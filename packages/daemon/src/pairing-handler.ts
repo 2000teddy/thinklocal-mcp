@@ -49,6 +49,7 @@ export function registerPairingRoutes(server: FastifyInstance, deps: PairingHand
 
   // Aktive Pairing-Session (nur eine gleichzeitig)
   let activeSession: PairingSession | null = null;
+  let failedAttempts = 0;
 
   // Session-Timeout: 5 Minuten
   const SESSION_TIMEOUT_MS = 5 * 60_000;
@@ -89,7 +90,8 @@ export function registerPairingRoutes(server: FastifyInstance, deps: PairingHand
       peerAgentId: null,
     };
 
-    log?.info({ pin }, '🔑 Pairing-PIN generiert — zeige dem Benutzer des anderen Nodes');
+    // SECURITY: PIN wird NUR im Return-Value angezeigt, NICHT geloggt
+    log?.info('Pairing-PIN generiert (nicht geloggt aus Sicherheitsgruenden)');
 
     return {
       pin,
@@ -117,18 +119,32 @@ export function registerPairingRoutes(server: FastifyInstance, deps: PairingHand
       return reply.code(400).send({ error: 'Missing required fields' });
     }
 
+    // SECURITY: /pairing/init erfordert eine lokal gestartete Session
+    if (!activeSession || activeSession.state !== 'waiting') {
+      return reply.code(409).send({ error: 'No local pairing session active. Call /pairing/start first.' });
+    }
+
+    // SECURITY: PIN muss mit der lokal generierten PIN uebereinstimmen
+    if (body.pin !== activeSession.pin) {
+      // Fehlversuch zaehlen — nach 3 Versuchen Session invalidieren
+      failedAttempts++;
+      if (failedAttempts >= 3) {
+        log?.warn({ attempts: failedAttempts }, 'Pairing: 3 falsche PIN-Versuche — Session invalidiert');
+        activeSession = null;
+        failedAttempts = 0;
+        return reply.code(403).send({ error: 'Too many failed attempts. Session invalidated.' });
+      }
+      return reply.code(403).send({ error: 'Wrong PIN' });
+    }
+
     // Bereits gepaart?
     if (store.isPaired(body.agent_id)) {
       return reply.code(200).send({ status: 'already_paired' });
     }
 
-    // Erstelle Verifier mit der eingegebenen PIN
-    const suite = spake2.SPAKE2_ED25519_SHA256_HKDF_HMAC;
-    const verifier = new suite.Verifier(
-      Buffer.from(body.pin),
-      Buffer.from('thinklocal-mesh'),
-      Buffer.from(deps.agentId),
-    );
+    // SECURITY: Nutze den Verifier aus der lokalen Session (nicht vom Angreifer-Input)
+    const verifier = activeSession.spakeInstance;
+    failedAttempts = 0;
 
     try {
       // Generiere eigene SPAKE2 Message

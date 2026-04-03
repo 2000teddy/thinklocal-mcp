@@ -55,7 +55,7 @@ export async function registerWebSocket(
     socket.send(JSON.stringify({
       type: 'system:connected',
       timestamp: new Date().toISOString(),
-      data: { message: 'Connected to thinklocal-mcp mesh', clients: clients.size },
+      data: { message: 'Connected to thinklocal-mcp mesh' },
     }));
 
     // Disconnect-Handler
