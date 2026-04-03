@@ -27,6 +27,10 @@ export const MessageType = {
   CAPABILITY_RESPONSE: 'CAPABILITY_RESPONSE',
   REGISTRY_SYNC: 'REGISTRY_SYNC',
   REGISTRY_SYNC_RESPONSE: 'REGISTRY_SYNC_RESPONSE',
+  TASK_REQUEST: 'TASK_REQUEST',
+  TASK_ACCEPT: 'TASK_ACCEPT',
+  TASK_REJECT: 'TASK_REJECT',
+  TASK_RESULT: 'TASK_RESULT',
 } as const;
 
 export type MessageTypeName = (typeof MessageType)[keyof typeof MessageType];
@@ -95,6 +99,29 @@ export interface RegistrySyncResponsePayload {
   capabilities: RegistrySyncPayload['capabilities'];
 }
 
+export interface TaskRequestPayload {
+  task_id: string;
+  skill_id: string;
+  input: Record<string, unknown>;
+  deadline: string | null;
+}
+
+export interface TaskAcceptPayload {
+  task_id: string;
+}
+
+export interface TaskRejectPayload {
+  task_id: string;
+  reason: string;
+}
+
+export interface TaskResultPayload {
+  task_id: string;
+  state: 'completed' | 'failed';
+  result: Record<string, unknown> | null;
+  error: string | null;
+}
+
 export type MessagePayload =
   | HeartbeatPayload
   | DiscoverQueryPayload
@@ -102,7 +129,11 @@ export type MessagePayload =
   | CapabilityQueryPayload
   | CapabilityResponsePayload
   | RegistrySyncPayload
-  | RegistrySyncResponsePayload;
+  | RegistrySyncResponsePayload
+  | TaskRequestPayload
+  | TaskAcceptPayload
+  | TaskRejectPayload
+  | TaskResultPayload;
 
 // --- Envelope ---
 

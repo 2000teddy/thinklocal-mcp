@@ -58,12 +58,12 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 ## Phase 2 — Kommunikation & Dashboard (Wochen 4-5)
 
 ### 2.1 Vollständiges Nachrichtenprotokoll
-- [ ] 🔴 TASK_REQUEST / TASK_ACCEPT / TASK_REJECT / TASK_RESULT
+- [x] 🔴 TASK_REQUEST / TASK_ACCEPT / TASK_REJECT / TASK_RESULT — `tasks.ts` + `messages.ts` (2026-04-03)
 - [ ] 🔴 SKILL_ANNOUNCE / SKILL_TRANSFER
 - [ ] 🔴 SECRET_REQUEST (mit Human-Gate-Flag)
 - [ ] 🔴 AUDIT_EVENT (Mesh-weite Synchronisation)
-- [ ] 🟠 Korrelierte Request/Response-Verfolgung
-- [ ] 🟠 Deadline-Propagation und Timeout-Handling
+- [x] 🟠 Korrelierte Request/Response-Verfolgung — `tasks.ts` correlationIndex (2026-04-03)
+- [x] 🟠 Deadline-Propagation und Timeout-Handling — `tasks.ts` checkTimeouts() (2026-04-03)
 - [ ] 🟡 Streaming-Responses für langdauernde Tasks
 
 ### 2.2 Health Monitoring
@@ -78,7 +78,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 ### 2.3 Dashboard API
 - [ ] 🔴 Fastify HTTP-Server mit GraphQL
 - [ ] 🔴 GraphQL Subscriptions für Echtzeit-Updates
-- [ ] 🔴 REST-Endpunkte für einfache Abfragen
+- [x] 🔴 REST-Endpunkte für einfache Abfragen — `dashboard-api.ts` /api/status, peers, capabilities, tasks, audit (2026-04-03)
 - [ ] 🟠 Coordinator-Node-Wahl (Raft oder First-Node-Simple)
 - [ ] 🟠 API-Authentifizierung (JWT/Session aus PIN-Zeremonie)
 - [ ] 🟡 OpenAPI/Swagger-Dokumentation

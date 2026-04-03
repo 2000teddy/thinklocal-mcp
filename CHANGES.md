@@ -219,9 +219,33 @@ Zwei Daemon-Instanzen auf `minimac-3.local` (Ports 9440/9441) finden sich via mD
 
 ---
 
+## [0.8.0] — 2026-04-03
+
+### Phase 2: Task-Delegation + Dashboard REST-API
+
+**Branch:** `agent/claude-code/phase2-tasks`
+
+#### Hinzugefügt
+
+| Modul | Beschreibung |
+|-------|-------------|
+| `tasks.ts` | Task-Manager: Lifecycle (requested→accepted→completed/failed/timeout), Correlation-ID-Tracking, Deadline mit Auto-Timeout |
+| `dashboard-api.ts` | REST-API für Dashboard: GET /api/status, /api/peers, /api/capabilities, /api/tasks, /api/audit (mit CSV-Export, Filtern, Paginierung) |
+
+#### Geändert
+
+- `messages.ts`: Neue Typen TASK_REQUEST, TASK_ACCEPT, TASK_REJECT, TASK_RESULT
+
+#### Tests
+
+- 8 neue Task-Manager-Tests (Lifecycle, State-Übergänge, Correlation, Timeout)
+
+---
+
 ## [Unreleased]
 
 ### Geplant (nächste Schritte)
-- SPAKE2 PIN-Zeremonie für Trust-Bootstrap
-- CLI Tool `tlmcp` für Mesh-Verwaltung
-- Dashboard Grundgerüst (Next.js)
+- SPAKE2 PIN-Zeremonie für Trust-Bootstrap (separater PR)
+- Dashboard UI (React + Vite)
+- SKILL_ANNOUNCE / SKILL_TRANSFER Nachrichten
+- GraphQL Subscriptions für Echtzeit-Updates
