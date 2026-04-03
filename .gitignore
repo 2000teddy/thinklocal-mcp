@@ -1,0 +1,62 @@
+# Node.js
+node_modules/
+dist/
+build/
+.next/
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+.eggs/
+
+# Rust
+target/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.cert
+*.p12
+secrets/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Docker
+docker-compose.override.yml
+
+# Test
+coverage/
+.nyc_output/
+htmlcov/
+.pytest_cache/
+
+# Build artifacts
+*.wasm
+*.tar.gz
+*.tlskill
+
+# Logs
+logs/
+*.log
