@@ -13,6 +13,10 @@ import { CapabilityRegistry } from './registry.js';
 import { GossipSync } from './gossip.js';
 import { RateLimiter } from './ratelimit.js';
 import { MessageType, encodeAndSign, createEnvelope, type MessageEnvelope } from './messages.js';
+import { TaskManager } from './tasks.js';
+import { registerDashboardApi } from './dashboard-api.js';
+import { PairingStore } from './pairing.js';
+import { registerPairingRoutes } from './pairing-handler.js';
 import type { AgentCard } from './agent-card.js';
 
 async function main(): Promise<void> {
@@ -136,6 +140,32 @@ async function main(): Promise<void> {
       }
     },
   });
+  // 8b. Task-Manager initialisieren
+  const taskManager = new TaskManager(log);
+
+  // 8c. Pairing-Store + Routen registrieren
+  const pairingStore = new PairingStore(config.daemon.data_dir, log);
+  registerPairingRoutes(cardServer.getServer(), {
+    store: pairingStore,
+    agentId: identity.spiffeUri,
+    hostname: config.daemon.hostname,
+    publicKeyPem: identity.publicKeyPem,
+    caCertPem: tlsBundle?.caCertPem ?? '',
+    fingerprint: identity.fingerprint,
+    log,
+  });
+
+  // 8d. Dashboard-API-Routen registrieren
+  registerDashboardApi(cardServer.getServer(), {
+    mesh,
+    registry,
+    tasks: taskManager,
+    audit,
+    identity,
+    config,
+    rateLimiter,
+  });
+
   await cardServer.start();
 
   const proto = cardServer.protocol;
@@ -204,6 +234,7 @@ async function main(): Promise<void> {
     log.info({ signal }, 'Shutdown eingeleitet...');
     gossip.stop();
     mesh.stopHeartbeatLoop();
+    taskManager.stop();
     rateLimiter.stop();
     discovery.stop();
     await cardServer.stop();

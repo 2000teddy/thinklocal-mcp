@@ -194,6 +194,11 @@ export class AgentCardServer {
     this.opts.log?.info('Agent Card Server gestoppt');
   }
 
+  /** Zugriff auf die Fastify-Instanz fuer Plugin-Registrierung (Dashboard, Pairing) */
+  getServer(): FastifyInstance {
+    return this.server;
+  }
+
   get protocol(): string {
     return this.useTls ? 'https' : 'http';
   }

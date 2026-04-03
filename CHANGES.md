@@ -272,9 +272,40 @@ Zwei Daemon-Instanzen auf `minimac-3.local` (Ports 9440/9441) finden sich via mD
 
 ---
 
+## [0.10.0] — 2026-04-03
+
+### Dashboard UI + vollstaendige API-Integration
+
+**Branch:** `agent/claude-code/phase2-dashboard`
+
+#### Hinzugefuegt — Dashboard UI (`packages/dashboard-ui/`)
+
+| View | Beschreibung |
+|------|-------------|
+| **Topologie** | React Flow Netzwerkgraph — eigener Node (blau) + Peers (gruen/rot), animierte Kanten fuer Online-Peers |
+| **Skill-Matrix** | Tabelle Agent x Capability mit Health-Badges und Version |
+| **Health** | CPU/RAM/Disk Gauges mit Farbbalken, Uptime, Peer-Count, Task-Count |
+| **Pairing** | PIN-Generierung, Session-Status, Liste gepaarter Peers |
+| **Audit-Log** | Event-Tabelle mit farbcodierten Typen, CSV-Export-Button |
+
+#### Technologie
+
+- React 19 + Vite 6 + TypeScript strict
+- @xyflow/react (React Flow) fuer Topologie-Graph
+- Tailwind CSS 4 fuer Styling
+- Auto-Polling-Hook (5-10s Intervall)
+- Vite-Proxy zu Daemon API (localhost:9440)
+
+#### Geaendert — Daemon
+
+- `index.ts`: TaskManager, PairingStore, Dashboard-API und Pairing-Routen vollstaendig integriert
+- `agent-card.ts`: getServer() Methode fuer Plugin-Registrierung
+
+---
+
 ## [Unreleased]
 
-### Geplant (nächste Schritte)
-- Dashboard UI (React + Vite)
+### Geplant (naechste Schritte)
 - SKILL_ANNOUNCE / SKILL_TRANSFER Nachrichten
-- GraphQL Subscriptions für Echtzeit-Updates
+- GraphQL Subscriptions fuer Echtzeit-Updates
+- Agent-Detail-Ansicht im Dashboard

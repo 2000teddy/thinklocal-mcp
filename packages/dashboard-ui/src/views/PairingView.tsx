@@ -1,0 +1,134 @@
+import { useState, useCallback } from 'react';
+import { api } from '../api.ts';
+import { usePolling } from '../hooks/usePolling.ts';
+
+/** Pairing-Interface: PIN generieren, anzeigen, Status pruefen */
+export function PairingView() {
+  const fetchStatus = useCallback(() => api.getPairingStatus(), []);
+  const { data: pairingStatus, refresh } = usePolling(fetchStatus, 5_000);
+  const [pin, setPin] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
+
+  const handleStartPairing = async () => {
+    setStarting(true);
+    try {
+      const result = await api.startPairing();
+      setPin(result.pin);
+      refresh();
+    } catch {
+      alert('Pairing konnte nicht gestartet werden');
+    } finally {
+      setStarting(false);
+    }
+  };
+
+  return (
+    <div>
+      <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem' }}>
+        Peer-Pairing
+      </h2>
+
+      {/* PIN-Anzeige */}
+      <div className="card" style={{ marginBottom: '1rem', textAlign: 'center' }}>
+        {pin ? (
+          <div>
+            <p style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
+              PIN dem Benutzer des anderen Nodes mitteilen:
+            </p>
+            <div style={{
+              fontSize: '3rem',
+              fontWeight: 800,
+              fontFamily: 'monospace',
+              letterSpacing: '0.5rem',
+              color: 'var(--accent)',
+              padding: '1rem',
+            }}>
+              {pin}
+            </div>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginTop: '0.5rem' }}>
+              Die PIN ist 5 Minuten gueltig
+            </p>
+          </div>
+        ) : (
+          <div>
+            <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem', fontSize: '0.875rem' }}>
+              Starte das Pairing um eine PIN zu generieren.
+              Der Benutzer des anderen Nodes gibt diese PIN ein.
+            </p>
+            <button
+              onClick={handleStartPairing}
+              disabled={starting}
+              style={{
+                background: 'var(--accent)',
+                color: '#fff',
+                border: 'none',
+                padding: '0.75rem 2rem',
+                borderRadius: '0.5rem',
+                fontSize: '0.875rem',
+                fontWeight: 600,
+                cursor: starting ? 'not-allowed' : 'pointer',
+                opacity: starting ? 0.5 : 1,
+              }}
+            >
+              {starting ? 'Starte...' : 'Pairing starten'}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Aktive Session */}
+      {pairingStatus?.active_session && (
+        <div className="card" style={{ marginBottom: '1rem' }}>
+          <h3 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+            Aktive Pairing-Session
+          </h3>
+          <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+            <p>Status: <span className={`badge badge-${pairingStatus.active_session.state === 'completed' ? 'online' : 'degraded'}`}>
+              {pairingStatus.active_session.state}
+            </span></p>
+            {pairingStatus.active_session.peer && (
+              <p style={{ marginTop: '0.25rem' }}>Peer: {pairingStatus.active_session.peer}</p>
+            )}
+            <p style={{ marginTop: '0.25rem' }}>Alter: {pairingStatus.active_session.age_seconds}s</p>
+          </div>
+        </div>
+      )}
+
+      {/* Gepaarte Peers */}
+      <div className="card">
+        <h3 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.75rem' }}>
+          Gepaarte Peers ({pairingStatus?.paired_peers?.length ?? 0})
+        </h3>
+        {pairingStatus?.paired_peers && pairingStatus.paired_peers.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {pairingStatus.paired_peers.map((peer) => (
+              <div key={peer.agent_id} style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '0.5rem 0.75rem',
+                background: 'var(--bg-primary)',
+                borderRadius: '0.5rem',
+                fontSize: '0.8125rem',
+              }}>
+                <div>
+                  <span style={{ fontWeight: 500 }}>{peer.hostname}</span>
+                  <span style={{ color: 'var(--text-secondary)', marginLeft: '0.5rem', fontSize: '0.75rem' }}>
+                    {peer.agent_id.split('/').pop()}
+                  </span>
+                </div>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                  {new Date(peer.paired_at).toLocaleDateString()}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.8125rem' }}>
+            Noch keine Peers gepaart
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
