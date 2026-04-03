@@ -10,6 +10,8 @@
     "dashboard:dev": "cd packages/dashboard-ui && npx vite",
     "dashboard:build": "cd packages/dashboard-ui && npx vite build",
     "tlmcp": "tsx packages/cli/src/tlmcp.ts",
+    "scan": "tsx packages/cli/src/scan-network.ts",
+    "deploy": "bash scripts/deploy-remote.sh",
     "test": "vitest run",
     "test:unit": "cd packages/daemon && vitest run",
     "test:integration": "vitest run tests/integration/"

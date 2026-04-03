@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.thinklocal.daemon</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <!-- Wird vom Installer durch den tatsaechlichen Pfad ersetzt -->
+        <string>__NODE_PATH__</string>
+        <string>__INSTALL_DIR__/packages/daemon/node_modules/.bin/tsx</string>
+        <string>__INSTALL_DIR__/packages/daemon/src/index.ts</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>TLMCP_CONFIG</key>
+        <string>__INSTALL_DIR__/config/daemon.toml</string>
+        <key>TLMCP_DATA_DIR</key>
+        <string>__HOME__/.thinklocal</string>
+        <key>TLMCP_NO_TLS</key>
+        <string>0</string>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>__HOME__/.thinklocal/logs/daemon.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>__HOME__/.thinklocal/logs/daemon.error.log</string>
+
+    <key>WorkingDirectory</key>
+    <string>__INSTALL_DIR__</string>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+</dict>
+</plist>
