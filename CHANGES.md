@@ -423,6 +423,37 @@ Zwei Daemon-Instanzen auf `minimac-3.local` (Ports 9440/9441) finden sich via mD
 
 ---
 
+## [0.16.0] — 2026-04-03
+
+### MCP-Server — AI-Agent-Integration
+
+**Branch:** `agent/claude-code/phase4-mcp-proxy`
+
+#### Hinzugefuegt
+
+| Modul | Beschreibung |
+|-------|-------------|
+| `mcp-server.ts` | In-Process MCP-Server mit 7 Tools: discover_peers, query_capabilities, get_agent_card, delegate_task, list_credentials, mesh_status, list_skills |
+| `mcp-stdio.ts` | Standalone MCP-Server fuer stdio-Transport — verbindet sich mit laufendem Daemon ueber REST-API. 8 Tools inkl. store_credential, get_audit_log, start_pairing |
+
+#### Integration in Claude Code
+
+```json
+{
+  "mcpServers": {
+    "thinklocal": {
+      "command": "npx",
+      "args": ["tsx", "packages/daemon/src/mcp-stdio.ts"],
+      "env": { "TLMCP_DAEMON_URL": "http://localhost:9440" }
+    }
+  }
+}
+```
+
+Damit kann Claude Code direkt Mesh-Funktionen nutzen: Peers entdecken, Capabilities abfragen, Tasks delegieren, Credentials verwalten.
+
+---
+
 ## [Unreleased]
 
 ### Geplant (naechste Schritte)
