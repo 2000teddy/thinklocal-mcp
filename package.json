@@ -1,0 +1,19 @@
+{
+  "name": "thinklocal-mcp",
+  "version": "0.1.0",
+  "description": "Encrypted P2P communication between AI CLI agents on the local network",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "daemon:start": "cd packages/daemon && tsx src/index.ts",
+    "daemon:build": "cd packages/daemon && npx tsc",
+    "test": "vitest run",
+    "test:unit": "cd packages/daemon && vitest run",
+    "test:integration": "vitest run tests/integration/"
+  },
+  "devDependencies": {
+    "vitest": "^3.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

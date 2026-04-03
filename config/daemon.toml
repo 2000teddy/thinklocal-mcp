@@ -1,0 +1,17 @@
+# thinklocal-mcp Daemon Konfiguration
+
+[daemon]
+port = 9440
+hostname = ""            # Leer = Auto-Detect via os.hostname()
+agent_type = "claude-code"
+data_dir = "~/.thinklocal"
+
+[mesh]
+heartbeat_interval_ms = 10000
+heartbeat_timeout_missed = 3
+
+[discovery]
+mdns_service_type = "_thinklocal._tcp"
+
+[logging]
+level = "info"           # trace, debug, info, warn, error, fatal

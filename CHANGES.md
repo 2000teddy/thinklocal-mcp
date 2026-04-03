@@ -46,13 +46,182 @@ Einstimmig: mTLS + Zero-Trust, libp2p/mDNS Mesh, CRDT Registry, signierte Skills
 
 ---
 
+## [0.2.0] — 2026-04-03
+
+### Phase 1, Schritt 2+3: Node Daemon Grundgerüst + PoC
+
+**Branch:** `agent/claude-code/phase1-daemon` | **PR:** #1
+
+#### Hinzugefügt — Neue Module (`packages/daemon/src/`)
+
+| Modul | Beschreibung |
+|-------|-------------|
+| `config.ts` | TOML-Config (`config/daemon.toml`) + Env-Override (`TLMCP_*`) mit Input-Validierung |
+| `identity.ts` | ECDSA P-256 Keypair-Generierung, SPIFFE-URI, Sign/Verify |
+| `audit.ts` | Append-only SQLite WAL-Log mit signierter Hash-Chain (`entry_hash` persistiert) |
+| `discovery.ts` | mDNS Discovery via `bonjour-service` (`_thinklocal._tcp`) |
+| `agent-card.ts` | Fastify HTTP-Server auf `/.well-known/agent-card.json` + `/health` |
+| `mesh.ts` | Peer-Tracking, paralleler Heartbeat mit Overlap-Schutz |
+| `index.ts` | Orchestrierung, Graceful Shutdown, Agent Card Identitäts-Verifizierung |
+| `logger.ts` | Pino-basiertes strukturiertes JSON-Logging |
+
+#### Sicherheit (nach GPT-5.4 Code Review)
+
+- Agent Card wird nur akzeptiert wenn SPIFFE-URI + Public-Key-Fingerprint zur mDNS-Ankündigung passen
+- mDNS TXT-`endpoint` wird ignoriert — Endpoint immer aus `host:port` abgeleitet
+- Audit-Hash-Chain hasht alle Felder inkl. Signatur, `entry_hash` wird für Restart-Sicherheit persistiert
+- Numerische Umgebungsvariablen werden als positive Ganzzahl validiert
+
+#### Tests
+
+- 4 Integration-Tests: Identität, Agent Cards, Peer-Discovery + Audit, Heartbeat Health-Check
+
+#### PoC-Ergebnis
+
+Zwei Daemon-Instanzen auf `minimac-3.local` (Ports 9440/9441) finden sich via mDNS, tauschen Agent Cards aus und halten Heartbeats aufrecht. PoC bestanden am 2026-04-03.
+
+---
+
+## [0.3.0] — 2026-04-03
+
+### mTLS — Gegenseitige TLS-Authentifizierung
+
+**Branch:** `agent/claude-code/phase1-daemon`
+
+#### Hinzugefügt
+
+| Modul | Beschreibung |
+|-------|-------------|
+| `tls.ts` | Lokale Self-Signed CA (RSA-2048, node-forge), Node-Zertifikate mit SPIFFE-URI in SAN, 90-Tage-Gültigkeit, Auto-Renewal bei <7 Tagen, Peer-Cert-Verifizierung |
+
+#### Geändert
+
+- `agent-card.ts`: Unterstützt jetzt HTTP und HTTPS mit `requestCert: true, rejectUnauthorized: true` für echte mTLS-Validierung
+- `mesh.ts`: Heartbeat-Requests über `undici` mit custom TLS-Dispatcher für Self-Signed CA
+- `index.ts`: TLS-Bundle wird automatisch erstellt, alle Peer-Kommunikation über mTLS. Abschaltbar via `TLMCP_NO_TLS=1`
+- `discovery.ts`: Publiziert `proto`-Feld im mDNS TXT-Record (`http`/`https`)
+
+#### Sicherheit (nach Gemini 2.5 Pro Code Review)
+
+- `rejectUnauthorized: true` auf dem Server (war `false` — Client-Certs werden jetzt validiert)
+- `undici` statt `node:https` für ausgehende Requests (native fetch unterstützt keine custom CA)
+- Zertifikats-Private-Keys mit Dateiberechtigung `0o600`
+
+#### Tests
+
+- 7 neue Unit-Tests für TLS-Modul (CA-Erstellung, Cert-Validierung, SPIFFE-Extraktion, Fremd-CA-Ablehnung)
+- 4 bestehende Integration-Tests weiterhin grün
+
+---
+
+## [0.4.0] — 2026-04-03
+
+### CBOR Message Envelope — Signiertes Nachrichtenprotokoll
+
+**Branch:** `agent/claude-code/phase1-daemon`
+
+#### Hinzugefügt
+
+| Modul | Beschreibung |
+|-------|-------------|
+| `messages.ts` | CBOR-basiertes Nachrichtenprotokoll mit signierten Envelopes: Correlation-ID, TTL, Idempotency-Key, ECDSA-Signatur |
+
+#### Nachrichtentypen (Phase 1)
+
+- `HEARTBEAT` — Lebenszeichen mit Uptime, Peer-Count, CPU-Load (TTL: 15s)
+- `DISCOVER_QUERY` / `DISCOVER_RESPONSE` — Peer-Suche mit optionalem Agent-Typ-Filter
+- `CAPABILITY_QUERY` / `CAPABILITY_RESPONSE` — Fähigkeiten abfragen (skill_id oder category)
+
+#### Geändert
+
+- `agent-card.ts`: Neuer `/message`-Endpoint für CBOR-Nachrichten mit Signaturprüfung und Content-Type-Parser für `application/cbor`
+
+#### Tests
+
+- 8 neue Unit-Tests: Envelope-Erstellung, CBOR Encode/Decode, Signaturverifizierung, TTL-Ablauf, Serialisierung/Deserialisierung
+
+---
+
+## [0.5.0] — 2026-04-03
+
+### CRDT Capability Registry — Verteilte Fähigkeiten-Datenbank
+
+**Branch:** `agent/claude-code/phase1-daemon`
+
+#### Hinzugefügt
+
+| Modul | Beschreibung |
+|-------|-------------|
+| `registry.ts` | Automerge-basierte CRDT-Registry für Capabilities. Register, Unregister, Suche nach skill_id/category/agent. Import/Export für Peer-Sync, Capability-Hashing, Save/Load-Persistenz |
+
+#### Features
+
+- `register()` / `unregister()` — Capabilities anmelden/abmelden
+- `findBySkill()` / `findByCategory()` / `getAgentCapabilities()` — Suche
+- `markAgentOffline()` — Alle Capabilities eines Agents als offline markieren
+- `importPeerCapabilities()` / `exportCapabilities()` — Peer-Synchronisation mit Timestamp-basierter Konfliktauflösung
+- `getCapabilityHash()` — SHA-256-Hash für kompakte Announcements
+- `save()` / `load()` — Persistenz via Automerge Binary
+
+#### Tests
+
+- 9 neue Unit-Tests: Register, Unregister, Suche, Offline-Markierung, Hash-Berechnung, Peer-Import, Konflikauflösung, Save/Load
+
+---
+
+## [0.6.0] — 2026-04-03
+
+### Gossip-Sync + Rate-Limiting
+
+**Branch:** `agent/claude-code/phase1-daemon`
+
+#### Hinzugefügt
+
+| Modul | Beschreibung |
+|-------|-------------|
+| `gossip.ts` | Gossip-basierte Registry-Synchronisation: Pull-Push-Pattern, konfigurierbarer Fanout (Default: 3 Peers), 30s-Intervall, Hash-Vergleich vor Import |
+| `ratelimit.ts` | Token Bucket Rate-Limiter pro Peer: 20 Tokens Burst, 2 Tokens/s Refill, automatisches Cleanup inaktiver Buckets |
+
+#### Geändert
+
+- `index.ts`: Registry, Gossip-Sync und Rate-Limiter vollständig integriert. Message-Handler verarbeitet REGISTRY_SYNC. Peers werden bei Offline-Markierung aus Rate-Limiter entfernt, Capabilities als offline markiert
+- `messages.ts`: Neue Typen REGISTRY_SYNC / REGISTRY_SYNC_RESPONSE mit Capability-Payload
+
+#### Tests
+
+- 2 Gossip-Tests: Import von Peer-Capabilities, Hash-Vergleich bei Sync
+- 6 Rate-Limiter-Tests: Burst-Limit, Refill, Separate Buckets, Remove, Overflow-Schutz
+
+---
+
+## [0.7.0] — 2026-04-03
+
+### Security-Hardening (nach GPT-5.1 Review)
+
+**Branch:** `agent/claude-code/phase1-daemon`
+
+#### Hinzugefügt
+
+| Modul | Beschreibung |
+|-------|-------------|
+| `replay.ts` | In-Memory Replay-Guard: Idempotency-Key pro Sender, TTL-basierte Duplikatserkennung, Auto-Cleanup |
+
+#### Security-Fixes
+
+- **Gossip agent_id Validation** (HIGH): `handleSyncMessage` filtert Capabilities mit fremder `agent_id` — nur Capabilities des tatsächlichen Senders werden importiert
+- **Replay-Schutz** (MEDIUM): Idempotency-Key wird jetzt im `/message`-Handler geprüft, Duplikate mit HTTP 409 abgelehnt
+- **Rate-Limiter auf allen Endpoints** (MEDIUM): `/.well-known/agent-card.json` und `/health` sind jetzt IP-basiert rate-limited (HTTP 429)
+- **CBOR Size-Limit** (LOW): Zusätzliches 256 KB Limit für `/message` Body vor CBOR-Parsing
+
+#### Tests
+
+- 4 Replay-Guard-Tests + 1 Gossip-agent_id-Validierungstest
+
+---
+
 ## [Unreleased]
 
-### Geplant
-- Node Daemon Grundgerüst (TypeScript)
-- mDNS Discovery Module
-- Lokale CA Bootstrap-Mechanismus
-- Agent Card Server Endpoint
-- Dashboard Grundgerüst (Next.js)
+### Geplant (nächste Schritte)
+- SPAKE2 PIN-Zeremonie für Trust-Bootstrap
 - CLI Tool `tlmcp` für Mesh-Verwaltung
-- Erster eingebauter Skill: `system-monitor`
+- Dashboard Grundgerüst (Next.js)

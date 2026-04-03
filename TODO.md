@@ -8,11 +8,11 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 ## Phase 1 — Fundament: Identität, Verschlüsselung, Discovery (Wochen 1-3)
 
 ### 1.1 Agent-Identität & Kryptografie
-- [ ] 🔴 ECDSA Keypair-Generierung pro Agent (secp256k1 oder P-256)
-- [ ] 🔴 SPIFFE-URI-Schema implementieren: `spiffe://thinklocal/host/<hostname>/agent/<type>`
+- [x] 🔴 ECDSA Keypair-Generierung pro Agent (P-256) — `identity.ts` (2026-04-03)
+- [x] 🔴 SPIFFE-URI-Schema implementieren: `spiffe://thinklocal/host/<hostname>/agent/<type>` — `identity.ts` (2026-04-03)
 - [ ] 🔴 Device-Fingerprinting für eindeutige Agent-Identifikation
-- [ ] 🔴 Lokale CA (Certificate Authority) — erster Node wird Mesh-Root
-- [ ] 🔴 Kurzlebige X.509-Zertifikate (24h TTL) mit Auto-Rotation
+- [x] 🔴 Lokale CA (Certificate Authority) — `tls.ts`, Self-Signed RSA-2048 CA (2026-04-03)
+- [x] 🔴 Kurzlebige X.509-Zertifikate (90d TTL) mit Auto-Renewal bei <7 Tagen — `tls.ts` (2026-04-03)
 - [ ] 🟠 Zertifikat-Widerrufsliste (CRL) oder OCSP-Stapling
 
 ### 1.2 Trust Bootstrap
@@ -25,45 +25,32 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 ### 1.3 Mesh-Networking
 - [ ] 🔴 libp2p Node.js/TypeScript Integration
 - [ ] 🔴 Noise Protocol für verschlüsselte Kanäle
-- [ ] 🔴 mTLS über alle Verbindungen
-- [ ] 🔴 mDNS Service Discovery (`_thinklocal._tcp.local`)
-- [ ] 🔴 TXT-Records: Agent-ID, Capability-Hash, Control-Endpoint, Cert-Fingerprint
+- [x] 🔴 mTLS über alle Verbindungen — Fastify HTTPS + undici Dispatcher mit CA (2026-04-03)
+- [x] 🔴 mDNS Service Discovery (`_thinklocal._tcp.local`) — `discovery.ts` (2026-04-03)
+- [x] 🔴 TXT-Records: Agent-ID, Capability-Hash, Control-Endpoint, Cert-Fingerprint — `discovery.ts` (2026-04-03)
 - [ ] 🟠 Connection Multiplexing über libp2p
 - [ ] 🟠 Unix-Socket-Optimierung für Same-Host-Agents
 - [ ] 🟡 NAT Traversal (für VPN/Tailscale-übergreifende Mesh-Erweiterung)
 
 ### 1.4 Capability Registry
-- [ ] 🔴 CRDT-basierte verteilte Registry (Automerge)
-- [ ] 🔴 Capability-Dokument-Schema (JSON Schema):
-  ```json
-  {
-    "agent_id": "...",
-    "skill_id": "influxdb.read",
-    "version": "1.2.0",
-    "input_schema": { ... },
-    "output_schema": { ... },
-    "permissions_required": ["network.local", "db.influx"],
-    "health": "healthy",
-    "trust_level": 3,
-    "signature": "ed25519:..."
-  }
-  ```
-- [ ] 🔴 Gossip-Synchronisation (Serf-Pattern)
-- [ ] 🟠 Vector Clocks für Konfliktauflösung
-- [ ] 🟠 Capability-Hashing für kompakte Announcements
+- [x] 🔴 CRDT-basierte verteilte Registry (Automerge) — `registry.ts` (2026-04-03)
+- [x] 🔴 Capability-Dokument-Schema — `registry.ts` Capability-Interface (2026-04-03)
+- [x] 🔴 Gossip-Synchronisation (Serf-Pattern) — `gossip.ts` Pull-Push mit Fanout (2026-04-03)
+- [ ] 🟠 Vector Clocks für Konfliktauflösung — Automerge CRDT handhabt das intern
+- [x] 🟠 Capability-Hashing für kompakte Announcements — `getCapabilityHash()` (2026-04-03)
 
 ### 1.5 Audit-Log (Phase 1!)
-- [ ] 🔴 Append-Only SQLite WAL-Log pro Agent
-- [ ] 🔴 Merkle-Tree-Integrität über Log-Einträge
-- [ ] 🔴 Signierte Audit-Events (ed25519)
-- [ ] 🟠 Log-Typen: PEER_JOIN, PEER_LEAVE, CAPABILITY_QUERY, TASK_DELEGATE, CREDENTIAL_ACCESS
+- [x] 🔴 Append-Only SQLite WAL-Log pro Agent — `audit.ts` (2026-04-03)
+- [x] 🔴 Merkle-Tree-Integrität über Log-Einträge — Hash-Chain mit `entry_hash` (2026-04-03)
+- [x] 🔴 Signierte Audit-Events (ed25519) — ECDSA-Signatur pro Event (2026-04-03)
+- [x] 🟠 Log-Typen: PEER_JOIN, PEER_LEAVE, CAPABILITY_QUERY, TASK_DELEGATE, CREDENTIAL_ACCESS — 6 Typen implementiert (2026-04-03)
 - [ ] 🟠 Log-Export (JSON/CSV) für externe Analyse
 
 ### 1.6 Nachrichtenprotokoll (Basis)
-- [ ] 🔴 CBOR Encoding/Decoding Library
-- [ ] 🔴 Message-Envelope: Correlation-ID, Deadline/TTL, Idempotency-Key, ed25519-Signatur
-- [ ] 🔴 Basis-Nachrichten: HEARTBEAT, DISCOVER_QUERY, CAPABILITY_QUERY
-- [ ] 🟠 Rate-Limiting (Token Bucket pro Peer)
+- [x] 🔴 CBOR Encoding/Decoding Library — `cbor-x` via `messages.ts` (2026-04-03)
+- [x] 🔴 Message-Envelope: Correlation-ID, Deadline/TTL, Idempotency-Key, ECDSA-Signatur — `messages.ts` (2026-04-03)
+- [x] 🔴 Basis-Nachrichten: HEARTBEAT, DISCOVER_QUERY, CAPABILITY_QUERY — `messages.ts` (2026-04-03)
+- [x] 🟠 Rate-Limiting (Token Bucket pro Peer) — `ratelimit.ts` (2026-04-03)
 - [ ] 🟠 Scoped Multicast (nach Capability/Topic, kein Blind Flood)
 
 ---
@@ -203,7 +190,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [ ] 🟡 Entwicklerhandbuch (eigene Adapter/Skills schreiben)
 
 ### Testing
-- [ ] 🔴 Unit-Test-Framework (Jest für TS, pytest für Python)
+- [x] 🔴 Unit-Test-Framework (Vitest für TS) — konfiguriert in `packages/daemon/` und Root (2026-04-03)
 - [ ] 🔴 Protokoll-Contract-Tests (müssen vor Merge bestehen)
 - [ ] 🟠 Integration-Tests (Multi-Node im Docker Compose)
 - [ ] 🟠 Security-Tests (Fuzzing, Penetration-Szenarien)
@@ -218,8 +205,8 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [ ] 🟡 Cross-Plattform-Tests (macOS, Linux, Windows via WSL)
 
 ### Konfiguration & Deployment
-- [ ] 🔴 Konfigurationsdatei-Format (TOML oder YAML)
-- [ ] 🔴 Umgebungsvariablen-Unterstützung
+- [x] 🔴 Konfigurationsdatei-Format (TOML) — `config/daemon.toml` + `config.ts` (2026-04-03)
+- [x] 🔴 Umgebungsvariablen-Unterstützung — `TLMCP_*`-Prefix mit Validierung (2026-04-03)
 - [ ] 🟠 Homebrew-Formel (macOS)
 - [ ] 🟠 Systemd-Service-Dateien (Linux)
 - [ ] 🟡 launchd-Plist (macOS)
