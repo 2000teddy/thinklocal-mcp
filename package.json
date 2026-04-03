@@ -7,6 +7,9 @@
   "scripts": {
     "daemon:start": "cd packages/daemon && tsx src/index.ts",
     "daemon:build": "cd packages/daemon && npx tsc",
+    "dashboard:dev": "cd packages/dashboard-ui && npx vite",
+    "dashboard:build": "cd packages/dashboard-ui && npx vite build",
+    "tlmcp": "tsx packages/cli/src/tlmcp.ts",
     "test": "vitest run",
     "test:unit": "cd packages/daemon && vitest run",
     "test:integration": "vitest run tests/integration/"
