@@ -242,10 +242,39 @@ Zwei Daemon-Instanzen auf `minimac-3.local` (Ports 9440/9441) finden sich via mD
 
 ---
 
+## [0.9.0] — 2026-04-03
+
+### SPAKE2 Trust-Bootstrap — PIN-basierte Peer-Authentifizierung
+
+**Branch:** `agent/claude-code/phase1-spake2`
+
+#### Hinzugefügt
+
+| Modul | Beschreibung |
+|-------|-------------|
+| `pairing.ts` | PIN-Generierung (6-stellig), AES-256-GCM Verschlüsselung für CA-Zertifikat-Austausch, PairingStore (JSON-Persistenz mit 0o600), Key-Derivation via SHA-256 |
+| `pairing-handler.ts` | Fastify-Routen: POST /pairing/start (PIN generieren), POST /pairing/init (SPAKE2 Handshake), POST /pairing/confirm (verschlüsselter CA-Austausch), GET /pairing/status |
+| `types/niomon-spake2.d.ts` | TypeScript-Deklarationen für @niomon/spake2 |
+
+#### Pairing-Flow
+
+1. Node A: `POST /pairing/start` → generiert PIN `123456`, zeigt sie im Terminal
+2. Benutzer teilt PIN an Benutzer von Node B
+3. Node B: `POST /pairing/init` mit PIN + SPAKE2 Message
+4. Bei gleicher PIN: Shared Secret → AES-256-GCM → CA-Zertifikate tauschen
+5. Node B: `POST /pairing/confirm` mit eigenen verschlüsselten Daten
+6. Beide Nodes speichern sich gegenseitig als vertrauenswürdig (PairingStore)
+7. Bei falschem PIN: SPAKE2 Handshake schlägt fehl, kein Informationsleck
+
+#### Tests
+
+- 9 neue Tests: PIN-Generierung, Key-Derivation, AES-256-GCM Encrypt/Decrypt, falscher Schlüssel, PairingStore (Persistenz, Remove, Liste)
+
+---
+
 ## [Unreleased]
 
 ### Geplant (nächste Schritte)
-- SPAKE2 PIN-Zeremonie für Trust-Bootstrap (separater PR)
 - Dashboard UI (React + Vite)
 - SKILL_ANNOUNCE / SKILL_TRANSFER Nachrichten
 - GraphQL Subscriptions für Echtzeit-Updates
