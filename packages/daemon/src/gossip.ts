@@ -171,10 +171,19 @@ export class GossipSync {
       };
     }
 
-    // Capabilities importieren
-    const imported = this.registry.importPeerCapabilities(
-      payload.capabilities as Capability[],
-    );
+    // Capabilities importieren — NUR Capabilities des tatsächlichen Senders akzeptieren
+    // Verhindert dass ein Peer Capabilities für fremde Agents fälschen kann
+    const sanitizedCaps = (payload.capabilities as Capability[]).filter((c) => {
+      if (c.agent_id !== envelope.sender) {
+        this.log?.warn(
+          { claimed: c.agent_id, sender: envelope.sender, skill: c.skill_id },
+          'Gossip: Capability mit fremder agent_id abgelehnt',
+        );
+        return false;
+      }
+      return true;
+    });
+    const imported = this.registry.importPeerCapabilities(sanitizedCaps);
 
     this.log?.info(
       { from: envelope.sender, imported, peerHash: payload.capability_hash },

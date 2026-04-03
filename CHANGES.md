@@ -194,6 +194,31 @@ Zwei Daemon-Instanzen auf `minimac-3.local` (Ports 9440/9441) finden sich via mD
 
 ---
 
+## [0.7.0] — 2026-04-03
+
+### Security-Hardening (nach GPT-5.1 Review)
+
+**Branch:** `agent/claude-code/phase1-daemon`
+
+#### Hinzugefügt
+
+| Modul | Beschreibung |
+|-------|-------------|
+| `replay.ts` | In-Memory Replay-Guard: Idempotency-Key pro Sender, TTL-basierte Duplikatserkennung, Auto-Cleanup |
+
+#### Security-Fixes
+
+- **Gossip agent_id Validation** (HIGH): `handleSyncMessage` filtert Capabilities mit fremder `agent_id` — nur Capabilities des tatsächlichen Senders werden importiert
+- **Replay-Schutz** (MEDIUM): Idempotency-Key wird jetzt im `/message`-Handler geprüft, Duplikate mit HTTP 409 abgelehnt
+- **Rate-Limiter auf allen Endpoints** (MEDIUM): `/.well-known/agent-card.json` und `/health` sind jetzt IP-basiert rate-limited (HTTP 429)
+- **CBOR Size-Limit** (LOW): Zusätzliches 256 KB Limit für `/message` Body vor CBOR-Parsing
+
+#### Tests
+
+- 4 Replay-Guard-Tests + 1 Gossip-agent_id-Validierungstest
+
+---
+
 ## [Unreleased]
 
 ### Geplant (nächste Schritte)

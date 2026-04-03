@@ -106,6 +106,7 @@ async function main(): Promise<void> {
     config,
     tls: tlsBundle,
     log,
+    rateLimiter,
     getPeerPublicKey: (agentId: string) => {
       const peer = mesh.getPeer(agentId);
       return peer?.agentCard?.publicKey;

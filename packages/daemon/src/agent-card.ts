@@ -9,6 +9,8 @@ import {
   decodeAndVerify,
   serializeSignedMessage,
 } from './messages.js';
+import { ReplayGuard } from './replay.js';
+import { RateLimiter } from './ratelimit.js';
 import type { Logger } from 'pino';
 
 export interface AgentCard {
@@ -52,6 +54,8 @@ export interface AgentCardServerOptions {
   getPeerPublicKey?: (agentId: string) => string | undefined;
   /** Handler für eingehende Mesh-Nachrichten */
   onMessage?: MessageHandler;
+  /** Rate-Limiter für alle Endpoints */
+  rateLimiter?: RateLimiter;
 }
 
 export class AgentCardServer {
@@ -59,6 +63,7 @@ export class AgentCardServer {
   private joinedAt: string;
   private peerCount = 0;
   private useTls: boolean;
+  private replayGuard = new ReplayGuard();
 
   constructor(private opts: AgentCardServerOptions) {
     this.joinedAt = new Date().toISOString();
@@ -92,11 +97,17 @@ export class AgentCardServer {
       },
     );
 
-    this.server.get('/.well-known/agent-card.json', async () => {
+    this.server.get('/.well-known/agent-card.json', async (request: FastifyRequest, reply: FastifyReply) => {
+      if (opts.rateLimiter && !opts.rateLimiter.allow(request.ip)) {
+        return reply.code(429).send({ error: 'Too Many Requests' });
+      }
       return this.buildCard();
     });
 
-    this.server.get('/health', async () => {
+    this.server.get('/health', async (request: FastifyRequest, reply: FastifyReply) => {
+      if (opts.rateLimiter && !opts.rateLimiter.allow(request.ip)) {
+        return reply.code(429).send({ error: 'Too Many Requests' });
+      }
       return { status: 'ok', timestamp: new Date().toISOString() };
     });
 
@@ -107,6 +118,10 @@ export class AgentCardServer {
       const body = request.body as Buffer;
       if (!body || body.length === 0) {
         return reply.code(400).send({ error: 'Empty body' });
+      }
+      // CBOR-spezifisches Size-Limit (256 KB)
+      if (body.length > 256 * 1024) {
+        return reply.code(413).send({ error: 'Message too large' });
       }
 
       try {
@@ -127,6 +142,11 @@ export class AgentCardServer {
         const verified = decodeAndVerify(signed, senderKey);
         if (!verified) {
           return reply.code(403).send({ error: 'Invalid signature or expired' });
+        }
+
+        // Replay-Schutz: Prüfe ob Nachricht bereits verarbeitet
+        if (this.replayGuard.isReplay(verified.sender, verified.idempotency_key, verified.ttl_ms)) {
+          return reply.code(409).send({ error: 'Duplicate message' });
         }
 
         // An den Message-Handler delegieren
@@ -169,6 +189,7 @@ export class AgentCardServer {
   }
 
   async stop(): Promise<void> {
+    this.replayGuard.stop();
     await this.server.close();
     this.opts.log?.info('Agent Card Server gestoppt');
   }

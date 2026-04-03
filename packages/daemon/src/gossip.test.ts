@@ -109,4 +109,62 @@ describe('GossipSync — Registry-Synchronisation', () => {
     expect(response.imported).toBe(0);
     expect(response.capabilities).toHaveLength(0);
   });
+
+  it('lehnt Capabilities mit gefälschter agent_id ab', () => {
+    const registry = new CapabilityRegistry();
+    const mesh = new MeshManager(10_000, 3, {
+      onPeerOnline: () => {},
+      onPeerOffline: () => {},
+    });
+
+    const gossip = new GossipSync(registry, mesh, agentA, 'dummy');
+
+    // Peer B sendet eine Capability mit agent_id von Agent C (Fälschung!)
+    const agentC = 'spiffe://thinklocal/host/c/agent/evil';
+    const syncPayload: RegistrySyncPayload = {
+      capability_hash: 'x',
+      capabilities: [
+        {
+          skill_id: 'fake-skill',
+          version: '1.0.0',
+          description: 'Faked by B pretending to be C',
+          agent_id: agentC, // NICHT der Sender!
+          health: 'healthy',
+          trust_level: 3,
+          updated_at: new Date().toISOString(),
+          category: 'test',
+          permissions: [],
+        },
+        {
+          skill_id: 'real-skill',
+          version: '1.0.0',
+          description: 'Legit from B',
+          agent_id: agentB, // Korrekter Sender
+          health: 'healthy',
+          trust_level: 3,
+          updated_at: new Date().toISOString(),
+          category: 'test',
+          permissions: [],
+        },
+      ],
+    };
+
+    const envelope: MessageEnvelope = {
+      id: 'test-3',
+      type: MessageType.REGISTRY_SYNC,
+      sender: agentB, // Tatsächlicher Sender
+      correlation_id: 'test-3',
+      timestamp: new Date().toISOString(),
+      ttl_ms: 60_000,
+      idempotency_key: 'test-3',
+      payload: syncPayload,
+    };
+
+    const response = gossip.handleSyncMessage(envelope);
+
+    // Nur die legitime Capability (agent_id == sender) wurde importiert
+    expect(response.imported).toBe(1);
+    expect(registry.findBySkill('fake-skill')).toHaveLength(0);
+    expect(registry.findBySkill('real-skill')).toHaveLength(1);
+  });
 });
