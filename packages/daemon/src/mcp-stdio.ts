@@ -110,6 +110,77 @@ server.tool('start_pairing', 'Startet Peer-Pairing und generiert eine PIN', {}, 
   return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
 });
 
+// --- Cross-Machine Skill Execution ---
+
+server.tool(
+  'execute_remote_skill',
+  'Fuehrt einen Skill auf einem Remote-Peer im Mesh aus. Findet automatisch den besten Peer fuer den Skill.',
+  {
+    skill_id: z.string().describe('Skill-ID (z.B. "system.health", "influxdb.read")'),
+    input: z.record(z.string(), z.unknown()).optional().describe('Eingabedaten fuer den Skill'),
+    target_agent: z.string().optional().describe('Optional: bestimmter Agent (SPIFFE-URI). Wenn leer, wird automatisch ein Peer gewaehlt.'),
+  },
+  async ({ skill_id, input, target_agent }) => {
+    // 1. Passenden Peer finden
+    const capsData = await fetchDaemon('/api/capabilities') as { capabilities: Array<{ skill_id: string; agent_id: string; health: string }> };
+    const candidates = capsData.capabilities.filter(
+      (c) => c.skill_id === skill_id && c.health === 'healthy',
+    );
+
+    if (candidates.length === 0) {
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ error: `Kein Peer mit Skill '${skill_id}' gefunden` }) }] };
+    }
+
+    // Ziel waehlen (explizit oder erster gesunder Peer)
+    const target = target_agent
+      ? candidates.find((c) => c.agent_id === target_agent)
+      : candidates[0];
+
+    if (!target) {
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ error: `Agent '${target_agent}' hat Skill '${skill_id}' nicht` }) }] };
+    }
+
+    // 2. Peer-Endpoint ermitteln
+    const peersData = await fetchDaemon('/api/peers') as { peers: Array<{ agent_id: string; host: string; port: number }> };
+    const peer = peersData.peers.find((p) => p.agent_id === target.agent_id);
+
+    if (!peer) {
+      // Lokaler Skill — direkt ausfuehren via Daemon-API
+      const taskData = await postDaemon('/api/tasks/execute', { skill_id, input: input ?? {} });
+      return { content: [{ type: 'text' as const, text: JSON.stringify(taskData, null, 2) }] };
+    }
+
+    // 3. Remote-Skill ausfuehren via Peer-API
+    try {
+      const peerUrl = `http://${peer.host}:${peer.port}`;
+      const result = await fetch(`${peerUrl}/api/tasks/execute`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ skill_id, input: input ?? {} }),
+        signal: AbortSignal.timeout(30_000),
+      });
+
+      if (!result.ok) {
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ error: `Remote-Ausfuehrung fehlgeschlagen: ${result.status}` }) }] };
+      }
+
+      const data = await result.json();
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            executed_on: { agent_id: target.agent_id, host: peer.host, port: peer.port },
+            skill_id,
+            result: data,
+          }, null, 2),
+        }],
+      };
+    } catch (err) {
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ error: `Verbindung zu ${peer.host}:${peer.port} fehlgeschlagen: ${err}` }) }] };
+    }
+  },
+);
+
 // --- Builtin Skills ---
 
 server.tool('system_health', 'System-Monitoring: CPU, RAM, Disk, OS-Info und Uptime', {}, async () => {

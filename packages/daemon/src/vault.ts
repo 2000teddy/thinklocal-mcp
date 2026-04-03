@@ -20,15 +20,11 @@
 
 import Database from 'better-sqlite3';
 import nacl from 'tweetnacl';
-import {
-  encodeBase64,
-  decodeBase64,
-  encodeUTF8,
-  decodeUTF8,
-} from 'tweetnacl-util';
-import { randomBytes, pbkdf2Sync, randomUUID } from 'node:crypto';
+import tweetnaclUtil from 'tweetnacl-util';
+const { encodeBase64, decodeBase64, encodeUTF8, decodeUTF8 } = tweetnaclUtil;
+import { randomBytes, pbkdf2Sync, randomUUID, createCipheriv, createDecipheriv } from 'node:crypto';
 import { resolve } from 'node:path';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import type { Logger } from 'pino';
 
 // --- Credential-Typen ---
@@ -305,7 +301,7 @@ export class CredentialVault {
 
   private encrypt(plaintext: string): { encrypted: string; nonce: string } {
     const nonce = randomBytes(12);
-    const { createCipheriv } = require('node:crypto') as typeof import('node:crypto');
+    
     const cipher = createCipheriv('aes-256-gcm', this.vaultKey, nonce);
     let enc = cipher.update(plaintext, 'utf8', 'base64');
     enc += cipher.final('base64');
@@ -320,7 +316,7 @@ export class CredentialVault {
     const [data, tagStr] = encrypted.split('.');
     const nonce = Buffer.from(nonceBase64, 'base64');
     const tag = Buffer.from(tagStr, 'base64');
-    const { createDecipheriv } = require('node:crypto') as typeof import('node:crypto');
+    
     const decipher = createDecipheriv('aes-256-gcm', this.vaultKey, nonce);
     decipher.setAuthTag(tag);
     let dec = decipher.update(data, 'base64', 'utf8');
@@ -329,7 +325,7 @@ export class CredentialVault {
   }
 
   private getOrCreateSalt(saltPath: string): Buffer {
-    const { existsSync, readFileSync, writeFileSync } = require('node:fs') as typeof import('node:fs');
+    
     if (existsSync(saltPath)) {
       return readFileSync(saltPath);
     }
