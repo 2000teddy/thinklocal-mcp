@@ -18,6 +18,8 @@ import { SkillManager, type SkillAnnouncePayload } from './skills.js';
 import { registerDashboardApi } from './dashboard-api.js';
 import { PairingStore } from './pairing.js';
 import { registerPairingRoutes } from './pairing-handler.js';
+import { MeshEventBus } from './events.js';
+import { registerWebSocket } from './websocket.js';
 import type { AgentCard } from './agent-card.js';
 
 async function main(): Promise<void> {
@@ -69,7 +71,11 @@ async function main(): Promise<void> {
   // 3. Audit-Log initialisieren
   const audit = new AuditLog(config.daemon.data_dir, identity.privateKeyPem, identity.spiffeUri, log);
 
-  // 4. Rate-Limiter initialisieren
+  // 4. Event-Bus fuer Echtzeit-Events
+  const eventBus = new MeshEventBus();
+  eventBus.emit('system:startup', { agentId: identity.spiffeUri, port: config.daemon.port });
+
+  // 4b. Rate-Limiter initialisieren
   const rateLimiter = new RateLimiter({ maxTokens: 20, refillRate: 2 }, log);
 
   // 5. Capability Registry + Skill-Manager initialisieren
@@ -84,12 +90,14 @@ async function main(): Promise<void> {
       onPeerOnline: (peer: MeshPeer) => {
         audit.append('PEER_JOIN', peer.agentId, `${peer.host}:${peer.port}`);
         cardServer.setPeerCount(mesh.peerCount);
+        eventBus.emit('peer:join', { agentId: peer.agentId, host: peer.host, port: peer.port });
       },
       onPeerOffline: (peer: MeshPeer) => {
         audit.append('PEER_LEAVE', peer.agentId);
         cardServer.setPeerCount(mesh.peerCount);
         registry.markAgentOffline(peer.agentId);
         rateLimiter.removePeer(peer.agentId);
+        eventBus.emit('peer:leave', { agentId: peer.agentId });
       },
     },
     log,
@@ -164,7 +172,10 @@ async function main(): Promise<void> {
     log,
   });
 
-  // 8d. Dashboard-API-Routen registrieren
+  // 8d. WebSocket fuer Echtzeit-Events
+  await registerWebSocket(cardServer.getServer(), eventBus, log);
+
+  // 8e. Dashboard-API-Routen registrieren
   registerDashboardApi(cardServer.getServer(), {
     mesh,
     registry,
