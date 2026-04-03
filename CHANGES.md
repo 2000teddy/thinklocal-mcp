@@ -389,10 +389,31 @@ Zwei Daemon-Instanzen auf `minimac-3.local` (Ports 9440/9441) finden sich via mD
 
 ---
 
+## [0.14.0] — 2026-04-03
+
+### Vault-Integration — SECRET_REQUEST + Dashboard Vault-UI
+
+**Branch:** `agent/claude-code/phase3-vault-integration`
+
+#### Hinzugefuegt
+
+- `SECRET_REQUEST` / `SECRET_RESPONSE` Message-Typen mit NaCl-verschluesseltem Credential-Transport
+- Dashboard Vault-View: Credentials anzeigen/hinzufuegen/entfernen, Approval-Gate (genehmigen/ablehnen)
+- REST-Endpoints: GET/POST/DELETE /api/vault/credentials, GET /api/vault/approvals, POST approve/deny
+
+#### SECRET_REQUEST Flow
+
+1. Peer sendet SECRET_REQUEST mit NaCl Public Key + Begruendung
+2. Daemon erstellt Approval-Request (Human Gate)
+3. Wenn Peer gepaart: Auto-Approve, Credential wird mit NaCl Sealed Box verschluesselt zurueckgegeben
+4. Wenn nicht gepaart: Status "pending", Human muss im Dashboard genehmigen
+5. Audit-Event bei jedem Credential-Zugriff
+
+---
+
 ## [Unreleased]
 
 ### Geplant (naechste Schritte)
 - Skill-Code-Transfer (signierte ZIP-Pakete + Sandbox)
-- SECRET_REQUEST Message-Typ im Daemon
 - Agent-Detail-Ansicht im Dashboard
 - OS-Keychain-Integration
