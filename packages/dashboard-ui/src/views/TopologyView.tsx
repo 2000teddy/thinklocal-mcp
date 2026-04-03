@@ -1,10 +1,12 @@
 import { useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   ReactFlow,
   Background,
   Controls,
   type Node,
   type Edge,
+  type NodeMouseHandler,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { api, type Peer } from '../api.ts';
@@ -12,6 +14,7 @@ import { usePolling } from '../hooks/usePolling.ts';
 
 /** Topologie-Ansicht: Netzwerkgraph aller verbundenen Agents */
 export function TopologyView() {
+  const navigate = useNavigate();
   const fetchPeers = useCallback(() => api.getPeers(), []);
   const fetchStatus = useCallback(() => api.getStatus(), []);
   const { data: peersData, error: peersError } = usePolling(fetchPeers, 5_000);
@@ -90,6 +93,12 @@ export function TopologyView() {
     return { nodes: n, edges: e };
   }, [peersData, status]);
 
+  const onNodeClick: NodeMouseHandler = useCallback((_event, node) => {
+    if (node.id !== 'self') {
+      navigate(`/agent/${encodeURIComponent(node.id)}`);
+    }
+  }, [navigate]);
+
   if (peersError) {
     return (
       <div className="card" style={{ padding: '2rem', textAlign: 'center' }}>
@@ -113,9 +122,10 @@ export function TopologyView() {
         <ReactFlow
           nodes={nodes}
           edges={edges}
+          onNodeClick={onNodeClick}
           fitView
           proOptions={{ hideAttribution: true }}
-          style={{ background: 'var(--bg-primary)' }}
+          style={{ background: 'var(--bg-primary)', cursor: 'pointer' }}
         >
           <Background color="#334155" gap={20} />
           <Controls />
