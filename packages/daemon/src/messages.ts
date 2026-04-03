@@ -31,6 +31,9 @@ export const MessageType = {
   TASK_ACCEPT: 'TASK_ACCEPT',
   TASK_REJECT: 'TASK_REJECT',
   TASK_RESULT: 'TASK_RESULT',
+  SKILL_ANNOUNCE: 'SKILL_ANNOUNCE',
+  SKILL_REQUEST: 'SKILL_REQUEST',
+  SKILL_TRANSFER: 'SKILL_TRANSFER',
 } as const;
 
 export type MessageTypeName = (typeof MessageType)[keyof typeof MessageType];

@@ -14,6 +14,7 @@ import { GossipSync } from './gossip.js';
 import { RateLimiter } from './ratelimit.js';
 import { MessageType, encodeAndSign, createEnvelope, type MessageEnvelope } from './messages.js';
 import { TaskManager } from './tasks.js';
+import { SkillManager, type SkillAnnouncePayload } from './skills.js';
 import { registerDashboardApi } from './dashboard-api.js';
 import { PairingStore } from './pairing.js';
 import { registerPairingRoutes } from './pairing-handler.js';
@@ -71,8 +72,9 @@ async function main(): Promise<void> {
   // 4. Rate-Limiter initialisieren
   const rateLimiter = new RateLimiter({ maxTokens: 20, refillRate: 2 }, log);
 
-  // 5. Capability Registry initialisieren
+  // 5. Capability Registry + Skill-Manager initialisieren
   const registry = new CapabilityRegistry(log);
+  const skillManager = new SkillManager(config.daemon.data_dir, identity.spiffeUri, registry, log);
 
   // 6. Mesh-Manager starten
   const mesh = new MeshManager(
@@ -102,6 +104,8 @@ async function main(): Promise<void> {
     identity.privateKeyPem,
     log,
     tlsDispatcher,
+    undefined, // GossipConfig defaults
+    skillManager,
   );
 
   // 8. Agent Card Server starten (HTTP oder HTTPS)
@@ -133,6 +137,11 @@ async function main(): Promise<void> {
             { correlation_id: envelope.correlation_id },
           );
           return encodeAndSign(responseEnvelope, identity.privateKeyPem);
+        }
+        case MessageType.SKILL_ANNOUNCE: {
+          const announcePayload = envelope.payload as SkillAnnouncePayload;
+          skillManager.handleAnnounce(envelope.sender, announcePayload);
+          return null; // Kein Response nötig
         }
         default:
           log.debug({ type: envelope.type }, 'Unbekannter Nachrichtentyp');
