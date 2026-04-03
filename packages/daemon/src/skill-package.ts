@@ -140,7 +140,32 @@ export function verifySkillPackage(pkg: SkillPackage): VerificationResult {
   if (!pkg.manifest.version) errors.push('Manifest: version fehlt');
   if (!pkg.manifest.entrypoint) errors.push('Manifest: entrypoint fehlt');
 
+  // 5. SECURITY: Skill-ID Path-Traversal-Schutz
+  if (pkg.manifest.id && !/^[a-z0-9][a-z0-9._-]*$/.test(pkg.manifest.id)) {
+    errors.push(`Manifest: Ungueltige Skill-ID "${pkg.manifest.id}" (nur a-z, 0-9, ., _, - erlaubt)`);
+  }
+
   return { valid: errors.length === 0, errors };
+}
+
+/**
+ * Verifiziert ein Skill-Paket gegen eine Liste bekannter/vertrauenswuerdiger Signer.
+ * Sicherer als verifySkillPackage() allein, weil der Public Key nicht
+ * nur aus dem Paket selbst vertraut wird.
+ */
+export function verifySkillPackageWithTrust(
+  pkg: SkillPackage,
+  trustedSignerKeys: Set<string>,
+): VerificationResult {
+  const result = verifySkillPackage(pkg);
+
+  // Zusaetzlich: Signer muss in der Trusted-Liste sein
+  if (!trustedSignerKeys.has(pkg.authorPublicKey)) {
+    result.errors.push('Signer nicht in Trusted-Signers-Liste');
+    result.valid = false;
+  }
+
+  return result;
 }
 
 /**

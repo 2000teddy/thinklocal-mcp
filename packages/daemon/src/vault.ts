@@ -26,7 +26,7 @@ import {
   encodeUTF8,
   decodeUTF8,
 } from 'tweetnacl-util';
-import { createHash, randomBytes, pbkdf2Sync } from 'node:crypto';
+import { randomBytes, pbkdf2Sync, randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { mkdirSync } from 'node:fs';
 import type { Logger } from 'pino';
@@ -145,7 +145,7 @@ export class CredentialVault {
     tags?: string[];
     ttlHours?: number;
   }): Credential {
-    const id = createHash('sha256').update(`${name}-${Date.now()}`).digest('hex').slice(0, 16);
+    const id = randomUUID();
     const { encrypted, nonce } = this.encrypt(value);
 
     const expiresAt = options?.ttlHours

@@ -130,10 +130,10 @@ export class AuditLog {
       [
         e.id,
         e.timestamp,
-        e.event_type,
-        e.agent_id,
-        e.peer_id ?? '',
-        `"${(e.details ?? '').replace(/"/g, '""')}"`,
+        sanitizeCsvCell(e.event_type),
+        sanitizeCsvCell(e.agent_id),
+        sanitizeCsvCell(e.peer_id ?? ''),
+        sanitizeCsvCell(e.details ?? ''),
         e.signature,
         e.prev_hash,
         e.entry_hash,
@@ -153,4 +153,14 @@ export class AuditLog {
   close(): void {
     this.db.close();
   }
+}
+
+/** SECURITY: CSV-Injection-Schutz — Zellen die mit =, +, -, @ beginnen werden prefixed */
+function sanitizeCsvCell(value: string): string {
+  const escaped = value.replace(/"/g, '""');
+  // CSV-Injection: Formeln verhindern
+  if (/^[=+\-@\t\r]/.test(escaped)) {
+    return `"'${escaped}"`;
+  }
+  return `"${escaped}"`;
 }
