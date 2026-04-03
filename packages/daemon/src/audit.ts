@@ -112,6 +112,44 @@ export class AuditLog {
       .all(limit) as AuditEvent[];
   }
 
+  /**
+   * Exportiert alle Audit-Events als JSON-String.
+   */
+  exportJson(limit?: number): string {
+    const events = this.getEvents(limit ?? 10_000);
+    return JSON.stringify(events, null, 2);
+  }
+
+  /**
+   * Exportiert alle Audit-Events als CSV-String.
+   */
+  exportCsv(limit?: number): string {
+    const events = this.getEvents(limit ?? 10_000);
+    const header = 'id,timestamp,event_type,agent_id,peer_id,details,signature,prev_hash,entry_hash';
+    const rows = events.map((e) =>
+      [
+        e.id,
+        e.timestamp,
+        e.event_type,
+        e.agent_id,
+        e.peer_id ?? '',
+        `"${(e.details ?? '').replace(/"/g, '""')}"`,
+        e.signature,
+        e.prev_hash,
+        e.entry_hash,
+      ].join(','),
+    );
+    return [header, ...rows].join('\n');
+  }
+
+  /**
+   * Gibt die Anzahl der Audit-Events zurück.
+   */
+  count(): number {
+    const row = this.db.prepare('SELECT COUNT(*) as cnt FROM audit_events').get() as { cnt: number };
+    return row.cnt;
+  }
+
   close(): void {
     this.db.close();
   }

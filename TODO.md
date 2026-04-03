@@ -10,12 +10,12 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 ### 1.1 Agent-Identität & Kryptografie
 - [x] 🔴 ECDSA Keypair-Generierung pro Agent (P-256) — `identity.ts` (2026-04-03)
 - [x] 🔴 SPIFFE-URI-Schema implementieren: `spiffe://thinklocal/host/<hostname>/agent/<type>` — `identity.ts` (2026-04-03)
-- [ ] 🔴 Device-Fingerprinting für eindeutige Agent-Identifikation
+- [x] 🔴 Device-Fingerprinting für eindeutige Agent-Identifikation — `identity.ts` computeDeviceFingerprint() (2026-04-03)
 - [x] 🔴 Lokale CA (Certificate Authority) — `tls.ts`, Self-Signed RSA-2048 CA (2026-04-03)
 - [x] 🔴 Kurzlebige X.509-Zertifikate (90d TTL) mit Auto-Renewal bei <7 Tagen — `tls.ts` (2026-04-03)
 - [ ] 🟠 Zertifikat-Widerrufsliste (CRL) oder OCSP-Stapling
 
-### 1.2 Trust Bootstrap
+### 1.2 Trust Bootstrap *(separater PR geplant)*
 - [ ] 🔴 SPAKE2 PIN-Zeremonie für Erstverbindung zweier Agents
 - [ ] 🔴 PIN-Anzeige im Terminal (CLI) und Dashboard (Web)
 - [ ] 🟠 QR-Code-Alternative für mobile/Desktop-Geräte
@@ -44,7 +44,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [x] 🔴 Merkle-Tree-Integrität über Log-Einträge — Hash-Chain mit `entry_hash` (2026-04-03)
 - [x] 🔴 Signierte Audit-Events (ed25519) — ECDSA-Signatur pro Event (2026-04-03)
 - [x] 🟠 Log-Typen: PEER_JOIN, PEER_LEAVE, CAPABILITY_QUERY, TASK_DELEGATE, CREDENTIAL_ACCESS — 6 Typen implementiert (2026-04-03)
-- [ ] 🟠 Log-Export (JSON/CSV) für externe Analyse
+- [x] 🟠 Log-Export (JSON/CSV) für externe Analyse — `audit.ts` exportJson()/exportCsv() (2026-04-03)
 
 ### 1.6 Nachrichtenprotokoll (Basis)
 - [x] 🔴 CBOR Encoding/Decoding Library — `cbor-x` via `messages.ts` (2026-04-03)
@@ -182,7 +182,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 ## Übergreifende Aufgaben (alle Phasen)
 
 ### Dokumentation
-- [ ] 🔴 ADR-Template erstellen und ersten ADR schreiben
+- [x] 🔴 ADR-Template erstellen und ersten ADR schreiben — `docs/architecture/ADR-001-daemon-architecture.md` (2026-04-03)
 - [ ] 🔴 Wire-Protokoll-Spezifikation (vollständig)
 - [ ] 🟠 Threat Model & Sicherheitsdesign-Dokument
 - [ ] 🟠 API-Dokumentation (OpenAPI + GraphQL Schema)
