@@ -16,6 +16,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
+import { systemHealth, systemProcesses, systemNetwork, systemDisk } from './builtin-skills/system-monitor.js';
 
 const DAEMON_URL = process.env['TLMCP_DAEMON_URL'] ?? 'http://localhost:9440';
 
@@ -106,6 +107,33 @@ server.tool('get_audit_log', 'Zeigt die letzten Audit-Events', { limit: z.number
 
 server.tool('start_pairing', 'Startet Peer-Pairing und generiert eine PIN', {}, async () => {
   const data = await postDaemon('/pairing/start', {});
+  return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+});
+
+// --- Builtin Skills ---
+
+server.tool('system_health', 'System-Monitoring: CPU, RAM, Disk, OS-Info und Uptime', {}, async () => {
+  const data = await systemHealth();
+  return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+});
+
+server.tool(
+  'system_processes',
+  'Top-Prozesse sortiert nach CPU-Nutzung',
+  { limit: z.number().optional().describe('Anzahl Prozesse (Default: 10)') },
+  async ({ limit }) => {
+    const data = await systemProcesses(limit ?? 10);
+    return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool('system_network', 'Netzwerk-Interfaces und Traffic-Statistiken', {}, async () => {
+  const data = await systemNetwork();
+  return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+});
+
+server.tool('system_disk', 'Dateisystem-Nutzung und Disk-I/O', {}, async () => {
+  const data = await systemDisk();
   return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
 });
 
