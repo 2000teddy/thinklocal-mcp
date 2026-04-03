@@ -59,7 +59,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 
 ### 2.1 Vollständiges Nachrichtenprotokoll
 - [x] 🔴 TASK_REQUEST / TASK_ACCEPT / TASK_REJECT / TASK_RESULT — `tasks.ts` + `messages.ts` (2026-04-03)
-- [ ] 🔴 SKILL_ANNOUNCE / SKILL_TRANSFER
+- [x] 🔴 SKILL_ANNOUNCE / SKILL_TRANSFER — `skills.ts` + Message-Handler (2026-04-03)
 - [ ] 🔴 SECRET_REQUEST (mit Human-Gate-Flag)
 - [ ] 🔴 AUDIT_EVENT (Mesh-weite Synchronisation)
 - [x] 🟠 Korrelierte Request/Response-Verfolgung — `tasks.ts` correlationIndex (2026-04-03)

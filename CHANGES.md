@@ -303,9 +303,40 @@ Zwei Daemon-Instanzen auf `minimac-3.local` (Ports 9440/9441) finden sich via mD
 
 ---
 
+## [0.11.0] — 2026-04-03
+
+### Skill-System — Skill-Announce + Transfer zwischen Peers
+
+**Branch:** `agent/claude-code/phase2-skills`
+
+#### Hinzugefuegt
+
+| Modul | Beschreibung |
+|-------|-------------|
+| `skills.ts` | SkillManager: Manifest-Format, lokale Skill-Registrierung, SKILL_ANNOUNCE-Handling, Transfer-Request/Response, Persistenz in JSON |
+
+#### Features
+
+- **Skill-Manifest**: ID, Version, Runtime (node/python/wasm/docker), Tools, Resources, Permissions, Integrity-Hash
+- **SKILL_ANNOUNCE**: Peers kuendigen ihre Skills an, Remote-Skills mit Trust-Level 2 in Registry
+- **SKILL_REQUEST / TRANSFER**: Transfer-Lifecycle (requested→transferring→installed/failed)
+- **Lokale Persistenz**: Installierte Skills in `installed.json`
+- **Registry-Integration**: Lokale Skills als Capabilities mit Trust-Level 3
+
+#### Geaendert
+
+- `messages.ts`: SKILL_ANNOUNCE, SKILL_REQUEST, SKILL_TRANSFER Typen
+- `index.ts`: SkillManager initialisiert, SKILL_ANNOUNCE im Message-Handler
+
+#### Tests
+
+- 6 neue Skill-Tests: Register, Unregister, Announce, Announce-Dedup, Transfer-Request, Persistenz
+
+---
+
 ## [Unreleased]
 
 ### Geplant (naechste Schritte)
-- SKILL_ANNOUNCE / SKILL_TRANSFER Nachrichten
+- Skill-Code-Transfer (Phase 3: signierte ZIP-Pakete)
 - GraphQL Subscriptions fuer Echtzeit-Updates
 - Agent-Detail-Ansicht im Dashboard

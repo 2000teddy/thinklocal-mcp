@@ -16,6 +16,7 @@ import { fetch, type Dispatcher } from 'undici';
 import type { Logger } from 'pino';
 import type { MeshManager, MeshPeer } from './mesh.js';
 import type { CapabilityRegistry, Capability } from './registry.js';
+import type { SkillManager } from './skills.js';
 import {
   createEnvelope,
   encodeAndSign,
@@ -51,6 +52,7 @@ export class GossipSync {
     private log?: Logger,
     private dispatcher?: Dispatcher,
     config?: Partial<GossipConfig>,
+    _skillManager?: SkillManager,
   ) {
     this.config = { ...DEFAULT_CONFIG, ...config };
   }
