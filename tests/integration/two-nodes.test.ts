@@ -69,8 +69,8 @@ describe('Two-Node Integration Test', () => {
   });
 
   it('serves agent cards on /.well-known/agent-card.json', async () => {
-    cardServerA = new AgentCardServer(identityA, configA);
-    cardServerB = new AgentCardServer(identityB, configB);
+    cardServerA = new AgentCardServer({ identity: identityA, config: configA });
+    cardServerB = new AgentCardServer({ identity: identityB, config: configB });
     await cardServerA.start();
     await cardServerB.start();
 

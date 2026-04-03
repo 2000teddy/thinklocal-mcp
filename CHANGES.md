@@ -46,13 +46,79 @@ Einstimmig: mTLS + Zero-Trust, libp2p/mDNS Mesh, CRDT Registry, signierte Skills
 
 ---
 
+## [0.2.0] — 2026-04-03
+
+### Phase 1, Schritt 2+3: Node Daemon Grundgerüst + PoC
+
+**Branch:** `agent/claude-code/phase1-daemon` | **PR:** #1
+
+#### Hinzugefügt — Neue Module (`packages/daemon/src/`)
+
+| Modul | Beschreibung |
+|-------|-------------|
+| `config.ts` | TOML-Config (`config/daemon.toml`) + Env-Override (`TLMCP_*`) mit Input-Validierung |
+| `identity.ts` | ECDSA P-256 Keypair-Generierung, SPIFFE-URI, Sign/Verify |
+| `audit.ts` | Append-only SQLite WAL-Log mit signierter Hash-Chain (`entry_hash` persistiert) |
+| `discovery.ts` | mDNS Discovery via `bonjour-service` (`_thinklocal._tcp`) |
+| `agent-card.ts` | Fastify HTTP-Server auf `/.well-known/agent-card.json` + `/health` |
+| `mesh.ts` | Peer-Tracking, paralleler Heartbeat mit Overlap-Schutz |
+| `index.ts` | Orchestrierung, Graceful Shutdown, Agent Card Identitäts-Verifizierung |
+| `logger.ts` | Pino-basiertes strukturiertes JSON-Logging |
+
+#### Sicherheit (nach GPT-5.4 Code Review)
+
+- Agent Card wird nur akzeptiert wenn SPIFFE-URI + Public-Key-Fingerprint zur mDNS-Ankündigung passen
+- mDNS TXT-`endpoint` wird ignoriert — Endpoint immer aus `host:port` abgeleitet
+- Audit-Hash-Chain hasht alle Felder inkl. Signatur, `entry_hash` wird für Restart-Sicherheit persistiert
+- Numerische Umgebungsvariablen werden als positive Ganzzahl validiert
+
+#### Tests
+
+- 4 Integration-Tests: Identität, Agent Cards, Peer-Discovery + Audit, Heartbeat Health-Check
+
+#### PoC-Ergebnis
+
+Zwei Daemon-Instanzen auf `minimac-3.local` (Ports 9440/9441) finden sich via mDNS, tauschen Agent Cards aus und halten Heartbeats aufrecht. PoC bestanden am 2026-04-03.
+
+---
+
+## [0.3.0] — 2026-04-03
+
+### mTLS — Gegenseitige TLS-Authentifizierung
+
+**Branch:** `agent/claude-code/phase1-daemon`
+
+#### Hinzugefügt
+
+| Modul | Beschreibung |
+|-------|-------------|
+| `tls.ts` | Lokale Self-Signed CA (RSA-2048, node-forge), Node-Zertifikate mit SPIFFE-URI in SAN, 90-Tage-Gültigkeit, Auto-Renewal bei <7 Tagen, Peer-Cert-Verifizierung |
+
+#### Geändert
+
+- `agent-card.ts`: Unterstützt jetzt HTTP und HTTPS mit `requestCert: true, rejectUnauthorized: true` für echte mTLS-Validierung
+- `mesh.ts`: Heartbeat-Requests über `undici` mit custom TLS-Dispatcher für Self-Signed CA
+- `index.ts`: TLS-Bundle wird automatisch erstellt, alle Peer-Kommunikation über mTLS. Abschaltbar via `TLMCP_NO_TLS=1`
+- `discovery.ts`: Publiziert `proto`-Feld im mDNS TXT-Record (`http`/`https`)
+
+#### Sicherheit (nach Gemini 2.5 Pro Code Review)
+
+- `rejectUnauthorized: true` auf dem Server (war `false` — Client-Certs werden jetzt validiert)
+- `undici` statt `node:https` für ausgehende Requests (native fetch unterstützt keine custom CA)
+- Zertifikats-Private-Keys mit Dateiberechtigung `0o600`
+
+#### Tests
+
+- 7 neue Unit-Tests für TLS-Modul (CA-Erstellung, Cert-Validierung, SPIFFE-Extraktion, Fremd-CA-Ablehnung)
+- 4 bestehende Integration-Tests weiterhin grün
+
+---
+
 ## [Unreleased]
 
-### Geplant
-- Node Daemon Grundgerüst (TypeScript)
-- mDNS Discovery Module
-- Lokale CA Bootstrap-Mechanismus
-- Agent Card Server Endpoint
-- Dashboard Grundgerüst (Next.js)
+### Geplant (nächste Schritte)
+- CRDT Capability Registry (Automerge)
+- CBOR Message Envelope
+- SPAKE2 PIN-Zeremonie für Trust-Bootstrap
 - CLI Tool `tlmcp` für Mesh-Verwaltung
-- Erster eingebauter Skill: `system-monitor`
+- Dashboard Grundgerüst (Next.js)

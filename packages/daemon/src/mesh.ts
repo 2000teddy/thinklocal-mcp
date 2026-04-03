@@ -1,3 +1,4 @@
+import { fetch, type Dispatcher } from 'undici';
 import type { Logger } from 'pino';
 import type { DiscoveredPeer } from './discovery.js';
 import type { AgentCard } from './agent-card.js';
@@ -30,6 +31,7 @@ export class MeshManager {
     private missedBeatsThreshold: number,
     private events: MeshEvents,
     private log?: Logger,
+    private dispatcher?: Dispatcher,
   ) {}
 
   addPeer(discovered: DiscoveredPeer): MeshPeer {
@@ -128,6 +130,7 @@ export class MeshManager {
         try {
           const response = await fetch(`${peer.endpoint}/health`, {
             signal: AbortSignal.timeout(5_000),
+            dispatcher: this.dispatcher,
           });
 
           if (response.ok) {

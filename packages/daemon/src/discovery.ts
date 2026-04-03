@@ -30,7 +30,12 @@ export class MdnsDiscovery {
   publish(
     name: string,
     port: number,
-    txt: { agentId: string; capabilityHash: string; certFingerprint: string; endpoint: string },
+    txt: {
+      agentId: string;
+      capabilityHash: string;
+      certFingerprint: string;
+      proto: 'http' | 'https';
+    },
   ): void {
     this.bonjour.publish({
       name,
@@ -40,7 +45,7 @@ export class MdnsDiscovery {
         'agent-id': txt.agentId,
         'capability-hash': txt.capabilityHash,
         'cert-fingerprint': txt.certFingerprint,
-        endpoint: txt.endpoint,
+        proto: txt.proto,
       },
     });
 
@@ -54,7 +59,8 @@ export class MdnsDiscovery {
         const txt = service.txt as Record<string, string> | undefined;
         if (!txt?.['agent-id']) return;
 
-        // Endpoint immer aus host:port ableiten — TXT-endpoint nicht blind vertrauen
+        // Endpoint aus host:port ableiten — Protokoll aus TXT lesen (http/https)
+        const proto = txt['proto'] === 'https' ? 'https' : 'http';
         const peer: DiscoveredPeer = {
           name: service.name,
           host: service.host,
@@ -62,7 +68,7 @@ export class MdnsDiscovery {
           agentId: txt['agent-id'],
           capabilityHash: txt['capability-hash'] ?? '',
           certFingerprint: txt['cert-fingerprint'] ?? '',
-          endpoint: `http://${service.host}:${service.port}`,
+          endpoint: `${proto}://${service.host}:${service.port}`,
         };
 
         this.log?.info({ peer: peer.name, host: peer.host, port: peer.port }, 'Peer entdeckt');

@@ -1,8 +1,10 @@
 import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
+import { Agent as UndiciAgent, fetch } from 'undici';
 import { loadConfig } from './config.js';
 import { createLogger } from './logger.js';
 import { loadOrCreateIdentity } from './identity.js';
+import { loadOrCreateTlsBundle, type NodeCertBundle } from './tls.js';
 import { AuditLog } from './audit.js';
 import { MdnsDiscovery } from './discovery.js';
 import { AgentCardServer } from './agent-card.js';
@@ -10,7 +12,7 @@ import { MeshManager, type MeshPeer } from './mesh.js';
 import type { AgentCard } from './agent-card.js';
 
 async function main(): Promise<void> {
-  // Config-Pfad: wenn in worktree, suche config/ relativ zum Repo-Root
+  // Config-Pfad
   const configPath = process.env['TLMCP_CONFIG']
     ?? resolve(process.cwd(), 'config', 'daemon.toml');
 
@@ -28,10 +30,37 @@ async function main(): Promise<void> {
   );
   log.info({ spiffeUri: identity.spiffeUri, fingerprint: identity.fingerprint.slice(0, 16) }, 'Identität geladen');
 
-  // 2. Audit-Log initialisieren
+  // 2. TLS-Bundle laden oder erstellen (CA + Node-Zertifikat)
+  let tlsBundle: NodeCertBundle | undefined;
+  const tlsDisabled = process.env['TLMCP_NO_TLS'] === '1';
+  if (!tlsDisabled) {
+    tlsBundle = loadOrCreateTlsBundle(
+      config.daemon.data_dir,
+      config.daemon.hostname,
+      identity.spiffeUri,
+      log,
+    );
+    log.info('mTLS aktiviert — HTTPS mit gegenseitiger Zertifikatsprüfung');
+  } else {
+    log.warn('mTLS DEAKTIVIERT (TLMCP_NO_TLS=1) — nur für Entwicklung!');
+  }
+
+  // Undici-Dispatcher für ausgehende HTTPS-Verbindungen (vertraut nur unserer Mesh-CA)
+  const tlsDispatcher = tlsBundle
+    ? new UndiciAgent({
+        connect: {
+          ca: tlsBundle.caCertPem,
+          cert: tlsBundle.certPem,
+          key: tlsBundle.keyPem,
+          rejectUnauthorized: true,
+        },
+      })
+    : undefined;
+
+  // 3. Audit-Log initialisieren
   const audit = new AuditLog(config.daemon.data_dir, identity.privateKeyPem, identity.spiffeUri, log);
 
-  // 3. Mesh-Manager starten
+  // 4. Mesh-Manager starten
   const mesh = new MeshManager(
     config.mesh.heartbeat_interval_ms,
     config.mesh.heartbeat_timeout_missed,
@@ -46,13 +75,21 @@ async function main(): Promise<void> {
       },
     },
     log,
+    tlsDispatcher,
   );
 
-  // 4. Agent Card Server starten
-  const cardServer = new AgentCardServer(identity, config, log);
+  // 5. Agent Card Server starten (HTTP oder HTTPS)
+  const cardServer = new AgentCardServer({
+    identity,
+    config,
+    tls: tlsBundle,
+    log,
+  });
   await cardServer.start();
 
-  // 5. mDNS Discovery starten
+  const proto = cardServer.protocol;
+
+  // 6. mDNS Discovery starten
   const discovery = new MdnsDiscovery(config.discovery.mdns_service_type, log);
 
   discovery.publish(
@@ -62,13 +99,12 @@ async function main(): Promise<void> {
       agentId: identity.spiffeUri,
       capabilityHash: '',
       certFingerprint: identity.fingerprint,
-      endpoint: `http://${config.daemon.hostname}:${config.daemon.port}`,
+      proto: proto as 'http' | 'https',
     },
   );
 
   discovery.browse({
     onPeerFound: async (discovered) => {
-      // Eigenen Service ignorieren
       if (discovered.agentId === identity.spiffeUri) return;
 
       mesh.addPeer(discovered);
@@ -77,11 +113,11 @@ async function main(): Promise<void> {
       try {
         const res = await fetch(`${discovered.endpoint}/.well-known/agent-card.json`, {
           signal: AbortSignal.timeout(5_000),
+          dispatcher: tlsDispatcher,
         });
         if (res.ok) {
           const card = (await res.json()) as AgentCard;
 
-          // Identitäts-Check: SPIFFE-URI und Public-Key-Fingerprint müssen übereinstimmen
           const cardFingerprint = createHash('sha256').update(card.publicKey).digest('hex');
           if (card.spiffeUri !== discovered.agentId || cardFingerprint !== discovered.certFingerprint) {
             log.warn(
@@ -103,15 +139,15 @@ async function main(): Promise<void> {
     },
   });
 
-  // 6. Heartbeat-Loop starten
+  // 7. Heartbeat-Loop starten
   mesh.startHeartbeatLoop();
 
   log.info(
-    { port: config.daemon.port, agentType: config.daemon.agent_type },
+    { port: config.daemon.port, agentType: config.daemon.agent_type, proto },
     'Daemon bereit — warte auf Peers...',
   );
 
-  // 7. Graceful Shutdown
+  // 8. Graceful Shutdown
   const shutdown = async (signal: string): Promise<void> => {
     log.info({ signal }, 'Shutdown eingeleitet...');
     mesh.stopHeartbeatLoop();
