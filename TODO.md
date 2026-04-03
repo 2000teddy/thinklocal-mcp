@@ -84,10 +84,10 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [ ] 🟡 OpenAPI/Swagger-Dokumentation
 
 ### 2.4 Dashboard UI (MVP)
-- [ ] 🔴 React + Vite Projekt-Setup
-- [ ] 🔴 **Topologie-Ansicht** — Netzwerkgraph aller verbundenen Agents
-- [ ] 🔴 **Skill-Matrix** — Tabelle: Agent × Capability mit Status
-- [ ] 🔴 **Health-Gauges** — Host-Gesundheit (CPU, RAM, Disk)
+- [x] 🔴 React + Vite Projekt-Setup — `packages/dashboard-ui/` mit Tailwind (2026-04-03)
+- [x] 🔴 **Topologie-Ansicht** — React Flow Netzwerkgraph mit animierten Kanten (2026-04-03)
+- [x] 🔴 **Skill-Matrix** — Tabelle: Agent x Capability mit Status-Badges (2026-04-03)
+- [x] 🔴 **Health-Gauges** — CPU/RAM/Disk mit Farbbalken + Uptime/Peers/Tasks (2026-04-03)
 - [ ] 🟠 **Agent-Detail-Ansicht** — Skills, Logs, Verbindungen pro Agent
 - [ ] 🟠 Dunkler/Heller Modus
 - [ ] 🟡 Responsive Design (Mobile/Tablet)
