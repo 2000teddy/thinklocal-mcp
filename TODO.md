@@ -15,12 +15,12 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [x] 🔴 Kurzlebige X.509-Zertifikate (90d TTL) mit Auto-Renewal bei <7 Tagen — `tls.ts` (2026-04-03)
 - [ ] 🟠 Zertifikat-Widerrufsliste (CRL) oder OCSP-Stapling
 
-### 1.2 Trust Bootstrap *(separater PR geplant)*
-- [ ] 🔴 SPAKE2 PIN-Zeremonie für Erstverbindung zweier Agents
-- [ ] 🔴 PIN-Anzeige im Terminal (CLI) und Dashboard (Web)
+### 1.2 Trust Bootstrap
+- [x] 🔴 SPAKE2 PIN-Zeremonie für Erstverbindung zweier Agents — `pairing.ts` + `pairing-handler.ts` (2026-04-03)
+- [x] 🔴 PIN-Anzeige im Terminal (CLI) — POST /pairing/start generiert 6-stellige PIN (2026-04-03)
 - [ ] 🟠 QR-Code-Alternative für mobile/Desktop-Geräte
 - [ ] 🟠 Fallback: Statische Peer-Liste in Konfigurationsdatei
-- [ ] 🟡 Device-Pairing-Persistenz (einmal gepairt → automatisch vertraut)
+- [x] 🟡 Device-Pairing-Persistenz (einmal gepairt → automatisch vertraut) — `PairingStore` in JSON-Datei (2026-04-03)
 
 ### 1.3 Mesh-Networking
 - [ ] 🔴 libp2p Node.js/TypeScript Integration
