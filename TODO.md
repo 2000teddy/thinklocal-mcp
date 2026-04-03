@@ -98,14 +98,14 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 ## Phase 3 — Vault & Skill-Transfer (Wochen 6-10)
 
 ### 3.1 Credential Vault
-- [ ] 🔴 LibSodium Sealed Boxes für Verschlüsselung
-- [ ] 🔴 Lokaler Vault-Speicher (SQLCipher)
+- [x] 🔴 NaCl Sealed Boxes fuer Verschluesselung — `vault.ts` sealForPeer/unsealFromPeer (2026-04-03)
+- [x] 🔴 Lokaler Vault-Speicher (AES-256-GCM + PBKDF2) — `vault.ts` (2026-04-03)
 - [ ] 🔴 OS-Keychain-Integration (macOS Keychain, GNOME Keyring)
-- [ ] 🔴 **Human Approval Gate** — Dashboard-Benachrichtigung + CLI-Prompt
-- [ ] 🟠 Shamir's Secret Sharing für hochwertige Credentials
-- [ ] 🟠 Credential-TTL und Auto-Expiry (Standard: 24h)
+- [x] 🔴 **Human Approval Gate** — `vault.ts` ApprovalRequest System (2026-04-03)
+- [ ] 🟠 Shamir's Secret Sharing fuer hochwertige Credentials
+- [x] 🟠 Credential-TTL und Auto-Expiry — `vault.ts` ttlHours + cleanExpired() (2026-04-03)
 - [ ] 🟠 Brokered Access — Credential-Halter proxied Anfragen statt Secrets zu teilen
-- [ ] 🟡 Credential-Scope (z.B. nur lesend, nur bestimmte Tabellen)
+- [x] 🟡 Credential-Scope (Tags/Kategorien) — `vault.ts` tags + category Filter (2026-04-03)
 - [ ] 🟡 Revocation-Mechanismus
 
 ### 3.2 Skill-Paket-Format
