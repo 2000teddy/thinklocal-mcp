@@ -22,6 +22,7 @@ import { MeshEventBus } from './events.js';
 import { registerWebSocket } from './websocket.js';
 import { CredentialVault } from './vault.js';
 import type { SecretRequestPayload, SecretResponsePayload } from './messages.js';
+import { SYSTEM_MONITOR_MANIFEST } from './builtin-skills/system-monitor.js';
 import type { AgentCard } from './agent-card.js';
 
 async function main(): Promise<void> {
@@ -87,6 +88,9 @@ async function main(): Promise<void> {
   // 5. Capability Registry + Skill-Manager initialisieren
   const registry = new CapabilityRegistry(log);
   const skillManager = new SkillManager(config.daemon.data_dir, identity.spiffeUri, registry, log);
+
+  // Eingebaute Skills registrieren
+  skillManager.registerLocal({ ...SYSTEM_MONITOR_MANIFEST, author: identity.spiffeUri });
 
   // 6. Mesh-Manager starten
   const mesh = new MeshManager(
