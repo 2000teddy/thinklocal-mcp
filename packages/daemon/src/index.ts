@@ -20,6 +20,8 @@ import { PairingStore } from './pairing.js';
 import { registerPairingRoutes } from './pairing-handler.js';
 import { MeshEventBus } from './events.js';
 import { registerWebSocket } from './websocket.js';
+import { CredentialVault } from './vault.js';
+import type { SecretRequestPayload, SecretResponsePayload } from './messages.js';
 import type { AgentCard } from './agent-card.js';
 
 async function main(): Promise<void> {
@@ -75,7 +77,11 @@ async function main(): Promise<void> {
   const eventBus = new MeshEventBus();
   eventBus.emit('system:startup', { agentId: identity.spiffeUri, port: config.daemon.port });
 
-  // 4b. Rate-Limiter initialisieren
+  // 4b. Credential Vault initialisieren
+  const vaultPassphrase = process.env['TLMCP_VAULT_PASSPHRASE'] ?? 'thinklocal-dev-vault';
+  const vault = new CredentialVault(config.daemon.data_dir, vaultPassphrase, log);
+
+  // 4c. Rate-Limiter initialisieren
   const rateLimiter = new RateLimiter({ maxTokens: 20, refillRate: 2 }, log);
 
   // 5. Capability Registry + Skill-Manager initialisieren
@@ -151,6 +157,29 @@ async function main(): Promise<void> {
           skillManager.handleAnnounce(envelope.sender, announcePayload);
           return null; // Kein Response nötig
         }
+        case MessageType.SECRET_REQUEST: {
+          const secretReq = envelope.payload as SecretRequestPayload;
+          log.info({ from: envelope.sender, credential: secretReq.credential_name }, 'Secret-Anfrage erhalten');
+          eventBus.emit('audit:new', { type: 'SECRET_REQUEST', from: envelope.sender, credential: secretReq.credential_name });
+
+          const approval = vault.createApprovalRequest(envelope.sender, secretReq.credential_name, secretReq.reason);
+          const cred = vault.retrieve(secretReq.credential_name);
+          let responsePayload: SecretResponsePayload;
+
+          if (!cred) {
+            responsePayload = { credential_name: secretReq.credential_name, status: 'denied', sealed_value: null, reason: 'Credential not found' };
+          } else if (pairingStore.isPaired(envelope.sender)) {
+            vault.approveRequest(approval.id);
+            const sealed = vault.sealForPeer(cred.value, secretReq.requester_public_key);
+            responsePayload = { credential_name: secretReq.credential_name, status: 'approved', sealed_value: sealed, reason: null };
+            audit.append('CREDENTIAL_ACCESS', envelope.sender, secretReq.credential_name);
+          } else {
+            responsePayload = { credential_name: secretReq.credential_name, status: 'pending', sealed_value: null, reason: 'Awaiting human approval' };
+          }
+
+          const secretResp = createEnvelope(MessageType.SECRET_RESPONSE, identity.spiffeUri, responsePayload, { correlation_id: envelope.correlation_id });
+          return encodeAndSign(secretResp, identity.privateKeyPem);
+        }
         default:
           log.debug({ type: envelope.type }, 'Unbekannter Nachrichtentyp');
           return null;
@@ -184,6 +213,7 @@ async function main(): Promise<void> {
     identity,
     config,
     rateLimiter,
+    vault,
   });
 
   await cardServer.start();
@@ -255,6 +285,7 @@ async function main(): Promise<void> {
     gossip.stop();
     mesh.stopHeartbeatLoop();
     taskManager.stop();
+    vault.close();
     rateLimiter.stop();
     discovery.stop();
     await cardServer.stop();

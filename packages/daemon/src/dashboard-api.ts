@@ -19,6 +19,7 @@ import type { AuditLog } from './audit.js';
 import type { AgentIdentity } from './identity.js';
 import type { DaemonConfig } from './config.js';
 import type { RateLimiter } from './ratelimit.js';
+import type { CredentialVault } from './vault.js';
 
 export interface DashboardApiDeps {
   mesh: MeshManager;
@@ -28,6 +29,7 @@ export interface DashboardApiDeps {
   identity: AgentIdentity;
   config: DaemonConfig;
   rateLimiter?: RateLimiter;
+  vault?: CredentialVault;
 }
 
 /**
@@ -152,5 +154,73 @@ export function registerDashboardApi(server: FastifyInstance, deps: DashboardApi
       count: events.length,
       total: audit.count(),
     };
+  });
+
+  // --- Vault-Endpoints ---
+
+  if (!deps.vault) return;
+  const vaultRef = deps.vault;
+
+  // GET /api/vault/credentials — Alle Credentials (ohne Werte)
+  server.get('/api/vault/credentials', async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!checkRateLimit(request, reply)) return;
+    const query = request.query as { category?: string };
+    const credentials = vaultRef.list(query.category);
+    return { credentials, count: credentials.length };
+  });
+
+  // POST /api/vault/credentials — Neues Credential speichern
+  server.post('/api/vault/credentials', async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!checkRateLimit(request, reply)) return;
+    const body = request.body as {
+      name: string;
+      value: string;
+      category?: string;
+      tags?: string[];
+      ttl_hours?: number;
+    };
+    if (!body.name || !body.value) {
+      return reply.code(400).send({ error: 'name and value required' });
+    }
+    const cred = vaultRef.store(body.name, body.value, {
+      category: body.category,
+      tags: body.tags,
+      ttlHours: body.ttl_hours,
+    });
+    return { credential: cred };
+  });
+
+  // DELETE /api/vault/credentials/:name — Credential entfernen
+  server.delete('/api/vault/credentials/:name', async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!checkRateLimit(request, reply)) return;
+    const { name } = request.params as { name: string };
+    const removed = vaultRef.remove(name);
+    if (!removed) return reply.code(404).send({ error: 'Credential not found' });
+    return { status: 'removed', name };
+  });
+
+  // GET /api/vault/approvals — Ausstehende Approval-Anfragen
+  server.get('/api/vault/approvals', async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!checkRateLimit(request, reply)) return;
+    const pending = vaultRef.getPendingRequests();
+    return { approvals: pending, count: pending.length };
+  });
+
+  // POST /api/vault/approvals/:id/approve — Anfrage genehmigen
+  server.post('/api/vault/approvals/:id/approve', async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!checkRateLimit(request, reply)) return;
+    const { id } = request.params as { id: string };
+    const approved = vaultRef.approveRequest(id);
+    if (!approved) return reply.code(404).send({ error: 'Approval not found or already decided' });
+    return { status: 'approved', id };
+  });
+
+  // POST /api/vault/approvals/:id/deny — Anfrage ablehnen
+  server.post('/api/vault/approvals/:id/deny', async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!checkRateLimit(request, reply)) return;
+    const { id } = request.params as { id: string };
+    const denied = vaultRef.denyRequest(id);
+    if (!denied) return reply.code(404).send({ error: 'Approval not found or already decided' });
+    return { status: 'denied', id };
   });
 }

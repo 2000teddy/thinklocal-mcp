@@ -34,6 +34,8 @@ export const MessageType = {
   SKILL_ANNOUNCE: 'SKILL_ANNOUNCE',
   SKILL_REQUEST: 'SKILL_REQUEST',
   SKILL_TRANSFER: 'SKILL_TRANSFER',
+  SECRET_REQUEST: 'SECRET_REQUEST',
+  SECRET_RESPONSE: 'SECRET_RESPONSE',
 } as const;
 
 export type MessageTypeName = (typeof MessageType)[keyof typeof MessageType];
@@ -125,6 +127,26 @@ export interface TaskResultPayload {
   error: string | null;
 }
 
+export interface SecretRequestPayload {
+  /** Name des angeforderten Credentials */
+  credential_name: string;
+  /** Begruendung fuer den Zugriff */
+  reason: string;
+  /** NaCl Public Key des Anforderers (Base64) fuer verschluesselten Ruecktransport */
+  requester_public_key: string;
+}
+
+export interface SecretResponsePayload {
+  /** Name des Credentials */
+  credential_name: string;
+  /** Status: approved (mit Wert), denied, pending */
+  status: 'approved' | 'denied' | 'pending';
+  /** NaCl-verschluesselter Credential-Wert (nur bei approved) */
+  sealed_value: string | null;
+  /** Ablehnungsgrund (bei denied) */
+  reason: string | null;
+}
+
 export type MessagePayload =
   | HeartbeatPayload
   | DiscoverQueryPayload
@@ -136,7 +158,9 @@ export type MessagePayload =
   | TaskRequestPayload
   | TaskAcceptPayload
   | TaskRejectPayload
-  | TaskResultPayload;
+  | TaskResultPayload
+  | SecretRequestPayload
+  | SecretResponsePayload;
 
 // --- Envelope ---
 

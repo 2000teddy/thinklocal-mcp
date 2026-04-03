@@ -5,6 +5,7 @@ import { HealthView } from './views/HealthView.tsx';
 import { PairingView } from './views/PairingView.tsx';
 import { AuditView } from './views/AuditView.tsx';
 import { EventFeed } from './views/EventFeed.tsx';
+import { VaultView } from './views/VaultView.tsx';
 import { useWebSocket } from './hooks/useWebSocket.tsx';
 
 export function App() {
@@ -41,6 +42,7 @@ export function App() {
         <NavItem to="/skills" label="Skill-Matrix" />
         <NavItem to="/health" label="Health" />
         <NavItem to="/events" label="Live-Events" />
+        <NavItem to="/vault" label="Vault" />
         <NavItem to="/pairing" label="Pairing" />
         <NavItem to="/audit" label="Audit-Log" />
       </nav>
@@ -52,6 +54,7 @@ export function App() {
           <Route path="/skills" element={<SkillMatrix />} />
           <Route path="/health" element={<HealthView />} />
           <Route path="/events" element={<EventFeed events={ws.events} connected={ws.connected} />} />
+          <Route path="/vault" element={<VaultView />} />
           <Route path="/pairing" element={<PairingView />} />
           <Route path="/audit" element={<AuditView />} />
         </Routes>
