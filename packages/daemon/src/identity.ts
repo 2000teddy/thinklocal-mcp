@@ -1,7 +1,7 @@
 import { generateKeyPairSync, createSign, createVerify, createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { hostname as osHostname } from 'node:os';
+import { hostname as osHostname, networkInterfaces, cpus, platform, arch } from 'node:os';
 import type { Logger } from 'pino';
 
 export interface AgentIdentity {
@@ -62,6 +62,42 @@ export async function loadOrCreateIdentity(
     spiffeUri: `spiffe://thinklocal/host/${host}/agent/${agentType}`,
     fingerprint: computeFingerprint(publicKey),
   };
+}
+
+/**
+ * Erstellt einen stabilen Device-Fingerprint basierend auf Hardware-Merkmalen.
+ * Kombination aus: Hostname, MAC-Adressen, CPU-Modell, Platform, Architektur.
+ * Ändert sich nicht über Neustarts hinweg (solange Hardware gleich bleibt).
+ */
+export function computeDeviceFingerprint(): string {
+  const parts: string[] = [];
+
+  // Hostname
+  parts.push(osHostname());
+
+  // MAC-Adressen (stabil über Neustarts)
+  const ifaces = networkInterfaces();
+  for (const ifaceList of Object.values(ifaces)) {
+    if (!ifaceList) continue;
+    for (const iface of ifaceList) {
+      if (iface.mac && iface.mac !== '00:00:00:00:00:00') {
+        parts.push(iface.mac);
+      }
+    }
+  }
+
+  // CPU-Modell + Anzahl
+  const cpuList = cpus();
+  if (cpuList.length > 0) {
+    parts.push(cpuList[0].model);
+    parts.push(String(cpuList.length));
+  }
+
+  // Platform + Architektur
+  parts.push(platform());
+  parts.push(arch());
+
+  return createHash('sha256').update(parts.sort().join('|')).digest('hex');
 }
 
 export function signData(privateKeyPem: string, data: Buffer): Buffer {
