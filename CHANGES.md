@@ -362,9 +362,37 @@ Zwei Daemon-Instanzen auf `minimac-3.local` (Ports 9440/9441) finden sich via mD
 
 ---
 
+## [0.13.0] — 2026-04-03
+
+### Phase 3: Credential Vault — Verschluesselter Credential-Speicher
+
+**Branch:** `agent/claude-code/phase3-vault`
+
+#### Hinzugefuegt
+
+| Modul | Beschreibung |
+|-------|-------------|
+| `vault.ts` | Verschluesselter Credential-Speicher: AES-256-GCM at-rest (PBKDF2 Key-Derivation), NaCl Sealed Boxes fuer Peer-Sharing, Credential-TTL mit Auto-Expiry, Tags/Kategorien, Human Approval Gate (pending/approved/denied) |
+
+#### Features
+
+- **Store/Retrieve**: Credentials verschluesselt speichern und abrufen
+- **NaCl Sealed Boxes**: `sealForPeer()` / `unsealFromPeer()` fuer sicheren Peer-zu-Peer-Austausch
+- **TTL + Auto-Expiry**: Credentials laufen nach konfigurierbarer Zeit ab
+- **Approval Gate**: Anfragen fuer Credential-Zugriff mit pending/approved/denied-Workflow
+- **Scoping**: Kategorien + Tags fuer feingranulaere Zugriffskontrolle
+- **Zugriffs-Tracking**: Access-Count + Last-Accessed-At pro Credential
+
+#### Tests
+
+- 10 neue Vault-Tests: Store/Retrieve, TTL, NaCl Seal/Unseal, falscher Schluessel, Approval-Workflow
+
+---
+
 ## [Unreleased]
 
 ### Geplant (naechste Schritte)
-- Phase 3: Credential Vault (LibSodium Sealed Boxes)
-- Skill-Code-Transfer (signierte ZIP-Pakete)
+- Skill-Code-Transfer (signierte ZIP-Pakete + Sandbox)
+- SECRET_REQUEST Message-Typ im Daemon
 - Agent-Detail-Ansicht im Dashboard
+- OS-Keychain-Integration

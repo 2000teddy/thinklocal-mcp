@@ -27,6 +27,8 @@
     "node-forge": "^1.4.0",
     "pino": "^9.6.0",
     "systeminformation": "^5.23.0",
+    "tweetnacl": "^1.0.3",
+    "tweetnacl-util": "^0.15.1",
     "undici": "^8.0.1"
   },
   "devDependencies": {
