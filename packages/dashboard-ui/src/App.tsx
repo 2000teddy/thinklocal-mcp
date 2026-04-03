@@ -6,6 +6,7 @@ import { PairingView } from './views/PairingView.tsx';
 import { AuditView } from './views/AuditView.tsx';
 import { EventFeed } from './views/EventFeed.tsx';
 import { VaultView } from './views/VaultView.tsx';
+import { AgentDetailView } from './views/AgentDetailView.tsx';
 import { useWebSocket } from './hooks/useWebSocket.tsx';
 
 export function App() {
@@ -54,6 +55,7 @@ export function App() {
           <Route path="/skills" element={<SkillMatrix />} />
           <Route path="/health" element={<HealthView />} />
           <Route path="/events" element={<EventFeed events={ws.events} connected={ws.connected} />} />
+          <Route path="/agent/:agentId" element={<AgentDetailView />} />
           <Route path="/vault" element={<VaultView />} />
           <Route path="/pairing" element={<PairingView />} />
           <Route path="/audit" element={<AuditView />} />

@@ -411,9 +411,21 @@ Zwei Daemon-Instanzen auf `minimac-3.local` (Ports 9440/9441) finden sich via mD
 
 ---
 
+## [0.15.0] — 2026-04-03
+
+### Agent-Detail-Ansicht + klickbare Topologie
+
+**Branch:** `agent/claude-code/phase2-agent-detail`
+
+- **AgentDetailView.tsx**: Drill-down-Ansicht pro Agent mit Health-Gauges (CPU/RAM/Disk), Capabilities-Liste, Audit-Events, Verbindungsdetails
+- **TopologyView**: Nodes sind jetzt klickbar — Klick auf Peer navigiert zu `/agent/:agentId`
+- Route: `/agent/:agentId`
+
+---
+
 ## [Unreleased]
 
 ### Geplant (naechste Schritte)
-- Skill-Code-Transfer (signierte ZIP-Pakete + Sandbox)
-- Agent-Detail-Ansicht im Dashboard
+- Skill-Code-Transfer (signierte ZIP-Pakete + WASM Sandbox)
 - OS-Keychain-Integration
+- Dunkler/Heller Modus im Dashboard

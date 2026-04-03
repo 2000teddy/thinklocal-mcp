@@ -88,7 +88,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [x] 🔴 **Topologie-Ansicht** — React Flow Netzwerkgraph mit animierten Kanten (2026-04-03)
 - [x] 🔴 **Skill-Matrix** — Tabelle: Agent x Capability mit Status-Badges (2026-04-03)
 - [x] 🔴 **Health-Gauges** — CPU/RAM/Disk mit Farbbalken + Uptime/Peers/Tasks (2026-04-03)
-- [ ] 🟠 **Agent-Detail-Ansicht** — Skills, Logs, Verbindungen pro Agent
+- [x] 🟠 **Agent-Detail-Ansicht** — Skills, Health-Gauges, Audit-Events pro Agent + klickbare Topologie-Nodes (2026-04-03)
 - [ ] 🟠 Dunkler/Heller Modus
 - [ ] 🟡 Responsive Design (Mobile/Tablet)
 - [ ] 🟡 Notifications (Agent-Down, Skill-Transfer-Anfrage, etc.)
