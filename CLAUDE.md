@@ -23,19 +23,55 @@ Die Architektur wurde durch einen Multi-Modell-Konsensus (GPT-5.4, Gemini 3 Pro,
 - Audit-Log ab Phase 1 (nicht nachrüsten!)
 - Human Approval Gates für Credential Sharing und Skill Transfer
 
-## Aufgabe: Phase 1 — Schritte 1 bis 3
+## Deine Rolle: Lead Developer & Orchestrator
 
-### Schritt 1: Git-Repository initialisieren und auf GitHub pushen
+Du bist der Hauptentwickler dieses Projekts. Du schreibst den Code, triffst Implementierungsentscheidungen und steuerst den Entwicklungsprozess. Zusätzlich hast du über PAL und clink Zugriff auf andere AI-Modelle, die du als spezialisierte Berater und Reviewer einsetzen sollst:
 
-```bash
-cd ~/Entwicklung_local/thinklocal-mcp
-chmod +x init-repo.sh
-./init-repo.sh
+### Sub-Agenten-Strategie (PAL/clink)
+
+**Code Review nach jedem abgeschlossenen Modul:**
+```
+pal:codereview  →  Lass GPT-5.4 oder Gemini Pro den fertigen Code reviewen
+                   Andere Modelle finden andere Bugs — nutze das.
 ```
 
-Das Skript erstellt ein privates GitHub-Repo via `gh` CLI, commitet und pusht. Danach:
-- Branch Protection für `main` einrichten (Settings → Branches → Add rule)
-- Eigenen Arbeitsbranch erstellen: `git checkout -b agent/claude-code/phase1-daemon`
+**Architektur-Entscheidungen während der Implementierung:**
+```
+pal:consensus   →  Wenn eine Design-Frage auftaucht (z.B. "bonjour-service vs @libp2p/mdns?"),
+                   konsultiere 2-3 Modelle und nimm den Konsensus.
+```
+
+**Isolierte Teilaufgaben delegieren:**
+```
+clink gemini    →  Testfälle generieren, TypeScript-Typen aus JSON-Schema ableiten
+clink codex     →  Dockerfile, CI/CD-Pipeline, Performance-Optimierung
+pal:chat        →  Schnelle Rückfragen zu Bibliotheken, API-Design, Best Practices
+```
+
+**Nicht tun:**
+- Nicht zwei Agenten gleichzeitig im selben Modul arbeiten lassen
+- Nicht Code von Sub-Agenten übernehmen ohne eigenes Review
+- Sub-Agenten haben keinen Repo-Kontext — gib immer die relevanten Dateipfade mit
+
+### Wann welchen Sub-Agenten nutzen
+
+| Situation | Tool | Modell |
+|-----------|------|--------|
+| Code fertig → Review | `pal:codereview` | GPT-5.4 oder Gemini Pro |
+| Architektur-Frage | `pal:consensus` | 2-3 Modelle |
+| Tests generieren | `clink gemini` | Gemini CLI |
+| Schnelle API-Frage | `pal:chat` | auto |
+| Sicherheitsreview | `pal:codereview` (focus: security) | GPT-5.4 |
+| Vor dem Commit | `pal:precommit` | auto |
+
+## Aufgabe: Phase 1 — Schritte 1 bis 3
+
+### Schritt 1: Arbeitsbranch erstellen
+
+Das Repo ist bereits auf GitHub (privat, `main` Branch). Erstelle deinen Arbeitsbranch:
+```bash
+git checkout -b agent/claude-code/phase1-daemon
+```
 
 ### Schritt 2: Node Daemon Grundgerüst (`packages/daemon/`)
 
@@ -86,6 +122,8 @@ Initialisiere `packages/daemon/` als TypeScript-Projekt:
    - Heartbeat-Loop starten
    - Graceful Shutdown (SIGTERM/SIGINT)
 
+4. **Nach jedem fertigen Modul**: `pal:codereview` mit GPT-5.4 oder Gemini Pro laufen lassen.
+
 ### Schritt 3: Proof-of-Concept — Zwei Nodes auf einem Rechner
 
 Ziel: Zwei Daemon-Instanzen auf localhost (verschiedene Ports) finden sich per mDNS, tauschen Agent Cards aus und halten einen Heartbeat aufrecht.
@@ -105,6 +143,16 @@ Erwartetes Verhalten:
 - Heartbeats laufen, bei Ctrl+C in einem Terminal: PEER_LEAVE im anderen
 
 Schreibe dafür auch einen Integration-Test in `tests/integration/two-nodes.test.ts`.
+Lass den Test anschließend von `clink gemini` reviewen.
+
+### Schritt 4: Vor dem Push
+
+```
+pal:precommit   →  Validierung aller Änderungen vor dem Commit
+git push origin agent/claude-code/phase1-daemon
+```
+
+Dann PR gegen `main` erstellen und Christian zur Genehmigung bitten.
 
 ## Tech-Entscheidungen (bindend)
 
@@ -136,3 +184,4 @@ Siehe CONTRIBUTING.md für Scopes und Regeln. Pushe nicht auf `main` direkt.
 - **mTLS ist Phase 1, aber der PoC darf mit Self-Signed starten** — die CA kommt danach
 - **Lies TODO.md Phase 1** vollständig durch — dort stehen die genauen Aufgaben mit Prioritäten
 - **Das Netzwerk ist 10.10.10.0/24** — der Mac (minimac-2) hat IP 10.10.10.55 auf USB LAN
+- **Nutze Sub-Agenten aktiv** — Code Review nach jedem Modul, Konsensus bei Architektur-Fragen
