@@ -478,8 +478,24 @@ Damit kann Claude Code direkt Mesh-Funktionen nutzen: Peers entdecken, Capabilit
 
 ---
 
+## [0.19.0] — 2026-04-03
+
+### Installation, Distribution + Netzwerk-Scanner
+
+- `scripts/install.sh`: One-Line-Installer fuer macOS/Linux — klont, installiert, richtet Service ein, konfiguriert MCP
+- `scripts/deploy-remote.sh`: SSH-Deployment auf entfernte Rechner mit Node-Check
+- `scripts/service/com.thinklocal.daemon.plist`: macOS launchd Service
+- `scripts/service/thinklocal-daemon.service`: Linux systemd User-Service
+- `scripts/service/thinklocal-daemon.ps1`: Windows Scheduled Task
+- `packages/cli/src/scan-network.ts`: Netzwerk-Scanner — findet laufende Daemons, SSH-Hosts, prueft Node.js, schlaegt Deployment vor
+- `INSTALL.md`: Umfassende Installationsanleitung (alle Plattformen, Claude Code, Claude Desktop, Fehlerbehebung, Deinstallation)
+- `README.md`: Quick Start aktualisiert
+
+---
+
 ## [Unreleased]
 
 ### Geplant
 - WASM/Docker Sandbox fuer Skill-Ausfuehrung
 - OS-Keychain-Integration
+- Homebrew-Formel

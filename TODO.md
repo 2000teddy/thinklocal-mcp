@@ -208,10 +208,10 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [x] 🔴 Konfigurationsdatei-Format (TOML) — `config/daemon.toml` + `config.ts` (2026-04-03)
 - [x] 🔴 Umgebungsvariablen-Unterstützung — `TLMCP_*`-Prefix mit Validierung (2026-04-03)
 - [ ] 🟠 Homebrew-Formel (macOS)
-- [ ] 🟠 Systemd-Service-Dateien (Linux)
-- [ ] 🟡 launchd-Plist (macOS)
-- [ ] 🟡 Windows-Service (optional)
-- [ ] 💡 Nix-Flake für reproduzierbare Builds
+- [x] 🟠 Systemd-Service-Dateien (Linux) — `scripts/service/thinklocal-daemon.service` (2026-04-03)
+- [x] 🟡 launchd-Plist (macOS) — `scripts/service/com.thinklocal.daemon.plist` (2026-04-03)
+- [x] 🟡 Windows-Service — `scripts/service/thinklocal-daemon.ps1` Scheduled Task (2026-04-03)
+- [ ] 💡 Nix-Flake fuer reproduzierbare Builds
 
 ---
 
