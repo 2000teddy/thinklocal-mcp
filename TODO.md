@@ -198,7 +198,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [ ] 🟡 Chaos-Tests (Network Partition, Node-Ausfall)
 
 ### CI/CD & Build
-- [ ] 🔴 GitHub Actions Pipeline
+- [x] 🔴 GitHub Actions Pipeline — `.github/workflows/ci.yml` (2026-04-03)
 - [ ] 🔴 Linting (ESLint, Ruff, Prettier)
 - [ ] 🟠 Docker-Image-Build und -Push
 - [ ] 🟠 Automatische Release-Erstellung

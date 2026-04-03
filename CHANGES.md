@@ -468,9 +468,18 @@ Damit kann Claude Code direkt Mesh-Funktionen nutzen: Peers entdecken, Capabilit
 
 ---
 
+## [0.18.0] — 2026-04-03
+
+### CI Pipeline + CLI Tool
+
+- `.github/workflows/ci.yml`: GitHub Actions fuer Daemon (TypeScript + Tests) und Dashboard (TypeScript + Vite Build)
+- `packages/cli/src/tlmcp.ts`: CLI fuer Mesh-Verwaltung: status, peers, caps, tasks, vault, pairing, audit
+- Root package.json: Neue Scripts `dashboard:dev`, `dashboard:build`, `tlmcp`
+
+---
+
 ## [Unreleased]
 
-### Geplant (naechste Schritte)
+### Geplant
 - WASM/Docker Sandbox fuer Skill-Ausfuehrung
 - OS-Keychain-Integration
-- Dunkler/Heller Modus im Dashboard

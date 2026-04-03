@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  daemon:
+    name: Daemon — TypeScript + Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: packages/daemon/package-lock.json
+
+      - name: Install dependencies
+        working-directory: packages/daemon
+        run: npm ci
+
+      - name: TypeScript check
+        working-directory: packages/daemon
+        run: npx tsc --noEmit
+
+      - name: Run tests
+        run: npx vitest run
+        env:
+          NODE_ENV: test
+
+  dashboard:
+    name: Dashboard — TypeScript + Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: packages/dashboard-ui/package-lock.json
+
+      - name: Install dependencies
+        working-directory: packages/dashboard-ui
+        run: npm ci
+
+      - name: TypeScript check
+        working-directory: packages/dashboard-ui
+        run: npx tsc --noEmit
+
+      - name: Production build
+        working-directory: packages/dashboard-ui
+        run: npx vite build
