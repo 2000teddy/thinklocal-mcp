@@ -20,6 +20,7 @@ import type { AgentIdentity } from './identity.js';
 import type { DaemonConfig } from './config.js';
 import type { RateLimiter } from './ratelimit.js';
 import type { CredentialVault } from './vault.js';
+import type { TaskExecutor } from './task-executor.js';
 
 export interface DashboardApiDeps {
   mesh: MeshManager;
@@ -30,6 +31,7 @@ export interface DashboardApiDeps {
   config: DaemonConfig;
   rateLimiter?: RateLimiter;
   vault?: CredentialVault;
+  executor?: TaskExecutor;
 }
 
 /**
@@ -155,6 +157,40 @@ export function registerDashboardApi(server: FastifyInstance, deps: DashboardApi
       total: audit.count(),
     };
   });
+
+  // --- Task-Execution-Endpoint ---
+
+  if (deps.executor) {
+    const executorRef = deps.executor;
+
+    // POST /api/tasks/execute — Fuehrt einen lokalen Skill aus und gibt das Ergebnis zurueck
+    server.post('/api/tasks/execute', async (request: FastifyRequest, reply: FastifyReply) => {
+      if (!checkRateLimit(request, reply)) return;
+      const body = request.body as { skill_id: string; input?: Record<string, unknown> };
+      if (!body.skill_id) {
+        return reply.code(400).send({ error: 'skill_id required' });
+      }
+
+      // Task erstellen und sofort ausfuehren
+      const task = tasks.createRequest('remote', body.skill_id, body.input ?? {});
+      const result = await executorRef.handleTaskRequest(
+        task.id,
+        body.skill_id,
+        body.input ?? {},
+        'remote',
+      );
+
+      if (!result.accepted) {
+        return reply.code(404).send({ error: result.error ?? 'Skill nicht verfuegbar' });
+      }
+
+      if (result.error) {
+        return reply.code(500).send({ error: result.error, task_id: task.id });
+      }
+
+      return { task_id: task.id, skill_id: body.skill_id, result: result.result };
+    });
+  }
 
   // --- Vault-Endpoints ---
 

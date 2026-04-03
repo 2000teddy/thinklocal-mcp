@@ -21,6 +21,7 @@ import { registerPairingRoutes } from './pairing-handler.js';
 import { MeshEventBus } from './events.js';
 import { registerWebSocket } from './websocket.js';
 import { CredentialVault } from './vault.js';
+import { TaskExecutor } from './task-executor.js';
 import type { SecretRequestPayload, SecretResponsePayload } from './messages.js';
 import { SYSTEM_MONITOR_MANIFEST } from './builtin-skills/system-monitor.js';
 import type { AgentCard } from './agent-card.js';
@@ -190,8 +191,16 @@ async function main(): Promise<void> {
       }
     },
   });
-  // 8b. Task-Manager initialisieren
+  // 8b. Task-Manager + Executor initialisieren
   const taskManager = new TaskManager(log);
+  const taskExecutor = new TaskExecutor({
+    tasks: taskManager,
+    skills: skillManager,
+    audit,
+    eventBus,
+    agentId: identity.spiffeUri,
+    log,
+  });
 
   // 8c. Pairing-Store + Routen registrieren
   const pairingStore = new PairingStore(config.daemon.data_dir, log);
@@ -218,6 +227,7 @@ async function main(): Promise<void> {
     config,
     rateLimiter,
     vault,
+    executor: taskExecutor,
   });
 
   await cardServer.start();
