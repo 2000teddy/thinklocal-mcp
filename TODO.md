@@ -126,8 +126,8 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
     "tests": ["test_health_check.py"]
   }
   ```
-- [ ] 🔴 Signierte ZIP-Pakete (.tlskill)
-- [ ] 🔴 Signatur-Verifizierung (ed25519) vor Installation
+- [x] 🔴 Signierte Skill-Pakete (.tlskill) — `skill-package.ts` (2026-04-03)
+- [x] 🔴 Signatur-Verifizierung (ECDSA) vor Installation — `verifySkillPackage()` (2026-04-03)
 - [ ] 🟠 SemVer-Versionierung mit Kompatibilitätsprüfung
 - [ ] 🟠 Rollback-Mechanismus bei fehlgeschlagener Installation
 

@@ -454,9 +454,23 @@ Damit kann Claude Code direkt Mesh-Funktionen nutzen: Peers entdecken, Capabilit
 
 ---
 
+## [0.17.0] — 2026-04-03
+
+### Signierte Skill-Pakete (.tlskill)
+
+**Branch:** `agent/claude-code/phase3-skill-packages`
+
+- `skill-package.ts`: Erstellung, Speicherung, Verifizierung und Installation von .tlskill-Paketen
+- Format: JSON-Container mit Manifest, Base64-Code, SHA-256 Integrity, ECDSA-Signatur
+- Verifizierung: Format-Check, Integrity-Hash, Signatur-Pruefung, Manifest-Validierung
+- Installation nur nach erfolgreicher Verifizierung
+- 7 Tests: Create, Verify, Tamper Detection, Wrong Key, Save/Load, Install, Reject Tampered
+
+---
+
 ## [Unreleased]
 
 ### Geplant (naechste Schritte)
-- Skill-Code-Transfer (signierte ZIP-Pakete + WASM Sandbox)
+- WASM/Docker Sandbox fuer Skill-Ausfuehrung
 - OS-Keychain-Integration
 - Dunkler/Heller Modus im Dashboard
