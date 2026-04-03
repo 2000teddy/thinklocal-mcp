@@ -9,6 +9,10 @@ import { AuditLog } from './audit.js';
 import { MdnsDiscovery } from './discovery.js';
 import { AgentCardServer } from './agent-card.js';
 import { MeshManager, type MeshPeer } from './mesh.js';
+import { CapabilityRegistry } from './registry.js';
+import { GossipSync } from './gossip.js';
+import { RateLimiter } from './ratelimit.js';
+import { MessageType, encodeAndSign, createEnvelope, type MessageEnvelope } from './messages.js';
 import type { AgentCard } from './agent-card.js';
 
 async function main(): Promise<void> {
@@ -60,7 +64,13 @@ async function main(): Promise<void> {
   // 3. Audit-Log initialisieren
   const audit = new AuditLog(config.daemon.data_dir, identity.privateKeyPem, identity.spiffeUri, log);
 
-  // 4. Mesh-Manager starten
+  // 4. Rate-Limiter initialisieren
+  const rateLimiter = new RateLimiter({ maxTokens: 20, refillRate: 2 }, log);
+
+  // 5. Capability Registry initialisieren
+  const registry = new CapabilityRegistry(log);
+
+  // 6. Mesh-Manager starten
   const mesh = new MeshManager(
     config.mesh.heartbeat_interval_ms,
     config.mesh.heartbeat_timeout_missed,
@@ -72,24 +82,64 @@ async function main(): Promise<void> {
       onPeerOffline: (peer: MeshPeer) => {
         audit.append('PEER_LEAVE', peer.agentId);
         cardServer.setPeerCount(mesh.peerCount);
+        registry.markAgentOffline(peer.agentId);
+        rateLimiter.removePeer(peer.agentId);
       },
     },
     log,
     tlsDispatcher,
   );
 
-  // 5. Agent Card Server starten (HTTP oder HTTPS)
+  // 7. Gossip-Sync initialisieren
+  const gossip = new GossipSync(
+    registry,
+    mesh,
+    identity.spiffeUri,
+    identity.privateKeyPem,
+    log,
+    tlsDispatcher,
+  );
+
+  // 8. Agent Card Server starten (HTTP oder HTTPS)
   const cardServer = new AgentCardServer({
     identity,
     config,
     tls: tlsBundle,
     log,
+    getPeerPublicKey: (agentId: string) => {
+      const peer = mesh.getPeer(agentId);
+      return peer?.agentCard?.publicKey;
+    },
+    onMessage: async (envelope: MessageEnvelope) => {
+      // Rate-Limiting prüfen
+      if (!rateLimiter.allow(envelope.sender)) {
+        log.warn({ sender: envelope.sender }, 'Rate-Limited — Nachricht abgelehnt');
+        return null;
+      }
+
+      // Nachricht je nach Typ verarbeiten
+      switch (envelope.type) {
+        case MessageType.REGISTRY_SYNC: {
+          const response = gossip.handleSyncMessage(envelope);
+          const responseEnvelope = createEnvelope(
+            MessageType.REGISTRY_SYNC_RESPONSE,
+            identity.spiffeUri,
+            response,
+            { correlation_id: envelope.correlation_id },
+          );
+          return encodeAndSign(responseEnvelope, identity.privateKeyPem);
+        }
+        default:
+          log.debug({ type: envelope.type }, 'Unbekannter Nachrichtentyp');
+          return null;
+      }
+    },
   });
   await cardServer.start();
 
   const proto = cardServer.protocol;
 
-  // 6. mDNS Discovery starten
+  // 9. mDNS Discovery starten
   const discovery = new MdnsDiscovery(config.discovery.mdns_service_type, log);
 
   discovery.publish(
@@ -139,18 +189,21 @@ async function main(): Promise<void> {
     },
   });
 
-  // 7. Heartbeat-Loop starten
+  // 10. Heartbeat-Loop + Gossip-Sync starten
   mesh.startHeartbeatLoop();
+  gossip.start();
 
   log.info(
     { port: config.daemon.port, agentType: config.daemon.agent_type, proto },
     'Daemon bereit — warte auf Peers...',
   );
 
-  // 8. Graceful Shutdown
+  // 11. Graceful Shutdown
   const shutdown = async (signal: string): Promise<void> => {
     log.info({ signal }, 'Shutdown eingeleitet...');
+    gossip.stop();
     mesh.stopHeartbeatLoop();
+    rateLimiter.stop();
     discovery.stop();
     await cardServer.stop();
     audit.append('PEER_LEAVE', identity.spiffeUri, 'graceful shutdown');

@@ -169,10 +169,34 @@ Zwei Daemon-Instanzen auf `minimac-3.local` (Ports 9440/9441) finden sich via mD
 
 ---
 
+## [0.6.0] — 2026-04-03
+
+### Gossip-Sync + Rate-Limiting
+
+**Branch:** `agent/claude-code/phase1-daemon`
+
+#### Hinzugefügt
+
+| Modul | Beschreibung |
+|-------|-------------|
+| `gossip.ts` | Gossip-basierte Registry-Synchronisation: Pull-Push-Pattern, konfigurierbarer Fanout (Default: 3 Peers), 30s-Intervall, Hash-Vergleich vor Import |
+| `ratelimit.ts` | Token Bucket Rate-Limiter pro Peer: 20 Tokens Burst, 2 Tokens/s Refill, automatisches Cleanup inaktiver Buckets |
+
+#### Geändert
+
+- `index.ts`: Registry, Gossip-Sync und Rate-Limiter vollständig integriert. Message-Handler verarbeitet REGISTRY_SYNC. Peers werden bei Offline-Markierung aus Rate-Limiter entfernt, Capabilities als offline markiert
+- `messages.ts`: Neue Typen REGISTRY_SYNC / REGISTRY_SYNC_RESPONSE mit Capability-Payload
+
+#### Tests
+
+- 2 Gossip-Tests: Import von Peer-Capabilities, Hash-Vergleich bei Sync
+- 6 Rate-Limiter-Tests: Burst-Limit, Refill, Separate Buckets, Remove, Overflow-Schutz
+
+---
+
 ## [Unreleased]
 
 ### Geplant (nächste Schritte)
-- Gossip-Sync-Loop (automatische Registry-Synchronisation über /message)
 - SPAKE2 PIN-Zeremonie für Trust-Bootstrap
 - CLI Tool `tlmcp` für Mesh-Verwaltung
 - Dashboard Grundgerüst (Next.js)

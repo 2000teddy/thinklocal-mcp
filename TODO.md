@@ -35,7 +35,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 ### 1.4 Capability Registry
 - [x] 🔴 CRDT-basierte verteilte Registry (Automerge) — `registry.ts` (2026-04-03)
 - [x] 🔴 Capability-Dokument-Schema — `registry.ts` Capability-Interface (2026-04-03)
-- [ ] 🔴 Gossip-Synchronisation (Serf-Pattern) — Import/Export vorhanden, Gossip-Loop TODO
+- [x] 🔴 Gossip-Synchronisation (Serf-Pattern) — `gossip.ts` Pull-Push mit Fanout (2026-04-03)
 - [ ] 🟠 Vector Clocks für Konfliktauflösung — Automerge CRDT handhabt das intern
 - [x] 🟠 Capability-Hashing für kompakte Announcements — `getCapabilityHash()` (2026-04-03)
 
@@ -50,7 +50,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [x] 🔴 CBOR Encoding/Decoding Library — `cbor-x` via `messages.ts` (2026-04-03)
 - [x] 🔴 Message-Envelope: Correlation-ID, Deadline/TTL, Idempotency-Key, ECDSA-Signatur — `messages.ts` (2026-04-03)
 - [x] 🔴 Basis-Nachrichten: HEARTBEAT, DISCOVER_QUERY, CAPABILITY_QUERY — `messages.ts` (2026-04-03)
-- [ ] 🟠 Rate-Limiting (Token Bucket pro Peer)
+- [x] 🟠 Rate-Limiting (Token Bucket pro Peer) — `ratelimit.ts` (2026-04-03)
 - [ ] 🟠 Scoped Multicast (nach Capability/Topic, kein Blind Flood)
 
 ---

@@ -25,6 +25,8 @@ export const MessageType = {
   DISCOVER_RESPONSE: 'DISCOVER_RESPONSE',
   CAPABILITY_QUERY: 'CAPABILITY_QUERY',
   CAPABILITY_RESPONSE: 'CAPABILITY_RESPONSE',
+  REGISTRY_SYNC: 'REGISTRY_SYNC',
+  REGISTRY_SYNC_RESPONSE: 'REGISTRY_SYNC_RESPONSE',
 } as const;
 
 export type MessageTypeName = (typeof MessageType)[keyof typeof MessageType];
@@ -67,12 +69,40 @@ export interface CapabilityResponsePayload {
   }>;
 }
 
+export interface RegistrySyncPayload {
+  /** Hash der lokalen Registry — Empfänger prüft ob Sync nötig */
+  capability_hash: string;
+  /** Alle lokalen Capabilities (für Import beim Empfänger) */
+  capabilities: Array<{
+    skill_id: string;
+    version: string;
+    description: string;
+    agent_id: string;
+    health: string;
+    trust_level: number;
+    updated_at: string;
+    category: string;
+    permissions: string[];
+  }>;
+}
+
+export interface RegistrySyncResponsePayload {
+  /** Hash der Registry nach Import */
+  capability_hash: string;
+  /** Anzahl importierter Capabilities */
+  imported: number;
+  /** Capabilities des Empfängers (für Rück-Sync) */
+  capabilities: RegistrySyncPayload['capabilities'];
+}
+
 export type MessagePayload =
   | HeartbeatPayload
   | DiscoverQueryPayload
   | DiscoverResponsePayload
   | CapabilityQueryPayload
-  | CapabilityResponsePayload;
+  | CapabilityResponsePayload
+  | RegistrySyncPayload
+  | RegistrySyncResponsePayload;
 
 // --- Envelope ---
 
