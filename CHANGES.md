@@ -114,11 +114,38 @@ Zwei Daemon-Instanzen auf `minimac-3.local` (Ports 9440/9441) finden sich via mD
 
 ---
 
+## [0.4.0] — 2026-04-03
+
+### CBOR Message Envelope — Signiertes Nachrichtenprotokoll
+
+**Branch:** `agent/claude-code/phase1-daemon`
+
+#### Hinzugefügt
+
+| Modul | Beschreibung |
+|-------|-------------|
+| `messages.ts` | CBOR-basiertes Nachrichtenprotokoll mit signierten Envelopes: Correlation-ID, TTL, Idempotency-Key, ECDSA-Signatur |
+
+#### Nachrichtentypen (Phase 1)
+
+- `HEARTBEAT` — Lebenszeichen mit Uptime, Peer-Count, CPU-Load (TTL: 15s)
+- `DISCOVER_QUERY` / `DISCOVER_RESPONSE` — Peer-Suche mit optionalem Agent-Typ-Filter
+- `CAPABILITY_QUERY` / `CAPABILITY_RESPONSE` — Fähigkeiten abfragen (skill_id oder category)
+
+#### Geändert
+
+- `agent-card.ts`: Neuer `/message`-Endpoint für CBOR-Nachrichten mit Signaturprüfung und Content-Type-Parser für `application/cbor`
+
+#### Tests
+
+- 8 neue Unit-Tests: Envelope-Erstellung, CBOR Encode/Decode, Signaturverifizierung, TTL-Ablauf, Serialisierung/Deserialisierung
+
+---
+
 ## [Unreleased]
 
 ### Geplant (nächste Schritte)
 - CRDT Capability Registry (Automerge)
-- CBOR Message Envelope
 - SPAKE2 PIN-Zeremonie für Trust-Bootstrap
 - CLI Tool `tlmcp` für Mesh-Verwaltung
 - Dashboard Grundgerüst (Next.js)

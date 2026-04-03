@@ -1,8 +1,14 @@
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyRequest, type FastifyReply } from 'fastify';
 import * as si from 'systeminformation';
 import type { AgentIdentity } from './identity.js';
 import type { DaemonConfig } from './config.js';
 import type { NodeCertBundle } from './tls.js';
+import type { MessageEnvelope, SignedMessage } from './messages.js';
+import {
+  deserializeSignedMessage,
+  decodeAndVerify,
+  serializeSignedMessage,
+} from './messages.js';
 import type { Logger } from 'pino';
 
 export interface AgentCard {
@@ -31,11 +37,21 @@ export interface AgentCard {
   };
 }
 
+/** Callback für eingehende Mesh-Nachrichten */
+export type MessageHandler = (
+  envelope: MessageEnvelope,
+  senderPublicKey: string,
+) => Promise<SignedMessage | null>;
+
 export interface AgentCardServerOptions {
   identity: AgentIdentity;
   config: DaemonConfig;
   tls?: NodeCertBundle;
   log?: Logger;
+  /** Map von bekannten Peer-Public-Keys (agentId → PEM) für Signaturprüfung */
+  getPeerPublicKey?: (agentId: string) => string | undefined;
+  /** Handler für eingehende Mesh-Nachrichten */
+  onMessage?: MessageHandler;
 }
 
 export class AgentCardServer {
@@ -48,7 +64,11 @@ export class AgentCardServer {
     this.joinedAt = new Date().toISOString();
     this.useTls = !!opts.tls;
 
-    const serverOpts: Record<string, unknown> = { logger: false };
+    const serverOpts: Record<string, unknown> = {
+      logger: false,
+      // Raw body für CBOR-Message-Endpoint
+      bodyLimit: 1_048_576, // 1 MB max
+    };
 
     // mTLS konfigurieren wenn TLS-Bundle vorhanden
     if (opts.tls) {
@@ -63,12 +83,67 @@ export class AgentCardServer {
 
     this.server = Fastify(serverOpts);
 
+    // CBOR Content-Type-Parser registrieren
+    this.server.addContentTypeParser(
+      'application/cbor',
+      { parseAs: 'buffer' },
+      (_req: FastifyRequest, body: Buffer, done: (err: Error | null, result?: Buffer) => void) => {
+        done(null, body);
+      },
+    );
+
     this.server.get('/.well-known/agent-card.json', async () => {
       return this.buildCard();
     });
 
     this.server.get('/health', async () => {
       return { status: 'ok', timestamp: new Date().toISOString() };
+    });
+
+    // Message-Endpoint: empfängt CBOR-kodierte SignedMessages
+    this.server.post('/message', {
+      config: { rawBody: true },
+    }, async (request: FastifyRequest, reply: FastifyReply) => {
+      const body = request.body as Buffer;
+      if (!body || body.length === 0) {
+        return reply.code(400).send({ error: 'Empty body' });
+      }
+
+      try {
+        const signed = deserializeSignedMessage(new Uint8Array(body));
+
+        // Envelope dekodieren um Sender zu extrahieren (ohne Signaturprüfung)
+        const { Decoder } = await import('cbor-x');
+        const decoder = new Decoder({ structuredClone: true });
+        const rawEnvelope = decoder.decode(Buffer.from(signed.envelope)) as MessageEnvelope;
+
+        // Public Key des Senders nachschlagen
+        const senderKey = opts.getPeerPublicKey?.(rawEnvelope.sender);
+        if (!senderKey) {
+          return reply.code(403).send({ error: 'Unknown sender' });
+        }
+
+        // Signatur verifizieren + TTL prüfen
+        const verified = decodeAndVerify(signed, senderKey);
+        if (!verified) {
+          return reply.code(403).send({ error: 'Invalid signature or expired' });
+        }
+
+        // An den Message-Handler delegieren
+        const response = await opts.onMessage?.(verified, senderKey);
+        if (response) {
+          const responseBytes = serializeSignedMessage(response);
+          return reply
+            .code(200)
+            .header('content-type', 'application/cbor')
+            .send(Buffer.from(responseBytes));
+        }
+
+        return reply.code(204).send();
+      } catch (err) {
+        opts.log?.warn({ err }, 'Fehler beim Verarbeiten einer Nachricht');
+        return reply.code(400).send({ error: 'Invalid message format' });
+      }
     });
   }
 

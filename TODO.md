@@ -60,9 +60,9 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [ ] 🟠 Log-Export (JSON/CSV) für externe Analyse
 
 ### 1.6 Nachrichtenprotokoll (Basis)
-- [ ] 🔴 CBOR Encoding/Decoding Library
-- [ ] 🔴 Message-Envelope: Correlation-ID, Deadline/TTL, Idempotency-Key, ed25519-Signatur
-- [ ] 🔴 Basis-Nachrichten: HEARTBEAT, DISCOVER_QUERY, CAPABILITY_QUERY
+- [x] 🔴 CBOR Encoding/Decoding Library — `cbor-x` via `messages.ts` (2026-04-03)
+- [x] 🔴 Message-Envelope: Correlation-ID, Deadline/TTL, Idempotency-Key, ECDSA-Signatur — `messages.ts` (2026-04-03)
+- [x] 🔴 Basis-Nachrichten: HEARTBEAT, DISCOVER_QUERY, CAPABILITY_QUERY — `messages.ts` (2026-04-03)
 - [ ] 🟠 Rate-Limiting (Token Bucket pro Peer)
 - [ ] 🟠 Scoped Multicast (nach Capability/Topic, kein Blind Flood)
 
