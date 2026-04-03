@@ -33,24 +33,11 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [ ] 🟡 NAT Traversal (für VPN/Tailscale-übergreifende Mesh-Erweiterung)
 
 ### 1.4 Capability Registry
-- [ ] 🔴 CRDT-basierte verteilte Registry (Automerge)
-- [ ] 🔴 Capability-Dokument-Schema (JSON Schema):
-  ```json
-  {
-    "agent_id": "...",
-    "skill_id": "influxdb.read",
-    "version": "1.2.0",
-    "input_schema": { ... },
-    "output_schema": { ... },
-    "permissions_required": ["network.local", "db.influx"],
-    "health": "healthy",
-    "trust_level": 3,
-    "signature": "ed25519:..."
-  }
-  ```
-- [ ] 🔴 Gossip-Synchronisation (Serf-Pattern)
-- [ ] 🟠 Vector Clocks für Konfliktauflösung
-- [ ] 🟠 Capability-Hashing für kompakte Announcements
+- [x] 🔴 CRDT-basierte verteilte Registry (Automerge) — `registry.ts` (2026-04-03)
+- [x] 🔴 Capability-Dokument-Schema — `registry.ts` Capability-Interface (2026-04-03)
+- [ ] 🔴 Gossip-Synchronisation (Serf-Pattern) — Import/Export vorhanden, Gossip-Loop TODO
+- [ ] 🟠 Vector Clocks für Konfliktauflösung — Automerge CRDT handhabt das intern
+- [x] 🟠 Capability-Hashing für kompakte Announcements — `getCapabilityHash()` (2026-04-03)
 
 ### 1.5 Audit-Log (Phase 1!)
 - [x] 🔴 Append-Only SQLite WAL-Log pro Agent — `audit.ts` (2026-04-03)

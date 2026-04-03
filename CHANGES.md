@@ -142,10 +142,37 @@ Zwei Daemon-Instanzen auf `minimac-3.local` (Ports 9440/9441) finden sich via mD
 
 ---
 
+## [0.5.0] — 2026-04-03
+
+### CRDT Capability Registry — Verteilte Fähigkeiten-Datenbank
+
+**Branch:** `agent/claude-code/phase1-daemon`
+
+#### Hinzugefügt
+
+| Modul | Beschreibung |
+|-------|-------------|
+| `registry.ts` | Automerge-basierte CRDT-Registry für Capabilities. Register, Unregister, Suche nach skill_id/category/agent. Import/Export für Peer-Sync, Capability-Hashing, Save/Load-Persistenz |
+
+#### Features
+
+- `register()` / `unregister()` — Capabilities anmelden/abmelden
+- `findBySkill()` / `findByCategory()` / `getAgentCapabilities()` — Suche
+- `markAgentOffline()` — Alle Capabilities eines Agents als offline markieren
+- `importPeerCapabilities()` / `exportCapabilities()` — Peer-Synchronisation mit Timestamp-basierter Konfliktauflösung
+- `getCapabilityHash()` — SHA-256-Hash für kompakte Announcements
+- `save()` / `load()` — Persistenz via Automerge Binary
+
+#### Tests
+
+- 9 neue Unit-Tests: Register, Unregister, Suche, Offline-Markierung, Hash-Berechnung, Peer-Import, Konflikauflösung, Save/Load
+
+---
+
 ## [Unreleased]
 
 ### Geplant (nächste Schritte)
-- CRDT Capability Registry (Automerge)
+- Gossip-Sync-Loop (automatische Registry-Synchronisation über /message)
 - SPAKE2 PIN-Zeremonie für Trust-Bootstrap
 - CLI Tool `tlmcp` für Mesh-Verwaltung
 - Dashboard Grundgerüst (Next.js)
