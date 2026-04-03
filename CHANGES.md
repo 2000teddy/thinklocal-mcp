@@ -334,9 +334,37 @@ Zwei Daemon-Instanzen auf `minimac-3.local` (Ports 9440/9441) finden sich via mD
 
 ---
 
+## [0.12.0] — 2026-04-03
+
+### WebSocket Echtzeit-Events + Live-Dashboard
+
+**Branch:** `agent/claude-code/phase2-websocket`
+
+#### Hinzugefuegt — Daemon
+
+| Modul | Beschreibung |
+|-------|-------------|
+| `events.ts` | Zentraler MeshEventBus (EventEmitter): 16 Event-Typen (peer, task, capability, skill, audit, system) |
+| `websocket.ts` | @fastify/websocket Server auf /ws: Broadcast an alle Clients, Ping/Pong (30s), Graceful Disconnect |
+
+#### Hinzugefuegt — Dashboard
+
+| View | Beschreibung |
+|------|-------------|
+| **Live-Events** | Echtzeit-Event-Feed via WebSocket mit Emoji-Icons, Auto-Reconnect, max 200 Events |
+| **useWebSocket** | React-Hook: WebSocket-Verbindung mit Auto-Reconnect (3s), Event-Buffer |
+
+#### Geaendert
+
+- `index.ts`: EventBus initialisiert, Events bei Peer-Join/Leave emittiert
+- `App.tsx`: Live-Indikator (gruen/rot) in Sidebar, neue "Live-Events"-Route
+- `vite.config.ts`: WebSocket-Proxy (/ws → ws://localhost:9440)
+
+---
+
 ## [Unreleased]
 
 ### Geplant (naechste Schritte)
-- Skill-Code-Transfer (Phase 3: signierte ZIP-Pakete)
-- GraphQL Subscriptions fuer Echtzeit-Updates
+- Phase 3: Credential Vault (LibSodium Sealed Boxes)
+- Skill-Code-Transfer (signierte ZIP-Pakete)
 - Agent-Detail-Ansicht im Dashboard

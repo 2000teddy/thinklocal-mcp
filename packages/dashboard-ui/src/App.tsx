@@ -4,8 +4,12 @@ import { SkillMatrix } from './views/SkillMatrix.tsx';
 import { HealthView } from './views/HealthView.tsx';
 import { PairingView } from './views/PairingView.tsx';
 import { AuditView } from './views/AuditView.tsx';
+import { EventFeed } from './views/EventFeed.tsx';
+import { useWebSocket } from './hooks/useWebSocket.tsx';
 
 export function App() {
+  const ws = useWebSocket();
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       {/* Sidebar Navigation */}
@@ -20,11 +24,23 @@ export function App() {
       }}>
         <div style={{ padding: '0.5rem', marginBottom: '1rem' }}>
           <h1 style={{ fontSize: '1.125rem', fontWeight: 700 }}>thinklocal</h1>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Mesh Dashboard</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginTop: '0.25rem' }}>
+            <span style={{
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              background: ws.connected ? 'var(--success)' : 'var(--danger)',
+              display: 'inline-block',
+            }} />
+            <span style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)' }}>
+              {ws.connected ? 'Live' : 'Offline'}
+            </span>
+          </div>
         </div>
         <NavItem to="/" label="Topologie" />
         <NavItem to="/skills" label="Skill-Matrix" />
         <NavItem to="/health" label="Health" />
+        <NavItem to="/events" label="Live-Events" />
         <NavItem to="/pairing" label="Pairing" />
         <NavItem to="/audit" label="Audit-Log" />
       </nav>
@@ -35,6 +51,7 @@ export function App() {
           <Route path="/" element={<TopologyView />} />
           <Route path="/skills" element={<SkillMatrix />} />
           <Route path="/health" element={<HealthView />} />
+          <Route path="/events" element={<EventFeed events={ws.events} connected={ws.connected} />} />
           <Route path="/pairing" element={<PairingView />} />
           <Route path="/audit" element={<AuditView />} />
         </Routes>

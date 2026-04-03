@@ -14,6 +14,10 @@ export default defineConfig({
         target: 'http://localhost:9440',
         changeOrigin: true,
       },
+      '/ws': {
+        target: 'ws://localhost:9440',
+        ws: true,
+      },
     },
   },
 });
