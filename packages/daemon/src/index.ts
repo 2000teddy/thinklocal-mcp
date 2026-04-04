@@ -25,6 +25,7 @@ import { TaskExecutor } from './task-executor.js';
 import type { SecretRequestPayload, SecretResponsePayload } from './messages.js';
 import { SYSTEM_MONITOR_MANIFEST } from './builtin-skills/system-monitor.js';
 import { INFLUXDB_MANIFEST, influxdbHealthCheck } from './builtin-skills/influxdb.js';
+import { TelegramGateway } from './telegram-gateway.js';
 import type { AgentCard } from './agent-card.js';
 
 async function main(): Promise<void> {
@@ -298,14 +299,33 @@ async function main(): Promise<void> {
   mesh.startHeartbeatLoop();
   gossip.start();
 
+  // 11. Telegram Gateway starten (wenn Token vorhanden)
+  let telegramGateway: TelegramGateway | undefined;
+  const telegramToken = process.env['TELEGRAM_BOT_TOKEN'];
+  if (telegramToken) {
+    try {
+      telegramGateway = new TelegramGateway(
+        { botToken: telegramToken, daemonUrl: `http://localhost:${config.daemon.port}` },
+        eventBus,
+        log,
+      );
+      log.info('Telegram Gateway gestartet — sende /start an den Bot');
+    } catch (err) {
+      log.warn({ err }, 'Telegram Gateway konnte nicht gestartet werden');
+    }
+  } else {
+    log.debug('Kein TELEGRAM_BOT_TOKEN — Telegram Gateway deaktiviert');
+  }
+
   log.info(
     { port: config.daemon.port, agentType: config.daemon.agent_type, proto },
     'Daemon bereit — warte auf Peers...',
   );
 
-  // 11. Graceful Shutdown
+  // 12. Graceful Shutdown
   const shutdown = async (signal: string): Promise<void> => {
     log.info({ signal }, 'Shutdown eingeleitet...');
+    telegramGateway?.stop();
     gossip.stop();
     mesh.stopHeartbeatLoop();
     taskManager.stop();
