@@ -121,14 +121,26 @@ server.tool(
     target_agent: z.string().optional().describe('Optional: bestimmter Agent (SPIFFE-URI). Wenn leer, wird automatisch ein Peer gewaehlt.'),
   },
   async ({ skill_id, input, target_agent }) => {
-    // 1. Passenden Peer finden
+    // 1. Passenden Peer finden — suche nach exaktem Match oder Skill-Manifest das den Sub-Skill enthaelt
+    // z.B. "system.health" ist ein Sub-Skill von "system-monitor"
     const capsData = await fetchDaemon('/api/capabilities') as { capabilities: Array<{ skill_id: string; agent_id: string; health: string }> };
-    const candidates = capsData.capabilities.filter(
+
+    // Erst exakter Match, dann Prefix-Match (system.health → system-monitor weil system-monitor Tools system.* hat)
+    let candidates = capsData.capabilities.filter(
       (c) => c.skill_id === skill_id && c.health === 'healthy',
     );
 
+    // Fallback: Suche nach Manifest das den Sub-Skill enthalten koennte
+    // z.B. skill_id "system.health" → suche "system-monitor" (gleicher Prefix "system")
     if (candidates.length === 0) {
-      return { content: [{ type: 'text' as const, text: JSON.stringify({ error: `Kein Peer mit Skill '${skill_id}' gefunden` }) }] };
+      const prefix = skill_id.split('.')[0];
+      candidates = capsData.capabilities.filter(
+        (c) => c.skill_id.startsWith(prefix) && c.health === 'healthy',
+      );
+    }
+
+    if (candidates.length === 0) {
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ error: `Kein Peer mit Skill '${skill_id}' gefunden. Verfuegbar: ${capsData.capabilities.map(c => c.skill_id).join(', ')}` }) }] };
     }
 
     // Ziel waehlen (explizit oder erster gesunder Peer)
