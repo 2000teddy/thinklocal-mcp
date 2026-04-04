@@ -5,6 +5,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
+## [0.21.0] — 2026-04-04
+
+### Behoben (Code Review GPT-5.1)
+- **Telegram Gateway Hardening**: Markdown-Escaping, Chat-ID Allowlist (`TELEGRAM_ALLOWED_CHATS`), Rate-Limiting pro Befehl, Anchored Regex, Error-Logging, res.ok-Check, EventBus Listener Cleanup, 429 Rate-Limit Handling
+- **mDNS IP-Aufloesung**: Discovery bevorzugt IPv4-Adresse aus mDNS addresses[] statt Hostname (fixt `ENOTFOUND influxdb` — bare Hostnames ohne `.local` nicht aufloesbar)
+- **Service-Umgebungsvariablen**: CLI liest `.env` und fuegt TELEGRAM_BOT_TOKEN, TELEGRAM_ALLOWED_CHATS, INFLUXDB_* automatisch in launchd-plist und systemd-Unit ein
+
+---
+
 ## [0.1.0] — 2026-04-03 14:30 UTC
 
 ### Hinzugefügt
