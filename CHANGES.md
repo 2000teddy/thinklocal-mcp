@@ -493,9 +493,50 @@ Damit kann Claude Code direkt Mesh-Funktionen nutzen: Peers entdecken, Capabilit
 
 ---
 
+## [0.20.0] — 2026-04-04
+
+### Produktisierung + Multi-Agent-Meilenstein
+
+**34 PRs gemergt** | 3 Code Reviews | Cross-Machine Live-getestet (macOS + macOS + Ubuntu)
+
+#### Phase 5 — Produktisierung (PR #22-#33)
+
+- `thinklocal` CLI: 11 Befehle (start/stop/status/doctor/bootstrap/peers/check/mcp/logs/uninstall/config)
+- Automatische Service-Installation: launchd (macOS) + systemd (Linux)
+- Claude Desktop + Code MCP Auto-Config (sicheres Einfuegen mit Backup)
+- One-Command-Installer: `curl ... | bash` mit vollstaendiger Dependency-Pruefung
+- Auto-Install: curl, git, Node.js (via nvm), npm, avahi-daemon, build-essential
+- nvm-aware Node-Pfad (System-Node bleibt unangetastet)
+- Dashboard als systemd Background-Service (Port 3000)
+- Update/Reinstall-Modus: `curl ... | bash -s -- update`
+- Security-Haertung: XML-Escaping, systemd-Quoting, atomicWrite, spawnSync
+- Remote-Check: `thinklocal check host:port` prueft entfernte Daemons
+- Peers mit Health-Daten (CPU/RAM/Disk/Uptime mit Farbcodes)
+
+#### Multi-Agent-Meilenstein (PR #34)
+
+- **Erster Remote-Agent-PR**: Claude Code auf dem Linux-Server hat eigenstaendig einen InfluxDB-Skill gebaut, getestet, committet und PR erstellt
+- InfluxDB 1.x Skill: 4 Tools (query, databases, measurements, write)
+- Cross-Machine Skill-Execute: Mac fragt InfluxDB auf Linux-Server ab — ueber das Mesh
+- Destruktive Queries blockiert (DROP, DELETE, ALTER)
+
+#### Drei-Node-Mesh Live-getestet
+
+| Node | Plattform | Rolle |
+|------|-----------|-------|
+| minimac | macOS (ARM64) | Daemon + Dashboard + Claude Code |
+| MacBook-Pro | macOS (ARM64) | Daemon + Claude Code |
+| influxdb | Ubuntu 24.04 (x64) | Daemon + Dashboard + Claude Code + InfluxDB-Skill |
+
+---
+
 ## [Unreleased]
 
 ### Geplant
+- Credential-Management: GitHub Token im Vault fuer automatischen Agent-Push
+- Telegram-Skill: Agent-zu-Agent-Kommunikation (User muss nicht mehr Mittelsmann sein)
+- ThinkHub: Skill-Marketplace (Skills nicht im Repo, sondern in eigener Registry)
 - WASM/Docker Sandbox fuer Skill-Ausfuehrung
+- Vision: ThinkLocal → ThinkWide → ThinkHub → ThinkBig
 - OS-Keychain-Integration
 - Homebrew-Formel
