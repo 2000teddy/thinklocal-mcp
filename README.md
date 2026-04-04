@@ -191,37 +191,44 @@ Ein Skill ist ein portables MCP-Server-Paket mit Manifest:
 
 ## Quick Start
 
-### 1. Installieren (macOS / Linux)
+### Automatisch (empfohlen)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/2000teddy/thinklocal-mcp/main/scripts/install.sh | bash
 ```
 
-### 2. Pruefen
+### Manuell (3 Befehle)
 
 ```bash
-curl http://localhost:9440/health
-npm run tlmcp -- status
+git clone https://github.com/2000teddy/thinklocal-mcp.git
+cd thinklocal-mcp
+npm install        # Installiert ALLES (Root + Daemon + Dashboard)
+npm start          # Daemon starten (mit mTLS)
+npm run start:dev  # Daemon starten (ohne mTLS, fuer Entwicklung)
 ```
 
-### 3. Dashboard oeffnen
+### Pruefen ob es laeuft
 
 ```bash
-npm run dashboard:dev
-# http://localhost:3000
+npm run health                # Health-Check
+npm run tlmcp -- status       # Ausfuehrlicher Status
+npm run tlmcp -- peers        # Verbundene Peers
 ```
 
-### 4. Zweiten Node installieren
+### Dashboard
 
 ```bash
-# Netzwerk scannen — findet geeignete Rechner
-npm run scan
-
-# Auf anderem Rechner deployen
-./scripts/deploy-remote.sh user@10.10.10.55 --agent-type gemini-cli
+npm run dashboard             # http://localhost:3000
 ```
 
-### 5. Claude Code nutzen
+### Zweiten Rechner hinzufuegen
+
+```bash
+npm run scan                  # Netzwerk nach geeigneten Rechnern scannen
+npm run deploy -- user@10.10.10.55 --agent-type gemini-cli
+```
+
+### Claude Code nutzen
 
 Die MCP-Tools werden automatisch geladen (via `~/.mcp.json`):
 

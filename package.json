@@ -1,20 +1,25 @@
 {
   "name": "thinklocal-mcp",
-  "version": "0.1.0",
+  "version": "0.19.0",
   "description": "Encrypted P2P communication between AI CLI agents on the local network",
   "private": true,
   "type": "module",
   "scripts": {
-    "daemon:start": "cd packages/daemon && tsx src/index.ts",
+    "postinstall": "cd packages/daemon && npm install && cd ../dashboard-ui && npm install && cd ../..",
+    "start": "cd packages/daemon && npx tsx src/index.ts",
+    "start:dev": "TLMCP_NO_TLS=1 npm start",
+    "daemon:start": "cd packages/daemon && npx tsx src/index.ts",
     "daemon:build": "cd packages/daemon && npx tsc",
+    "dashboard": "cd packages/dashboard-ui && npx vite",
     "dashboard:dev": "cd packages/dashboard-ui && npx vite",
     "dashboard:build": "cd packages/dashboard-ui && npx vite build",
-    "tlmcp": "tsx packages/cli/src/tlmcp.ts",
-    "scan": "tsx packages/cli/src/scan-network.ts",
+    "tlmcp": "npx tsx packages/cli/src/tlmcp.ts",
+    "scan": "npx tsx packages/cli/src/scan-network.ts",
     "deploy": "bash scripts/deploy-remote.sh",
-    "test": "vitest run",
-    "test:unit": "cd packages/daemon && vitest run",
-    "test:integration": "vitest run tests/integration/"
+    "test": "npx vitest run",
+    "test:unit": "cd packages/daemon && npx vitest run",
+    "test:integration": "npx vitest run tests/integration/",
+    "health": "curl -sf http://localhost:9440/health && echo '' || echo 'Daemon nicht erreichbar'"
   },
   "devDependencies": {
     "vitest": "^3.0.0",
