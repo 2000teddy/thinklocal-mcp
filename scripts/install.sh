@@ -16,6 +16,10 @@ INSTALL_DIR="${TLMCP_INSTALL_DIR:-$HOME/thinklocal-mcp}"
 DATA_DIR="$HOME/.thinklocal"
 LOG_DIR="$DATA_DIR/logs"
 
+# nvm laden falls vorhanden (curl | bash startet Non-Login-Shell)
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" 2>/dev/null
+
 # Farben
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -160,13 +164,49 @@ install_repo() {
     if [ -d "$INSTALL_DIR/.git" ]; then
         info "Aktualisiere bestehende Installation..."
         cd "$INSTALL_DIR"
-        git pull origin main
+        git fetch origin main
+        git reset --hard origin/main
+    elif [ -d "$INSTALL_DIR" ]; then
+        # Verzeichnis existiert aber ohne .git — aufraumen und neu klonen
+        warn "Verzeichnis $INSTALL_DIR existiert ohne Git — ersetze..."
+        rm -rf "$INSTALL_DIR"
+        git clone "$REPO_URL" "$INSTALL_DIR"
+        cd "$INSTALL_DIR"
     else
         info "Klone Repository..."
         git clone "$REPO_URL" "$INSTALL_DIR"
         cd "$INSTALL_DIR"
     fi
     ok "Repository in $INSTALL_DIR"
+}
+
+# --- Bestehende Installation aufraumen (fuer Reinstall/Update) ---
+cleanup_existing() {
+    if [ -d "$INSTALL_DIR" ] || [ -d "$DATA_DIR" ]; then
+        info "Bestehende Installation gefunden — raeume auf..."
+
+        # Daemon stoppen
+        if [ "$PLATFORM" = "darwin" ]; then
+            launchctl unload "$HOME/Library/LaunchAgents/com.thinklocal.daemon.plist" 2>/dev/null
+        elif [ "$PLATFORM" = "linux" ]; then
+            systemctl --user stop thinklocal-daemon 2>/dev/null
+            systemctl --user disable thinklocal-daemon 2>/dev/null
+        fi
+
+        # Alte Service-Dateien entfernen
+        rm -f "$HOME/Library/LaunchAgents/com.thinklocal.daemon.plist" 2>/dev/null
+        rm -f "$HOME/.config/systemd/user/thinklocal-daemon.service" 2>/dev/null
+        [ "$PLATFORM" = "linux" ] && systemctl --user daemon-reload 2>/dev/null
+
+        # Daten behalten, nur Repo neu
+        if [ -d "$INSTALL_DIR" ]; then
+            rm -rf "$INSTALL_DIR"
+            ok "Altes Repository entfernt"
+        fi
+
+        # Keys und Vault NICHT loeschen (Daten bleiben erhalten)
+        ok "Aufgeraeumt (Keys und Vault-Daten bleiben erhalten)"
+    fi
 }
 
 # --- Dependencies installieren ---
@@ -381,7 +421,15 @@ main() {
     echo "  ╚═══════════════════════════════════════╝"
     echo ""
 
-    detect_platform
+    # --reinstall: Bestehende Installation sauber entfernen und neu installieren
+    if [ "${1:-}" = "--reinstall" ] || [ "${1:-}" = "--update" ] || [ "${1:-}" = "update" ]; then
+        info "Reinstall/Update-Modus"
+        detect_platform
+        cleanup_existing
+    else
+        detect_platform
+    fi
+
     check_prerequisites
     install_repo
     install_deps
