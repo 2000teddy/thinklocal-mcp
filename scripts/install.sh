@@ -190,12 +190,15 @@ cleanup_existing() {
             launchctl unload "$HOME/Library/LaunchAgents/com.thinklocal.daemon.plist" 2>/dev/null
         elif [ "$PLATFORM" = "linux" ]; then
             systemctl --user stop thinklocal-daemon 2>/dev/null
+            systemctl --user stop thinklocal-dashboard 2>/dev/null
             systemctl --user disable thinklocal-daemon 2>/dev/null
+            systemctl --user disable thinklocal-dashboard 2>/dev/null
         fi
 
-        # Alte Service-Dateien entfernen
+        # Alte Service-Dateien entfernen (Daemon + Dashboard)
         rm -f "$HOME/Library/LaunchAgents/com.thinklocal.daemon.plist" 2>/dev/null
         rm -f "$HOME/.config/systemd/user/thinklocal-daemon.service" 2>/dev/null
+        rm -f "$HOME/.config/systemd/user/thinklocal-dashboard.service" 2>/dev/null
         [ "$PLATFORM" = "linux" ] && systemctl --user daemon-reload 2>/dev/null
 
         # Daten behalten, nur Repo neu
@@ -322,6 +325,44 @@ SERVICEEOF
     echo "  systemctl --user stop thinklocal-daemon     # Stoppen"
     echo "  systemctl --user status thinklocal-daemon   # Status"
     echo "  journalctl --user -u thinklocal-daemon -f   # Logs"
+
+    # Dashboard als zweiten Service installieren
+    install_linux_dashboard_service
+}
+
+# --- Linux: Dashboard als systemd Service ---
+install_linux_dashboard_service() {
+    local SERVICE_DST="$HOME/.config/systemd/user/thinklocal-dashboard.service"
+    local NPX_PATH
+    NPX_PATH=$(command -v npx)
+    if [ -n "$NVM_BIN" ] && [ -x "$NVM_BIN/npx" ]; then
+        NPX_PATH="$NVM_BIN/npx"
+    fi
+    NPX_PATH=$(realpath "$NPX_PATH" 2>/dev/null || readlink -f "$NPX_PATH" 2>/dev/null || echo "$NPX_PATH")
+
+    cat > "$SERVICE_DST" << DASHEOF
+[Unit]
+Description=thinklocal-mcp Dashboard (Web UI)
+After=thinklocal-daemon.service
+Wants=thinklocal-daemon.service
+
+[Service]
+Type=simple
+ExecStart=$NPX_PATH vite --host 0.0.0.0 --port 3000
+WorkingDirectory=$INSTALL_DIR/packages/dashboard-ui
+Environment=NODE_ENV=production
+Environment=PATH=$(dirname "$NPX_PATH"):/usr/local/bin:/usr/bin:/bin
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
+DASHEOF
+
+    systemctl --user daemon-reload
+    systemctl --user enable thinklocal-dashboard
+    systemctl --user start thinklocal-dashboard
+    ok "Dashboard-Service installiert (http://0.0.0.0:3000)"
 }
 
 # --- MCP-Server konfigurieren ---
@@ -332,8 +373,8 @@ setup_mcp() {
     local MCP_JSON="$HOME/.mcp.json"
     local TSX_PATH="$INSTALL_DIR/packages/daemon/node_modules/.bin/tsx"
 
-    if [ -f "$MCP_JSON" ]; then
-        warn "~/.mcp.json existiert bereits — ueberspringe (bitte manuell pruefen)"
+    if [ -f "$MCP_JSON" ] && grep -q "thinklocal" "$MCP_JSON" 2>/dev/null; then
+        ok "~/.mcp.json bereits konfiguriert"
     else
         cat > "$MCP_JSON" << MCPEOF
 {
@@ -447,12 +488,20 @@ main() {
     echo ""
     ok "Installation abgeschlossen!"
     echo ""
-    echo "  Naechste Schritte:"
-    echo "  1. Dashboard starten:  cd $INSTALL_DIR && npm run dashboard:dev"
-    echo "  2. CLI nutzen:         cd $INSTALL_DIR && npm run tlmcp -- status"
-    echo "  3. Claude Code oeffnen — thinklocal-Tools sind automatisch verfuegbar"
-    echo "  4. Zweiten Node auf einem anderen Rechner installieren:"
-    echo "     ssh user@andere-maschine 'curl -fsSL https://raw.githubusercontent.com/2000teddy/thinklocal-mcp/main/scripts/install.sh | bash'"
+    echo "  Services:"
+    echo "    Daemon:    http://localhost:9440  (laeuft als Service)"
+    echo "    Dashboard: http://localhost:3000  (laeuft als Service)"
+    echo ""
+    echo "  Befehle:"
+    echo "    thinklocal status     Status pruefen"
+    echo "    thinklocal peers      Peers im Mesh anzeigen"
+    echo "    thinklocal doctor     Systemdiagnose"
+    echo ""
+    echo "  Weiteren Rechner hinzufuegen:"
+    echo "    curl -fsSL https://raw.githubusercontent.com/2000teddy/thinklocal-mcp/main/scripts/install.sh | bash"
+    echo ""
+    echo "  Update:"
+    echo "    curl -fsSL ... | bash -s -- update"
     echo ""
 }
 
