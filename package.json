@@ -13,6 +13,7 @@
     "dashboard": "cd packages/dashboard-ui && npx vite",
     "dashboard:dev": "cd packages/dashboard-ui && npx vite",
     "dashboard:build": "cd packages/dashboard-ui && npx vite build",
+    "thinklocal": "npx tsx packages/cli/src/thinklocal.ts",
     "tlmcp": "npx tsx packages/cli/src/tlmcp.ts",
     "scan": "npx tsx packages/cli/src/scan-network.ts",
     "deploy": "bash scripts/deploy-remote.sh",
