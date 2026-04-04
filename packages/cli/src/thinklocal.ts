@@ -18,8 +18,8 @@
 
 import { resolve } from 'node:path';
 import { homedir, platform } from 'node:os';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { execSync, spawn } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, statSync } from 'node:fs';
+import { execSync, spawn, spawnSync } from 'node:child_process';
 
 const HOME = homedir();
 const PLATFORM = platform();
@@ -27,6 +27,31 @@ const DATA_DIR = process.env['TLMCP_DATA_DIR'] ?? resolve(HOME, '.thinklocal');
 const DAEMON_PORT = Number(process.env['TLMCP_PORT'] ?? '9440');
 const DAEMON_URL = `http://localhost:${DAEMON_PORT}`;
 const INSTALL_DIR = resolve(import.meta.dirname, '..', '..', '..');
+
+// --- Sicherheits-Hilfsfunktionen ---
+
+/** XML-Escaping fuer launchd plist-Werte */
+function xmlEscape(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;');
+}
+
+/** systemd-Escaping fuer Unit-Werte */
+function systemdEscape(value: string): string {
+  if (/[\r\n]/.test(value)) throw new Error('Ungueltige Zeichen in systemd-Wert');
+  return `"${value.replace(/(["\\])/g, '\\$1')}"`;
+}
+
+/** Atomisches Schreiben: temp-Datei + rename */
+function atomicWrite(filePath: string, content: string, mode = 0o600): void {
+  const tmp = `${filePath}.${process.pid}.tmp`;
+  writeFileSync(tmp, content, { mode });
+  renameSync(tmp, filePath);
+}
 
 // --- Farben ---
 const C = {
@@ -113,6 +138,18 @@ async function cmdStart(): Promise<void> {
     ok('Daemon laeuft bereits');
     return;
   }
+
+  // Alte Zombie-Prozesse auf dem Port aufraumen
+  try {
+    const pids = execSync(`lsof -ti :${DAEMON_PORT} 2>/dev/null`, { encoding: 'utf-8' }).trim();
+    if (pids) {
+      for (const pid of pids.split('\n').filter(Boolean)) {
+        try { process.kill(Number(pid), 'SIGTERM'); } catch { /* ok */ }
+      }
+      await new Promise((r) => setTimeout(r, 1_000));
+      info('Alte Daemon-Prozesse bereinigt');
+    }
+  } catch { /* kein Prozess auf dem Port */ }
 
   // Service starten (plattformabhaengig)
   if (PLATFORM === 'darwin') {
@@ -357,20 +394,19 @@ async function cmdBootstrap(): Promise<void> {
   // 4. System-Service installieren (launchd / systemd)
   installService(tsxPath);
 
-  // 5. Daemon einmal starten (generiert Keys + Certs)
+  // 5. Daemon einmal starten (generiert Keys + Certs) — via spawnSync, kein Shell
   info('Starte Daemon kurz um Keys zu generieren...');
-  try {
-    const result = execSync(
-      `TLMCP_DATA_DIR="${DATA_DIR}" TLMCP_NO_TLS=1 timeout 5 ${tsxPath} ${resolve(INSTALL_DIR, 'packages', 'daemon', 'src', 'index.ts')} 2>&1 || true`,
-      { encoding: 'utf-8', cwd: INSTALL_DIR, timeout: 10_000 },
-    );
-    if (result.includes('Keypair gespeichert') || result.includes('Keypair geladen')) {
-      ok('Agent-Keypair generiert');
-    }
-  } catch {
-    if (existsSync(resolve(DATA_DIR, 'keys', 'agent.pub.pem'))) {
-      ok('Agent-Keypair generiert');
-    }
+  const indexPath2 = resolve(INSTALL_DIR, 'packages', 'daemon', 'src', 'index.ts');
+  const keyGenResult = spawnSync(tsxPath, [indexPath2], {
+    cwd: INSTALL_DIR,
+    env: { ...process.env, TLMCP_DATA_DIR: DATA_DIR, TLMCP_NO_TLS: '1' },
+    timeout: 8_000,
+    encoding: 'utf-8',
+  });
+  const keyGenOutput = (keyGenResult.stdout ?? '') + (keyGenResult.stderr ?? '');
+  if (keyGenOutput.includes('Keypair gespeichert') || keyGenOutput.includes('Keypair geladen')
+      || existsSync(resolve(DATA_DIR, 'keys', 'agent.pub.pem'))) {
+    ok('Agent-Keypair generiert');
   }
 
   // 6. Service starten
@@ -565,7 +601,7 @@ function upsertMcpConfig(
     // Neue Config erstellen
     mkdirSync(resolve(configPath, '..'), { recursive: true });
     const config = { mcpServers: { thinklocal: mcpEntry } };
-    writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', { mode: 0o644 });
+    atomicWrite(configPath, JSON.stringify(config, null, 2) + '\n');
     ok(`${label} konfiguriert (neu erstellt)`);
     return;
   }
@@ -597,14 +633,15 @@ function upsertMcpConfig(
   }
   (config['mcpServers'] as Record<string, unknown>)['thinklocal'] = mcpEntry;
 
-  writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
+  const mode = existsSync(configPath) ? (statSync(configPath).mode & 0o777) : 0o600;
+  atomicWrite(configPath, JSON.stringify(config, null, 2) + '\n', mode);
   ok(`${label} konfiguriert (thinklocal hinzugefuegt)`);
 }
 
 // --- Service-Installation ---
 
 function installService(tsxPath: string): void {
-  const nodePath = execSync('which node', { encoding: 'utf-8' }).trim();
+  const nodePath = process.execPath;
   const indexPath = resolve(INSTALL_DIR, 'packages', 'daemon', 'src', 'index.ts');
   const configPath = resolve(INSTALL_DIR, 'config', 'daemon.toml');
 
@@ -629,6 +666,7 @@ function installLaunchdService(nodePath: string, tsxPath: string, indexPath: str
 
   mkdirSync(plistDir, { recursive: true });
 
+  // XML-Escaping fuer alle interpolierten Werte
   const plist = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -637,16 +675,18 @@ function installLaunchdService(nodePath: string, tsxPath: string, indexPath: str
     <string>com.thinklocal.daemon</string>
     <key>ProgramArguments</key>
     <array>
-        <string>${nodePath}</string>
-        <string>${tsxPath}</string>
-        <string>${indexPath}</string>
+        <string>${xmlEscape(nodePath)}</string>
+        <string>${xmlEscape(tsxPath)}</string>
+        <string>${xmlEscape(indexPath)}</string>
     </array>
     <key>EnvironmentVariables</key>
     <dict>
         <key>TLMCP_CONFIG</key>
-        <string>${configPath}</string>
+        <string>${xmlEscape(configPath)}</string>
         <key>TLMCP_DATA_DIR</key>
-        <string>${DATA_DIR}</string>
+        <string>${xmlEscape(DATA_DIR)}</string>
+        <key>TLMCP_NO_TLS</key>
+        <string>1</string>
         <key>PATH</key>
         <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
     </dict>
@@ -658,11 +698,11 @@ function installLaunchdService(nodePath: string, tsxPath: string, indexPath: str
         <false/>
     </dict>
     <key>StandardOutPath</key>
-    <string>${DATA_DIR}/logs/daemon.log</string>
+    <string>${xmlEscape(DATA_DIR)}/logs/daemon.log</string>
     <key>StandardErrorPath</key>
-    <string>${DATA_DIR}/logs/daemon.error.log</string>
+    <string>${xmlEscape(DATA_DIR)}/logs/daemon.error.log</string>
     <key>WorkingDirectory</key>
-    <string>${INSTALL_DIR}</string>
+    <string>${xmlEscape(INSTALL_DIR)}</string>
     <key>ProcessType</key>
     <string>Background</string>
     <key>ThrottleInterval</key>
@@ -685,6 +725,7 @@ function installSystemdService(nodePath: string, tsxPath: string, indexPath: str
 
   mkdirSync(serviceDir, { recursive: true });
 
+  // systemd-Quoting fuer alle Pfade
   const unit = `[Unit]
 Description=thinklocal-mcp Mesh Daemon
 After=network-online.target
@@ -692,12 +733,13 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=${nodePath} ${tsxPath} ${indexPath}
-Environment=TLMCP_CONFIG=${configPath}
-Environment=TLMCP_DATA_DIR=${DATA_DIR}
-Environment=PATH=/usr/local/bin:/usr/bin:/bin
-Environment=NODE_ENV=production
-WorkingDirectory=${INSTALL_DIR}
+ExecStart=${[nodePath, tsxPath, indexPath].map(systemdEscape).join(' ')}
+Environment=${systemdEscape(`TLMCP_CONFIG=${configPath}`)}
+Environment=${systemdEscape(`TLMCP_DATA_DIR=${DATA_DIR}`)}
+Environment=${systemdEscape('TLMCP_NO_TLS=1')}
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+Environment="NODE_ENV=production"
+WorkingDirectory=${systemdEscape(INSTALL_DIR)}
 Restart=on-failure
 RestartSec=10
 StandardOutput=append:${DATA_DIR}/logs/daemon.log
