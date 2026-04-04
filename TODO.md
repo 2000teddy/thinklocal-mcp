@@ -324,3 +324,8 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [ ] 💡 **A/B-Testing für Skills** — Verschiedene Skill-Versionen parallel testen
 - [ ] 💡 **Mesh-Backup/Restore** — CA-Material, Registry-Snapshots, Policy-Bundles sichern
 - [ ] 💡 **Compliance-Modus** — Regulatorische Anforderungen (DSGVO, HIPAA) über Policy-Engine abbilden
+- [ ] 💡 **Eingebettete AI-Modelle** — Kleine lokale Modelle (Ollama/MiniMax/GLM) fuer:
+  - Intelligente Fehler-Diagnose (`thinklocal doctor --ai`)
+  - Natuerliche-Sprache-Queries ("Hat jemand eine Datenbank?")
+  - Automatische Skill-Erstellung on-the-fly
+  - Kontext-Transfer-Zusammenfassung zwischen Agents
