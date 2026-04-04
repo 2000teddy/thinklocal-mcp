@@ -329,3 +329,8 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
   - Natuerliche-Sprache-Queries ("Hat jemand eine Datenbank?")
   - Automatische Skill-Erstellung on-the-fly
   - Kontext-Transfer-Zusammenfassung zwischen Agents
+- [ ] 🔴 **Credential-Management** — GitHub Token + API Keys im Vault speichern, Agents koennen automatisch pushen
+- [ ] 🔴 **Telegram-Skill** — Agent-zu-Agent-Kommunikation via Telegram (User nicht mehr Mittelsmann)
+- [ ] 💡 **ThinkHub** — Skill-Marketplace/Registry (wie ClawHub) statt Skills im Repo
+- [ ] 💡 **ThinkWide** — Mehrere LANs verbinden (WireGuard/Tailscale)
+- [ ] 💡 **ThinkBig** — ThinkLocal + ThinkWide + ThinkHub zusammengefuehrt
