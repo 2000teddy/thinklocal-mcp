@@ -47,17 +47,37 @@ function header(msg: string): void { console.log(`\n  ${C.bold}${msg}${C.reset}\
 
 // --- Health-Check ---
 async function isDaemonRunning(): Promise<boolean> {
+  // 1. HTTP Health-Check (schnellster Weg)
   try {
-    const res = await fetch(`${DAEMON_URL}/health`, { signal: AbortSignal.timeout(2_000) });
-    return res.ok;
-  } catch { return false; }
+    const res = await fetch(`http://localhost:${DAEMON_PORT}/health`, { signal: AbortSignal.timeout(2_000) });
+    if (res.ok) return true;
+  } catch { /* weiter */ }
+
+  // 2. Port-Check (fuer HTTPS/mTLS wo HTTP fehlschlaegt)
+  try {
+    const output = execSync(`lsof -ti :${DAEMON_PORT} 2>/dev/null`, { encoding: 'utf-8' }).trim();
+    if (output) return true;
+  } catch { /* weiter */ }
+
+  // 3. launchd/systemd Status
+  if (PLATFORM === 'darwin') {
+    try {
+      const output = execSync('launchctl list com.thinklocal.daemon 2>/dev/null', { encoding: 'utf-8' });
+      if (output.includes('PID') || output.match(/"\d+"/)) return true;
+    } catch { /* weiter */ }
+  }
+
+  return false;
 }
 
 async function fetchStatus(): Promise<Record<string, unknown> | null> {
-  try {
-    const res = await fetch(`${DAEMON_URL}/api/status`, { signal: AbortSignal.timeout(3_000) });
-    return res.ok ? (await res.json()) as Record<string, unknown> : null;
-  } catch { return null; }
+  for (const proto of ['http', 'https']) {
+    try {
+      const res = await fetch(`${proto}://localhost:${DAEMON_PORT}/api/status`, { signal: AbortSignal.timeout(3_000) });
+      if (res.ok) return (await res.json()) as Record<string, unknown>;
+    } catch { /* try next */ }
+  }
+  return null;
 }
 
 // --- Befehle ---
@@ -369,7 +389,10 @@ async function cmdBootstrap(): Promise<void> {
     }
   }
 
-  // 4. Daemon einmal starten (generiert Keys + Certs)
+  // 4. System-Service installieren (launchd / systemd)
+  installService(tsxPath);
+
+  // 5. Daemon einmal starten (generiert Keys + Certs)
   info('Starte Daemon kurz um Keys zu generieren...');
   try {
     const result = execSync(
@@ -380,20 +403,44 @@ async function cmdBootstrap(): Promise<void> {
       ok('Agent-Keypair generiert');
     }
   } catch {
-    // Timeout ist erwartet — Keys sollten trotzdem generiert worden sein
     if (existsSync(resolve(DATA_DIR, 'keys', 'agent.pub.pem'))) {
       ok('Agent-Keypair generiert');
     }
   }
 
+  // 6. Service starten
+  info('Starte Daemon als Service...');
+  if (PLATFORM === 'darwin') {
+    try {
+      execSync(`launchctl load "${resolve(HOME, 'Library', 'LaunchAgents', 'com.thinklocal.daemon.plist')}" 2>/dev/null; launchctl start com.thinklocal.daemon 2>/dev/null`);
+    } catch { /* ok */ }
+  } else if (PLATFORM === 'linux') {
+    try {
+      execSync('systemctl --user daemon-reload && systemctl --user start thinklocal-daemon 2>/dev/null');
+    } catch { /* ok */ }
+  }
+
+  // Warten und pruefen
+  await waitForDaemon(8_000);
+  const running = await isDaemonRunning();
+
   console.log();
-  console.log(`  ${C.green}${C.bold}Bootstrap abgeschlossen!${C.reset}`);
+  if (running) {
+    console.log(`  ${C.green}${C.bold}Bootstrap abgeschlossen — Daemon laeuft!${C.reset}`);
+  } else {
+    console.log(`  ${C.yellow}${C.bold}Bootstrap abgeschlossen${C.reset} — Daemon muss manuell gestartet werden:`);
+    console.log(`  ${C.bold}thinklocal start${C.reset}`);
+  }
   console.log();
-  console.log(`  Naechste Schritte:`);
-  console.log(`  1. Daemon starten:   ${C.bold}thinklocal start${C.reset}`);
-  console.log(`  2. Status pruefen:   ${C.bold}thinklocal status${C.reset}`);
-  console.log(`  3. Diagnose:         ${C.bold}thinklocal doctor${C.reset}`);
-  console.log(`  4. Claude Code:      Neues Terminal oeffnen — Tools sind automatisch da`);
+  console.log(`  Befehle:`);
+  console.log(`    thinklocal status     Status pruefen`);
+  console.log(`    thinklocal doctor     Diagnose ausfuehren`);
+  console.log(`    thinklocal peers      Verbundene Peers anzeigen`);
+  console.log(`    thinklocal stop       Daemon stoppen`);
+  console.log(`    thinklocal logs       Live-Logs anzeigen`);
+  console.log();
+  console.log(`  Claude Code: Oeffne ein neues Terminal — die Mesh-Tools sind automatisch da.`);
+  console.log(`  Dashboard:   npm run dashboard (http://localhost:3000)`);
   console.log();
 }
 
@@ -425,6 +472,56 @@ async function cmdPeers(): Promise<void> {
   }
 }
 
+async function cmdUninstall(): Promise<void> {
+  header('thinklocal deinstallieren');
+
+  // 1. Daemon stoppen
+  await cmdStop();
+
+  // 2. Service entfernen
+  if (PLATFORM === 'darwin') {
+    const plistPath = resolve(HOME, 'Library', 'LaunchAgents', 'com.thinklocal.daemon.plist');
+    if (existsSync(plistPath)) {
+      try { execSync(`launchctl unload "${plistPath}" 2>/dev/null`); } catch { /* ok */ }
+      execSync(`rm -f "${plistPath}"`);
+      ok('launchd Service entfernt');
+    }
+  } else if (PLATFORM === 'linux') {
+    const servicePath = resolve(HOME, '.config', 'systemd', 'user', 'thinklocal-daemon.service');
+    if (existsSync(servicePath)) {
+      try { execSync('systemctl --user disable thinklocal-daemon 2>/dev/null'); } catch { /* ok */ }
+      execSync(`rm -f "${servicePath}"`);
+      try { execSync('systemctl --user daemon-reload'); } catch { /* ok */ }
+      ok('systemd Service entfernt');
+    }
+  }
+
+  // 3. MCP-Config: thinklocal-Eintrag aus ~/.mcp.json entfernen
+  const mcpPath = resolve(HOME, '.mcp.json');
+  if (existsSync(mcpPath)) {
+    try {
+      const mcpConfig = JSON.parse(readFileSync(mcpPath, 'utf-8')) as Record<string, Record<string, unknown>>;
+      if (mcpConfig['mcpServers']?.['thinklocal']) {
+        delete mcpConfig['mcpServers']['thinklocal'];
+        if (Object.keys(mcpConfig['mcpServers']).length === 0) {
+          execSync(`rm -f "${mcpPath}"`);
+          ok('~/.mcp.json entfernt (war nur thinklocal)');
+        } else {
+          writeFileSync(mcpPath, JSON.stringify(mcpConfig, null, 2) + '\n');
+          ok('thinklocal aus ~/.mcp.json entfernt');
+        }
+      }
+    } catch {
+      warn('~/.mcp.json konnte nicht bereinigt werden');
+    }
+  }
+
+  console.log();
+  info(`Datenverzeichnis ${C.bold}nicht${C.reset} geloescht: ${DATA_DIR}`);
+  info(`Zum vollstaendigen Entfernen: rm -rf ${DATA_DIR}`);
+  console.log();
+}
+
 async function cmdConfigShow(): Promise<void> {
   header('Konfiguration');
   const configPath = resolve(INSTALL_DIR, 'config', 'daemon.toml');
@@ -438,6 +535,122 @@ async function cmdConfigShow(): Promise<void> {
   console.log(`  ${C.dim}Daemon-Port:       ${DAEMON_PORT}${C.reset}`);
   console.log(`  ${C.dim}Install-Pfad:      ${INSTALL_DIR}${C.reset}`);
   console.log();
+}
+
+// --- Service-Installation ---
+
+function installService(tsxPath: string): void {
+  const nodePath = execSync('which node', { encoding: 'utf-8' }).trim();
+  const indexPath = resolve(INSTALL_DIR, 'packages', 'daemon', 'src', 'index.ts');
+  const configPath = resolve(INSTALL_DIR, 'config', 'daemon.toml');
+
+  if (PLATFORM === 'darwin') {
+    installLaunchdService(nodePath, tsxPath, indexPath, configPath);
+  } else if (PLATFORM === 'linux') {
+    installSystemdService(nodePath, tsxPath, indexPath, configPath);
+  } else {
+    warn('Automatische Service-Installation nur auf macOS und Linux');
+    info('Windows: scripts/service/thinklocal-daemon.ps1 install');
+  }
+}
+
+function installLaunchdService(nodePath: string, tsxPath: string, indexPath: string, configPath: string): void {
+  const plistDir = resolve(HOME, 'Library', 'LaunchAgents');
+  const plistPath = resolve(plistDir, 'com.thinklocal.daemon.plist');
+
+  if (existsSync(plistPath)) {
+    ok('launchd Service bereits installiert');
+    return;
+  }
+
+  mkdirSync(plistDir, { recursive: true });
+
+  const plist = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.thinklocal.daemon</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>${nodePath}</string>
+        <string>${tsxPath}</string>
+        <string>${indexPath}</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>TLMCP_CONFIG</key>
+        <string>${configPath}</string>
+        <key>TLMCP_DATA_DIR</key>
+        <string>${DATA_DIR}</string>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>${DATA_DIR}/logs/daemon.log</string>
+    <key>StandardErrorPath</key>
+    <string>${DATA_DIR}/logs/daemon.error.log</string>
+    <key>WorkingDirectory</key>
+    <string>${INSTALL_DIR}</string>
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+</dict>
+</plist>`;
+
+  writeFileSync(plistPath, plist);
+  ok('launchd Service installiert (startet bei Login)');
+}
+
+function installSystemdService(nodePath: string, tsxPath: string, indexPath: string, configPath: string): void {
+  const serviceDir = resolve(HOME, '.config', 'systemd', 'user');
+  const servicePath = resolve(serviceDir, 'thinklocal-daemon.service');
+
+  if (existsSync(servicePath)) {
+    ok('systemd Service bereits installiert');
+    return;
+  }
+
+  mkdirSync(serviceDir, { recursive: true });
+
+  const unit = `[Unit]
+Description=thinklocal-mcp Mesh Daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=${nodePath} ${tsxPath} ${indexPath}
+Environment=TLMCP_CONFIG=${configPath}
+Environment=TLMCP_DATA_DIR=${DATA_DIR}
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=NODE_ENV=production
+WorkingDirectory=${INSTALL_DIR}
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:${DATA_DIR}/logs/daemon.log
+StandardError=append:${DATA_DIR}/logs/daemon.error.log
+
+[Install]
+WantedBy=default.target`;
+
+  writeFileSync(servicePath, unit);
+  try {
+    execSync('systemctl --user daemon-reload');
+    execSync('systemctl --user enable thinklocal-daemon');
+    ok('systemd Service installiert und aktiviert (startet bei Login)');
+  } catch {
+    ok('systemd Service-Datei erstellt');
+    warn('systemctl daemon-reload fehlgeschlagen — bitte manuell ausfuehren');
+  }
 }
 
 // --- Hilfsfunktionen ---
@@ -476,6 +689,7 @@ async function main(): Promise<void> {
     case 'logs': return cmdLogs();
     case 'bootstrap': return cmdBootstrap();
     case 'peers': return cmdPeers();
+    case 'uninstall': return cmdUninstall();
     case 'config':
       if (args[1] === 'show' || !args[1]) return cmdConfigShow();
       break;
@@ -487,15 +701,16 @@ async function main(): Promise<void> {
   ${C.bold}thinklocal${C.reset} — Mesh-Netzwerk fuer AI CLI Agenten
 
   ${C.bold}Befehle:${C.reset}
-    start          Daemon starten
+    bootstrap      Ersteinrichtung (Keys, Config, Service, MCP)
+    start          Daemon starten (Service oder Vordergrund)
     stop           Daemon stoppen
     restart        Daemon neu starten
     status         Status anzeigen
     doctor         Systemdiagnose (prueft alles)
     logs           Live-Logs anzeigen
-    bootstrap      Ersteinrichtung (Keys, Config, MCP)
     peers          Verbundene Peers anzeigen
     config show    Konfiguration anzeigen
+    uninstall      Service + Config entfernen
 
   ${C.bold}Beispiele:${C.reset}
     thinklocal bootstrap     # Einmalig: alles einrichten
