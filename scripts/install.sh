@@ -39,34 +39,120 @@ detect_platform() {
     info "Plattform: $PLATFORM ($(uname -m))"
 }
 
-# --- Voraussetzungen pruefen ---
+# --- Hilfsfunktion: Paket installieren ---
+install_pkg() {
+    local PKG_NAME="$1"
+    local PKG_APT="${2:-$1}"
+    local PKG_DNF="${3:-$1}"
+
+    if command -v apt-get &>/dev/null; then
+        info "Installiere $PKG_NAME via apt..."
+        sudo apt-get install -y $PKG_APT 2>/dev/null && \
+            ok "$PKG_NAME installiert" && return 0
+    elif command -v dnf &>/dev/null; then
+        info "Installiere $PKG_NAME via dnf..."
+        sudo dnf install -y $PKG_DNF 2>/dev/null && \
+            ok "$PKG_NAME installiert" && return 0
+    elif command -v brew &>/dev/null; then
+        info "Installiere $PKG_NAME via brew..."
+        brew install $PKG_APT 2>/dev/null && \
+            ok "$PKG_NAME installiert" && return 0
+    fi
+    return 1
+}
+
+# --- Voraussetzungen pruefen und fehlende installieren ---
 check_prerequisites() {
     info "Pruefe Voraussetzungen..."
+    echo ""
 
-    # Node.js
-    if ! command -v node &>/dev/null; then
-        error "Node.js nicht gefunden. Bitte installiere Node.js 20+: https://nodejs.org"
-    fi
-    NODE_VERSION=$(node -v | sed 's/v//' | cut -d. -f1)
-    if [ "$NODE_VERSION" -lt 18 ]; then
-        error "Node.js $NODE_VERSION gefunden, aber 18+ benoetigt."
-    elif [ "$NODE_VERSION" -lt 20 ]; then
-        warn "Node.js $(node -v) — Version 20+ empfohlen. v18 funktioniert eingeschraenkt."
+    # 1. curl (wird fuer den Installer selbst gebraucht — sollte da sein)
+    if command -v curl &>/dev/null; then
+        ok "curl $(curl --version | head -1 | awk '{print $2}')"
     else
-        ok "Node.js $(node -v)"
+        warn "curl fehlt"
+        install_pkg "curl" "curl" "curl" || error "curl konnte nicht installiert werden"
     fi
 
-    # npm
-    if ! command -v npm &>/dev/null; then
-        error "npm nicht gefunden."
+    # 2. Git
+    if command -v git &>/dev/null; then
+        ok "git $(git --version | awk '{print $3}')"
+    else
+        info "git fehlt — installiere..."
+        install_pkg "git" "git" "git" || error "git konnte nicht installiert werden"
+        ok "git $(git --version | awk '{print $3}')"
     fi
-    ok "npm $(npm -v)"
 
-    # Git
-    if ! command -v git &>/dev/null; then
-        error "git nicht gefunden."
+    # 3. Node.js
+    if command -v node &>/dev/null; then
+        NODE_VERSION=$(node -v | sed 's/v//' | cut -d. -f1)
+        if [ "$NODE_VERSION" -lt 18 ]; then
+            warn "Node.js v$NODE_VERSION ist zu alt (mindestens v18 benoetigt)"
+            info "Installiere Node.js 22 via nvm..."
+            install_node_via_nvm
+        elif [ "$NODE_VERSION" -lt 20 ]; then
+            warn "Node.js $(node -v) — Version 20+ empfohlen (v18 funktioniert eingeschraenkt)"
+        else
+            ok "Node.js $(node -v)"
+        fi
+    else
+        info "Node.js fehlt — installiere via nvm..."
+        install_node_via_nvm
     fi
-    ok "git $(git --version | awk '{print $3}')"
+
+    # 4. npm (kommt mit Node.js)
+    if command -v npm &>/dev/null; then
+        ok "npm $(npm -v)"
+    else
+        error "npm nicht gefunden — Node.js-Installation fehlgeschlagen?"
+    fi
+
+    # 5. Linux-spezifisch: avahi-daemon fuer mDNS
+    if [ "$PLATFORM" = "linux" ]; then
+        if systemctl is-active avahi-daemon &>/dev/null; then
+            ok "avahi-daemon (mDNS-Discovery)"
+        else
+            info "avahi-daemon fehlt — wird fuer Peer-Discovery im LAN benoetigt"
+            install_pkg "avahi-daemon" "avahi-daemon avahi-utils" "avahi avahi-tools" || \
+                warn "avahi-daemon konnte nicht installiert werden — Peer-Discovery funktioniert moeglicherweise nicht"
+        fi
+    fi
+
+    # 6. Linux-spezifisch: build-essential fuer native npm-Module (better-sqlite3)
+    if [ "$PLATFORM" = "linux" ]; then
+        if command -v make &>/dev/null && command -v gcc &>/dev/null; then
+            ok "Build-Tools (make, gcc)"
+        else
+            info "Build-Tools fehlen — werden fuer native npm-Module benoetigt"
+            install_pkg "build-essential" "build-essential" "gcc-c++ make" || \
+                warn "Build-Tools konnten nicht installiert werden — npm install koennte fehlschlagen"
+        fi
+    fi
+
+    echo ""
+    ok "Alle Voraussetzungen geprueft"
+}
+
+# --- Node.js via nvm installieren (ohne bestehende Installation zu beruehren) ---
+install_node_via_nvm() {
+    if ! command -v nvm &>/dev/null && [ ! -d "$HOME/.nvm" ]; then
+        info "Installiere nvm (Node Version Manager)..."
+        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash 2>/dev/null
+        export NVM_DIR="$HOME/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    else
+        export NVM_DIR="$HOME/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    fi
+
+    if command -v nvm &>/dev/null; then
+        nvm install 22 2>/dev/null
+        nvm alias default 22 2>/dev/null
+        nvm use 22 2>/dev/null
+        ok "Node.js $(node -v) via nvm installiert"
+    else
+        error "nvm konnte nicht installiert werden. Bitte Node.js 20+ manuell installieren: https://nodejs.org"
+    fi
 }
 
 # --- Repository klonen oder aktualisieren ---
@@ -184,6 +270,12 @@ SERVICEEOF
     loginctl enable-linger "$(whoami)" 2>/dev/null && \
         ok "User-Linger aktiviert (Service laeuft ohne Login)" || \
         warn "loginctl enable-linger fehlgeschlagen — ggf. sudo noetig"
+
+    # mDNS-Port in Firewall oeffnen (falls ufw aktiv)
+    if command -v ufw &>/dev/null; then
+        sudo ufw allow 5353/udp 2>/dev/null && \
+            ok "Firewall: mDNS Port 5353/udp erlaubt" || true
+    fi
 
     info "Steuern mit:"
     echo "  systemctl --user start thinklocal-daemon    # Starten"
