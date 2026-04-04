@@ -82,20 +82,12 @@ install_repo() {
 
 # --- Dependencies installieren ---
 install_deps() {
-    info "Installiere Daemon-Dependencies..."
-    cd "$INSTALL_DIR/packages/daemon"
-    npm ci --production=false
-    ok "Daemon-Dependencies installiert"
-
-    info "Installiere Dashboard-Dependencies..."
-    cd "$INSTALL_DIR/packages/dashboard-ui"
-    npm ci --production=false
-    ok "Dashboard-Dependencies installiert"
-
-    # Root-Dependencies (vitest, tsx)
+    # Ein einziger npm install im Root installiert alles
+    # (postinstall-Script installiert daemon + dashboard automatisch)
     cd "$INSTALL_DIR"
-    npm ci
-    ok "Root-Dependencies installiert"
+    info "Installiere alle Dependencies (Root + Daemon + Dashboard)..."
+    npm install
+    ok "Alle Dependencies installiert"
 }
 
 # --- Datenverzeichnis erstellen ---

@@ -55,21 +55,16 @@ cd ~/thinklocal-mcp
 ### 2. Dependencies installieren
 
 ```bash
-# Root (vitest, tsx)
-npm ci
-
-# Daemon
-cd packages/daemon && npm ci && cd ../..
-
-# Dashboard (optional)
-cd packages/dashboard-ui && npm ci && cd ../..
+npm install
 ```
 
-### 3. Daemon starten (Vordergrund)
+> Das installiert automatisch alle Dependencies (Root + Daemon + Dashboard) in einem Schritt.
+
+### 3. Daemon starten
 
 ```bash
-cd packages/daemon
-npx tsx src/index.ts
+npm start              # Mit mTLS (Produktion)
+npm run start:dev      # Ohne mTLS (Entwicklung)
 ```
 
 Konfiguration via Umgebungsvariablen:
