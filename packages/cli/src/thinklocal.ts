@@ -395,7 +395,10 @@ async function cmdBootstrap(): Promise<void> {
   // 4. System-Service installieren (launchd / systemd)
   installService(tsxPath);
 
-  // 5. Daemon einmal starten (generiert Keys + Certs) — via spawnSync, kein Shell
+  // 5. Credentials aus .env importieren (wenn vorhanden)
+  importEnvCredentials(INSTALL_DIR);
+
+  // 6. Daemon einmal starten (generiert Keys + Certs) — via spawnSync, kein Shell
   info('Starte Daemon kurz um Keys zu generieren...');
   const indexPath2 = resolve(INSTALL_DIR, 'packages', 'daemon', 'src', 'index.ts');
   const keyGenResult = spawnSync(tsxPath, [indexPath2], {
@@ -716,6 +719,86 @@ function upsertMcpConfig(
   const mode = existsSync(configPath) ? (statSync(configPath).mode & 0o777) : 0o600;
   atomicWrite(configPath, JSON.stringify(config, null, 2) + '\n', mode);
   ok(`${label} konfiguriert (thinklocal hinzugefuegt)`);
+}
+
+// --- Credential-Import aus .env ---
+
+/**
+ * Liest Credentials aus .env und:
+ * 1. Speichert sie im Daemon-Vault (verschluesselt)
+ * 2. Konfiguriert Git mit GitHub-Token (fuer automatischen Push)
+ */
+function importEnvCredentials(installDir: string): void {
+  const envPath = resolve(installDir, '.env');
+  if (!existsSync(envPath)) return;
+
+  const envContent = readFileSync(envPath, 'utf-8');
+  const envVars: Record<string, string> = {};
+
+  for (const line of envContent.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eqIdx = trimmed.indexOf('=');
+    if (eqIdx === -1) continue;
+    const key = trimmed.slice(0, eqIdx).trim();
+    const value = trimmed.slice(eqIdx + 1).trim();
+    if (key && value) envVars[key] = value;
+  }
+
+  if (Object.keys(envVars).length === 0) return;
+  info(`${Object.keys(envVars).length} Credentials in .env gefunden`);
+
+  // Git konfigurieren (GitHub Token fuer automatischen Push)
+  if (envVars['GITHUB_TOKEN'] && envVars['GITHUB_USER']) {
+    try {
+      const ghUser = envVars['GITHUB_USER'];
+      const ghToken = envVars['GITHUB_TOKEN'];
+      const ghEmail = envVars['GITHUB_EMAIL'] ?? `${ghUser}@users.noreply.github.com`;
+
+      // Git Credential-Helper konfigurieren
+      spawnSync('git', ['config', '--global', 'user.name', ghUser], { encoding: 'utf-8' });
+      spawnSync('git', ['config', '--global', 'user.email', ghEmail], { encoding: 'utf-8' });
+
+      // Credential-Helper fuer HTTPS speichern (store statt cache fuer Persistenz)
+      spawnSync('git', ['config', '--global', 'credential.helper', 'store'], { encoding: 'utf-8' });
+
+      // Token in git-credentials speichern
+      const credPath = resolve(HOME, '.git-credentials');
+      const credLine = `https://${ghUser}:${ghToken}@github.com\n`;
+      if (!existsSync(credPath) || !readFileSync(credPath, 'utf-8').includes('github.com')) {
+        atomicWrite(credPath, credLine);
+      }
+      ok('Git konfiguriert (GitHub Token fuer automatischen Push)');
+    } catch {
+      warn('Git-Konfiguration fehlgeschlagen');
+    }
+  }
+
+  // Credentials im Vault speichern (wenn Daemon laeuft)
+  const credEntries = Object.entries(envVars).filter(([k]) =>
+    k.includes('TOKEN') || k.includes('PASSWORD') || k.includes('SECRET') || k.includes('KEY'),
+  );
+
+  if (credEntries.length > 0) {
+    // Versuche Credentials ueber die Daemon-API zu speichern
+    let vaultOk = false;
+    for (const [name, value] of credEntries) {
+      try {
+        const res = spawnSync('curl', [
+          '-sf', '-X', 'POST',
+          `http://localhost:${DAEMON_PORT}/api/vault/credentials`,
+          '-H', 'Content-Type: application/json',
+          '-d', JSON.stringify({ name: name.toLowerCase(), value, category: 'env-import' }),
+        ], { encoding: 'utf-8', timeout: 5_000 });
+        if (res.status === 0) vaultOk = true;
+      } catch { /* Daemon laeuft noch nicht — ok */ }
+    }
+    if (vaultOk) {
+      ok(`${credEntries.length} Credentials im Vault gespeichert (verschluesselt)`);
+    } else {
+      info(`${credEntries.length} Credentials gefunden — werden nach Daemon-Start im Vault gespeichert`);
+    }
+  }
 }
 
 // --- Service-Installation ---
