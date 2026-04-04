@@ -129,23 +129,49 @@ install_linux_service() {
     info "Installiere systemd Service..."
     local NODE_PATH
     NODE_PATH=$(which node)
-    local SERVICE_SRC="$INSTALL_DIR/scripts/service/thinklocal-daemon.service"
+    local TSX_PATH="$INSTALL_DIR/packages/daemon/node_modules/.bin/tsx"
+    local INDEX_PATH="$INSTALL_DIR/packages/daemon/src/index.ts"
     local SERVICE_DST="$HOME/.config/systemd/user/thinklocal-daemon.service"
 
     mkdir -p "$HOME/.config/systemd/user"
 
-    # Platzhalter ersetzen
-    sed -e "s|__NODE_PATH__|$NODE_PATH|g" \
-        -e "s|__INSTALL_DIR__|$INSTALL_DIR|g" \
-        -e "s|__HOME__|$HOME|g" \
-        -e "s|__USER__|$(whoami)|g" \
-        "$SERVICE_SRC" > "$SERVICE_DST"
+    # Service-Datei direkt generieren (NICHT aus Template!)
+    # User-Services duerfen KEIN User=, Group=, ProtectSystem= etc. haben
+    cat > "$SERVICE_DST" << SERVICEEOF
+[Unit]
+Description=thinklocal-mcp Mesh Daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=$NODE_PATH $TSX_PATH $INDEX_PATH
+Environment=TLMCP_CONFIG=$INSTALL_DIR/config/daemon.toml
+Environment=TLMCP_DATA_DIR=$HOME/.thinklocal
+Environment=TLMCP_NO_TLS=1
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=NODE_ENV=production
+WorkingDirectory=$INSTALL_DIR
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:$HOME/.thinklocal/logs/daemon.log
+StandardError=append:$HOME/.thinklocal/logs/daemon.error.log
+
+[Install]
+WantedBy=default.target
+SERVICEEOF
 
     # User-Service aktivieren
     systemctl --user daemon-reload
     systemctl --user enable thinklocal-daemon
     systemctl --user start thinklocal-daemon
     ok "systemd User-Service installiert und gestartet"
+
+    # enable-linger damit Service auch ohne Login-Session laeuft
+    loginctl enable-linger "$(whoami)" 2>/dev/null && \
+        ok "User-Linger aktiviert (Service laeuft ohne Login)" || \
+        warn "loginctl enable-linger fehlgeschlagen — ggf. sudo noetig"
+
     info "Steuern mit:"
     echo "  systemctl --user start thinklocal-daemon    # Starten"
     echo "  systemctl --user stop thinklocal-daemon     # Stoppen"
