@@ -464,14 +464,93 @@ async function cmdPeers(): Promise<void> {
 
     for (const p of data.peers) {
       const card = p['agent_card'] as Record<string, unknown> | null;
+      const health = card?.['health'] as Record<string, number> | null;
       const agents = card ? (card['capabilities'] as Record<string, unknown>)?.['agents'] : null;
-      console.log(`  ${C.green}●${C.reset} ${p['name']}`);
+      const status = p['status'] === 'online' ? `${C.green}●${C.reset}` : `${C.red}○${C.reset}`;
+
+      console.log(`  ${status} ${C.bold}${p['name']}${C.reset}`);
       console.log(`    ${C.dim}${p['host']}:${p['port']} | ${agents ?? 'unknown'}${C.reset}`);
+      if (health) {
+        const cpuColor = (health['cpu_percent'] ?? 0) > 80 ? C.red : (health['cpu_percent'] ?? 0) > 50 ? C.yellow : C.green;
+        const ramColor = (health['memory_percent'] ?? 0) > 90 ? C.red : (health['memory_percent'] ?? 0) > 70 ? C.yellow : C.green;
+        console.log(`    CPU: ${cpuColor}${health['cpu_percent']}%${C.reset}  RAM: ${ramColor}${health['memory_percent']}%${C.reset}  Disk: ${health['disk_percent']}%  Uptime: ${formatUptime(health['uptime_seconds'] ?? 0)}`);
+      }
     }
     console.log(`\n  ${data.peers.length} Peer(s) verbunden\n`);
   } catch {
     fail('Konnte Peer-Daten nicht abrufen');
   }
+}
+
+async function cmdCheck(host: string): Promise<void> {
+  header(`Remote-Check: ${host}`);
+
+  // Port bestimmen (host:port oder nur host)
+  let targetHost = host;
+  let targetPort = DAEMON_PORT;
+  if (host.includes(':')) {
+    const parts = host.split(':');
+    targetHost = parts[0];
+    targetPort = Number(parts[1]);
+  }
+
+  // 1. Health-Check
+  try {
+    const res = await fetch(`http://${targetHost}:${targetPort}/health`, { signal: AbortSignal.timeout(3_000) });
+    if (res.ok) {
+      ok(`Daemon erreichbar (http://${targetHost}:${targetPort})`);
+    } else {
+      fail(`Daemon antwortet mit Status ${res.status}`);
+      return;
+    }
+  } catch {
+    fail(`Daemon nicht erreichbar auf ${targetHost}:${targetPort}`);
+    info('Pruefen: Laeuft der Daemon? Firewall? Richtiger Port?');
+    return;
+  }
+
+  // 2. Status abrufen
+  try {
+    const res = await fetch(`http://${targetHost}:${targetPort}/api/status`, { signal: AbortSignal.timeout(3_000) });
+    const status = (await res.json()) as Record<string, unknown>;
+    console.log(`  Agent:         ${status['agent_id']}`);
+    console.log(`  Hostname:      ${status['hostname']}:${status['port']}`);
+    console.log(`  Agent-Typ:     ${status['agent_type']}`);
+    console.log(`  Uptime:        ${formatUptime(status['uptime_seconds'] as number)}`);
+    console.log(`  Peers:         ${status['peers_online']} online`);
+    console.log(`  Capabilities:  ${status['capabilities_count']}`);
+    console.log(`  Tasks:         ${status['active_tasks']} aktiv`);
+  } catch {
+    warn('Status konnte nicht abgerufen werden');
+  }
+
+  // 3. Agent Card
+  try {
+    const res = await fetch(`http://${targetHost}:${targetPort}/.well-known/agent-card.json`, { signal: AbortSignal.timeout(3_000) });
+    const card = (await res.json()) as Record<string, unknown>;
+    ok(`Agent Card: ${card['name']} v${card['version']}`);
+  } catch {
+    warn('Agent Card nicht erreichbar');
+  }
+
+  // 4. Skill-Execute testen
+  try {
+    const res = await fetch(`http://${targetHost}:${targetPort}/api/tasks/execute`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ skill_id: 'system.health' }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (res.ok) {
+      ok('Skill-Execute funktioniert (system.health)');
+    } else {
+      warn(`Skill-Execute: ${res.status} ${res.statusText}`);
+    }
+  } catch {
+    warn('Skill-Execute nicht verfuegbar');
+  }
+
+  console.log();
 }
 
 async function cmdMcpConfig(target?: string): Promise<void> {
@@ -807,6 +886,10 @@ async function main(): Promise<void> {
     case 'bootstrap': return cmdBootstrap();
     case 'peers': return cmdPeers();
     case 'uninstall': return cmdUninstall();
+    case 'check':
+      if (args[1]) return cmdCheck(args[1]);
+      console.log('  Nutzung: thinklocal check <host> oder thinklocal check <host>:<port>');
+      return;
     case 'mcp':
       return cmdMcpConfig(args[1]);
     case 'config':
@@ -827,7 +910,8 @@ async function main(): Promise<void> {
     status         Status anzeigen
     doctor         Systemdiagnose (prueft alles)
     logs           Live-Logs anzeigen
-    peers          Verbundene Peers anzeigen
+    peers          Verbundene Peers mit Health-Daten
+    check <host>   Remote-Daemon pruefen (host oder host:port)
     mcp            MCP-Config-Snippet anzeigen
     mcp install    MCP in Claude Desktop + Code eintragen
     config show    Konfiguration anzeigen
