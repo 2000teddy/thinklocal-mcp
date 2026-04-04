@@ -179,7 +179,78 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 
 ---
 
-## Übergreifende Aufgaben (alle Phasen)
+## Phase 5 — Produktisierung: "Install once, it just works" (Konsensus: GPT-5.4 + Gemini 2.5 Pro + GPT-5.1)
+
+> Ergebnis des Multi-Modell-Konsensus vom 2026-04-04. Alle 3 Modelle einig: CLI + Daemon-Management ZUERST, dann Claude-Integration, SSH-Deploy auf v2.
+
+### 5.1 `thinklocal` CLI + Daemon-Management
+- [ ] 🔴 Globale CLI: `thinklocal start`, `stop`, `status`, `restart`, `logs`, `doctor`
+- [ ] 🔴 `thinklocal bootstrap` — Ersteinrichtung: Keys generieren, Config erstellen, Service installieren
+- [ ] 🔴 `thinklocal doctor` — Diagnostik: Daemon laeuft?, Keys vorhanden?, Peers erreichbar?, MCP konfiguriert?
+- [ ] 🟠 `thinklocal peers` — Verbundene Peers anzeigen
+- [ ] 🟠 `thinklocal config show/edit/validate` — Konfiguration verwalten
+- [ ] 🟠 Saubere, menschenlesbare Ausgabe (kein JSON-Log-Spam im Terminal)
+
+### 5.2 One-Command Install + System-Service
+- [ ] 🔴 macOS: `brew install thinklocal-mcp` oder `curl ... | bash` — installiert Daemon + CLI + launchd Service
+- [ ] 🔴 Linux: `.deb`-Paket oder Install-Script mit systemd User-Service
+- [ ] 🔴 Installer registriert launchd/systemd Service automatisch (Daemon startet bei Login)
+- [ ] 🟠 Uninstaller: `thinklocal uninstall` — Service entfernen, Config/Keys behalten (opt-in loeschen)
+- [ ] 🟠 Sensible Defaults: mDNS auto-discovery, Keys auto-generieren, MCP-Endpoint auto-exponieren
+
+### 5.3 Claude Desktop MCP Integration
+- [ ] 🔴 `thinklocal mcp config --claude-desktop` — generiert den JSON-Block fuer Claude Desktop Config
+- [ ] 🔴 `thinklocal mcp config --claude-code` — generiert ~/.mcp.json fuer Claude Code
+- [ ] 🔴 Lokale MCP Bridge: Claude spricht mit lokalem Daemon ueber localhost (nicht direkt mit Mesh)
+- [ ] 🟠 Auto-Detection: Installer findet Claude Desktop Config und bietet an, thinklocal hinzuzufuegen
+- [ ] 🟡 Dokumentation: Schritt-fuer-Schritt mit Screenshots
+
+### 5.4 Claude Code Terminal Integration
+- [ ] 🔴 `thinklocal init` — schreibt .mcp.json ins aktuelle Projekt
+- [ ] 🟠 Globale ~/.mcp.json wird automatisch bei `thinklocal bootstrap` erstellt
+- [ ] 🟡 Verifizierung: "Starte Claude Code und frage: Welche Peers sind im Mesh?"
+
+### 5.5 Linux Support (Ubuntu/Debian)
+- [ ] 🔴 Install-Script mit Plattform-Erkennung (macOS/Linux)
+- [ ] 🔴 systemd User-Service mit gleicher UX wie macOS
+- [ ] 🟠 `.deb`-Paket fuer apt-Installation
+- [ ] 🟡 Docker-Image als Alternative
+
+### 5.6 Distribution + Auto-Update
+- [ ] 🟠 Homebrew-Formel (macOS)
+- [ ] 🟠 Auto-Update-Mechanismus (Sparkle fuer App, npm fuer CLI)
+- [ ] 🟡 Signierte Releases (checksums, GPG)
+
+---
+
+## Phase 6 — Native Experience + Remote-Deployment
+
+### 6.1 Swift MenuBar App (macOS)
+- [ ] 🟠 SwiftUI MenuBarExtra als duenne Shell ueber Daemon-API
+- [ ] 🟠 Status-Icon: gruen (Mesh aktiv), gelb (keine Peers), rot (Daemon offline)
+- [ ] 🟠 Quick-Actions: Start/Stop, Peers anzeigen, Dashboard oeffnen, Logs anzeigen
+- [ ] 🟡 Pairing per Klick (PIN anzeigen/eingeben)
+- [ ] 🟡 Sparkle Auto-Update + notarisiertes .dmg
+- [ ] 💡 Architektur wie OpenClaw: Swift App startet/steuert Node.js Daemon als Subprocess
+
+### 6.2 SSH-basiertes Remote-Deployment (v2, opt-in)
+- [ ] 🟠 `thinklocal deploy user@host` — SSH-Bootstrap mit Node-Check, Install, Service-Setup
+- [ ] 🟠 SSH-Key-Austausch: Einmalige Credentials, danach automatischer sicherer Zugriff
+- [ ] 🟠 Lokale CA signiert Mesh-Zertifikate fuer Remote-Nodes
+- [ ] 🟡 Dry-Run-Modus: `thinklocal deploy --dry-run` zeigt alle Schritte
+- [ ] 🟡 `thinklocal remove user@host` — Remote-Deinstallation
+- [ ] 💡 Netzwerk-Scanner schlaegt Deployment-Ziele vor
+
+### 6.3 Fehlende Infrastruktur (Konsensus-Findings)
+- [ ] 🔴 Diagnostik: `thinklocal doctor` (Daemon, Keys, Peers, MCP, Certs, Firewall)
+- [ ] 🟠 Recovery-Flows: abgelaufene Certs, Port-Konflikte, umbenannte Hosts
+- [ ] 🟠 Versioning: Kompatibilitaetsmatrix, graceful Degradation bei Mixed-Version-Nodes
+- [ ] 🟡 Security-Lifecycle: Cert-Rotation, Revocation, Trust-Reset
+- [ ] 🟡 Benutzerfreundliche Fehlermeldungen statt Stack-Traces
+
+---
+
+## Uebergreifende Aufgaben (alle Phasen)
 
 ### Dokumentation
 - [x] 🔴 ADR-Template erstellen und ersten ADR schreiben — `docs/architecture/ADR-001-daemon-architecture.md` (2026-04-03)
