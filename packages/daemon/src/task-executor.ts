@@ -21,6 +21,13 @@ import {
   systemNetwork,
   systemDisk,
 } from './builtin-skills/system-monitor.js';
+import {
+  influxdbQuery,
+  influxdbDatabases,
+  influxdbMeasurements,
+  influxdbWrite,
+  influxdbHealthCheck,
+} from './builtin-skills/influxdb.js';
 
 export interface TaskExecutorDeps {
   tasks: TaskManager;
@@ -106,6 +113,31 @@ export class TaskExecutor {
     );
     this.handlers.set('system.network', async () => await systemNetwork());
     this.handlers.set('system.disk', async () => await systemDisk());
+
+    // influxdb Skills (nur wenn erreichbar)
+    influxdbHealthCheck().then((available) => {
+      if (available) {
+        this.handlers.set('influxdb.query', async (input) =>
+          await influxdbQuery(
+            input['query'] as string,
+            input['database'] as string | undefined,
+            input['epoch'] as string | undefined,
+          ),
+        );
+        this.handlers.set('influxdb.databases', async () => await influxdbDatabases());
+        this.handlers.set('influxdb.measurements', async (input) =>
+          await influxdbMeasurements(input['database'] as string),
+        );
+        this.handlers.set('influxdb.write', async (input) =>
+          await influxdbWrite(
+            input['database'] as string,
+            input['lines'] as string,
+            input['precision'] as string | undefined,
+          ),
+        );
+        this.deps.log?.info('InfluxDB Skill-Handler registriert');
+      }
+    });
 
     this.deps.log?.info({ skills: [...this.handlers.keys()] }, 'Builtin-Skill-Handler registriert');
   }

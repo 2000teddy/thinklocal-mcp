@@ -17,6 +17,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { systemHealth, systemProcesses, systemNetwork, systemDisk } from './builtin-skills/system-monitor.js';
+import { influxdbQuery, influxdbDatabases, influxdbMeasurements, influxdbWrite } from './builtin-skills/influxdb.js';
 
 const DAEMON_URL = process.env['TLMCP_DAEMON_URL'] ?? 'http://localhost:9440';
 
@@ -219,6 +220,51 @@ server.tool('system_disk', 'Dateisystem-Nutzung und Disk-I/O', {}, async () => {
   const data = await systemDisk();
   return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
 });
+
+// --- InfluxDB Skills ---
+
+server.tool(
+  'influxdb_query',
+  'Fuehrt eine InfluxQL-Query aus (SELECT, SHOW). Fuer Writes nutze influxdb_write.',
+  {
+    query: z.string().describe('InfluxQL Query (z.B. "SELECT * FROM cpu WHERE time > now() - 1h")'),
+    database: z.string().optional().describe('Datenbank-Name'),
+    epoch: z.string().optional().describe('Zeitformat: ns, u, ms, s, m, h (Default: RFC3339)'),
+  },
+  async ({ query, database, epoch }) => {
+    const data = await influxdbQuery(query, database, epoch);
+    return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool('influxdb_databases', 'Listet alle InfluxDB-Datenbanken auf', {}, async () => {
+  const data = await influxdbDatabases();
+  return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+});
+
+server.tool(
+  'influxdb_measurements',
+  'Listet alle Measurements einer InfluxDB-Datenbank auf',
+  { database: z.string().describe('Datenbank-Name') },
+  async ({ database }) => {
+    const data = await influxdbMeasurements(database);
+    return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool(
+  'influxdb_write',
+  'Schreibt Datenpunkte in InfluxDB (Line Protocol)',
+  {
+    database: z.string().describe('Ziel-Datenbank'),
+    lines: z.string().describe('Datenpunkte im Line Protocol (z.B. "cpu,host=server1 value=0.64")'),
+    precision: z.string().optional().describe('Zeitpraezision: ns, u, ms, s, m, h (Default: ns)'),
+  },
+  async ({ database, lines, precision }) => {
+    const data = await influxdbWrite(database, lines, precision);
+    return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+  },
+);
 
 // --- Start ---
 

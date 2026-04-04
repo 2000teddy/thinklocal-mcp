@@ -24,6 +24,7 @@ import { CredentialVault } from './vault.js';
 import { TaskExecutor } from './task-executor.js';
 import type { SecretRequestPayload, SecretResponsePayload } from './messages.js';
 import { SYSTEM_MONITOR_MANIFEST } from './builtin-skills/system-monitor.js';
+import { INFLUXDB_MANIFEST, influxdbHealthCheck } from './builtin-skills/influxdb.js';
 import type { AgentCard } from './agent-card.js';
 
 async function main(): Promise<void> {
@@ -92,6 +93,15 @@ async function main(): Promise<void> {
 
   // Eingebaute Skills registrieren
   skillManager.registerLocal({ ...SYSTEM_MONITOR_MANIFEST, author: identity.spiffeUri });
+
+  // InfluxDB Skill nur registrieren wenn InfluxDB erreichbar ist
+  const influxAvailable = await influxdbHealthCheck();
+  if (influxAvailable) {
+    skillManager.registerLocal({ ...INFLUXDB_MANIFEST, author: identity.spiffeUri });
+    log.info('InfluxDB Skill registriert — Datenbank erreichbar');
+  } else {
+    log.info('InfluxDB nicht erreichbar — Skill nicht registriert');
+  }
 
   // 6. Mesh-Manager starten
   const mesh = new MeshManager(
