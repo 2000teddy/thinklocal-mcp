@@ -48,10 +48,13 @@ check_prerequisites() {
         error "Node.js nicht gefunden. Bitte installiere Node.js 20+: https://nodejs.org"
     fi
     NODE_VERSION=$(node -v | sed 's/v//' | cut -d. -f1)
-    if [ "$NODE_VERSION" -lt 20 ]; then
-        error "Node.js $NODE_VERSION gefunden, aber 20+ benoetigt."
+    if [ "$NODE_VERSION" -lt 18 ]; then
+        error "Node.js $NODE_VERSION gefunden, aber 18+ benoetigt."
+    elif [ "$NODE_VERSION" -lt 20 ]; then
+        warn "Node.js $(node -v) — Version 20+ empfohlen. v18 funktioniert eingeschraenkt."
+    else
+        ok "Node.js $(node -v)"
     fi
-    ok "Node.js $(node -v)"
 
     # npm
     if ! command -v npm &>/dev/null; then
