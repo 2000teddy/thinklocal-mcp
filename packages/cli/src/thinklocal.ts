@@ -330,63 +330,28 @@ async function cmdBootstrap(): Promise<void> {
   mkdirSync(resolve(DATA_DIR, 'pairing'), { recursive: true });
   ok(`Datenverzeichnis: ${DATA_DIR}`);
 
-  // 2. MCP-Konfiguration (~/.mcp.json)
-  const mcpPath = resolve(HOME, '.mcp.json');
+  // 2. MCP-Server-Eintrag vorbereiten
   const tsxPath = resolve(INSTALL_DIR, 'packages', 'daemon', 'node_modules', '.bin', 'tsx');
   const mcpStdioPath = resolve(INSTALL_DIR, 'packages', 'daemon', 'src', 'mcp-stdio.ts');
+  const thinklocalMcpEntry = {
+    command: tsxPath,
+    args: [mcpStdioPath],
+    env: { TLMCP_DAEMON_URL: DAEMON_URL },
+  };
 
-  if (!existsSync(mcpPath)) {
-    const mcpConfig = {
-      mcpServers: {
-        thinklocal: {
-          command: tsxPath,
-          args: [mcpStdioPath],
-          env: { TLMCP_DAEMON_URL: DAEMON_URL },
-        },
-      },
-    };
-    writeFileSync(mcpPath, JSON.stringify(mcpConfig, null, 2) + '\n', { mode: 0o644 });
-    ok('~/.mcp.json erstellt (Claude Code global)');
-  } else {
-    const existing = readFileSync(mcpPath, 'utf-8');
-    if (existing.includes('thinklocal')) {
-      ok('~/.mcp.json bereits konfiguriert');
-    } else {
-      warn('~/.mcp.json existiert — bitte thinklocal manuell hinzufuegen');
-      info(`Befehl: thinklocal mcp config --claude-code`);
-    }
-  }
+  // 3. ~/.mcp.json (Claude Code global)
+  const mcpPath = resolve(HOME, '.mcp.json');
+  upsertMcpConfig(mcpPath, thinklocalMcpEntry, '~/.mcp.json (Claude Code)');
 
-  // 3. Claude Desktop Config
+  // 4. Claude Desktop Config
   let claudeConfigPath = '';
   if (PLATFORM === 'darwin') {
     claudeConfigPath = resolve(HOME, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
   } else if (PLATFORM === 'linux') {
     claudeConfigPath = resolve(HOME, '.config', 'Claude', 'claude_desktop_config.json');
   }
-
   if (claudeConfigPath) {
-    if (!existsSync(claudeConfigPath)) {
-      mkdirSync(resolve(claudeConfigPath, '..'), { recursive: true });
-      const desktopConfig = {
-        mcpServers: {
-          thinklocal: {
-            command: tsxPath,
-            args: [mcpStdioPath],
-            env: { TLMCP_DAEMON_URL: DAEMON_URL },
-          },
-        },
-      };
-      writeFileSync(claudeConfigPath, JSON.stringify(desktopConfig, null, 2) + '\n');
-      ok('Claude Desktop konfiguriert');
-    } else {
-      const existing = readFileSync(claudeConfigPath, 'utf-8');
-      if (existing.includes('thinklocal')) {
-        ok('Claude Desktop bereits konfiguriert');
-      } else {
-        warn('Claude Desktop Config existiert — thinklocal muss manuell hinzugefuegt werden');
-      }
-    }
+    upsertMcpConfig(claudeConfigPath, thinklocalMcpEntry, 'Claude Desktop');
   }
 
   // 4. System-Service installieren (launchd / systemd)
@@ -472,6 +437,53 @@ async function cmdPeers(): Promise<void> {
   }
 }
 
+async function cmdMcpConfig(target?: string): Promise<void> {
+  const tsxPath = resolve(INSTALL_DIR, 'packages', 'daemon', 'node_modules', '.bin', 'tsx');
+  const mcpStdioPath = resolve(INSTALL_DIR, 'packages', 'daemon', 'src', 'mcp-stdio.ts');
+
+  const snippet = {
+    thinklocal: {
+      command: tsxPath,
+      args: [mcpStdioPath],
+      env: { TLMCP_DAEMON_URL: DAEMON_URL },
+    },
+  };
+
+  if (target === 'install') {
+    // Automatisch in alle Configs einfuegen
+    const mcpPath = resolve(HOME, '.mcp.json');
+    upsertMcpConfig(mcpPath, snippet['thinklocal'], '~/.mcp.json (Claude Code)');
+
+    let claudeConfigPath = '';
+    if (PLATFORM === 'darwin') {
+      claudeConfigPath = resolve(HOME, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
+    } else if (PLATFORM === 'linux') {
+      claudeConfigPath = resolve(HOME, '.config', 'Claude', 'claude_desktop_config.json');
+    }
+    if (claudeConfigPath) {
+      upsertMcpConfig(claudeConfigPath, snippet['thinklocal'], 'Claude Desktop');
+    }
+    return;
+  }
+
+  header('MCP-Server-Konfiguration');
+  console.log('  Fuer Claude Desktop und Claude Code — kopiere diesen Block');
+  console.log('  in den "mcpServers"-Bereich der jeweiligen Config-Datei:\n');
+  console.log(`${C.dim}${JSON.stringify(snippet, null, 2)}${C.reset}`);
+
+  console.log(`\n  ${C.bold}Config-Dateien:${C.reset}`);
+  console.log(`    Claude Code:    ~/.mcp.json`);
+  if (PLATFORM === 'darwin') {
+    console.log(`    Claude Desktop: ~/Library/Application Support/Claude/claude_desktop_config.json`);
+  } else if (PLATFORM === 'linux') {
+    console.log(`    Claude Desktop: ~/.config/Claude/claude_desktop_config.json`);
+  }
+
+  console.log(`\n  ${C.bold}Oder automatisch:${C.reset}`);
+  console.log(`    thinklocal mcp install     Fuegt thinklocal in alle Configs ein`);
+  console.log(`    thinklocal bootstrap       Macht alles (inkl. MCP-Config)\n`);
+}
+
 async function cmdUninstall(): Promise<void> {
   header('thinklocal deinstallieren');
 
@@ -535,6 +547,58 @@ async function cmdConfigShow(): Promise<void> {
   console.log(`  ${C.dim}Daemon-Port:       ${DAEMON_PORT}${C.reset}`);
   console.log(`  ${C.dim}Install-Pfad:      ${INSTALL_DIR}${C.reset}`);
   console.log();
+}
+
+// --- MCP-Config-Management ---
+
+/**
+ * Fuegt thinklocal sicher in eine MCP-Konfigurationsdatei ein.
+ * Erstellt die Datei wenn noetig, erweitert bestehende Configs ohne
+ * andere Server zu beruehren, und erstellt Backups.
+ */
+function upsertMcpConfig(
+  configPath: string,
+  mcpEntry: Record<string, unknown>,
+  label: string,
+): void {
+  if (!existsSync(configPath)) {
+    // Neue Config erstellen
+    mkdirSync(resolve(configPath, '..'), { recursive: true });
+    const config = { mcpServers: { thinklocal: mcpEntry } };
+    writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', { mode: 0o644 });
+    ok(`${label} konfiguriert (neu erstellt)`);
+    return;
+  }
+
+  // Bestehende Config lesen
+  let config: Record<string, unknown>;
+  try {
+    config = JSON.parse(readFileSync(configPath, 'utf-8')) as Record<string, unknown>;
+  } catch {
+    warn(`${label}: Config-Datei ist kein gueltiges JSON — ueberspringe`);
+    return;
+  }
+
+  // Pruefen ob thinklocal bereits drin ist
+  const servers = config['mcpServers'] as Record<string, unknown> | undefined;
+  if (servers?.['thinklocal']) {
+    ok(`${label} bereits konfiguriert`);
+    return;
+  }
+
+  // Backup erstellen
+  const backupPath = `${configPath}.pre-thinklocal.bak`;
+  writeFileSync(backupPath, readFileSync(configPath));
+  info(`Backup: ${backupPath}`);
+
+  // thinklocal einfuegen
+  if (!config['mcpServers']) {
+    config['mcpServers'] = {};
+  }
+  (config['mcpServers'] as Record<string, unknown>)['thinklocal'] = mcpEntry;
+
+  writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
+  ok(`${label} konfiguriert (thinklocal hinzugefuegt)`);
 }
 
 // --- Service-Installation ---
@@ -690,6 +754,8 @@ async function main(): Promise<void> {
     case 'bootstrap': return cmdBootstrap();
     case 'peers': return cmdPeers();
     case 'uninstall': return cmdUninstall();
+    case 'mcp':
+      return cmdMcpConfig(args[1]);
     case 'config':
       if (args[1] === 'show' || !args[1]) return cmdConfigShow();
       break;
@@ -709,6 +775,8 @@ async function main(): Promise<void> {
     doctor         Systemdiagnose (prueft alles)
     logs           Live-Logs anzeigen
     peers          Verbundene Peers anzeigen
+    mcp            MCP-Config-Snippet anzeigen
+    mcp install    MCP in Claude Desktop + Code eintragen
     config show    Konfiguration anzeigen
     uninstall      Service + Config entfernen
 
