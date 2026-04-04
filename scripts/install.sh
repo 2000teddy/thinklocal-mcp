@@ -104,7 +104,12 @@ setup_data_dir() {
 install_macos_service() {
     info "Installiere macOS launchd Service..."
     local NODE_PATH
-    NODE_PATH=$(which node)
+    # nvm-aware Node-Pfad
+    NODE_PATH=$(command -v node)
+    if [ -n "$NVM_BIN" ] && [ -x "$NVM_BIN/node" ]; then
+        NODE_PATH="$NVM_BIN/node"
+    fi
+    NODE_PATH=$(realpath "$NODE_PATH" 2>/dev/null || echo "$NODE_PATH")
     local PLIST_SRC="$INSTALL_DIR/scripts/service/com.thinklocal.daemon.plist"
     local PLIST_DST="$HOME/Library/LaunchAgents/com.thinklocal.daemon.plist"
 
@@ -128,7 +133,15 @@ install_macos_service() {
 install_linux_service() {
     info "Installiere systemd Service..."
     local NODE_PATH
-    NODE_PATH=$(which node)
+    # nvm-aware Node-Pfad: realpath folgt Symlinks, command -v findet auch nvm-Nodes
+    NODE_PATH=$(command -v node)
+    # Wenn nvm aktiv ist, bevorzuge den nvm-Pfad
+    if [ -n "$NVM_BIN" ] && [ -x "$NVM_BIN/node" ]; then
+        NODE_PATH="$NVM_BIN/node"
+        info "nvm erkannt: Node aus $NODE_PATH"
+    fi
+    # Absoluten Pfad sicherstellen (realpath folgt Symlinks)
+    NODE_PATH=$(realpath "$NODE_PATH" 2>/dev/null || readlink -f "$NODE_PATH" 2>/dev/null || echo "$NODE_PATH")
     local TSX_PATH="$INSTALL_DIR/packages/daemon/node_modules/.bin/tsx"
     local INDEX_PATH="$INSTALL_DIR/packages/daemon/src/index.ts"
     local SERVICE_DST="$HOME/.config/systemd/user/thinklocal-daemon.service"
