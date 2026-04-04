@@ -240,7 +240,8 @@ async function cmdDoctor(): Promise<void> {
     const nodeV = execSync('node -v', { encoding: 'utf-8' }).trim();
     const major = Number(nodeV.replace('v', '').split('.')[0]);
     if (major >= 20) ok(`Node.js ${nodeV}`);
-    else { warn(`Node.js ${nodeV} — Version 20+ empfohlen`); issues++; }
+    else if (major >= 18) warn(`Node.js ${nodeV} — Version 20+ empfohlen (v18 funktioniert eingeschraenkt)`);
+    else { fail(`Node.js ${nodeV} — Version 18+ benoetigt`); issues++; }
   } catch { fail('Node.js nicht gefunden'); issues++; }
 
   // 2. Datenverzeichnis
@@ -753,9 +754,19 @@ WantedBy=default.target`;
     execSync('systemctl --user daemon-reload');
     execSync('systemctl --user enable thinklocal-daemon');
     ok('systemd Service installiert und aktiviert (startet bei Login)');
+
+    // enable-linger damit der Service auch ohne Login-Session laeuft
+    try {
+      execSync('loginctl enable-linger $(whoami) 2>/dev/null');
+      ok('User-Linger aktiviert (Service laeuft ohne Login)');
+    } catch {
+      warn('loginctl enable-linger fehlgeschlagen — Service laeuft nur bei aktiver Session');
+      info('Fix: sudo loginctl enable-linger $(whoami)');
+    }
   } catch {
     ok('systemd Service-Datei erstellt');
     warn('systemctl daemon-reload fehlgeschlagen — bitte manuell ausfuehren');
+    info('Befehle: systemctl --user daemon-reload && systemctl --user enable --now thinklocal-daemon');
   }
 }
 
