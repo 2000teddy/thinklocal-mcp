@@ -59,19 +59,28 @@ export class MdnsDiscovery {
         const txt = service.txt as Record<string, string> | undefined;
         if (!txt?.['agent-id']) return;
 
+        // Bevorzuge IP-Adresse aus mDNS (addresses[]) statt Hostname
+        // Hostname allein (z.B. "influxdb") kann ohne DNS nicht aufgeloest werden
+        const addresses = (service as unknown as { addresses?: string[] }).addresses;
+        const ipv4 = addresses?.find((a: string) => /^\d+\.\d+\.\d+\.\d+$/.test(a));
+        const resolvedHost = ipv4 ?? service.host;
+
         // Endpoint aus host:port ableiten — Protokoll aus TXT lesen (http/https)
         const proto = txt['proto'] === 'https' ? 'https' : 'http';
         const peer: DiscoveredPeer = {
           name: service.name,
-          host: service.host,
+          host: resolvedHost,
           port: service.port,
           agentId: txt['agent-id'],
           capabilityHash: txt['capability-hash'] ?? '',
           certFingerprint: txt['cert-fingerprint'] ?? '',
-          endpoint: `${proto}://${service.host}:${service.port}`,
+          endpoint: `${proto}://${resolvedHost}:${service.port}`,
         };
 
-        this.log?.info({ peer: peer.name, host: peer.host, port: peer.port }, 'Peer entdeckt');
+        this.log?.info(
+          { peer: peer.name, host: peer.host, port: peer.port, originalHost: service.host, addresses },
+          'Peer entdeckt',
+        );
         events.onPeerFound(peer);
       },
     );

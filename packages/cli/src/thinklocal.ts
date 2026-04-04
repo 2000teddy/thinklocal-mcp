@@ -53,6 +53,31 @@ function atomicWrite(filePath: string, content: string, mode = 0o600): void {
   renameSync(tmp, filePath);
 }
 
+/** Laedt .env-Datei und gibt key=value Paare zurueck (nur bekannte Service-Variablen) */
+function loadServiceEnvVars(): Record<string, string> {
+  const envPath = resolve(INSTALL_DIR, '.env');
+  const vars: Record<string, string> = {};
+  // Nur diese Variablen werden in den Service uebernommen (keine Secrets wie GITHUB_TOKEN!)
+  const allowedKeys = new Set(['TELEGRAM_BOT_TOKEN', 'TELEGRAM_ALLOWED_CHATS', 'INFLUXDB_USERNAME', 'INFLUXDB_PASSWORD']);
+
+  if (!existsSync(envPath)) return vars;
+  try {
+    const content = readFileSync(envPath, 'utf-8');
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eqIndex = trimmed.indexOf('=');
+      if (eqIndex < 1) continue;
+      const key = trimmed.slice(0, eqIndex).trim();
+      const value = trimmed.slice(eqIndex + 1).trim();
+      if (allowedKeys.has(key) && value) {
+        vars[key] = value;
+      }
+    }
+  } catch { /* .env nicht lesbar — ignorieren */ }
+  return vars;
+}
+
 // --- Farben ---
 const C = {
   reset: '\x1b[0m',
@@ -851,7 +876,9 @@ function installLaunchdService(nodePath: string, tsxPath: string, indexPath: str
         <key>TLMCP_NO_TLS</key>
         <string>1</string>
         <key>PATH</key>
-        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>${Object.entries(loadServiceEnvVars()).map(([k, v]) => `
+        <key>${xmlEscape(k)}</key>
+        <string>${xmlEscape(v)}</string>`).join('')}
     </dict>
     <key>RunAtLoad</key>
     <true/>
@@ -902,6 +929,7 @@ Environment=${systemdEscape(`TLMCP_DATA_DIR=${DATA_DIR}`)}
 Environment=${systemdEscape('TLMCP_NO_TLS=1')}
 Environment="PATH=/usr/local/bin:/usr/bin:/bin"
 Environment="NODE_ENV=production"
+${Object.entries(loadServiceEnvVars()).map(([k, v]) => `Environment=${systemdEscape(`${k}=${v}`)}`).join('\n')}
 WorkingDirectory=${systemdEscape(INSTALL_DIR)}
 Restart=on-failure
 RestartSec=10
