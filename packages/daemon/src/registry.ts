@@ -243,6 +243,42 @@ export class CapabilityRegistry {
     return Object.values(this.doc.capabilities);
   }
 
+  /**
+   * Markiert Capabilities als stale wenn updated_at aelter als maxAge ist.
+   * Setzt health auf 'degraded' fuer stale Capabilities.
+   * Gibt die Anzahl der markierten Capabilities zurueck.
+   */
+  markStaleCapabilities(maxAgeMs: number = 5 * 60 * 1000): number {
+    const now = Date.now();
+    let marked = 0;
+    this.doc = Automerge.change(this.doc, (d) => {
+      for (const key of Object.keys(d.capabilities)) {
+        const cap = d.capabilities[key];
+        if (!cap || cap.health === 'offline') continue;
+        const age = now - new Date(cap.updated_at).getTime();
+        if (age > maxAgeMs && cap.health === 'healthy') {
+          cap.health = 'degraded';
+          marked++;
+        }
+      }
+    });
+    if (marked > 0) {
+      this.log?.info({ marked, maxAgeMs }, 'Stale Capabilities als degraded markiert');
+    }
+    return marked;
+  }
+
+  /**
+   * Gibt Capabilities zurueck die aelter als maxAge sind.
+   */
+  getStaleCapabilities(maxAgeMs: number = 5 * 60 * 1000): Capability[] {
+    const now = Date.now();
+    return Object.values(this.doc.capabilities).filter((c) => {
+      const age = now - new Date(c.updated_at).getTime();
+      return age > maxAgeMs;
+    });
+  }
+
   private makeKey(agentId: string, skillId: string): string {
     return `${agentId}::${skillId}`;
   }

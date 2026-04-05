@@ -32,6 +32,12 @@ export interface AgentCard {
     disk_percent: number;
     uptime_seconds: number;
   };
+  worker: {
+    active_tasks: number;
+    completed_tasks: number;
+    failed_tasks: number;
+    load_percent: number; // 0-100, basierend auf aktiven Tasks vs. Kapazitaet
+  };
   mesh: {
     joined_at: string;
     trust_level: string;
@@ -63,6 +69,7 @@ export class AgentCardServer {
   private joinedAt: string;
   private peerCount = 0;
   private useTls: boolean;
+  private workerStats = { active: 0, completed: 0, failed: 0, capacity: 10 };
   private replayGuard = new ReplayGuard();
 
   constructor(private opts: AgentCardServerOptions) {
@@ -179,6 +186,11 @@ export class AgentCardServer {
     this.peerCount = count;
   }
 
+  /** Worker-Statistiken aktualisieren (wird vom Task-Manager aufgerufen) */
+  setWorkerStats(stats: { active: number; completed: number; failed: number }): void {
+    this.workerStats = { ...this.workerStats, ...stats };
+  }
+
   async start(): Promise<void> {
     await this.server.listen({
       port: this.opts.config.daemon.port,
@@ -236,6 +248,12 @@ export class AgentCardServer {
         memory_percent: Math.round((mem.used / mem.total) * 1000) / 10,
         disk_percent: Math.round(diskUsed * 10) / 10,
         uptime_seconds: Math.floor(process.uptime()),
+      },
+      worker: {
+        active_tasks: this.workerStats.active,
+        completed_tasks: this.workerStats.completed,
+        failed_tasks: this.workerStats.failed,
+        load_percent: Math.min(100, Math.round((this.workerStats.active / Math.max(1, this.workerStats.capacity)) * 100)),
       },
       mesh: {
         joined_at: this.joinedAt,

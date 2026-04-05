@@ -1,0 +1,285 @@
+openapi: 3.0.3
+info:
+  title: thinklocal-mcp Daemon API
+  version: 0.26.0
+  description: REST-API fuer das thinklocal-mcp Mesh-Netzwerk
+  contact:
+    name: thinklocal-mcp
+    url: https://github.com/2000teddy/thinklocal-mcp
+
+servers:
+  - url: http://localhost:9440
+    description: Lokaler Daemon
+
+paths:
+  /health:
+    get:
+      summary: Liveness-Check
+      tags: [System]
+      responses:
+        '200':
+          description: Daemon ist online
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  timestamp: { type: string, format: date-time }
+
+  /.well-known/agent-card.json:
+    get:
+      summary: Agent Card (Identitaet + Capabilities + Health)
+      tags: [Discovery]
+      responses:
+        '200':
+          description: Agent Card
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentCard'
+
+  /api/status:
+    get:
+      summary: Daemon-Status
+      tags: [System]
+      responses:
+        '200':
+          description: Aktueller Status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+
+  /api/peers:
+    get:
+      summary: Verbundene Peers
+      tags: [Mesh]
+      responses:
+        '200':
+          description: Peer-Liste
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  peers:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Peer'
+
+  /api/capabilities:
+    get:
+      summary: Alle Capabilities im Mesh
+      tags: [Registry]
+      responses:
+        '200':
+          description: Capability-Liste
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  capabilities:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Capability'
+
+  /api/tasks/execute:
+    post:
+      summary: Skill ausfuehren (lokal oder remote)
+      tags: [Tasks]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [skill_id]
+              properties:
+                skill_id: { type: string, example: system.health }
+                input: { type: object }
+      responses:
+        '200':
+          description: Task-Ergebnis
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result: { type: object }
+
+  /api/vault:
+    get:
+      summary: Credentials auflisten
+      tags: [Vault]
+      responses:
+        '200':
+          description: Credential-Liste (ohne Werte)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  credentials:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Credential'
+    post:
+      summary: Credential speichern
+      tags: [Vault]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, value]
+              properties:
+                name: { type: string }
+                value: { type: string }
+                category: { type: string }
+      responses:
+        '200':
+          description: Gespeichert
+
+  /api/audit:
+    get:
+      summary: Audit-Events abfragen
+      tags: [Audit]
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        '200':
+          description: Audit-Events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditEvent'
+
+  /api/auth/token:
+    post:
+      summary: JWT-Token generieren (nur von localhost)
+      tags: [Auth]
+      responses:
+        '200':
+          description: Neuer Token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+                  expires_in: { type: string, example: 24h }
+        '403':
+          description: Nur von localhost erlaubt
+
+  /message:
+    post:
+      summary: CBOR-kodierte Mesh-Nachricht empfangen
+      tags: [Protocol]
+      requestBody:
+        required: true
+        content:
+          application/cbor:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200': { description: Antwort (CBOR) }
+        '204': { description: Keine Antwort }
+        '400': { description: Ungueltige Nachricht }
+        '403': { description: Unbekannter Sender oder ungueltige Signatur }
+        '409': { description: Duplikat (Replay) }
+        '413': { description: Nachricht zu gross (>256KB) }
+
+components:
+  schemas:
+    AgentCard:
+      type: object
+      properties:
+        name: { type: string }
+        version: { type: string }
+        hostname: { type: string }
+        endpoint: { type: string }
+        publicKey: { type: string }
+        spiffeUri: { type: string }
+        capabilities:
+          type: object
+          properties:
+            skills: { type: array, items: { type: string } }
+            agents: { type: array, items: { type: string } }
+        health:
+          type: object
+          properties:
+            cpu_percent: { type: number }
+            memory_percent: { type: number }
+            disk_percent: { type: number }
+            uptime_seconds: { type: number }
+        worker:
+          type: object
+          properties:
+            active_tasks: { type: integer }
+            completed_tasks: { type: integer }
+            failed_tasks: { type: integer }
+            load_percent: { type: number }
+        mesh:
+          type: object
+          properties:
+            joined_at: { type: string, format: date-time }
+            trust_level: { type: string }
+            peers_connected: { type: integer }
+
+    Status:
+      type: object
+      properties:
+        agent_id: { type: string }
+        hostname: { type: string }
+        port: { type: integer }
+        uptime_seconds: { type: number }
+        peers_online: { type: integer }
+        capabilities_count: { type: integer }
+        active_tasks: { type: integer }
+
+    Peer:
+      type: object
+      properties:
+        name: { type: string }
+        host: { type: string }
+        port: { type: integer }
+        agentId: { type: string }
+        status: { type: string, enum: [online, offline] }
+
+    Capability:
+      type: object
+      properties:
+        skill_id: { type: string }
+        version: { type: string }
+        agent_id: { type: string }
+        health: { type: string, enum: [healthy, degraded, offline] }
+        description: { type: string }
+        category: { type: string }
+
+    Credential:
+      type: object
+      properties:
+        name: { type: string }
+        category: { type: string }
+        created_at: { type: string, format: date-time }
+
+    AuditEvent:
+      type: object
+      properties:
+        id: { type: integer }
+        timestamp: { type: string, format: date-time }
+        event_type: { type: string }
+        agent_id: { type: string }
+        peer_id: { type: string }
+        details: { type: string }
