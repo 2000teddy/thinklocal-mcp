@@ -102,7 +102,10 @@ export class GossipSync {
    * Synchronisiert die Registry mit einem einzelnen Peer.
    */
   async syncWithPeer(peer: MeshPeer): Promise<void> {
-    const capabilities = this.registry.exportCapabilities();
+    // Nur eigene Capabilities senden — keine Relay von Peer-Capabilities
+    // Das verhindert "fremde agent_id"-Warnungen beim Empfaenger
+    const capabilities = this.registry.exportCapabilities()
+      .filter((c) => c.agent_id === this.senderSpiffeUri);
     const hash = this.registry.getCapabilityHash();
 
     // REGISTRY_SYNC-Nachricht erstellen

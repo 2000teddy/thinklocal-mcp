@@ -210,6 +210,26 @@ export class CapabilityRegistry {
   }
 
   /**
+   * Entfernt alle Capabilities eines bestimmten Agents (z.B. wenn Peer offline geht).
+   * Verhindert Stale-Capability-Relay im Gossip.
+   */
+  removePeerCapabilities(agentId: string): number {
+    let removed = 0;
+    this.doc = Automerge.change(this.doc, (d) => {
+      for (const key of Object.keys(d.capabilities)) {
+        if (d.capabilities[key]?.agent_id === agentId) {
+          delete d.capabilities[key];
+          removed++;
+        }
+      }
+    });
+    if (removed > 0) {
+      this.log?.info({ agentId, removed }, 'Peer-Capabilities entfernt (Peer offline)');
+    }
+    return removed;
+  }
+
+  /**
    * Exportiert alle Capabilities als Array (für Peer-Sync).
    */
   exportCapabilities(): Capability[] {

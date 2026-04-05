@@ -118,6 +118,7 @@ async function main(): Promise<void> {
         audit.append('PEER_LEAVE', peer.agentId);
         cardServer.setPeerCount(mesh.peerCount);
         registry.markAgentOffline(peer.agentId);
+        registry.removePeerCapabilities(peer.agentId);
         rateLimiter.removePeer(peer.agentId);
         eventBus.emit('peer:leave', { agentId: peer.agentId });
       },
