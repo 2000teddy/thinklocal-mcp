@@ -30,6 +30,7 @@ const PUBLIC_PATHS = new Set([
   '/pairing/confirm',
   '/pairing/status',
   '/api/auth/token',    // Token-Generierung (nur localhost)
+  '/api/auth/refresh',  // Token-Refresh (prueft selbst)
 ]);
 
 /**
@@ -133,5 +134,21 @@ export async function registerApiAuth(
     return { token, expires_in: tokenTtl };
   });
 
-  log?.info({ tokenTtl }, 'API-Auth aktiviert (JWT)');
+  // Token-Refresh-Endpoint (gueltiger Token noetig)
+  app.post('/api/auth/refresh', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      // Alten Token verifizieren
+      await request.jwtVerify();
+      // Neuen Token ausstellen
+      const newToken = app.jwt.sign(
+        { scope: 'dashboard', iat: Math.floor(Date.now() / 1000) },
+        { expiresIn: tokenTtl },
+      );
+      return { token: newToken, expires_in: tokenTtl };
+    } catch {
+      reply.code(401).send({ error: 'Unauthorized', message: 'Gueltiger Token fuer Refresh erforderlich' });
+    }
+  });
+
+  log?.info({ tokenTtl }, 'API-Auth aktiviert (JWT + Refresh)');
 }
