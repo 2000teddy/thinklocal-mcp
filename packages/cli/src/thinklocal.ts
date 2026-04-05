@@ -1031,12 +1031,13 @@ function scpUpload(localPath: string, target: string, remotePath: string, label:
 async function cmdDeploy(targetArg: string, flags: string[]): Promise<void> {
   const dryRun = flags.includes('--dry-run');
   const withEnv = flags.includes('--with-env');
+  const withCa = flags.includes('--with-ca');
   const target = targetArg; // user@host
 
   if (!target || !target.includes('@')) {
-    console.log(`  Nutzung: thinklocal deploy user@host [--dry-run] [--with-env]`);
+    console.log(`  Nutzung: thinklocal deploy user@host [--dry-run] [--with-env] [--with-ca]`);
     console.log(`  Beispiel: thinklocal deploy chris@10.10.10.56`);
-    console.log(`  Beispiel: thinklocal deploy chris@10.10.10.56 --dry-run`);
+    console.log(`  Beispiel: thinklocal deploy chris@10.10.10.56 --with-env --with-ca`);
     return;
   }
 
@@ -1081,6 +1082,26 @@ async function cmdDeploy(targetArg: string, flags: string[]): Promise<void> {
       }
       if (!scpUpload(envPath, target, '~/.local/share/thinklocal-mcp/.env', '.env hochgeladen', dryRun)) return;
       sshExec(target, 'chmod 600 ~/.local/share/thinklocal-mcp/.env', '.env-Rechte gesetzt (600)', dryRun);
+    }
+  }
+
+  // 4b. CA-Zertifikat uebertragen (wenn --with-ca)
+  if (withCa) {
+    const caPath = resolve(DATA_DIR, 'certs', 'ca.crt');
+    if (!existsSync(caPath)) {
+      warn('CA-Zertifikat nicht gefunden (~/.thinklocal/certs/ca.crt) — ueberspringe');
+    } else {
+      if (!dryRun) {
+        sshExec(target, 'mkdir -p ~/.thinklocal/certs', 'Remote-Certs-Verzeichnis erstellt', dryRun);
+      }
+      if (!scpUpload(caPath, target, '~/.thinklocal/certs/ca.crt', 'CA-Zertifikat hochgeladen', dryRun)) return;
+      // Auch CA-Key uebertragen fuer Node-Cert-Signierung
+      const caKeyPath = resolve(DATA_DIR, 'certs', 'ca.key');
+      if (existsSync(caKeyPath)) {
+        if (!scpUpload(caKeyPath, target, '~/.thinklocal/certs/ca.key', 'CA-Key hochgeladen', dryRun)) return;
+        sshExec(target, 'chmod 600 ~/.thinklocal/certs/ca.key', 'CA-Key-Rechte gesetzt (600)', dryRun);
+      }
+      ok('mTLS-Trust etabliert (gemeinsame CA)');
     }
   }
 
