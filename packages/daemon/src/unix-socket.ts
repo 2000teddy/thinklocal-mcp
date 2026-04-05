@@ -13,8 +13,9 @@
  */
 
 import { createServer, connect, type Server, type Socket } from 'node:net';
-import { existsSync, mkdirSync, unlinkSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, unlinkSync, statSync, chmodSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import type { Logger } from 'pino';
 
 export interface UnixSocketConfig {
@@ -67,8 +68,8 @@ export class UnixSocketServer {
   /** Startet den Unix-Socket-Server */
   start(): Promise<void> {
     return new Promise((resolveP, reject) => {
-      // Socket-Verzeichnis anlegen
-      mkdirSync(dirname(this.socketPath), { recursive: true });
+      // Socket-Verzeichnis anlegen (nur fuer Owner zugaenglich)
+      mkdirSync(dirname(this.socketPath), { recursive: true, mode: 0o700 });
 
       // Alte Socket-Datei aufraeumen (falls Daemon vorher abgestuerzt)
       cleanupStaleSocket(this.socketPath);
@@ -80,18 +81,37 @@ export class UnixSocketServer {
         const buffer = new FrameBuffer(this.maxMessageSize);
 
         socket.on('data', (chunk) => {
-          buffer.push(chunk);
+          try {
+            buffer.push(chunk);
+          } catch (err) {
+            // FrameProtocolError: Buffer-Cap oder Oversize → Verbindung schliessen
+            this.log?.warn({ err }, 'Frame-Protocol-Fehler — Verbindung wird geschlossen');
+            if (!socket.destroyed) socket.destroy();
+            this.clients.delete(socket);
+            return;
+          }
 
           let frame: Buffer | null;
-          while ((frame = buffer.read()) !== null) {
-            try {
+          try {
+            while ((frame = buffer.read()) !== null) {
               const msg = JSON.parse(frame.toString('utf-8')) as UnixSocketMessage;
+              // Minimale Validierung der Pflichtfelder
+              if (!msg.type || !msg.from || typeof msg.timestamp !== 'number') {
+                this.log?.warn('Unix-Socket: Nachricht ohne Pflichtfelder (type, from, timestamp)');
+                continue;
+              }
               this.onMessage(msg, (response) => {
                 if (!socket.destroyed) {
-                  writeFrame(socket, response);
+                  writeFrame(socket, response, this.maxMessageSize);
                 }
               });
-            } catch (err) {
+            }
+          } catch (err) {
+            if (err instanceof FrameProtocolError) {
+              this.log?.warn({ err }, 'Frame-Protocol-Fehler — Verbindung wird geschlossen');
+              if (!socket.destroyed) socket.destroy();
+              this.clients.delete(socket);
+            } else {
               this.log?.warn({ err }, 'Ungueltige Unix-Socket-Nachricht');
             }
           }
@@ -103,6 +123,7 @@ export class UnixSocketServer {
 
         socket.on('error', (err) => {
           this.log?.debug({ err }, 'Unix-Socket Client-Fehler');
+          if (!socket.destroyed) socket.destroy();
           this.clients.delete(socket);
         });
       });
@@ -110,6 +131,8 @@ export class UnixSocketServer {
       this.server.on('error', reject);
 
       this.server.listen(this.socketPath, () => {
+        // Socket-Datei-Berechtigungen einschraenken
+        try { chmodSync(this.socketPath, 0o600); } catch { /* ignore on some OS */ }
         this.log?.info({ socketPath: this.socketPath }, 'Unix-Socket-Server gestartet');
         resolveP();
       });
@@ -127,7 +150,7 @@ export class UnixSocketServer {
 
       if (this.server) {
         this.server.close(() => {
-          cleanupStaleSocket(this.socketPath);
+          cleanupStaleSocketSync(this.socketPath);
           this.log?.info('Unix-Socket-Server gestoppt');
           resolveP();
         });
@@ -149,6 +172,7 @@ export class UnixSocketServer {
 export class UnixSocketClient {
   private socket: Socket | null = null;
   private buffer: FrameBuffer;
+  private maxMessageSize: number;
   private pendingRequests = new Map<string, {
     resolve: (msg: UnixSocketMessage) => void;
     reject: (err: Error) => void;
@@ -160,7 +184,8 @@ export class UnixSocketClient {
     private log?: Logger,
     maxMessageSize?: number,
   ) {
-    this.buffer = new FrameBuffer(maxMessageSize ?? DEFAULT_MAX_MESSAGE_SIZE);
+    this.maxMessageSize = maxMessageSize ?? DEFAULT_MAX_MESSAGE_SIZE;
+    this.buffer = new FrameBuffer(this.maxMessageSize);
   }
 
   /** Verbindet zum Unix-Socket eines anderen Agents */
@@ -217,7 +242,7 @@ export class UnixSocketClient {
     if (!this.socket || this.socket.destroyed) {
       throw new Error('Unix-Socket nicht verbunden');
     }
-    writeFrame(this.socket, msg);
+    writeFrame(this.socket, msg, this.maxMessageSize);
   }
 
   /** Sendet eine Request-Nachricht und wartet auf Antwort */
@@ -236,7 +261,7 @@ export class UnixSocketClient {
       }, timeoutMs);
 
       this.pendingRequests.set(correlationId, { resolve: resolveP, reject, timer });
-      writeFrame(this.socket!, msg);
+      writeFrame(this.socket!, msg, this.maxMessageSize);
     });
   }
 
@@ -246,6 +271,7 @@ export class UnixSocketClient {
       this.socket.destroy();
       this.socket = null;
     }
+    this.buffer.reset();
     for (const [id, pending] of this.pendingRequests) {
       clearTimeout(pending.timer);
       pending.reject(new Error('Client disconnected'));
@@ -299,12 +325,22 @@ export function getSocketPath(socketDir: string, agentId: string): string {
 class FrameBuffer {
   private chunks: Buffer[] = [];
   private totalLength = 0;
+  /** Hard cap fuer Buffer-Groesse (verhindert Memory-Exhaustion bei Slow-Drain) */
+  private readonly bufferCap: number;
 
-  constructor(private maxSize: number) {}
+  constructor(private maxSize: number) {
+    this.bufferCap = maxSize * 4; // 4x max message size als Buffer-Limit
+  }
 
   push(chunk: Buffer): void {
-    this.chunks.push(chunk);
     this.totalLength += chunk.length;
+    if (this.totalLength > this.bufferCap) {
+      // Buffer-Cap ueberschritten — Protocol-Error, Verbindung muss geschlossen werden
+      this.chunks = [];
+      this.totalLength = 0;
+      throw new FrameProtocolError('Buffer-Cap ueberschritten — moeglicher Angriff oder defekter Client');
+    }
+    this.chunks.push(chunk);
   }
 
   read(): Buffer | null {
@@ -317,10 +353,10 @@ class FrameBuffer {
     const msgLength = combined.readUInt32BE(0);
 
     if (msgLength > this.maxSize) {
-      // Nachricht zu gross — Buffer leeren und null zurueckgeben (silent drop)
+      // Nachricht zu gross — Protocol-Error (nicht silent drop!)
       this.chunks = [];
       this.totalLength = 0;
-      return null;
+      throw new FrameProtocolError(`Nachricht zu gross: ${msgLength} > ${this.maxSize}`);
     }
 
     if (combined.length < HEADER_SIZE + msgLength) return null;
@@ -333,30 +369,78 @@ class FrameBuffer {
 
     return frame;
   }
+
+  reset(): void {
+    this.chunks = [];
+    this.totalLength = 0;
+  }
 }
 
-function writeFrame(socket: Socket, msg: UnixSocketMessage): void {
+/** Protocol-Fehler: Verbindung muss geschlossen werden */
+export class FrameProtocolError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'FrameProtocolError';
+  }
+}
+
+function writeFrame(socket: Socket, msg: UnixSocketMessage, maxSize = DEFAULT_MAX_MESSAGE_SIZE): void {
   const payload = Buffer.from(JSON.stringify(msg), 'utf-8');
+  if (payload.length > maxSize) {
+    throw new Error(`Nachricht zu gross fuer writeFrame: ${payload.length} > ${maxSize}`);
+  }
   const header = Buffer.alloc(HEADER_SIZE);
   header.writeUInt32BE(payload.length, 0);
   socket.write(Buffer.concat([header, payload]));
 }
 
+/**
+ * Entfernt eine stale Socket-Datei, aber nur wenn kein anderer Daemon sie aktiv nutzt.
+ * Probt den Socket zuerst — nur bei ECONNREFUSED wird entfernt.
+ */
 function cleanupStaleSocket(socketPath: string): void {
-  if (existsSync(socketPath)) {
-    try {
-      // Pruefen ob es wirklich ein Socket ist
-      const stat = statSync(socketPath);
-      if (stat.isSocket()) {
-        unlinkSync(socketPath);
-      }
-    } catch {
-      // Datei nicht vorhanden oder kein Zugriff — ignorieren
-    }
+  try {
+    const stat = statSync(socketPath);
+    if (!stat.isSocket()) return; // Keine Socket-Datei
+  } catch {
+    return; // Datei existiert nicht
   }
+
+  // Probe: versuche Verbindung zum Socket
+  return new Promise<void>((resolve) => {
+    const probe = connect(socketPath, () => {
+      // Socket ist aktiv — NICHT loeschen!
+      probe.destroy();
+      resolve();
+    });
+    probe.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'ECONNREFUSED') {
+        // Socket ist stale — sicher zu entfernen
+        try { unlinkSync(socketPath); } catch { /* ignore */ }
+      }
+      resolve();
+    });
+    // Timeout fuer Probe
+    probe.setTimeout(1000, () => {
+      probe.destroy();
+      // Timeout = wahrscheinlich stale, sicher entfernen
+      try { unlinkSync(socketPath); } catch { /* ignore */ }
+      resolve();
+    });
+  }) as unknown as void; // Synchroner Aufruf — fire-and-forget
 }
 
-let correlationCounter = 0;
+/**
+ * Synchrone Version: entfernt stale Socket ohne Probe.
+ * Nutzen wenn async cleanupStaleSocket nicht moeglich (z.B. im Server.stop).
+ */
+function cleanupStaleSocketSync(socketPath: string): void {
+  try {
+    const stat = statSync(socketPath);
+    if (stat.isSocket()) unlinkSync(socketPath);
+  } catch { /* ignore */ }
+}
+
 function generateCorrelationId(): string {
-  return `unix-${Date.now()}-${++correlationCounter}`;
+  return randomUUID();
 }

@@ -167,9 +167,8 @@ describe('Unix-Socket', () => {
       ).rejects.toThrow('Timeout');
     });
 
-    it('lehnt zu grosse Nachrichten ab', async () => {
+    it('schliesst Verbindung bei zu grossen Nachrichten (Protocol Error)', async () => {
       const tmpDir = mkdtempSync(resolve(tmpdir(), 'tlmcp-sock-'));
-      const errors: Error[] = [];
 
       const server = new UnixSocketServer(
         { socketDir: tmpDir, agentId: 'size-server', maxMessageSize: 100 },
@@ -182,21 +181,15 @@ describe('Unix-Socket', () => {
       clients.push(client);
       await client.connect();
 
-      // Sende Nachricht die groesser als 100 Bytes ist
-      try {
+      // Client-seitig: writeFrame prueft jetzt Groesse
+      expect(() => {
         client.send({
           type: 'request',
           from: 'big-client',
           payload: { data: 'x'.repeat(200) },
           timestamp: Date.now(),
         });
-      } catch (err) {
-        errors.push(err as Error);
-      }
-
-      // Server sollte die uebergrosse Nachricht verwerfen (kein Crash)
-      await new Promise((r) => setTimeout(r, 100));
-      // Kein Crash = Test bestanden
+      }).toThrow('zu gross');
     });
   });
 });
