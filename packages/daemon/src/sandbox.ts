@@ -13,11 +13,11 @@
  */
 
 import { fork, spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { dirname, normalize, resolve } from 'node:path';
+import { dirname, isAbsolute, normalize, relative, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import type { Logger } from 'pino';
 
-export type SandboxRuntime = 'node' | 'wasm';
+export type SandboxRuntime = 'node' | 'wasm' | 'docker';
 
 export interface SandboxConfig {
   /** Max CPU-Zeit in ms (default: 30s) */
@@ -30,6 +30,10 @@ export interface SandboxConfig {
   allowNetwork?: boolean;
   /** Pfad/Binaername fuer den WASM-Runner (default: wasmtime) */
   wasmRunner?: string;
+  /** Pfad/Binaername fuer den Docker-Runner (default: docker) */
+  dockerRunner?: string;
+  /** Optionales Docker-Image fuer den Skill-Fallback */
+  dockerImage?: string;
 }
 
 export interface SandboxResult {
@@ -53,7 +57,8 @@ interface SandboxProcessDeps {
 export function isPathAllowed(targetPath: string, allowedDir: string): boolean {
   const normalizedTarget = normalize(resolve(targetPath));
   const normalizedAllowed = normalize(resolve(allowedDir));
-  return normalizedTarget.startsWith(normalizedAllowed);
+  const relativePath = relative(normalizedAllowed, normalizedTarget);
+  return relativePath === '' || (!relativePath.startsWith('..') && !isAbsolute(relativePath));
 }
 
 function getSkillDir(entryPath: string): string {
@@ -104,6 +109,84 @@ export function parseSandboxStdout(stdout: string): unknown {
   }
 }
 
+function toContainerPath(path: string): string {
+  return path.replace(/\\/g, '/');
+}
+
+function getRelativeSkillPath(targetPath: string, allowedDir: string): string {
+  const absoluteTarget = normalize(resolve(targetPath));
+  const absoluteAllowed = normalize(resolve(allowedDir));
+  const relative = absoluteTarget.slice(absoluteAllowed.length).replace(/^[/\\]+/, '');
+  return toContainerPath(relative);
+}
+
+function getDockerImage(entryPath: string, configuredImage?: string): string {
+  if (configuredImage) return configuredImage;
+
+  if (entryPath.endsWith('.py')) return 'python:3.12-alpine';
+  if (entryPath.endsWith('.sh')) return 'alpine:3.20';
+  return 'node:22-alpine';
+}
+
+function getDockerCommand(entryPath: string, allowedDir: string): string[] {
+  const relativePath = getRelativeSkillPath(entryPath, allowedDir);
+  const containerPath = `/workspace/${relativePath}`;
+
+  if (entryPath.endsWith('.py')) return ['python', containerPath];
+  if (entryPath.endsWith('.sh')) return ['sh', containerPath];
+  if (entryPath.endsWith('.js') || entryPath.endsWith('.mjs') || entryPath.endsWith('.cjs')) {
+    return ['node', containerPath];
+  }
+
+  throw new Error(`Docker-Fallback unterstuetzt nur .js, .mjs, .cjs, .py oder .sh: ${entryPath}`);
+}
+
+/**
+ * Skill-Contract fuer Docker-Fallback:
+ * - Skill-Datei liegt innerhalb des erlaubten Skill-Verzeichnisses
+ * - Verzeichnis wird read-only nach /workspace gemountet
+ * - Input kommt via SKILL_INPUT_BASE64 Environment-Variable
+ * - Output wird als JSON oder Plaintext auf stdout geschrieben
+ */
+export function buildDockerArgs(
+  entryPath: string,
+  allowedDir: string,
+  input: unknown,
+  config: Pick<Required<SandboxConfig>, 'allowNetwork' | 'maxMemoryMb' | 'dockerImage'>,
+): string[] {
+  const inputBase64 = Buffer.from(JSON.stringify(input ?? null), 'utf8').toString('base64');
+  const relativePath = getRelativeSkillPath(entryPath, allowedDir);
+  const skillDir = relativePath.includes('/') ? relativePath.slice(0, relativePath.lastIndexOf('/')) : '';
+  const workDir = skillDir ? `/workspace/${skillDir}` : '/workspace';
+  const dockerImage = getDockerImage(entryPath, config.dockerImage);
+
+  return [
+    'run',
+    '--rm',
+    '--network',
+    config.allowNetwork ? 'bridge' : 'none',
+    '--memory',
+    `${config.maxMemoryMb}m`,
+    '--cpus',
+    '1',
+    '--pids-limit',
+    '64',
+    '--read-only',
+    '--mount',
+    `type=bind,src=${resolve(allowedDir)},dst=/workspace,readonly`,
+    '-w',
+    workDir,
+    '-e',
+    'SANDBOX=1',
+    '-e',
+    `SKILL_DIR=${workDir}`,
+    '-e',
+    `SKILL_INPUT_BASE64=${inputBase64}`,
+    dockerImage,
+    ...getDockerCommand(entryPath, allowedDir),
+  ];
+}
+
 /**
  * Fuehrt einen Skill in einer sandboxed Umgebung aus.
  *
@@ -129,6 +212,8 @@ export class SkillSandbox {
       allowedDir: config?.allowedDir ?? skillsDir,
       allowNetwork: config?.allowNetwork ?? false,
       wasmRunner: config?.wasmRunner ?? process.env['TLMCP_WASMTIME_BIN'] ?? 'wasmtime',
+      dockerRunner: config?.dockerRunner ?? process.env['TLMCP_DOCKER_BIN'] ?? 'docker',
+      dockerImage: config?.dockerImage ?? process.env['TLMCP_SKILL_DOCKER_IMAGE'] ?? '',
     };
     this.deps = {
       forkProcess: deps?.forkProcess ?? fork,
@@ -159,6 +244,10 @@ export class SkillSandbox {
   ): Promise<SandboxResult> {
     if (runtime === 'wasm') {
       return this.executeWasm(entryPath, input, config);
+    }
+
+    if (runtime === 'docker') {
+      return this.executeDocker(entryPath, input, config);
     }
 
     return this.executeNode(entryPath, input, config);
@@ -249,6 +338,111 @@ export class SkillSandbox {
         const error =
           (err as NodeJS.ErrnoException).code === 'ENOENT'
             ? `WASM-Runner nicht gefunden: ${cfg.wasmRunner}`
+            : err.message;
+        resolveOnce({
+          success: false,
+          error,
+          durationMs,
+        });
+      });
+    });
+  }
+
+  /**
+   * Fuehrt einen Skill in einem read-only Docker-Container aus.
+   */
+  async executeDocker(
+    entryPath: string,
+    input: unknown,
+    config?: Partial<SandboxConfig>,
+  ): Promise<SandboxResult> {
+    const cfg = { ...this.defaultConfig, ...config };
+    const start = Date.now();
+
+    if (!isPathAllowed(entryPath, cfg.allowedDir)) {
+      return {
+        success: false,
+        error: `Zugriff verweigert: ${entryPath} liegt ausserhalb von ${cfg.allowedDir}`,
+        durationMs: 0,
+      };
+    }
+
+    if (!this.deps.pathExists(entryPath)) {
+      return {
+        success: false,
+        error: `Docker-Skill nicht gefunden: ${entryPath}`,
+        durationMs: 0,
+      };
+    }
+
+    let args: string[];
+    try {
+      args = buildDockerArgs(entryPath, cfg.allowedDir, input, cfg);
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        durationMs: 0,
+      };
+    }
+
+    return new Promise<SandboxResult>((resolvePromise) => {
+      const child = this.deps.spawnProcess(cfg.dockerRunner, args, {
+        cwd: getSkillDir(entryPath),
+        env: createMinimalRunnerEnv(),
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }) as ChildProcessWithoutNullStreams;
+
+      let stdout = '';
+      let stderr = '';
+      let settled = false;
+      const timeout = setTimeout(() => {
+        if (!child.killed) {
+          child.kill('SIGTERM');
+          this.log?.warn({ entryPath, timeoutMs: cfg.timeoutMs }, 'Docker-Sandbox: Timeout');
+        }
+      }, cfg.timeoutMs);
+
+      const resolveOnce = (result: SandboxResult): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        resolvePromise(result);
+      };
+
+      child.stdout.on('data', (data: Buffer) => {
+        stdout += data.toString();
+      });
+
+      child.stderr.on('data', (data: Buffer) => {
+        stderr += data.toString();
+      });
+
+      child.on('exit', (code) => {
+        const durationMs = Date.now() - start;
+
+        if (code === 0) {
+          resolveOnce({
+            success: true,
+            output: parseSandboxStdout(stdout),
+            durationMs,
+          });
+        } else {
+          const error = stderr.trim() || `Exit code ${code}`;
+          this.log?.warn({ entryPath, code, error, durationMs }, 'Docker-Sandbox: Fehlgeschlagen');
+          resolveOnce({
+            success: false,
+            error,
+            durationMs,
+          });
+        }
+      });
+
+      child.on('error', (err) => {
+        const durationMs = Date.now() - start;
+        const error =
+          (err as NodeJS.ErrnoException).code === 'ENOENT'
+            ? `Docker-Runner nicht gefunden: ${cfg.dockerRunner}`
             : err.message;
         resolveOnce({
           success: false,

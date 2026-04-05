@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildWasmtimeArgs, isPathAllowed, parseSandboxStdout } from './sandbox.js';
+import { buildDockerArgs, buildWasmtimeArgs, isPathAllowed, parseSandboxStdout } from './sandbox.js';
 
 describe('Sandbox', () => {
   describe('isPathAllowed', () => {
@@ -17,6 +17,10 @@ describe('Sandbox', () => {
 
     it('blockiert absoluten Pfad ausserhalb', () => {
       expect(isPathAllowed('/etc/shadow', '/home/user/skills')).toBe(false);
+    });
+
+    it('blockiert Verzeichnisse mit gleichem Prefix ausserhalb', () => {
+      expect(isPathAllowed('/home/user/skills-evil/index.js', '/home/user/skills')).toBe(false);
     });
 
     it('blockiert Pfad mit .. in der Mitte', () => {
@@ -65,6 +69,55 @@ describe('Sandbox', () => {
 
     it('liefert undefined bei leerem stdout', () => {
       expect(parseSandboxStdout('   \n')).toBeUndefined();
+    });
+  });
+
+  describe('buildDockerArgs', () => {
+    it('baut einen read-only Docker-Fallback fuer JavaScript-Skills', () => {
+      const args = buildDockerArgs('/home/user/skills/docker/index.js', '/home/user/skills', { hello: 'world' }, {
+        allowNetwork: false,
+        maxMemoryMb: 256,
+        dockerImage: '',
+      });
+
+      expect(args).toEqual([
+        'run',
+        '--rm',
+        '--network',
+        'none',
+        '--memory',
+        '256m',
+        '--cpus',
+        '1',
+        '--pids-limit',
+        '64',
+        '--read-only',
+        '--mount',
+        'type=bind,src=/home/user/skills,dst=/workspace,readonly',
+        '-w',
+        '/workspace/docker',
+        '-e',
+        'SANDBOX=1',
+        '-e',
+        'SKILL_DIR=/workspace/docker',
+        '-e',
+        expect.stringMatching(/^SKILL_INPUT_BASE64=/),
+        'node:22-alpine',
+        'node',
+        '/workspace/docker/index.js',
+      ]);
+    });
+
+    it('waehlt fuer Python-Skills das passende Basisimage', () => {
+      const args = buildDockerArgs('/home/user/skills/python/tool.py', '/home/user/skills', { ping: true }, {
+        allowNetwork: true,
+        maxMemoryMb: 512,
+        dockerImage: '',
+      });
+
+      expect(args).toContain('bridge');
+      expect(args).toContain('python:3.12-alpine');
+      expect(args.slice(-2)).toEqual(['python', '/workspace/python/tool.py']);
     });
   });
 });
