@@ -37,7 +37,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [x] 🔴 mDNS Service Discovery (`_thinklocal._tcp.local`) — `discovery.ts` (2026-04-03)
 - [x] 🔴 TXT-Records: Agent-ID, Capability-Hash, Control-Endpoint, Cert-Fingerprint — `discovery.ts` (2026-04-03)
 - [x] 🟠 Klarer Betriebsmodus für lokales `localhost-only` vs. echtes LAN-Mesh mit TLS/mTLS, CA-Trust-Bootstrap und dokumentiertem Umschaltpfad — `runtime_mode` (`local|lan`) in Config, CLI, Installer und lokalen Clients (2026-04-05)
-- [ ] 🟠 Connection Multiplexing über libp2p
+- [x] 🟠 Connection Multiplexing über libp2p — Yamux-Multiplexer plus logische Stream-Protokolle und Stream-Statistiken in Runtime/Agent-Card (2026-04-06)
 - [x] 🟠 Unix-Socket-Optimierung für Same-Host-Agents — `unix-socket.ts` Server+Client, Framed Protocol, FrameBuffer (2026-04-05)
 - [ ] 🟡 NAT Traversal (für VPN/Tailscale-übergreifende Mesh-Erweiterung)
 

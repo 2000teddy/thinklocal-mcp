@@ -51,6 +51,13 @@ export interface AgentCard {
       connected_peers: number;
       noise: boolean;
       mdns: boolean;
+      multiplexer: {
+        enabled: boolean;
+        name: string | null;
+        protocols: string[];
+        open_streams: number;
+        streams_by_protocol: Record<string, number>;
+      };
       reason: string | null;
     };
   };
@@ -294,6 +301,13 @@ export class AgentCardServer {
           connected_peers: libp2p.connectedPeers,
           noise: libp2p.noise,
           mdns: libp2p.mdns,
+          multiplexer: {
+            enabled: libp2p.multiplexer.enabled,
+            name: libp2p.multiplexer.name,
+            protocols: [...libp2p.multiplexer.protocols],
+            open_streams: libp2p.multiplexer.openStreams,
+            streams_by_protocol: { ...libp2p.multiplexer.streamsByProtocol },
+          },
           reason: libp2p.reason,
         },
       },

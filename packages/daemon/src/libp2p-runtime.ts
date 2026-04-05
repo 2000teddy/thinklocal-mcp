@@ -10,6 +10,14 @@ export interface Libp2pRuntimeConfig {
 
 export type Libp2pRuntimeStatus = 'disabled' | 'ready' | 'degraded';
 
+export interface Libp2pMultiplexerState {
+  enabled: boolean;
+  name: string | null;
+  protocols: string[];
+  openStreams: number;
+  streamsByProtocol: Record<string, number>;
+}
+
 export interface Libp2pRuntimeState {
   enabled: boolean;
   available: boolean;
@@ -19,6 +27,7 @@ export interface Libp2pRuntimeState {
   connectedPeers: number;
   noise: boolean;
   mdns: boolean;
+  multiplexer: Libp2pMultiplexerState;
   reason: string | null;
 }
 
@@ -43,6 +52,17 @@ export function getLibp2pListenMultiaddrs(bindHost: string, listenPort: number):
   return [`/ip4/${host || '0.0.0.0'}/tcp/${listenPort}`];
 }
 
+export const LIBP2P_PROTOCOLS = {
+  HEARTBEAT: '/thinklocal/mesh/heartbeat/1.0.0',
+  REGISTRY: '/thinklocal/mesh/registry/1.0.0',
+  TASKS: '/thinklocal/mesh/tasks/1.0.0',
+  AUDIT: '/thinklocal/mesh/audit/1.0.0',
+} as const;
+
+export function getLibp2pProtocolList(): string[] {
+  return Object.values(LIBP2P_PROTOCOLS);
+}
+
 export function createInitialLibp2pState(config: Libp2pRuntimeConfig): Libp2pRuntimeState {
   if (!config.enabled) {
     return {
@@ -54,6 +74,13 @@ export function createInitialLibp2pState(config: Libp2pRuntimeConfig): Libp2pRun
       connectedPeers: 0,
       noise: false,
       mdns: false,
+      multiplexer: {
+        enabled: false,
+        name: null,
+        protocols: [],
+        openStreams: 0,
+        streamsByProtocol: {},
+      },
       reason: 'libp2p disabled by configuration',
     };
   }
@@ -67,6 +94,13 @@ export function createInitialLibp2pState(config: Libp2pRuntimeConfig): Libp2pRun
     connectedPeers: 0,
     noise: true,
     mdns: true,
+    multiplexer: {
+      enabled: true,
+      name: 'yamux',
+      protocols: getLibp2pProtocolList(),
+      openStreams: 0,
+      streamsByProtocol: Object.fromEntries(getLibp2pProtocolList().map((protocol) => [protocol, 0])),
+    },
     reason: 'libp2p not started yet',
   };
 }
@@ -156,10 +190,17 @@ class ActiveLibp2pRuntime implements Libp2pRuntime {
     this.state.status = 'ready';
     this.state.reason = null;
 
+    this.registerProtocolHandlers();
     this.attachEventListeners();
     this.log?.info(
-      { peerId: this.state.peerId, listenMultiaddrs: this.state.listenMultiaddrs, noise: true },
-      'libp2p Runtime mit Noise gestartet',
+      {
+        peerId: this.state.peerId,
+        listenMultiaddrs: this.state.listenMultiaddrs,
+        noise: true,
+        multiplexer: this.state.multiplexer.name,
+        protocols: this.state.multiplexer.protocols,
+      },
+      'libp2p Runtime mit Noise und Multiplexing gestartet',
     );
   }
 
@@ -176,7 +217,36 @@ class ActiveLibp2pRuntime implements Libp2pRuntime {
       ...this.state,
       connectedPeers,
       listenMultiaddrs: [...this.state.listenMultiaddrs],
+      multiplexer: {
+        ...this.state.multiplexer,
+        protocols: [...this.state.multiplexer.protocols],
+        streamsByProtocol: { ...this.state.multiplexer.streamsByProtocol },
+      },
     };
+  }
+
+  private registerProtocolHandlers(): void {
+    for (const protocol of this.state.multiplexer.protocols) {
+      const handler = async (evt: any) => {
+        this.onStreamOpened(protocol);
+        try {
+          const stream = evt?.stream ?? evt;
+          if (typeof stream?.close === 'function') {
+            await stream.close();
+          } else if (typeof stream?.abort === 'function') {
+            stream.abort(new Error('thinklocal placeholder protocol handler'));
+          }
+        } finally {
+          this.onStreamClosed(protocol);
+        }
+      };
+
+      if (typeof this.node?.handle === 'function') {
+        this.node.handle(protocol, handler);
+      } else if (this.node?.services?.registrar && typeof this.node.services.registrar.handle === 'function') {
+        this.node.services.registrar.handle(protocol, handler);
+      }
+    }
   }
 
   private attachEventListeners(): void {
@@ -194,6 +264,19 @@ class ActiveLibp2pRuntime implements Libp2pRuntime {
       this.node.on('peer:connect', handler);
       this.node.on('peer:disconnect', handler);
     }
+  }
+
+  private onStreamOpened(protocol: string): void {
+    this.state.multiplexer.openStreams += 1;
+    this.state.multiplexer.streamsByProtocol[protocol] = (this.state.multiplexer.streamsByProtocol[protocol] ?? 0) + 1;
+  }
+
+  private onStreamClosed(protocol: string): void {
+    this.state.multiplexer.openStreams = Math.max(0, this.state.multiplexer.openStreams - 1);
+    this.state.multiplexer.streamsByProtocol[protocol] = Math.max(
+      0,
+      (this.state.multiplexer.streamsByProtocol[protocol] ?? 1) - 1,
+    );
   }
 
   private readConnectedPeers(): number {

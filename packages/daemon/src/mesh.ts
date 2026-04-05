@@ -103,7 +103,12 @@ export class MeshManager {
       peer.libp2p.listenMultiaddrs = [...(card.mesh.libp2p?.listen_multiaddrs ?? peer.libp2p.listenMultiaddrs)];
       peer.libp2p.connected = card.mesh.libp2p?.connected_peers ? card.mesh.libp2p.connected_peers > 0 : peer.libp2p.connected;
       peer.libp2p.status = card.mesh.libp2p?.status === 'ready'
-        ? (peer.libp2p.connected ? 'connected' : 'discovered')
+        ? (
+            peer.libp2p.connected
+            || (card.mesh.libp2p.multiplexer?.open_streams ?? 0) > 0
+              ? 'connected'
+              : 'discovered'
+          )
         : peer.libp2p.status;
     }
   }
