@@ -42,6 +42,8 @@ export interface TelegramGatewayConfig {
   daemonUrl: string;
   /** Pfad zur Persistenz-Datei fuer chatId (optional) */
   chatIdFile?: string;
+  /** Optionaler fetch-Dispatcher fuer HTTPS mit self-signed CA */
+  fetchDispatcher?: import('undici').Dispatcher;
 }
 
 export class TelegramGateway {
@@ -88,6 +90,18 @@ export class TelegramGateway {
     }
   }
 
+  /** Fetch mit optionalem TLS-Dispatcher (fuer self-signed mTLS) */
+  private daemonFetch(path: string, init?: RequestInit): Promise<Response> {
+    const opts: RequestInit & { dispatcher?: unknown } = {
+      signal: AbortSignal.timeout(5_000),
+      ...init,
+    };
+    if (this.config.fetchDispatcher) {
+      opts.dispatcher = this.config.fetchDispatcher;
+    }
+    return fetch(`${this.config.daemonUrl}${path}`, opts);
+  }
+
   /** Simple per-command rate limiter (min interval in ms) */
   private isRateLimited(chatId: string, command: string, minMs = 5000): boolean {
     const key = `${chatId}:${command}`;
@@ -132,7 +146,7 @@ export class TelegramGateway {
     this.bot.onText(/^\/status$/, async (msg) => {
       if (this.isRateLimited(String(msg.chat.id), '/status')) return;
       try {
-        const res = await fetch(`${this.config.daemonUrl}/api/status`, { signal: AbortSignal.timeout(5_000) });
+        const res = await this.daemonFetch('/api/status');
         if (!res.ok) {
           this.log?.warn({ status: res.status }, 'Daemon /api/status nicht OK');
           this.bot.sendMessage(msg.chat.id, '❌ Daemon-API Fehler');
@@ -161,7 +175,7 @@ export class TelegramGateway {
     this.bot.onText(/^\/peers$/, async (msg) => {
       if (this.isRateLimited(String(msg.chat.id), '/peers')) return;
       try {
-        const res = await fetch(`${this.config.daemonUrl}/api/peers`, { signal: AbortSignal.timeout(5_000) });
+        const res = await this.daemonFetch('/api/peers');
         if (!res.ok) {
           this.log?.warn({ status: res.status }, 'Daemon /api/peers nicht OK');
           this.bot.sendMessage(msg.chat.id, '❌ Daemon-API Fehler');
@@ -201,11 +215,10 @@ export class TelegramGateway {
         return;
       }
       try {
-        const res = await fetch(`${this.config.daemonUrl}/api/tasks/execute`, {
+        const res = await this.daemonFetch('/api/tasks/execute', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ skill_id: 'system.health' }),
-          signal: AbortSignal.timeout(10_000),
         });
         if (!res.ok) {
           this.log?.warn({ status: res.status }, 'Daemon /api/tasks/execute nicht OK');
@@ -239,7 +252,7 @@ export class TelegramGateway {
     this.bot.onText(/^\/skills$/, async (msg) => {
       if (this.isRateLimited(String(msg.chat.id), '/skills')) return;
       try {
-        const res = await fetch(`${this.config.daemonUrl}/api/capabilities`, { signal: AbortSignal.timeout(5_000) });
+        const res = await this.daemonFetch('/api/capabilities');
         if (!res.ok) {
           this.log?.warn({ status: res.status }, 'Daemon /api/capabilities nicht OK');
           this.bot.sendMessage(msg.chat.id, '❌ Daemon-API Fehler');
@@ -269,7 +282,7 @@ export class TelegramGateway {
     this.bot.onText(/^\/audit$/, async (msg) => {
       if (this.isRateLimited(String(msg.chat.id), '/audit')) return;
       try {
-        const res = await fetch(`${this.config.daemonUrl}/api/audit?limit=5`, { signal: AbortSignal.timeout(5_000) });
+        const res = await this.daemonFetch('/api/audit?limit=5');
         if (!res.ok) {
           this.log?.warn({ status: res.status }, 'Daemon /api/audit nicht OK');
           this.bot.sendMessage(msg.chat.id, '❌ Daemon-API Fehler');

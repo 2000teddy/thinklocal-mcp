@@ -382,7 +382,7 @@ async function main(): Promise<void> {
     try {
       const chatIdFile = resolve(config.daemon.data_dir, 'telegram-chat-id');
       telegramGateway = new TelegramGateway(
-        { botToken: telegramToken, daemonUrl: `http://localhost:${config.daemon.port}`, chatIdFile },
+        { botToken: telegramToken, daemonUrl: `${proto}://localhost:${config.daemon.port}`, chatIdFile, fetchDispatcher: tlsDispatcher },
         eventBus,
         log,
       );

@@ -24,7 +24,8 @@ export function loadOrCreateVaultPassphrase(
     return envPassphrase;
   }
 
-  const keychain = deps?.keychain ?? createKeychainStore(log);
+  // deps.keychain === null → explizit kein Keychain; undefined → OS-Keychain nutzen
+  const keychain = deps && 'keychain' in deps ? deps.keychain : createKeychainStore(log);
   const passphrasePath = resolve(dataDir, 'vault', 'passphrase');
 
   const fromKeychain = keychain?.get(KEYCHAIN_ACCOUNT);
