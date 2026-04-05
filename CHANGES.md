@@ -5,6 +5,24 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
+## [0.27.0] — 2026-04-05
+
+### Phase 2 abgeschlossen
+- Worker-Auslastung in Agent Card (active/completed/failed/load_percent)
+- Capability-Freshness-Tracking (markStaleCapabilities)
+- Coordinator-Node-Wahl (aeltester Node)
+- OpenAPI 3.0.3 Spec (docs/openapi.yaml)
+
+### Phase 3 Fortschritt (8/12 Items)
+- **Credential Revocation**: revoke/isRevoked/listRevoked + revoked_credentials Tabelle
+- **Brokered Access**: executeBrokered() — Proxy ohne Secret-Exposure
+- **Shamir's Secret Sharing**: splitSecret/combineShares (K-von-N Threshold)
+- **Skill Rollback**: Backup/Restore bei fehlgeschlagener Installation
+- **Policy Verteilung + Versionierung**: exportForSync/importFromPeer/getVersion/save
+- **Skill-Sandbox**: fork()-basierte Isolation mit Timeout, Memory-Limit, Netzwerk-Flag, Path-Traversal-Schutz
+
+---
+
 ## [0.26.0] — 2026-04-05
 
 ### Hinzugefuegt
