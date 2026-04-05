@@ -48,19 +48,38 @@ export interface MeshStatus {
 export interface MeshClientConfig {
   baseUrl: string;
   timeoutMs?: number;
+  /** Maximale Retry-Versuche bei transienten Fehlern (default: 3) */
+  maxRetries?: number;
+  /** Basis-Wartezeit in ms fuer exponential backoff (default: 500) */
+  retryBaseMs?: number;
 }
 
 /**
  * HTTP-Client fuer den Mesh-Daemon.
  * Single Source of Truth fuer alle Daemon-API-Aufrufe.
  */
+/** Transiente HTTP-Statuscodes die einen Retry rechtfertigen */
+const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
+
+/** Transiente Fehlertypen (Netzwerk) */
+function isTransientError(err: unknown): boolean {
+  if (err instanceof TypeError) return true; // fetch network error
+  if (err instanceof DOMException && err.name === 'AbortError') return false; // Timeout = kein Retry
+  const msg = String(err);
+  return msg.includes('ECONNREFUSED') || msg.includes('ECONNRESET') || msg.includes('ETIMEDOUT');
+}
+
 export class MeshDaemonClient {
   private baseUrl: string;
   private timeoutMs: number;
+  private maxRetries: number;
+  private retryBaseMs: number;
 
   constructor(config: MeshClientConfig) {
     this.baseUrl = config.baseUrl.replace(/\/$/, '');
     this.timeoutMs = config.timeoutMs ?? 10_000;
+    this.maxRetries = config.maxRetries ?? 3;
+    this.retryBaseMs = config.retryBaseMs ?? 500;
   }
 
   async getStatus(): Promise<MeshStatus> {
@@ -101,21 +120,59 @@ export class MeshDaemonClient {
   // --- Interne HTTP-Methoden ---
 
   private async get<T>(path: string): Promise<T> {
-    const res = await fetch(`${this.baseUrl}${path}`, {
-      signal: AbortSignal.timeout(this.timeoutMs),
+    return this.withRetry(async () => {
+      const res = await fetch(`${this.baseUrl}${path}`, {
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
+      if (!res.ok) {
+        if (RETRYABLE_STATUS.has(res.status)) {
+          throw Object.assign(new Error(`GET ${path}: ${res.status} ${res.statusText}`), { retryable: true });
+        }
+        throw new Error(`GET ${path}: ${res.status} ${res.statusText}`);
+      }
+      return (await res.json()) as T;
     });
-    if (!res.ok) throw new Error(`GET ${path}: ${res.status} ${res.statusText}`);
-    return (await res.json()) as T;
   }
 
   private async post<T>(path: string, body: unknown): Promise<T> {
-    const res = await fetch(`${this.baseUrl}${path}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(this.timeoutMs),
+    return this.withRetry(async () => {
+      const res = await fetch(`${this.baseUrl}${path}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
+      if (!res.ok) {
+        if (RETRYABLE_STATUS.has(res.status)) {
+          throw Object.assign(new Error(`POST ${path}: ${res.status} ${res.statusText}`), { retryable: true });
+        }
+        throw new Error(`POST ${path}: ${res.status} ${res.statusText}`);
+      }
+      return (await res.json()) as T;
     });
-    if (!res.ok) throw new Error(`POST ${path}: ${res.status} ${res.statusText}`);
-    return (await res.json()) as T;
+  }
+
+  /**
+   * Fuehrt eine Operation mit exponential backoff Retry aus.
+   * Nur transiente Fehler (Netzwerk, 5xx, 429) werden wiederholt.
+   */
+  private async withRetry<T>(fn: () => Promise<T>): Promise<T> {
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (err) {
+        lastError = err as Error;
+        const shouldRetry = (err as { retryable?: boolean }).retryable || isTransientError(err);
+        if (!shouldRetry || attempt >= this.maxRetries) break;
+
+        // Exponential backoff mit Jitter
+        const delay = this.retryBaseMs * Math.pow(2, attempt) + Math.random() * 100;
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+
+    throw lastError;
   }
 }

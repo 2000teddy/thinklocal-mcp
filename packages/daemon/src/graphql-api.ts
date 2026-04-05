@@ -124,12 +124,18 @@ export async function registerGraphQL(
         meshEvents: {
           subscribe: async function* (_: unknown, __: unknown) {
             // EventBus-basierter Async Generator
+            const MAX_QUEUE_SIZE = 100; // Begrenzt Speicher bei langsamen Clients
+            const IDLE_TIMEOUT_MS = 300_000; // 5 Minuten ohne Events → cleanup
             const queue: MeshEvent[] = [];
             let resolve: (() => void) | null = null;
+            let alive = true;
 
             const handler = (event: MeshEvent) => {
+              if (!alive) return;
               // Heartbeats filtern
               if (event.type === 'peer:heartbeat') return;
+              // Queue-Overflow: aelteste Events droppen
+              if (queue.length >= MAX_QUEUE_SIZE) queue.shift();
               queue.push(event);
               if (resolve) {
                 resolve();
@@ -140,7 +146,7 @@ export async function registerGraphQL(
             eventBus.onAny(handler);
 
             try {
-              while (true) {
+              while (alive) {
                 if (queue.length > 0) {
                   const event = queue.shift()!;
                   yield {
@@ -151,11 +157,22 @@ export async function registerGraphQL(
                     },
                   };
                 } else {
-                  await new Promise<void>((r) => { resolve = r; });
+                  // Warte auf naechstes Event mit Timeout (verhindert ewiges Haengen)
+                  await new Promise<void>((r) => {
+                    resolve = r;
+                    setTimeout(() => {
+                      if (resolve === r) {
+                        resolve = null;
+                        r(); // Aufwachen und alive pruefen
+                      }
+                    }, IDLE_TIMEOUT_MS);
+                  });
                 }
               }
             } finally {
+              alive = false;
               eventBus.offAny(handler);
+              log?.debug('GraphQL Subscription cleanup: Handler entfernt');
             }
           },
         },

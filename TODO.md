@@ -297,9 +297,9 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [x] 🟠 **JWT Token-Refresh** — /api/auth/refresh Endpoint (2026-04-05)
 - [x] 🟠 **SemVer Prerelease-Vergleich** — Spec-konformer Vergleich (numerisch + lexikographisch) (2026-04-05)
 - [x] 🟡 **Task-Router Tie-Breaking** — Zufalls-Tiebreaker bei gleichem Score (2026-04-05)
-- [ ] 🟡 **GraphQL Subscription Cleanup** — Async Generator leakt Handler bei Network-Drop ohne finally. Mercurius sollte das handlen, aber Edge-Case (Gemini 2.5 Pro)
-- [ ] 🟡 **mesh-client.ts Retry-Logik** — Keine Wiederholungsversuche bei transienten HTTP-Fehlern (GPT-5.1)
-- [ ] 🟡 **Policy-Pattern Dokumentation** — matchesPattern unterstuetzt nur *, prefix* und exakt. Dokumentieren damit Admins keine Regex/Glob-Semantik erwarten (GPT-5.1)
+- [x] 🟡 **GraphQL Subscription Cleanup** — Queue-Limit (100), Idle-Timeout (5min), alive-Flag gegen Handler-Leak (2026-04-05)
+- [x] 🟡 **mesh-client.ts Retry-Logik** — Exponential Backoff mit Jitter, transiente Fehler (5xx, 429, Netzwerk), max 3 Retries (2026-04-05)
+- [x] 🟡 **Policy-Pattern Dokumentation** — matchesPattern JSDoc mit Beispielen und expliziter "NICHT unterstuetzt"-Sektion (2026-04-05)
 
 ---
 

@@ -258,7 +258,22 @@ export class PolicyEngine {
     }
   }
 
-  /** Einfacher Pattern-Matcher: "*" = alle, sonst exakter Match oder Prefix-Match mit "*" am Ende */
+  /**
+   * Einfacher Pattern-Matcher fuer Policy-Regeln.
+   *
+   * Unterstuetzte Muster:
+   * - `"*"` — Matcht alles (Wildcard)
+   * - `"system.*"` — Prefix-Match: matcht "system.health", "system.disk", etc.
+   * - `"influxdb.query"` — Exakter Match: matcht nur genau diesen String
+   *
+   * NICHT unterstuetzt (by design — Einfachheit > Maechgkeit):
+   * - Regex-Patterns (z.B. `"system\\..*"`)
+   * - Glob-Patterns mit `?` oder `[abc]`
+   * - Negation (z.B. `"!system.*"`)
+   * - Mehrere Patterns (z.B. `"system.*,influxdb.*"`)
+   *
+   * Fuer komplexere Regeln: Mehrere Policies mit verschiedenen Patterns anlegen.
+   */
   private matchesPattern(value: string, pattern: string): boolean {
     if (pattern === '*') return true;
     if (pattern.endsWith('*')) {
