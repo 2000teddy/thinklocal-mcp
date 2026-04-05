@@ -32,6 +32,7 @@
     "node-forge": "^1.4.0",
     "node-telegram-bot-api": "^0.67.0",
     "pino": "^9.6.0",
+    "shamir": "^0.7.1",
     "systeminformation": "^5.23.0",
     "tweetnacl": "^1.0.3",
     "tweetnacl-util": "^0.15.1",

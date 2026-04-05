@@ -114,6 +114,14 @@ export class CredentialVault {
     `);
 
     this.db.exec(`
+      CREATE TABLE IF NOT EXISTS revoked_credentials (
+        name TEXT PRIMARY KEY,
+        revoked_at TEXT NOT NULL,
+        reason TEXT NOT NULL DEFAULT ''
+      )
+    `);
+
+    this.db.exec(`
       CREATE TABLE IF NOT EXISTS approval_requests (
         id TEXT PRIMARY KEY,
         requester TEXT NOT NULL,
@@ -291,6 +299,79 @@ export class CredentialVault {
     return this.db.prepare(
       "SELECT * FROM approval_requests WHERE status = 'pending' ORDER BY requested_at DESC",
     ).all() as ApprovalRequest[];
+  }
+
+  // --- Credential Revocation ---
+
+  /**
+   * Revoziert ein Credential — markiert es als ungueltig und loescht den Wert.
+   * Revozierte Credentials koennen nicht mehr abgerufen werden.
+   * Gibt true zurueck wenn erfolgreich revoziert.
+   */
+  revoke(name: string, reason = 'manually revoked'): boolean {
+    // Prüfen ob Credential existiert
+    const existing = this.db.prepare('SELECT id FROM credentials WHERE name = ?').get(name);
+    if (!existing) return false;
+
+    // In Revocation-Tabelle eintragen
+    this.db.prepare(`
+      INSERT OR IGNORE INTO revoked_credentials (name, revoked_at, reason)
+      VALUES (?, ?, ?)
+    `).run(name, new Date().toISOString(), reason);
+
+    // Verschlüsselten Wert löschen
+    this.db.prepare('DELETE FROM credentials WHERE name = ?').run(name);
+
+    this.log?.warn({ name, reason }, 'Credential revoziert');
+    return true;
+  }
+
+  /** Prueft ob ein Credential revoziert wurde */
+  isRevoked(name: string): boolean {
+    const row = this.db.prepare('SELECT 1 FROM revoked_credentials WHERE name = ?').get(name);
+    return row !== undefined;
+  }
+
+  /** Listet alle revozierten Credentials */
+  listRevoked(): Array<{ name: string; revoked_at: string; reason: string }> {
+    return this.db.prepare('SELECT * FROM revoked_credentials ORDER BY revoked_at DESC').all() as Array<{
+      name: string; revoked_at: string; reason: string;
+    }>;
+  }
+
+  // --- Brokered Access ---
+
+  /**
+   * Brokered Access: Statt ein Credential zu teilen, fuehrt der Halter
+   * eine Aktion im Namen des Anfragenden aus.
+   *
+   * Der Anfragende bekommt nur das Ergebnis, nie das Secret selbst.
+   * Beispiel: Statt GitHub-Token zu teilen, fuehrt der Broker den API-Call aus.
+   */
+  async executeBrokered(
+    credentialName: string,
+    action: (value: string) => Promise<unknown>,
+    requester: string,
+  ): Promise<{ success: boolean; result?: unknown; error?: string }> {
+    // Credential abrufen (intern)
+    const cred = this.retrieve(credentialName);
+    if (!cred) {
+      return { success: false, error: `Credential '${credentialName}' nicht gefunden` };
+    }
+
+    // Prüfen ob revoziert
+    if (this.isRevoked(credentialName)) {
+      return { success: false, error: `Credential '${credentialName}' wurde revoziert` };
+    }
+
+    this.log?.info({ credentialName, requester }, 'Brokered Access ausgefuehrt');
+
+    try {
+      const result = await action(cred.value);
+      return { success: true, result };
+    } catch (err) {
+      return { success: false, error: String(err) };
+    }
   }
 
   close(): void {
