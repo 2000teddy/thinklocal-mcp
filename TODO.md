@@ -151,7 +151,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 ## Phase 4 — Agent-Adapter & Wachstum (Wochen 11+)
 
 ### 4.1 Agent-Adapter
-- [ ] 🔴 **Adapter-Abstraktionsschicht** — stabile API gegen CLI-Tool-Änderungen
+- [x] 🔴 **Adapter-Abstraktionsschicht** — `mesh-client.ts` + `mesh-adapter.ts` BaseHttpMeshAdapter (2026-04-05)
 - [x] 🔴 Claude Code Adapter (stdio MCP Proxy) — `mcp-stdio.ts` mit 13+ Tools (2026-04-04)
 - [ ] 🟠 Codex CLI Adapter
 - [ ] 🟠 Gemini CLI Adapter
