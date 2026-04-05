@@ -295,6 +295,43 @@ async function main(): Promise<void> {
     },
   });
 
+  // 9b. Statische Peers verbinden (Fallback wenn mDNS nicht funktioniert)
+  if (config.discovery.static_peers.length > 0) {
+    log.info({ count: config.discovery.static_peers.length }, 'Statische Peers konfiguriert');
+    for (const sp of config.discovery.static_peers) {
+      const port = sp.port ?? config.daemon.port;
+      const endpoint = `http://${sp.host}:${port}`;
+      const name = sp.name ?? `${sp.host}:${port}`;
+      try {
+        // Agent Card abrufen um Identitaet zu ermitteln
+        const res = await fetch(`${endpoint}/.well-known/agent-card.json`, {
+          signal: AbortSignal.timeout(5_000),
+          dispatcher: tlsDispatcher,
+        });
+        if (res.ok) {
+          const card = (await res.json()) as AgentCard;
+          const fingerprint = createHash('sha256').update(card.publicKey).digest('hex');
+          const peer = {
+            name,
+            host: sp.host,
+            port,
+            agentId: card.spiffeUri,
+            capabilityHash: '',
+            certFingerprint: fingerprint,
+            endpoint,
+          };
+          mesh.addPeer(peer);
+          mesh.updateAgentCard(card.spiffeUri, card);
+          log.info({ peer: name, agentId: card.spiffeUri }, 'Statischer Peer verbunden');
+        } else {
+          log.warn({ peer: name, status: res.status }, 'Statischer Peer nicht erreichbar');
+        }
+      } catch (err) {
+        log.warn({ peer: name, err }, 'Statischer Peer Verbindung fehlgeschlagen');
+      }
+    }
+  }
+
   // 10. Heartbeat-Loop + Gossip-Sync starten
   mesh.startHeartbeatLoop();
   gossip.start();
@@ -304,12 +341,12 @@ async function main(): Promise<void> {
   const telegramToken = process.env['TELEGRAM_BOT_TOKEN'];
   if (telegramToken) {
     try {
+      const chatIdFile = resolve(config.daemon.data_dir, 'telegram-chat-id');
       telegramGateway = new TelegramGateway(
-        { botToken: telegramToken, daemonUrl: `http://localhost:${config.daemon.port}` },
+        { botToken: telegramToken, daemonUrl: `http://localhost:${config.daemon.port}`, chatIdFile },
         eventBus,
         log,
       );
-      log.info('Telegram Gateway gestartet — sende /start an den Bot');
     } catch (err) {
       log.warn({ err }, 'Telegram Gateway konnte nicht gestartet werden');
     }

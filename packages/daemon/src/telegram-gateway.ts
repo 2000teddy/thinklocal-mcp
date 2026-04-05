@@ -17,6 +17,8 @@
  */
 
 import TelegramBot from 'node-telegram-bot-api';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import type { MeshEventBus, MeshEvent } from './events.js';
 import type { Logger } from 'pino';
 
@@ -38,6 +40,8 @@ export interface TelegramGatewayConfig {
   chatId?: string;
   /** Daemon-URL fuer API-Abfragen */
   daemonUrl: string;
+  /** Pfad zur Persistenz-Datei fuer chatId (optional) */
+  chatIdFile?: string;
 }
 
 export class TelegramGateway {
@@ -52,12 +56,36 @@ export class TelegramGateway {
     private eventBus: MeshEventBus,
     private log?: Logger,
   ) {
-    this.chatId = config.chatId ?? null;
+    this.chatId = config.chatId ?? this.loadChatId();
     this.bot = new TelegramBot(config.botToken, { polling: true });
     this.setupCommands();
     this.setupEventBridge();
     this.enabled = true;
-    this.log?.info('Telegram Gateway gestartet');
+    if (this.chatId) {
+      this.log?.info({ chatId: this.chatId }, 'Telegram Gateway gestartet (chatId aus Datei geladen)');
+    } else {
+      this.log?.info('Telegram Gateway gestartet — sende /start an den Bot');
+    }
+  }
+
+  /** Laedt gespeicherte chatId aus Datei */
+  private loadChatId(): string | null {
+    if (!this.config.chatIdFile) return null;
+    try {
+      const data = readFileSync(this.config.chatIdFile, 'utf-8').trim();
+      return data || null;
+    } catch { return null; }
+  }
+
+  /** Speichert chatId in Datei fuer Persistenz ueber Restarts */
+  private saveChatId(chatId: string): void {
+    if (!this.config.chatIdFile) return;
+    try {
+      mkdirSync(dirname(this.config.chatIdFile), { recursive: true });
+      writeFileSync(this.config.chatIdFile, chatId, { mode: 0o600 });
+    } catch (err) {
+      this.log?.warn({ err }, 'chatId-Persistenz fehlgeschlagen');
+    }
   }
 
   /** Simple per-command rate limiter (min interval in ms) */
@@ -85,6 +113,7 @@ export class TelegramGateway {
       }
 
       this.chatId = chatId;
+      this.saveChatId(chatId);
       this.bot.sendMessage(msg.chat.id,
         '🟢 *thinklocal-mcp Mesh verbunden*\n\n' +
         'Ich sende dir Mesh-Events und du kannst Befehle ausfuehren:\n\n' +

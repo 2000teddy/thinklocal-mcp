@@ -3,6 +3,12 @@ import { resolve } from 'node:path';
 import { homedir, hostname as osHostname } from 'node:os';
 import TOML from '@iarna/toml';
 
+export interface StaticPeer {
+  host: string;
+  port?: number;
+  name?: string;
+}
+
 export interface DaemonConfig {
   daemon: {
     port: number;
@@ -16,6 +22,7 @@ export interface DaemonConfig {
   };
   discovery: {
     mdns_service_type: string;
+    static_peers: StaticPeer[];
   };
   logging: {
     level: string;
@@ -35,6 +42,7 @@ const DEFAULTS: DaemonConfig = {
   },
   discovery: {
     mdns_service_type: '_thinklocal._tcp',
+    static_peers: [],
   },
   logging: {
     level: 'info',
@@ -65,6 +73,18 @@ export function loadConfig(configPath?: string): DaemonConfig {
   if (env['TLMCP_LOG_LEVEL']) cfg.logging.level = env['TLMCP_LOG_LEVEL'];
   if (env['TLMCP_HEARTBEAT_MS'])
     cfg.mesh.heartbeat_interval_ms = readPositiveInt('TLMCP_HEARTBEAT_MS', cfg.mesh.heartbeat_interval_ms);
+
+  // 2b. Statische Peers aus TLMCP_STATIC_PEERS (komma-separiert: "host:port,host2:port2")
+  if (env['TLMCP_STATIC_PEERS']) {
+    cfg.discovery.static_peers = env['TLMCP_STATIC_PEERS']
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+      .map((entry) => {
+        const [host, portStr] = entry.split(':');
+        return { host, port: portStr ? Number.parseInt(portStr, 10) : undefined };
+      });
+  }
 
   // 3. Hostname auffüllen und Pfad expandieren
   if (!cfg.daemon.hostname) cfg.daemon.hostname = osHostname();
