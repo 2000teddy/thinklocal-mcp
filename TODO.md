@@ -109,23 +109,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [ ] 🟡 Revocation-Mechanismus
 
 ### 3.2 Skill-Paket-Format
-- [ ] 🔴 Manifest-Schema (JSON):
-  ```json
-  {
-    "id": "system-health-monitor",
-    "version": "1.0.0",
-    "description": "Monitors CPU, RAM, disk usage",
-    "author_agent": "spiffe://thinklocal/host/alpha/agent/claude-code",
-    "signature": "ed25519:...",
-    "hash": "sha256:...",
-    "runtime": "wasm|python|docker",
-    "input_schema": { ... },
-    "output_schema": { ... },
-    "permissions": ["system.read"],
-    "dependencies": [],
-    "tests": ["test_health_check.py"]
-  }
-  ```
+- [x] 🔴 Manifest-Schema (JSON) — `skill-manifest.ts` mit JSON Schema, Validierung, Permissions-System (2026-04-05)
 - [x] 🔴 Signierte Skill-Pakete (.tlskill) — `skill-package.ts` (2026-04-03)
 - [x] 🔴 Signatur-Verifizierung (ECDSA) vor Installation — `verifySkillPackage()` (2026-04-03)
 - [ ] 🟠 SemVer-Versionierung mit Kompatibilitätsprüfung
