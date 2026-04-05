@@ -146,7 +146,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [ ] 💡 VS Code Extension als Agent
 
 ### 4.2 Autonome Delegation
-- [ ] 🟠 Task-Routing basierend auf Capability-Matching
+- [x] 🟠 Task-Routing basierend auf Capability-Matching — `task-router.ts` mit Score-System (2026-04-05)
 - [ ] 🟠 Approval-Gate-Konfiguration (pro Task-Typ)
 - [ ] 🟡 Multi-Step-Task-Chains (Agent A → Agent B → Agent C)
 - [ ] 🟡 Task-Priorisierung und Queue-Management
