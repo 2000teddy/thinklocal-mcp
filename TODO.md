@@ -280,7 +280,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 
 ### Von mehreren Modellen identifiziert
 - [x] 🟠 **Skill Lifecycle Management** — `skill-lifecycle.ts` Expiry, Usage-Tracking, Deprecation, GC (2026-04-05)
-- [ ] 🟠 **Network Partition (Split-Brain)** — CRDTs handhaben Eventual Consistency, aber aktive Tasks können timeout oder dupliziert werden. Idempotency-Keys, Partition-Erkennung, graceful Reconnection.
+- [x] 🟠 **Network Partition (Split-Brain)** — `partition-detector.ts` Erkennung + graceful Reconnection (2026-04-05)
 - [ ] 🟠 **O(n²) Registry-Wachstum** — Bei vielen Agents und Skills wächst die Gossip-Bandbreite quadratisch. Capability-Hashing, Pagination, Supernodes.
 - [ ] 🟠 **Agent-Adapter-Fragilität** — CLI-Tools entwickeln sich schnell. Adapter-Abstraktionsschicht als Puffer gegen Upstream-API-Änderungen.
 
