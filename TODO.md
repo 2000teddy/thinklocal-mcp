@@ -156,7 +156,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [ ] 🟡 QUIC-Transport-Upgrade
 - [ ] 🟡 Multi-Subnet-Unterstützung
 - [ ] 🟡 Supernode-Architektur für >100 Agents
-- [ ] 🟡 Skill-Dependency-Resolution (wie npm/pip)
+- [x] 🟡 Skill-Dependency-Resolution (wie npm/pip) — `skill-deps.ts` checkDependencies + topologische Sortierung (2026-04-05)
 - [ ] 💡 Skill-Marketplace (lokales Registry mit Bewertungen)
 - [ ] 💡 Agent-Reputation-System
 - [ ] 💡 Föderierte Meshes (mehrere LANs verbinden via WireGuard/Tailscale)
