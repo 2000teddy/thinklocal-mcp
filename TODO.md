@@ -76,8 +76,8 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [ ] 🟡 Capability-Freshness-Tracking
 
 ### 2.3 Dashboard API
-- [ ] 🔴 Fastify HTTP-Server mit GraphQL
-- [ ] 🔴 GraphQL Subscriptions für Echtzeit-Updates
+- [x] 🔴 Fastify HTTP-Server mit GraphQL — Mercurius Plugin `/graphql` + `/graphiql` (2026-04-05)
+- [x] 🔴 GraphQL Subscriptions für Echtzeit-Updates — EventBus-basierter Async Generator (2026-04-05)
 - [x] 🔴 REST-Endpunkte für einfache Abfragen — `dashboard-api.ts` /api/status, peers, capabilities, tasks, audit (2026-04-03)
 - [ ] 🟠 Coordinator-Node-Wahl (Raft oder First-Node-Simple)
 - [ ] 🟠 API-Authentifizierung (JWT/Session aus PIN-Zeremonie)
