@@ -1,7 +1,32 @@
 # Changelog
 
 Alle relevanten Änderungen an diesem Projekt werden hier dokumentiert.
+Mit Versionnummer, Datum und Uhrzeit - sowie einer kurzen Beschreibung / Erläuterung 
 Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
+
+---
+
+## [0.28.0] — 2026-04-05
+
+### Hinzugefuegt
+- **Benutzerhandbuch**: `docs/USER-GUIDE.md` (10 Sektionen)
+- **Entwicklerhandbuch**: `docs/DEVELOPER-GUIDE.md` (Skills, Adapter, API, Events)
+- **Threat Model**: `docs/THREAT-MODEL.md` (Assets, Angreifer, Vektoren, Trust-Grenzen)
+- **Dockerfile**: Multi-Stage Build (node:22-slim + avahi)
+- **Release-Workflow**: Automatischer GitHub Release bei v* Tags
+- **Approval-Gates**: Konfigurierbare auto/approve/deny pro Skill-Pattern
+- **Task-Queue**: Priorisierte Warteschlange (5 Levels, max Parallelitaet)
+- **Skill-Dependencies**: checkDependencies + topologische Sortierung
+- **Recovery-Flows**: Auto-Recovery fuer Cert-Expiry, Port-Konflikte, Hostname, DB-Corruption
+
+### Statistik Tag 2 (2026-04-05)
+- 23 PRs (#38-#60)
+- Phase 2: KOMPLETT abgeschlossen
+- Phase 3: 67% erledigt (WASM/Docker offen)
+- Phase 4: 30% erledigt
+- 3 Nachholreviews durchgefuehrt (1 CRITICAL Shell-Injection gefixt!)
+- 5 neue Dokumentations-Dateien
+- ~120 neue Tests
 
 ---
 
