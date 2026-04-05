@@ -182,13 +182,8 @@ export class AuditLog {
     signature: string;
     entry_hash: string;
   }): boolean {
-    // Prüfe ob Event bereits existiert (Deduplizierung)
-    const existing = this.db
-      .prepare('SELECT id FROM peer_audit_events WHERE entry_hash = ?')
-      .get(event.entry_hash);
-    if (existing) return false; // Bereits importiert
-
-    this.importPeerStmt.run(
+    // INSERT OR IGNORE mit UNIQUE entry_hash — ein Query statt zwei
+    const info = this.importPeerStmt.run(
       event.timestamp,
       event.event_type,
       event.agent_id,
@@ -197,6 +192,7 @@ export class AuditLog {
       event.signature,
       event.entry_hash,
     );
+    if (info.changes === 0) return false; // Bereits importiert (UNIQUE constraint)
     this.log?.debug({ from: event.agent_id, type: event.event_type }, 'Peer-Audit-Event importiert');
     return true;
   }

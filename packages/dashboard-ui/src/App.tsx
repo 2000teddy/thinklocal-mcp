@@ -35,8 +35,8 @@ export function App() {
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       <ToastContainer toasts={toasts} onDismiss={dismiss} />
       {/* Mobile Header */}
-      <div className="mobile-header" style={{ display: 'none' }}>
-        <button className="hamburger" onClick={() => setSidebarOpen(true)}>
+      <div className="mobile-header">
+        <button className="hamburger" onClick={() => setSidebarOpen(true)} aria-label="Navigation oeffnen" aria-expanded={sidebarOpen}>
           {'\u2630'}
         </button>
         <span style={{ fontWeight: 700, fontSize: '1rem' }}>thinklocal</span>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { MeshEvent } from '../hooks/useWebSocket.tsx';
 
 export interface Toast {
@@ -29,31 +29,59 @@ function eventToToast(event: MeshEvent): Omit<Toast, 'id' | 'timestamp'> | null 
   }
 }
 
-let nextId = 1;
+const MAX_TOASTS = 5;
+const DISMISS_MS = 6000;
 
 /** Hook fuer Toast-Notifications basierend auf MeshEvents */
 export function useToasts(lastEvent: MeshEvent | null) {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const timersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+  const nextId = useRef(1);
 
+  // Cleanup aller Timer bei Unmount
   useEffect(() => {
-    if (!lastEvent) return;
-    const toast = eventToToast(lastEvent);
-    if (!toast) return;
-
-    const newToast: Toast = { ...toast, id: nextId++, timestamp: Date.now() };
-    setToasts((prev) => [...prev, newToast].slice(-5)); // Max 5 gleichzeitig
-
-    // Auto-Dismiss nach 6s
-    const timer = setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== newToast.id));
-    }, 6000);
-
-    return () => clearTimeout(timer);
-  }, [lastEvent]);
+    const timers = timersRef.current;
+    return () => {
+      timers.forEach((timerId) => clearTimeout(timerId));
+      timers.clear();
+    };
+  }, []);
 
   const dismiss = useCallback((id: number) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
+    const timerId = timersRef.current.get(id);
+    if (timerId) {
+      clearTimeout(timerId);
+      timersRef.current.delete(id);
+    }
   }, []);
+
+  useEffect(() => {
+    if (!lastEvent) return;
+    const toastInfo = eventToToast(lastEvent);
+    if (!toastInfo) return;
+
+    const newToast: Toast = { ...toastInfo, id: nextId.current++, timestamp: Date.now() };
+
+    setToasts((prev) => {
+      const updated = [...prev, newToast];
+      // Bei Ueberschreitung: Timer des aeltesten Toasts aufraeumen
+      if (updated.length > MAX_TOASTS) {
+        const oldest = updated[0];
+        const oldTimer = timersRef.current.get(oldest.id);
+        if (oldTimer) {
+          clearTimeout(oldTimer);
+          timersRef.current.delete(oldest.id);
+        }
+        return updated.slice(-MAX_TOASTS);
+      }
+      return updated;
+    });
+
+    // Auto-Dismiss Timer — jeder Toast hat seinen eigenen
+    const timer = setTimeout(() => dismiss(newToast.id), DISMISS_MS);
+    timersRef.current.set(newToast.id, timer);
+  }, [lastEvent, dismiss]);
 
   return { toasts, dismiss };
 }
