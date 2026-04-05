@@ -27,11 +27,28 @@ function useTheme() {
 export function App() {
   const ws = useWebSocket();
   const { theme, toggle: toggleTheme } = useTheme();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
+      {/* Mobile Header */}
+      <div className="mobile-header" style={{ display: 'none' }}>
+        <button className="hamburger" onClick={() => setSidebarOpen(true)}>
+          {'\u2630'}
+        </button>
+        <span style={{ fontWeight: 700, fontSize: '1rem' }}>thinklocal</span>
+        <span style={{
+          width: '8px', height: '8px', borderRadius: '50%',
+          background: ws.connected ? 'var(--success)' : 'var(--danger)',
+          display: 'inline-block',
+        }} />
+      </div>
+
+      {/* Sidebar Overlay (Mobile) */}
+      {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
+
       {/* Sidebar Navigation */}
-      <nav style={{
+      <nav className={`sidebar${sidebarOpen ? ' open' : ''}`} style={{
         width: '220px',
         background: 'var(--bg-secondary)',
         borderRight: '1px solid var(--border)',
@@ -55,13 +72,13 @@ export function App() {
             </span>
           </div>
         </div>
-        <NavItem to="/" label="Topologie" />
-        <NavItem to="/skills" label="Skill-Matrix" />
-        <NavItem to="/health" label="Health" />
-        <NavItem to="/events" label="Live-Events" />
-        <NavItem to="/vault" label="Vault" />
-        <NavItem to="/pairing" label="Pairing" />
-        <NavItem to="/audit" label="Audit-Log" />
+        <NavItem to="/" label="Topologie" onClick={() => setSidebarOpen(false)} />
+        <NavItem to="/skills" label="Skill-Matrix" onClick={() => setSidebarOpen(false)} />
+        <NavItem to="/health" label="Health" onClick={() => setSidebarOpen(false)} />
+        <NavItem to="/events" label="Live-Events" onClick={() => setSidebarOpen(false)} />
+        <NavItem to="/vault" label="Vault" onClick={() => setSidebarOpen(false)} />
+        <NavItem to="/pairing" label="Pairing" onClick={() => setSidebarOpen(false)} />
+        <NavItem to="/audit" label="Audit-Log" onClick={() => setSidebarOpen(false)} />
 
         {/* Theme Toggle */}
         <div style={{ marginTop: 'auto', paddingTop: '1rem' }}>
@@ -87,7 +104,7 @@ export function App() {
       </nav>
 
       {/* Main Content */}
-      <main style={{ flex: 1, padding: '1.5rem', overflow: 'auto' }}>
+      <main className="main-content" style={{ flex: 1, padding: '1.5rem', overflow: 'auto' }}>
         <Routes>
           <Route path="/" element={<TopologyView />} />
           <Route path="/skills" element={<SkillMatrix />} />
@@ -103,10 +120,11 @@ export function App() {
   );
 }
 
-function NavItem({ to, label }: { to: string; label: string }) {
+function NavItem({ to, label, onClick }: { to: string; label: string; onClick?: () => void }) {
   return (
     <NavLink
       to={to}
+      onClick={onClick}
       style={({ isActive }) => ({
         display: 'block',
         padding: '0.5rem 0.75rem',
