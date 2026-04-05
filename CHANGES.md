@@ -5,6 +5,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
+## [0.24.0] — 2026-04-05
+
+### Hinzugefuegt
+- **Dashboard Toast-Notifications**: Peer join/leave, Task complete/fail, System start/stop — auto-dismiss, max 5, slide-in Animation
+- **Wire Protocol Specification v1.0**: Vollstaendige Dokumentation in `docs/WIRE-PROTOCOL.md` (Envelope, Gossip, Heartbeat, Pairing, 16 Nachrichtentypen)
+
+---
+
 ## [0.23.0] — 2026-04-05
 
 ### Hinzugefuegt
