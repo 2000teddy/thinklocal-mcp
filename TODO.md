@@ -255,7 +255,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 
 ### Dokumentation
 - [x] 🔴 ADR-Template erstellen und ersten ADR schreiben — `docs/architecture/ADR-001-daemon-architecture.md` (2026-04-03)
-- [ ] 🔴 Wire-Protokoll-Spezifikation (vollständig)
+- [x] 🔴 Wire-Protokoll-Spezifikation (vollständig) — `docs/WIRE-PROTOCOL.md` (2026-04-05)
 - [ ] 🟠 Threat Model & Sicherheitsdesign-Dokument
 - [ ] 🟠 API-Dokumentation (OpenAPI + GraphQL Schema)
 - [ ] 🟡 Benutzerhandbuch (Installation, Konfiguration, Troubleshooting)
