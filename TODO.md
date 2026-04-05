@@ -229,7 +229,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 ### 6.3 Fehlende Infrastruktur (Konsensus-Findings)
 - [x] 🔴 Diagnostik: `thinklocal doctor` (Daemon, Keys, Peers, MCP, Certs, Ports) (2026-04-04)
 - [x] 🟠 Recovery-Flows: abgelaufene Certs, Port-Konflikte, umbenannte Hosts — `recovery.ts` runRecoveryChecks() (2026-04-05)
-- [ ] 🟠 Versioning: Kompatibilitaetsmatrix, graceful Degradation bei Mixed-Version-Nodes
+- [x] 🟠 Versioning: Kompatibilitaetsmatrix, graceful Degradation — `version-compat.ts` + FEATURE_MATRIX (2026-04-05)
 - [ ] 🟡 Security-Lifecycle: Cert-Rotation, Revocation, Trust-Reset
 - [x] 🟡 Benutzerfreundliche Fehlermeldungen statt Stack-Traces — Farbige CLI-Ausgabe (2026-04-04)
 
