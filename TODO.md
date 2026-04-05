@@ -80,7 +80,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [x] 🔴 GraphQL Subscriptions für Echtzeit-Updates — EventBus-basierter Async Generator (2026-04-05)
 - [x] 🔴 REST-Endpunkte für einfache Abfragen — `dashboard-api.ts` /api/status, peers, capabilities, tasks, audit (2026-04-03)
 - [ ] 🟠 Coordinator-Node-Wahl (Raft oder First-Node-Simple)
-- [ ] 🟠 API-Authentifizierung (JWT/Session aus PIN-Zeremonie)
+- [x] 🟠 API-Authentifizierung (JWT) — `api-auth.ts` @fastify/jwt, localhost bypass, /api/auth/token (2026-04-05)
 - [ ] 🟡 OpenAPI/Swagger-Dokumentation
 
 ### 2.4 Dashboard UI (MVP)

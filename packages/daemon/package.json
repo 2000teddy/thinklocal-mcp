@@ -17,6 +17,7 @@
   "dependencies": {
     "@automerge/automerge": "^3.2.5",
     "@cfworker/json-schema": "^4.1.1",
+    "@fastify/jwt": "^10.0.0",
     "@fastify/websocket": "^11.2.0",
     "@iarna/toml": "^3.0.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
