@@ -5,6 +5,34 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
+## [0.26.0] — 2026-04-05
+
+### Hinzugefuegt
+- **SemVer-Versionierung**: Leichtgewichtiges SemVer-Modul (parse, compare, range, compatible) ohne npm-Dependency
+- **Task-Router**: Score-basiertes Capability-Matching (exakt +100, health +30, lokal +20, CPU +10)
+- **SSH Remote-Deploy**: `thinklocal deploy user@host` mit --dry-run und --with-env
+
+### Behoben (Nachholreviews PR #39-#51)
+Retroaktive Code Reviews fuer 13 PRs die ohne Review gemergt wurden:
+- **CRITICAL: Shell-Injection in keychain.ts** (GPT-5.1) — `execSync("cmd ${var}")` → `execFileSync('cmd', [args])`. Unsanitierte Parameter konnten beliebige Shell-Befehle ausfuehren!
+- **HIGH: Toast Timer-Leak** (Gemini 2.5 Pro) — useEffect cleanup loeschte nur den letzten Timer. Bei schnellen Events blieben Timer aktiv. Fix: useRef Map fuer alle Timer-IDs
+- **MEDIUM: JWT-Secret in Plaintext-Datei** (Gemini 2.5 Pro) — Secret wird jetzt bevorzugt im OS-Keychain gespeichert (macOS Keychain / Linux libsecret), Datei nur als Fallback
+- **MEDIUM: CSS !important Overrides** (Gemini 2.5 Pro) — Desktop-first CSS Pattern, keine !important mehr
+- **LOW: Schema-Cache-Hash** — SHA-256 statt truncated JSON (verhindert Cache-Kollision)
+- **LOW: Audit-Dedup** — INSERT OR IGNORE changes statt separatem SELECT
+- **LOW: Accessibility** — aria-label + aria-expanded auf Hamburger-Button
+
+### Code Reviews (5 Reviews heute)
+- Gemini 2.5 Pro: Dashboard UI (PR #39+#40)
+- GPT-5.1: Security Review Daemon Core (PR #42-#47) — Shell-Injection gefunden!
+- Gemini 2.5 Pro: GraphQL, JWT, Router, SemVer (PR #48-#51)
+
+### Sonstiges
+- **install.sh**: Node-Mindestversion auf v22 angehoben (undici braucht >=22.19)
+- **PR-Checkliste**: Neue Pflicht-Checkliste in Memory-Files (Review, Precommit, Tests vor jedem Merge)
+
+---
+
 ## [0.25.0] — 2026-04-05
 
 ### Hinzugefuegt
