@@ -281,8 +281,8 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 ### Von mehreren Modellen identifiziert
 - [x] 🟠 **Skill Lifecycle Management** — `skill-lifecycle.ts` Expiry, Usage-Tracking, Deprecation, GC (2026-04-05)
 - [x] 🟠 **Network Partition (Split-Brain)** — `partition-detector.ts` Erkennung + graceful Reconnection (2026-04-05)
-- [ ] 🟠 **O(n²) Registry-Wachstum** — Bei vielen Agents und Skills wächst die Gossip-Bandbreite quadratisch. Capability-Hashing, Pagination, Supernodes.
-- [ ] 🟠 **Agent-Adapter-Fragilität** — CLI-Tools entwickeln sich schnell. Adapter-Abstraktionsschicht als Puffer gegen Upstream-API-Änderungen.
+- [x] 🟠 **O(n²) Registry-Wachstum** — Mitigiert durch: Gossip nur eigene Caps senden, Hash-Vergleich vor Sync, Stale-Cleanup, Scoped Multicast (2026-04-05)
+- [x] 🟠 **Agent-Adapter-Fragilität** — Geloest durch BaseHttpMeshAdapter + MeshDaemonClient Abstraktionsschicht (2026-04-05)
 
 ### Von einzelnen Modellen identifiziert
 - [ ] 🟡 **Skill Sprawl** — Unkontrollierte Skill-Verbreitung wie WormGPT-Exploits vermeiden
