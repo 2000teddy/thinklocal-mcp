@@ -9,6 +9,7 @@ import { EventFeed } from './views/EventFeed.tsx';
 import { VaultView } from './views/VaultView.tsx';
 import { AgentDetailView } from './views/AgentDetailView.tsx';
 import { useWebSocket } from './hooks/useWebSocket.tsx';
+import { useToasts, ToastContainer } from './components/Toasts.tsx';
 
 function useTheme() {
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
@@ -28,9 +29,11 @@ export function App() {
   const ws = useWebSocket();
   const { theme, toggle: toggleTheme } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { toasts, dismiss } = useToasts(ws.lastEvent);
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
+      <ToastContainer toasts={toasts} onDismiss={dismiss} />
       {/* Mobile Header */}
       <div className="mobile-header" style={{ display: 'none' }}>
         <button className="hamburger" onClick={() => setSidebarOpen(true)}>
