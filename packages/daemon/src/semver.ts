@@ -44,6 +44,34 @@ export function compareSemVer(a: string, b: string): -1 | 0 | 1 {
   if (va.prerelease && !vb.prerelease) return -1;
   if (!va.prerelease && vb.prerelease) return 1;
 
+  // Prerelease-Vergleich (SemVer Spec-konform)
+  if (va.prerelease && vb.prerelease) {
+    const pa = va.prerelease.split('.');
+    const pb = vb.prerelease.split('.');
+    const len = Math.min(pa.length, pb.length);
+
+    for (let i = 0; i < len; i++) {
+      const na = Number(pa[i]);
+      const nb = Number(pb[i]);
+
+      if (!isNaN(na) && !isNaN(nb)) {
+        // Beide numerisch: numerisch vergleichen
+        if (na !== nb) return na > nb ? 1 : -1;
+      } else if (!isNaN(na)) {
+        // Numerisch < String (SemVer Spec)
+        return -1;
+      } else if (!isNaN(nb)) {
+        return 1;
+      } else {
+        // Beide Strings: lexikographisch
+        if (pa[i] !== pb[i]) return pa[i] > pb[i] ? 1 : -1;
+      }
+    }
+
+    // Laengerer Prerelease hat hohere Prioritaet
+    if (pa.length !== pb.length) return pa.length > pb.length ? 1 : -1;
+  }
+
   return 0;
 }
 
