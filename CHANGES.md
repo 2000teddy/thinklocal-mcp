@@ -5,6 +5,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
+## [0.23.0] — 2026-04-05
+
+### Hinzugefuegt
+- **SSH Remote-Deploy**: `thinklocal deploy user@host` — Deployment auf Linux-Server mit --dry-run und --with-env (Architektur-Konsensus GPT-5.1 + Gemini 2.5 Pro)
+- **Dashboard Responsive**: Hamburger-Menu auf Mobile (<768px), Slide-Sidebar, Touch-Overlay
+
+### Code Reviews
+- Gemini 2.5 Pro: Deploy Command (host-match fix, ssh LogLevel, gossip response filter)
+- Gemini 2.5 Pro: Static Peers + chatId + Gossip
+
+---
+
 ## [0.22.0] — 2026-04-05
 
 ### Hinzugefuegt
