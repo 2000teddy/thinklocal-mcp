@@ -250,7 +250,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [x] 🔴 Protokoll-Contract-Tests (müssen vor Merge bestehen) — 15 Tests in `protocol-contract.test.ts` (2026-04-05)
 - [x] 🟠 Integration-Tests (Multi-Node im Docker Compose) — `tests/integration/two-nodes.test.ts` (2026-04-03)
 - [x] 🟠 Security-Tests (Fuzzing, Penetration-Szenarien) — 20 Tests: Replay, TTL, ECDSA, Path-Traversal, Rate-Limit, QR-Token, Input-Sanitisierung (2026-04-05)
-- [ ] 🟡 Performance-Tests (Latenz, Durchsatz, Skalierung)
+- [x] 🟡 Performance-Tests (Latenz, Durchsatz, Skalierung) — 9 Benchmarks: ECDSA 15k/s, SHA256 992k/s, PatternMatch 4.3M/s, MapLookup 99M/s (2026-04-05)
 - [ ] 🟡 Chaos-Tests (Network Partition, Node-Ausfall)
 
 ### CI/CD & Build
