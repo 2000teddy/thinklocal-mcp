@@ -13,5 +13,19 @@ heartbeat_timeout_missed = 3
 [discovery]
 mdns_service_type = "_thinklocal._tcp"
 
+# Statische Peers als Fallback wenn mDNS nicht funktioniert (z.B. ueber VPN)
+# Beispiel:
+# [[discovery.static_peers]]
+# host = "10.10.10.56"
+# port = 9440
+# name = "influxdb-server"
+#
+# [[discovery.static_peers]]
+# host = "192.168.1.100"
+# port = 9440
+# name = "remote-agent"
+#
+# Oder per Umgebungsvariable: TLMCP_STATIC_PEERS="10.10.10.56:9440,192.168.1.100:9440"
+
 [logging]
 level = "info"           # trace, debug, info, warn, error, fatal

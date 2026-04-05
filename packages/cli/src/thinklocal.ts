@@ -53,6 +53,31 @@ function atomicWrite(filePath: string, content: string, mode = 0o600): void {
   renameSync(tmp, filePath);
 }
 
+/** Laedt .env-Datei und gibt key=value Paare zurueck (nur bekannte Service-Variablen) */
+function loadServiceEnvVars(): Record<string, string> {
+  const envPath = resolve(INSTALL_DIR, '.env');
+  const vars: Record<string, string> = {};
+  // Nur diese Variablen werden in den Service uebernommen (keine Secrets wie GITHUB_TOKEN!)
+  const allowedKeys = new Set(['TELEGRAM_BOT_TOKEN', 'TELEGRAM_ALLOWED_CHATS', 'INFLUXDB_USERNAME', 'INFLUXDB_PASSWORD']);
+
+  if (!existsSync(envPath)) return vars;
+  try {
+    const content = readFileSync(envPath, 'utf-8');
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eqIndex = trimmed.indexOf('=');
+      if (eqIndex < 1) continue;
+      const key = trimmed.slice(0, eqIndex).trim();
+      const value = trimmed.slice(eqIndex + 1).trim();
+      if (allowedKeys.has(key) && value) {
+        vars[key] = value;
+      }
+    }
+  } catch { /* .env nicht lesbar — ignorieren */ }
+  return vars;
+}
+
 // --- Farben ---
 const C = {
   reset: '\x1b[0m',
@@ -822,9 +847,10 @@ function installLaunchdService(nodePath: string, tsxPath: string, indexPath: str
   const plistDir = resolve(HOME, 'Library', 'LaunchAgents');
   const plistPath = resolve(plistDir, 'com.thinklocal.daemon.plist');
 
-  if (existsSync(plistPath)) {
-    ok('launchd Service bereits installiert');
-    return;
+  const isUpdate = existsSync(plistPath);
+  if (isUpdate) {
+    // Service stoppen bevor plist aktualisiert wird
+    try { execSync(`launchctl unload "${plistPath}" 2>/dev/null`); } catch { /* ok */ }
   }
 
   mkdirSync(plistDir, { recursive: true });
@@ -851,7 +877,9 @@ function installLaunchdService(nodePath: string, tsxPath: string, indexPath: str
         <key>TLMCP_NO_TLS</key>
         <string>1</string>
         <key>PATH</key>
-        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>${Object.entries(loadServiceEnvVars()).map(([k, v]) => `
+        <key>${xmlEscape(k)}</key>
+        <string>${xmlEscape(v)}</string>`).join('')}
     </dict>
     <key>RunAtLoad</key>
     <true/>
@@ -874,17 +902,17 @@ function installLaunchdService(nodePath: string, tsxPath: string, indexPath: str
 </plist>`;
 
   writeFileSync(plistPath, plist);
-  ok('launchd Service installiert (startet bei Login)');
+  // Service laden
+  try {
+    execSync(`launchctl load "${plistPath}" 2>/dev/null`);
+  } catch { /* ok */ }
+  ok(isUpdate ? 'launchd Service aktualisiert (Env-Vars neu geladen)' : 'launchd Service installiert (startet bei Login)');
 }
 
 function installSystemdService(nodePath: string, tsxPath: string, indexPath: string, configPath: string): void {
   const serviceDir = resolve(HOME, '.config', 'systemd', 'user');
   const servicePath = resolve(serviceDir, 'thinklocal-daemon.service');
-
-  if (existsSync(servicePath)) {
-    ok('systemd Service bereits installiert');
-    return;
-  }
+  const isUpdate = existsSync(servicePath);
 
   mkdirSync(serviceDir, { recursive: true });
 
@@ -902,6 +930,7 @@ Environment=${systemdEscape(`TLMCP_DATA_DIR=${DATA_DIR}`)}
 Environment=${systemdEscape('TLMCP_NO_TLS=1')}
 Environment="PATH=/usr/local/bin:/usr/bin:/bin"
 Environment="NODE_ENV=production"
+${Object.entries(loadServiceEnvVars()).map(([k, v]) => `Environment=${systemdEscape(`${k}=${v}`)}`).join('\n')}
 WorkingDirectory=${systemdEscape(INSTALL_DIR)}
 Restart=on-failure
 RestartSec=10
@@ -953,6 +982,177 @@ function formatUptime(s: number): string {
   return `${Math.floor(s / 86400)}d ${Math.floor((s % 86400) / 3600)}h`;
 }
 
+// --- Deploy ---
+
+function sshExec(target: string, command: string, label: string, dryRun = false): boolean {
+  if (dryRun) {
+    info(`Wuerde ausfuehren: ssh ${target} '${command}'`);
+    return true;
+  }
+  const result = spawnSync('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-o', 'LogLevel=ERROR', target, command], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 120_000,
+  });
+  if (result.status === 0) {
+    ok(label);
+    return true;
+  }
+  const stderr = result.stderr?.toString().trim();
+  fail(`${label}: ${stderr || `Exit ${result.status}`}`);
+  return false;
+}
+
+function sshOutput(target: string, command: string): string | null {
+  const result = spawnSync('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-o', 'LogLevel=ERROR', target, command], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 30_000,
+  });
+  if (result.status !== 0) return null;
+  return result.stdout?.toString().trim() ?? null;
+}
+
+function scpUpload(localPath: string, target: string, remotePath: string, label: string, dryRun = false): boolean {
+  if (dryRun) {
+    info(`Wuerde hochladen: ${localPath} → ${target}:${remotePath}`);
+    return true;
+  }
+  const result = spawnSync('scp', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-o', 'LogLevel=ERROR', localPath, `${target}:${remotePath}`], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 60_000,
+  });
+  if (result.status === 0) {
+    ok(label);
+    return true;
+  }
+  fail(`${label}: ${result.stderr?.toString().trim() || `Exit ${result.status}`}`);
+  return false;
+}
+
+async function cmdDeploy(targetArg: string, flags: string[]): Promise<void> {
+  const dryRun = flags.includes('--dry-run');
+  const withEnv = flags.includes('--with-env');
+  const target = targetArg; // user@host
+
+  if (!target || !target.includes('@')) {
+    console.log(`  Nutzung: thinklocal deploy user@host [--dry-run] [--with-env]`);
+    console.log(`  Beispiel: thinklocal deploy chris@10.10.10.56`);
+    console.log(`  Beispiel: thinklocal deploy chris@10.10.10.56 --dry-run`);
+    return;
+  }
+
+  header(`Deploy nach ${target}${dryRun ? ' (Dry-Run)' : ''}`);
+
+  // 1. SSH-Verbindung pruefen
+  info('Pruefe SSH-Verbindung...');
+  const os = sshOutput(target, 'uname -s');
+  if (!os) {
+    fail('SSH-Verbindung fehlgeschlagen (Key-basierte Authentifizierung noetig)');
+    info('Tipp: ssh-copy-id ' + target);
+    return;
+  }
+  if (os !== 'Linux') {
+    fail(`Nur Linux wird unterstuetzt (erkannt: ${os})`);
+    info('macOS-Deploy kommt in einer zukuenftigen Version');
+    return;
+  }
+  ok(`SSH-Verbindung OK (${os})`);
+
+  // 2. systemd pruefen
+  const hasSystemctl = sshOutput(target, 'command -v systemctl');
+  if (!hasSystemctl) {
+    fail('systemd nicht gefunden — wird fuer den Service benoetigt');
+    return;
+  }
+  ok('systemd verfuegbar');
+
+  // 3. Pruefen ob Update oder Neuinstallation
+  const existingInstall = sshOutput(target, 'test -d ~/.local/share/thinklocal-mcp/.git && echo yes || echo no');
+  const isUpdate = existingInstall === 'yes';
+  info(isUpdate ? 'Bestehende Installation gefunden — Update-Modus' : 'Keine Installation gefunden — Neuinstallation');
+
+  // 4. .env hochladen (wenn --with-env)
+  if (withEnv) {
+    const envPath = resolve(INSTALL_DIR, '.env');
+    if (!existsSync(envPath)) {
+      warn('.env-Datei nicht gefunden — ueberspringe');
+    } else {
+      if (!dryRun) {
+        sshExec(target, 'mkdir -p ~/.local/share/thinklocal-mcp', 'Remote-Verzeichnis erstellt', dryRun);
+      }
+      if (!scpUpload(envPath, target, '~/.local/share/thinklocal-mcp/.env', '.env hochgeladen', dryRun)) return;
+      sshExec(target, 'chmod 600 ~/.local/share/thinklocal-mcp/.env', '.env-Rechte gesetzt (600)', dryRun);
+    }
+  }
+
+  // 5. install.sh ueber SSH ausfuehren
+  info(isUpdate ? 'Starte Update...' : 'Starte Installation...');
+  const installScript = resolve(INSTALL_DIR, 'scripts', 'install.sh');
+  if (!existsSync(installScript)) {
+    fail('scripts/install.sh nicht gefunden');
+    return;
+  }
+
+  if (dryRun) {
+    info(`Wuerde ausfuehren: ssh ${target} 'bash -s -- ${isUpdate ? '--update' : ''}' < scripts/install.sh`);
+    ok('Dry-Run abgeschlossen — keine Aenderungen vorgenommen');
+    return;
+  }
+
+  // install.sh ueber stdin pipen
+  const installResult = spawnSync('ssh', ['-o', 'BatchMode=yes', target, `bash -s -- ${isUpdate ? '--update' : ''}`], {
+    input: readFileSync(installScript),
+    stdio: ['pipe', 'pipe', 'pipe'],
+    timeout: 300_000, // 5 Minuten fuer npm install
+  });
+
+  if (installResult.status !== 0) {
+    fail('Installation fehlgeschlagen');
+    const stderr = installResult.stderr?.toString().trim();
+    if (stderr) {
+      console.log(`\n  ${C.dim}${stderr.split('\n').slice(-10).join('\n  ')}${C.reset}`);
+    }
+    info(`Debug: ssh ${target} 'journalctl --user -u thinklocal-daemon -e'`);
+    return;
+  }
+  ok(isUpdate ? 'Update erfolgreich' : 'Installation erfolgreich');
+
+  // 6. Service-Status pruefen
+  const serviceStatus = sshOutput(target, 'systemctl --user is-active thinklocal-daemon 2>/dev/null');
+  if (serviceStatus === 'active') {
+    ok('Daemon laeuft auf Remote');
+  } else {
+    warn(`Service-Status: ${serviceStatus ?? 'unbekannt'}`);
+    info('Starte Service manuell: ssh ' + target + " 'systemctl --user start thinklocal-daemon'");
+  }
+
+  // 7. Mesh-Join verifizieren (30s Timeout)
+  info('Warte auf Mesh-Beitritt (max 30s)...');
+  const host = target.split('@')[1];
+  let joined = false;
+  for (let i = 0; i < 6; i++) {
+    try {
+      const res = await fetch(`${DAEMON_URL}/api/peers`, { signal: AbortSignal.timeout(3_000) });
+      if (res.ok) {
+        const data = (await res.json()) as { peers: Array<{ host: string }> };
+        if (data.peers.some((p) => p.host === host)) {
+          joined = true;
+          break;
+        }
+      }
+    } catch { /* retry */ }
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+
+  if (joined) {
+    ok(`Remote-Node ${host} ist dem Mesh beigetreten!`);
+  } else {
+    warn('Remote-Node noch nicht im Mesh sichtbar (evtl. mDNS dauert laenger)');
+    info(`Pruefe: thinklocal check ${host}`);
+  }
+
+  console.log(`\n  ${C.green}${C.bold}Deploy abgeschlossen!${C.reset}\n`);
+}
+
 // --- Main ---
 
 async function main(): Promise<void> {
@@ -975,6 +1175,8 @@ async function main(): Promise<void> {
       return;
     case 'mcp':
       return cmdMcpConfig(args[1]);
+    case 'deploy':
+      return cmdDeploy(args[1], args.slice(2));
     case 'config':
       if (args[1] === 'show' || !args[1]) return cmdConfigShow();
       break;
@@ -995,6 +1197,7 @@ async function main(): Promise<void> {
     logs           Live-Logs anzeigen
     peers          Verbundene Peers mit Health-Daten
     check <host>   Remote-Daemon pruefen (host oder host:port)
+    deploy <u@h>   Remote-Deployment via SSH (Linux)
     mcp            MCP-Config-Snippet anzeigen
     mcp install    MCP in Claude Desktop + Code eintragen
     config show    Konfiguration anzeigen
@@ -1005,6 +1208,8 @@ async function main(): Promise<void> {
     thinklocal start         # Daemon starten
     thinklocal doctor        # Probleme finden
     thinklocal peers         # Wer ist im Mesh?
+    thinklocal deploy chris@10.10.10.56  # Remote-Deploy
+    thinklocal deploy chris@server --dry-run  # Nur zeigen
 
   ${C.bold}Env:${C.reset}
     TLMCP_PORT=9440          Daemon-Port

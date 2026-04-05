@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 
+/* Dark Mode (Standard) */
 :root {
   --bg-primary: #0f172a;
   --bg-secondary: #1e293b;
@@ -12,7 +13,29 @@
   --success: #22c55e;
   --warning: #f59e0b;
   --danger: #ef4444;
+  --shadow: rgba(0, 0, 0, 0.3);
 }
+
+/* Light Mode */
+[data-theme="light"] {
+  --bg-primary: #f8fafc;
+  --bg-secondary: #e2e8f0;
+  --bg-card: #ffffff;
+  --border: #cbd5e1;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --success: #16a34a;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --shadow: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="light"] .badge-online { background: #dcfce7; color: #166534; }
+[data-theme="light"] .badge-offline { background: #fee2e2; color: #991b1b; }
+[data-theme="light"] .badge-healthy { background: #dcfce7; color: #166534; }
+[data-theme="light"] .badge-degraded { background: #fef3c7; color: #92400e; }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 

@@ -4,7 +4,7 @@ import { Agent as UndiciAgent, fetch } from 'undici';
 import { loadConfig } from './config.js';
 import { createLogger } from './logger.js';
 import { loadOrCreateIdentity } from './identity.js';
-import { loadOrCreateTlsBundle, type NodeCertBundle } from './tls.js';
+import { loadOrCreateTlsBundle, getCertDaysLeft, type NodeCertBundle } from './tls.js';
 import { AuditLog } from './audit.js';
 import { MdnsDiscovery } from './discovery.js';
 import { AgentCardServer } from './agent-card.js';
@@ -118,6 +118,7 @@ async function main(): Promise<void> {
         audit.append('PEER_LEAVE', peer.agentId);
         cardServer.setPeerCount(mesh.peerCount);
         registry.markAgentOffline(peer.agentId);
+        registry.removePeerCapabilities(peer.agentId);
         rateLimiter.removePeer(peer.agentId);
         eventBus.emit('peer:leave', { agentId: peer.agentId });
       },
@@ -295,6 +296,42 @@ async function main(): Promise<void> {
     },
   });
 
+  // 9b. Statische Peers verbinden (parallel, Fallback wenn mDNS nicht funktioniert)
+  if (config.discovery.static_peers.length > 0) {
+    log.info({ count: config.discovery.static_peers.length }, 'Statische Peers konfiguriert');
+    await Promise.allSettled(config.discovery.static_peers.map(async (sp) => {
+      const port = sp.port ?? config.daemon.port;
+      const endpoint = `${proto}://${sp.host}:${port}`;
+      const name = sp.name ?? `${sp.host}:${port}`;
+      try {
+        const res = await fetch(`${endpoint}/.well-known/agent-card.json`, {
+          signal: AbortSignal.timeout(5_000),
+          dispatcher: tlsDispatcher,
+        });
+        if (res.ok) {
+          const card = (await res.json()) as AgentCard;
+          const fingerprint = createHash('sha256').update(card.publicKey).digest('hex');
+          const peer = {
+            name,
+            host: sp.host,
+            port,
+            agentId: card.spiffeUri,
+            capabilityHash: '',
+            certFingerprint: fingerprint,
+            endpoint,
+          };
+          mesh.addPeer(peer);
+          mesh.updateAgentCard(card.spiffeUri, card);
+          log.info({ peer: name, agentId: card.spiffeUri }, 'Statischer Peer verbunden');
+        } else {
+          log.warn({ peer: name, status: res.status }, 'Statischer Peer nicht erreichbar');
+        }
+      } catch (err) {
+        log.warn({ peer: name, err }, 'Statischer Peer Verbindung fehlgeschlagen');
+      }
+    }));
+  }
+
   // 10. Heartbeat-Loop + Gossip-Sync starten
   mesh.startHeartbeatLoop();
   gossip.start();
@@ -304,12 +341,12 @@ async function main(): Promise<void> {
   const telegramToken = process.env['TELEGRAM_BOT_TOKEN'];
   if (telegramToken) {
     try {
+      const chatIdFile = resolve(config.daemon.data_dir, 'telegram-chat-id');
       telegramGateway = new TelegramGateway(
-        { botToken: telegramToken, daemonUrl: `http://localhost:${config.daemon.port}` },
+        { botToken: telegramToken, daemonUrl: `http://localhost:${config.daemon.port}`, chatIdFile },
         eventBus,
         log,
       );
-      log.info('Telegram Gateway gestartet — sende /start an den Bot');
     } catch (err) {
       log.warn({ err }, 'Telegram Gateway konnte nicht gestartet werden');
     }
@@ -321,6 +358,19 @@ async function main(): Promise<void> {
     { port: config.daemon.port, agentType: config.daemon.agent_type, proto },
     'Daemon bereit — warte auf Peers...',
   );
+
+  // Zertifikat-Ablauf-Warnung
+  const certDaysLeft = getCertDaysLeft(config.daemon.data_dir);
+  if (certDaysLeft !== null) {
+    if (certDaysLeft <= 7) {
+      log.warn({ certDaysLeft }, 'Zertifikat laeuft in weniger als 7 Tagen ab!');
+      eventBus.emit('system:startup', { warning: 'cert_expiry_soon', certDaysLeft });
+    } else if (certDaysLeft <= 30) {
+      log.info({ certDaysLeft }, 'Zertifikat laeuft in weniger als 30 Tagen ab');
+    } else {
+      log.debug({ certDaysLeft }, 'Zertifikat gueltig');
+    }
+  }
 
   // 12. Graceful Shutdown
   const shutdown = async (signal: string): Promise<void> => {

@@ -135,11 +135,18 @@ export class CapabilityRegistry {
    * Berechnet einen Hash über alle Capabilities (für kompakte Announcements).
    */
   getCapabilityHash(): string {
-    const keys = Object.keys(this.doc.capabilities).sort();
-    const data = keys
-      .map((k) => `${k}:${this.doc.capabilities[k].version}:${this.doc.capabilities[k].health}`)
-      .join('|');
-    return createHash('sha256').update(data).digest('hex').slice(0, 16);
+    return this.hashCapabilities(Object.values(this.doc.capabilities));
+  }
+
+  /**
+   * Berechnet einen Hash über eine gegebene Liste von Capabilities.
+   * Wird vom Gossip genutzt um nur eigene Capabilities zu hashen.
+   */
+  hashCapabilities(capabilities: Capability[]): string {
+    const keys = capabilities
+      .map((c) => `${c.agent_id}::${c.skill_id}:${c.version}:${c.health}`)
+      .sort();
+    return createHash('sha256').update(keys.join('|')).digest('hex').slice(0, 16);
   }
 
   // --- Automerge Sync ---
@@ -207,6 +214,26 @@ export class CapabilityRegistry {
       this.log?.info({ imported }, 'Peer-Capabilities importiert');
     }
     return imported;
+  }
+
+  /**
+   * Entfernt alle Capabilities eines bestimmten Agents (z.B. wenn Peer offline geht).
+   * Verhindert Stale-Capability-Relay im Gossip.
+   */
+  removePeerCapabilities(agentId: string): number {
+    let removed = 0;
+    this.doc = Automerge.change(this.doc, (d) => {
+      for (const key of Object.keys(d.capabilities)) {
+        if (d.capabilities[key]?.agent_id === agentId) {
+          delete d.capabilities[key];
+          removed++;
+        }
+      }
+    });
+    if (removed > 0) {
+      this.log?.info({ agentId, removed }, 'Peer-Capabilities entfernt (Peer offline)');
+    }
+    return removed;
   }
 
   /**

@@ -201,6 +201,23 @@ export function loadOrCreateTlsBundle(
 }
 
 /**
+ * Gibt die verbleibenden Tage bis zum Ablauf des Node-Zertifikats zurueck.
+ * Nützlich fuer proaktive Warnungen im Dashboard und Telegram.
+ */
+export function getCertDaysLeft(dataDir: string): number | null {
+  const certPath = resolve(dataDir, 'certs', 'node.crt');
+  if (!existsSync(certPath)) return null;
+  try {
+    const certPem = readFileSync(certPath, 'utf-8');
+    const cert = forge.pki.certificateFromPem(certPem);
+    const now = new Date();
+    return Math.floor((cert.validity.notAfter.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Verifiziert ein Peer-Zertifikat gegen die CA.
  * Gibt true zurück wenn das Zertifikat gültig und von unserer CA signiert ist.
  */
