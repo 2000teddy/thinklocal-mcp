@@ -5,6 +5,24 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
+## [0.25.0] — 2026-04-05
+
+### Hinzugefuegt
+- **Security Docs**: Detaillierte Bedrohungsanalyse fuer Root-Compromise, Bootstrap-Trust, Prompt Injection (SECURITY.md)
+- **Protocol Contract Tests**: 15 Tests fuer Wire Protocol (Envelope, Signatur, TTL, CBOR, Cross-Agent)
+- **I/O Schema Validation**: @cfworker/json-schema fuer Task-Input/Output Validierung
+- **AUDIT_EVENT Mesh-Sync**: peer_audit_events Tabelle fuer Mesh-weite Audit-Synchronisation
+- **Adapter-Abstraktionsschicht**: MeshDaemonClient + BaseHttpMeshAdapter fuer AI-CLI-Adapter
+- **Skill-Manifest-Schema**: JSON Schema mit 9 Pflichtfeldern, Permissions, Kategorien, Runtimes
+- **OS-Keychain-Integration**: macOS Keychain + Linux libsecret (Shell-Out, kein native Build)
+- **ESLint + Prettier**: Linting-Setup mit Flat Config
+
+### Code Reviews (6 heute)
+- GPT-5.1: Telegram Gateway, Architektur-Konsensus Deploy, Adapter-Design, Keychain-Empfehlung, Schema-Lib-Empfehlung
+- Gemini 2.5 Pro: Static Peers + Gossip, Deploy Command
+
+---
+
 ## [0.24.0] — 2026-04-05
 
 ### Hinzugefuegt
