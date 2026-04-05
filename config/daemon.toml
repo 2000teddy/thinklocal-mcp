@@ -20,6 +20,10 @@ mdns_service_type = "_thinklocal._tcp"
 enabled = true                  # Wird im local-Modus implizit deaktiviert, ausser per Env-Override
 listen_port = 9540              # Default: daemon.port + 100
 mdns_service_tag = "thinklocal-mcp"
+nat_traversal_enabled = true    # AutoNAT + Relay-Assist fuer VPN/Tailscale/Cross-Subnet-Szenarien
+relay_transport_enabled = true  # Erlaubt Circuit-Relay als Fallback-Pfad
+relay_service_enabled = false   # Nur auf expliziten Relay-Nodes aktivieren
+announce_multiaddrs = []        # Optional: oeffentliche oder Relay-Multiaddrs explizit announcen
 
 # Statische Peers als Fallback wenn mDNS nicht funktioniert (z.B. ueber VPN)
 # Beispiel:

@@ -33,6 +33,10 @@ export interface DaemonConfig {
     enabled: boolean;
     listen_port: number;
     mdns_service_tag: string;
+    nat_traversal_enabled: boolean;
+    relay_transport_enabled: boolean;
+    relay_service_enabled: boolean;
+    announce_multiaddrs: string[];
   };
   logging: {
     level: string;
@@ -61,6 +65,10 @@ const DEFAULTS: DaemonConfig = {
     enabled: true,
     listen_port: 9540,
     mdns_service_tag: 'thinklocal-mcp',
+    nat_traversal_enabled: true,
+    relay_transport_enabled: true,
+    relay_service_enabled: false,
+    announce_multiaddrs: [],
   },
   logging: {
     level: 'info',
@@ -95,6 +103,15 @@ export function loadConfig(configPath?: string): DaemonConfig {
   if (env['TLMCP_LIBP2P_ENABLED']) cfg.libp2p.enabled = env['TLMCP_LIBP2P_ENABLED'] === '1';
   if (env['TLMCP_LIBP2P_PORT']) cfg.libp2p.listen_port = readPositiveInt('TLMCP_LIBP2P_PORT', cfg.libp2p.listen_port);
   if (env['TLMCP_LIBP2P_MDNS_TAG']) cfg.libp2p.mdns_service_tag = env['TLMCP_LIBP2P_MDNS_TAG'];
+  if (env['TLMCP_NAT_TRAVERSAL']) cfg.libp2p.nat_traversal_enabled = env['TLMCP_NAT_TRAVERSAL'] === '1';
+  if (env['TLMCP_LIBP2P_RELAY_TRANSPORT']) cfg.libp2p.relay_transport_enabled = env['TLMCP_LIBP2P_RELAY_TRANSPORT'] === '1';
+  if (env['TLMCP_LIBP2P_RELAY_SERVICE']) cfg.libp2p.relay_service_enabled = env['TLMCP_LIBP2P_RELAY_SERVICE'] === '1';
+  if (env['TLMCP_LIBP2P_ANNOUNCE_ADDRS']) {
+    cfg.libp2p.announce_multiaddrs = env['TLMCP_LIBP2P_ANNOUNCE_ADDRS']
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+  }
   if (env['TLMCP_LOG_LEVEL']) cfg.logging.level = env['TLMCP_LOG_LEVEL'];
   if (env['TLMCP_HEARTBEAT_MS'])
     cfg.mesh.heartbeat_interval_ms = readPositiveInt('TLMCP_HEARTBEAT_MS', cfg.mesh.heartbeat_interval_ms);
@@ -128,6 +145,11 @@ export function loadConfig(configPath?: string): DaemonConfig {
     runtimeMode: cfg.daemon.runtime_mode,
     explicitEnvOverride: env['TLMCP_LIBP2P_ENABLED'],
   });
+  if (!cfg.libp2p.enabled) {
+    cfg.libp2p.nat_traversal_enabled = false;
+    cfg.libp2p.relay_transport_enabled = false;
+    cfg.libp2p.relay_service_enabled = false;
+  }
   cfg.libp2p.listen_port = resolveLibp2pListenPort({
     daemonPort: cfg.daemon.port,
     configuredPort: cfg.libp2p.listen_port,

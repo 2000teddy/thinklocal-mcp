@@ -181,6 +181,7 @@ Ein Skill ist ein portables MCP-Server-Paket mit Manifest:
 | **mTLS/CA** | `node-forge` + `step-ca` | Leichtgewichtige lokale CA |
 | **P2P Overlay** | `libp2p` + Noise + mDNS | Peer-Sessions und spaetere Mesh-Erweiterung |
 | **Multiplexing** | Yamux über libp2p | Mehrere logische Mesh-Kanaele über eine Verbindung |
+| **NAT Traversal** | AutoNAT + Circuit Relay v2 | Reachability-Erkennung und Relay-Assist fuer VPN/Tailscale/Cross-Subnet |
 | **Protocol** | JSON-RPC 2.0 über HTTPS | MCP/A2A-kompatibel |
 | **Dashboard** | React 19 + Next.js 15 + Tailwind | Modernes Frontend |
 | **Realtime** | WebSocket (Socket.io) | Live-Updates |

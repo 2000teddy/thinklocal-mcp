@@ -82,6 +82,10 @@ Konfiguration via Umgebungsvariablen:
 | `TLMCP_BIND_HOST` | `0.0.0.0` | Bind-Adresse; fuer lokalen Service typischerweise `127.0.0.1` |
 | `TLMCP_LIBP2P_ENABLED` | abhaengig von `runtime_mode` | `lan` aktiviert libp2p standardmaessig, `local` deaktiviert es |
 | `TLMCP_LIBP2P_PORT` | `daemon.port + 100` | TCP-Port fuer libp2p/Noise |
+| `TLMCP_NAT_TRAVERSAL` | `1` im `lan`-Pfad | Aktiviert AutoNAT- und Relay-Assist-Metadaten |
+| `TLMCP_LIBP2P_RELAY_TRANSPORT` | `1` | Erlaubt Circuit-Relay-v2 als Fallback-Transport |
+| `TLMCP_LIBP2P_RELAY_SERVICE` | `0` | Aktiviert den Node selbst als Relay-Server |
+| `TLMCP_LIBP2P_ANNOUNCE_ADDRS` | leer | Komma-separierte Multiaddrs fuer oeffentliche/Relay-Announcements |
 | `TLMCP_AGENT_TYPE` | `claude-code` | Agent-Typ |
 | `TLMCP_DATA_DIR` | `~/.thinklocal` | Datenverzeichnis |
 | `TLMCP_NO_TLS` | `0` | `1` = TLS deaktivieren (nur Entwicklung!) |

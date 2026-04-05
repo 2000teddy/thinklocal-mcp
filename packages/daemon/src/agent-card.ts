@@ -58,6 +58,19 @@ export interface AgentCard {
         open_streams: number;
         streams_by_protocol: Record<string, number>;
       };
+      nat: {
+        enabled: boolean;
+        reachability: 'unknown' | 'private' | 'public' | 'relay';
+        strategy: 'disabled' | 'direct' | 'relay' | 'hybrid';
+        auto_nat: boolean;
+        relay_transport: boolean;
+        relay_service: boolean;
+        hole_punching: boolean;
+        observed_multiaddrs: string[];
+        announce_multiaddrs: string[];
+        relay_reservations: number;
+        reason: string | null;
+      };
       reason: string | null;
     };
   };
@@ -307,6 +320,19 @@ export class AgentCardServer {
             protocols: [...libp2p.multiplexer.protocols],
             open_streams: libp2p.multiplexer.openStreams,
             streams_by_protocol: { ...libp2p.multiplexer.streamsByProtocol },
+          },
+          nat: {
+            enabled: libp2p.nat.enabled,
+            reachability: libp2p.nat.reachability,
+            strategy: libp2p.nat.strategy,
+            auto_nat: libp2p.nat.autoNAT,
+            relay_transport: libp2p.nat.relayTransport,
+            relay_service: libp2p.nat.relayService,
+            hole_punching: libp2p.nat.holePunching,
+            observed_multiaddrs: [...libp2p.nat.observedMultiaddrs],
+            announce_multiaddrs: [...libp2p.nat.announceMultiaddrs],
+            relay_reservations: libp2p.nat.relayReservations,
+            reason: libp2p.nat.reason,
           },
           reason: libp2p.reason,
         },

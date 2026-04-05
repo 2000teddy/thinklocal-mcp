@@ -3,6 +3,7 @@ import {
   createInitialLibp2pState,
   getLibp2pListenMultiaddrs,
   getLibp2pProtocolList,
+  resolveNatReachability,
   resolveLibp2pEnabled,
   resolveLibp2pListenPort,
 } from './libp2p-runtime.js';
@@ -19,6 +20,10 @@ describe('libp2p-runtime', () => {
       bindHost: '127.0.0.1',
       listenPort: 9540,
       mdnsServiceTag: 'thinklocal-mcp',
+      natTraversalEnabled: false,
+      relayTransportEnabled: false,
+      relayServiceEnabled: false,
+      announceMultiaddrs: [],
     });
 
     expect(state.enabled).toBe(false);
@@ -32,6 +37,10 @@ describe('libp2p-runtime', () => {
       bindHost: '0.0.0.0',
       listenPort: 9540,
       mdnsServiceTag: 'thinklocal-mcp',
+      natTraversalEnabled: true,
+      relayTransportEnabled: true,
+      relayServiceEnabled: false,
+      announceMultiaddrs: [],
     });
 
     expect(state.enabled).toBe(true);
@@ -43,6 +52,8 @@ describe('libp2p-runtime', () => {
     expect(state.multiplexer.name).toBe('yamux');
     expect(state.multiplexer.protocols).toEqual(getLibp2pProtocolList());
     expect(state.multiplexer.openStreams).toBe(0);
+    expect(state.nat.enabled).toBe(true);
+    expect(state.nat.strategy).toBe('hybrid');
   });
 
   it('aktiviert libp2p standardmaessig nur im lan mode', () => {
@@ -76,5 +87,26 @@ describe('libp2p-runtime', () => {
       '/thinklocal/mesh/tasks/1.0.0',
       '/thinklocal/mesh/audit/1.0.0',
     ]);
+  });
+
+  it('klassifiziert relay und public reachability korrekt', () => {
+    expect(resolveNatReachability({
+      enabled: true,
+      announceMultiaddrs: ['/ip4/203.0.113.5/tcp/9540'],
+      observedMultiaddrs: [],
+      relayTransport: true,
+    })).toBe('public');
+    expect(resolveNatReachability({
+      enabled: true,
+      announceMultiaddrs: ['/ip4/10.0.0.5/tcp/9540/p2p-circuit'],
+      observedMultiaddrs: [],
+      relayTransport: true,
+    })).toBe('relay');
+    expect(resolveNatReachability({
+      enabled: true,
+      announceMultiaddrs: ['/ip4/10.0.0.5/tcp/9540'],
+      observedMultiaddrs: [],
+      relayTransport: true,
+    })).toBe('private');
   });
 });

@@ -134,6 +134,10 @@ async function main(): Promise<void> {
     bindHost: config.daemon.bind_host,
     listenPort: config.libp2p.listen_port,
     mdnsServiceTag: config.libp2p.mdns_service_tag,
+    natTraversalEnabled: config.libp2p.nat_traversal_enabled,
+    relayTransportEnabled: config.libp2p.relay_transport_enabled,
+    relayServiceEnabled: config.libp2p.relay_service_enabled,
+    announceMultiaddrs: config.libp2p.announce_multiaddrs,
   }, log);
   await libp2pRuntime.start();
 
