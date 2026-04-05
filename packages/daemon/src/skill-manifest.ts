@@ -120,11 +120,11 @@ export const SKILL_MANIFEST_SCHEMA = {
       description: 'Tags fuer Discovery',
     },
   },
-} as const;
+};
 
 // --- Validierung ---
 
-const manifestValidator = new Validator(SKILL_MANIFEST_SCHEMA);
+const manifestValidator = new Validator(SKILL_MANIFEST_SCHEMA as Record<string, unknown>);
 
 /**
  * Validiert ein Skill-Manifest gegen das Schema.

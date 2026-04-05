@@ -100,7 +100,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 ### 3.1 Credential Vault
 - [x] 🔴 NaCl Sealed Boxes fuer Verschluesselung — `vault.ts` sealForPeer/unsealFromPeer (2026-04-03)
 - [x] 🔴 Lokaler Vault-Speicher (AES-256-GCM + PBKDF2) — `vault.ts` (2026-04-03)
-- [ ] 🔴 OS-Keychain-Integration (macOS Keychain, GNOME Keyring)
+- [x] 🔴 OS-Keychain-Integration (macOS Keychain, GNOME Keyring) — `keychain.ts` shell-out Wrapper, kein native Build (2026-04-05)
 - [x] 🔴 **Human Approval Gate** — `vault.ts` ApprovalRequest System (2026-04-03)
 - [ ] 🟠 Shamir's Secret Sharing fuer hochwertige Credentials
 - [x] 🟠 Credential-TTL und Auto-Expiry — `vault.ts` ttlHours + cleanExpired() (2026-04-03)
