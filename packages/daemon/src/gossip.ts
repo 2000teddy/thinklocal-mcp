@@ -106,7 +106,8 @@ export class GossipSync {
     // Das verhindert "fremde agent_id"-Warnungen beim Empfaenger
     const capabilities = this.registry.exportCapabilities()
       .filter((c) => c.agent_id === this.senderSpiffeUri);
-    const hash = this.registry.getCapabilityHash();
+    // Hash muss ueber die gleichen Capabilities berechnet werden die gesendet werden
+    const hash = this.registry.hashCapabilities(capabilities);
 
     // REGISTRY_SYNC-Nachricht erstellen
     const payload: RegistrySyncPayload = {

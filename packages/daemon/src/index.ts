@@ -296,15 +296,14 @@ async function main(): Promise<void> {
     },
   });
 
-  // 9b. Statische Peers verbinden (Fallback wenn mDNS nicht funktioniert)
+  // 9b. Statische Peers verbinden (parallel, Fallback wenn mDNS nicht funktioniert)
   if (config.discovery.static_peers.length > 0) {
     log.info({ count: config.discovery.static_peers.length }, 'Statische Peers konfiguriert');
-    for (const sp of config.discovery.static_peers) {
+    await Promise.allSettled(config.discovery.static_peers.map(async (sp) => {
       const port = sp.port ?? config.daemon.port;
-      const endpoint = `http://${sp.host}:${port}`;
+      const endpoint = `${proto}://${sp.host}:${port}`;
       const name = sp.name ?? `${sp.host}:${port}`;
       try {
-        // Agent Card abrufen um Identitaet zu ermitteln
         const res = await fetch(`${endpoint}/.well-known/agent-card.json`, {
           signal: AbortSignal.timeout(5_000),
           dispatcher: tlsDispatcher,
@@ -330,7 +329,7 @@ async function main(): Promise<void> {
       } catch (err) {
         log.warn({ peer: name, err }, 'Statischer Peer Verbindung fehlgeschlagen');
       }
-    }
+    }));
   }
 
   // 10. Heartbeat-Loop + Gossip-Sync starten

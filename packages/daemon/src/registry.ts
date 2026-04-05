@@ -135,11 +135,18 @@ export class CapabilityRegistry {
    * Berechnet einen Hash über alle Capabilities (für kompakte Announcements).
    */
   getCapabilityHash(): string {
-    const keys = Object.keys(this.doc.capabilities).sort();
-    const data = keys
-      .map((k) => `${k}:${this.doc.capabilities[k].version}:${this.doc.capabilities[k].health}`)
-      .join('|');
-    return createHash('sha256').update(data).digest('hex').slice(0, 16);
+    return this.hashCapabilities(Object.values(this.doc.capabilities));
+  }
+
+  /**
+   * Berechnet einen Hash über eine gegebene Liste von Capabilities.
+   * Wird vom Gossip genutzt um nur eigene Capabilities zu hashen.
+   */
+  hashCapabilities(capabilities: Capability[]): string {
+    const keys = capabilities
+      .map((c) => `${c.agent_id}::${c.skill_id}:${c.version}:${c.health}`)
+      .sort();
+    return createHash('sha256').update(keys.join('|')).digest('hex').slice(0, 16);
   }
 
   // --- Automerge Sync ---
