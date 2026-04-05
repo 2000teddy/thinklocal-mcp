@@ -67,10 +67,10 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [ ] 🟡 Streaming-Responses für langdauernde Tasks
 
 ### 2.2 Health Monitoring
-- [ ] 🔴 Heartbeat alle 10-30 Sekunden mit exponentieller Backoff
-- [ ] 🔴 Peer als offline markieren nach 3 verpassten Heartbeats
-- [ ] 🔴 Gossip-Propagation von Agent-Down-Events
-- [ ] 🟠 Systemmetriken sammeln (CPU, RAM, Disk, Netzwerk)
+- [x] 🔴 Heartbeat alle 10-30 Sekunden mit exponentieller Backoff — `mesh.ts` 10s Heartbeat (2026-04-03)
+- [x] 🔴 Peer als offline markieren nach 3 verpassten Heartbeats — `mesh.ts` 3 missed → offline (2026-04-03)
+- [x] 🔴 Gossip-Propagation von Agent-Down-Events — EventBus `peer:leave` (2026-04-03)
+- [x] 🟠 Systemmetriken sammeln (CPU, RAM, Disk, Netzwerk) — `systeminformation` in Agent Card (2026-04-03)
 - [ ] 🟠 Worker-Auslastung tracken
 - [ ] 🟡 Zertifikat-Ablauf-Warnung
 - [ ] 🟡 Capability-Freshness-Tracking
@@ -184,35 +184,36 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 > Ergebnis des Multi-Modell-Konsensus vom 2026-04-04. Alle 3 Modelle einig: CLI + Daemon-Management ZUERST, dann Claude-Integration, SSH-Deploy auf v2.
 
 ### 5.1 `thinklocal` CLI + Daemon-Management
-- [ ] 🔴 Globale CLI: `thinklocal start`, `stop`, `status`, `restart`, `logs`, `doctor`
-- [ ] 🔴 `thinklocal bootstrap` — Ersteinrichtung: Keys generieren, Config erstellen, Service installieren
-- [ ] 🔴 `thinklocal doctor` — Diagnostik: Daemon laeuft?, Keys vorhanden?, Peers erreichbar?, MCP konfiguriert?
-- [ ] 🟠 `thinklocal peers` — Verbundene Peers anzeigen
-- [ ] 🟠 `thinklocal config show/edit/validate` — Konfiguration verwalten
-- [ ] 🟠 Saubere, menschenlesbare Ausgabe (kein JSON-Log-Spam im Terminal)
+- [x] 🔴 Globale CLI: `thinklocal start`, `stop`, `status`, `restart`, `logs`, `doctor` — `thinklocal.ts` 12+ Befehle (2026-04-04)
+- [x] 🔴 `thinklocal bootstrap` — Ersteinrichtung: Keys, Config, Service, MCP, Credentials (2026-04-04)
+- [x] 🔴 `thinklocal doctor` — Diagnostik: Daemon, Keys, Certs, Peers, MCP, Ports (2026-04-04)
+- [x] 🟠 `thinklocal peers` — Verbundene Peers anzeigen (2026-04-04)
+- [x] 🟠 `thinklocal config show/edit/validate` — `config show` implementiert (2026-04-04)
+- [x] 🟠 Saubere, menschenlesbare Ausgabe (kein JSON-Log-Spam im Terminal) — Farbige CLI-Ausgabe (2026-04-04)
 
 ### 5.2 One-Command Install + System-Service
-- [ ] 🔴 macOS: `brew install thinklocal-mcp` oder `curl ... | bash` — installiert Daemon + CLI + launchd Service
-- [ ] 🔴 Linux: `.deb`-Paket oder Install-Script mit systemd User-Service
-- [ ] 🔴 Installer registriert launchd/systemd Service automatisch (Daemon startet bei Login)
-- [ ] 🟠 Uninstaller: `thinklocal uninstall` — Service entfernen, Config/Keys behalten (opt-in loeschen)
-- [ ] 🟠 Sensible Defaults: mDNS auto-discovery, Keys auto-generieren, MCP-Endpoint auto-exponieren
+- [x] 🔴 macOS: `curl ... | bash` — installiert Daemon + CLI + launchd Service (2026-04-04)
+- [x] 🔴 Linux: Install-Script mit systemd User-Service + avahi-daemon (2026-04-04)
+- [x] 🔴 Installer registriert launchd/systemd Service automatisch (2026-04-04)
+- [x] 🟠 Uninstaller: `thinklocal uninstall` — Service entfernen, Config behalten (2026-04-04)
+- [x] 🟠 Sensible Defaults: mDNS auto-discovery, Keys auto-generieren, MCP auto-konfigurieren (2026-04-04)
+- [ ] 🟠 Homebrew-Formel (macOS)
 
 ### 5.3 Claude Desktop MCP Integration
-- [ ] 🔴 `thinklocal mcp config --claude-desktop` — generiert den JSON-Block fuer Claude Desktop Config
-- [ ] 🔴 `thinklocal mcp config --claude-code` — generiert ~/.mcp.json fuer Claude Code
-- [ ] 🔴 Lokale MCP Bridge: Claude spricht mit lokalem Daemon ueber localhost (nicht direkt mit Mesh)
-- [ ] 🟠 Auto-Detection: Installer findet Claude Desktop Config und bietet an, thinklocal hinzuzufuegen
+- [x] 🔴 `thinklocal mcp config --claude-desktop` — generiert JSON-Block (2026-04-04)
+- [x] 🔴 `thinklocal mcp config --claude-code` — generiert ~/.mcp.json (2026-04-04)
+- [x] 🔴 Lokale MCP Bridge: `mcp-stdio.ts` mit 13+ Tools (2026-04-04)
+- [x] 🟠 Auto-Detection: Installer findet Claude Config und fuegt thinklocal hinzu (2026-04-04)
 - [ ] 🟡 Dokumentation: Schritt-fuer-Schritt mit Screenshots
 
 ### 5.4 Claude Code Terminal Integration
-- [ ] 🔴 `thinklocal init` — schreibt .mcp.json ins aktuelle Projekt
-- [ ] 🟠 Globale ~/.mcp.json wird automatisch bei `thinklocal bootstrap` erstellt
-- [ ] 🟡 Verifizierung: "Starte Claude Code und frage: Welche Peers sind im Mesh?"
+- [x] 🔴 `thinklocal init` — schreibt .mcp.json ins aktuelle Projekt (2026-04-04)
+- [x] 🟠 Globale ~/.mcp.json wird automatisch bei `thinklocal bootstrap` erstellt (2026-04-04)
+- [x] 🟡 Verifizierung: Claude Code nutzt Mesh-Tools direkt (getestet 2026-04-04)
 
 ### 5.5 Linux Support (Ubuntu/Debian)
-- [ ] 🔴 Install-Script mit Plattform-Erkennung (macOS/Linux)
-- [ ] 🔴 systemd User-Service mit gleicher UX wie macOS
+- [x] 🔴 Install-Script mit Plattform-Erkennung (macOS/Linux) — `scripts/install.sh` (2026-04-04)
+- [x] 🔴 systemd User-Service mit gleicher UX wie macOS — inkl. enable-linger (2026-04-04)
 - [ ] 🟠 `.deb`-Paket fuer apt-Installation
 - [ ] 🟡 Docker-Image als Alternative
 
@@ -242,11 +243,11 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [ ] 💡 Netzwerk-Scanner schlaegt Deployment-Ziele vor
 
 ### 6.3 Fehlende Infrastruktur (Konsensus-Findings)
-- [ ] 🔴 Diagnostik: `thinklocal doctor` (Daemon, Keys, Peers, MCP, Certs, Firewall)
+- [x] 🔴 Diagnostik: `thinklocal doctor` (Daemon, Keys, Peers, MCP, Certs, Ports) (2026-04-04)
 - [ ] 🟠 Recovery-Flows: abgelaufene Certs, Port-Konflikte, umbenannte Hosts
 - [ ] 🟠 Versioning: Kompatibilitaetsmatrix, graceful Degradation bei Mixed-Version-Nodes
 - [ ] 🟡 Security-Lifecycle: Cert-Rotation, Revocation, Trust-Reset
-- [ ] 🟡 Benutzerfreundliche Fehlermeldungen statt Stack-Traces
+- [x] 🟡 Benutzerfreundliche Fehlermeldungen statt Stack-Traces — Farbige CLI-Ausgabe (2026-04-04)
 
 ---
 
@@ -329,8 +330,8 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
   - Natuerliche-Sprache-Queries ("Hat jemand eine Datenbank?")
   - Automatische Skill-Erstellung on-the-fly
   - Kontext-Transfer-Zusammenfassung zwischen Agents
-- [ ] 🔴 **Credential-Management** — GitHub Token + API Keys im Vault speichern, Agents koennen automatisch pushen
-- [ ] 🔴 **Telegram-Skill** — Agent-zu-Agent-Kommunikation via Telegram (User nicht mehr Mittelsmann)
+- [x] 🔴 **Credential-Management** — .env Import + Git Auto-Config + Vault-Speicherung (2026-04-04)
+- [x] 🔴 **Telegram Gateway** — Bot-Monitoring mit 6 Befehlen + Event-Bridge, Chat-ID Allowlist (2026-04-05)
 - [ ] 💡 **ThinkHub** — Skill-Marketplace/Registry (wie ClawHub) statt Skills im Repo
 - [ ] 💡 **ThinkWide** — Mehrere LANs verbinden (WireGuard/Tailscale)
 - [ ] 💡 **ThinkBig** — ThinkLocal + ThinkWide + ThinkHub zusammengefuehrt

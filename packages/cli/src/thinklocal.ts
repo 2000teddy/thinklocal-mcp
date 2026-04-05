@@ -847,9 +847,10 @@ function installLaunchdService(nodePath: string, tsxPath: string, indexPath: str
   const plistDir = resolve(HOME, 'Library', 'LaunchAgents');
   const plistPath = resolve(plistDir, 'com.thinklocal.daemon.plist');
 
-  if (existsSync(plistPath)) {
-    ok('launchd Service bereits installiert');
-    return;
+  const isUpdate = existsSync(plistPath);
+  if (isUpdate) {
+    // Service stoppen bevor plist aktualisiert wird
+    try { execSync(`launchctl unload "${plistPath}" 2>/dev/null`); } catch { /* ok */ }
   }
 
   mkdirSync(plistDir, { recursive: true });
@@ -901,17 +902,17 @@ function installLaunchdService(nodePath: string, tsxPath: string, indexPath: str
 </plist>`;
 
   writeFileSync(plistPath, plist);
-  ok('launchd Service installiert (startet bei Login)');
+  // Service laden
+  try {
+    execSync(`launchctl load "${plistPath}" 2>/dev/null`);
+  } catch { /* ok */ }
+  ok(isUpdate ? 'launchd Service aktualisiert (Env-Vars neu geladen)' : 'launchd Service installiert (startet bei Login)');
 }
 
 function installSystemdService(nodePath: string, tsxPath: string, indexPath: string, configPath: string): void {
   const serviceDir = resolve(HOME, '.config', 'systemd', 'user');
   const servicePath = resolve(serviceDir, 'thinklocal-daemon.service');
-
-  if (existsSync(servicePath)) {
-    ok('systemd Service bereits installiert');
-    return;
-  }
+  const isUpdate = existsSync(servicePath);
 
   mkdirSync(serviceDir, { recursive: true });
 

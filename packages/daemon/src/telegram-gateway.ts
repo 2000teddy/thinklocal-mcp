@@ -86,13 +86,13 @@ export class TelegramGateway {
 
       this.chatId = chatId;
       this.bot.sendMessage(msg.chat.id,
-        '🟢 *thinklocal\\-mcp Mesh verbunden*\n\n' +
-        'Ich sende dir Mesh\\-Events und du kannst Befehle ausfuehren:\n\n' +
-        '/status — Daemon\\-Status\n' +
+        '🟢 *thinklocal-mcp Mesh verbunden*\n\n' +
+        'Ich sende dir Mesh-Events und du kannst Befehle ausfuehren:\n\n' +
+        '/status — Daemon-Status\n' +
         '/peers — Verbundene Peers\n' +
-        '/health — System\\-Health\n' +
+        '/health — System-Health\n' +
         '/skills — Verfuegbare Skills\n' +
-        '/audit — Letzte Audit\\-Events\n' +
+        '/audit — Letzte Audit-Events\n' +
         '/help — Diese Hilfe',
         { parse_mode: 'Markdown' },
       );
@@ -113,7 +113,7 @@ export class TelegramGateway {
         const agentId = escapeMarkdown(String(status['agent_id'] ?? 'unknown'));
         const host = escapeMarkdown(String(status['hostname'] ?? 'unknown'));
         this.bot.sendMessage(msg.chat.id,
-          `📊 *Mesh\\-Status*\n\n` +
+          `📊 *Mesh-Status*\n\n` +
           `Agent: \`${agentId}\`\n` +
           `Host: ${host}:${status['port']}\n` +
           `Uptime: ${formatUptime(status['uptime_seconds'] as number)}\n` +
@@ -192,7 +192,7 @@ export class TelegramGateway {
         const distro = escapeMarkdown(String(os['distro'] ?? ''));
 
         this.bot.sendMessage(msg.chat.id,
-          `🖥 *System\\-Health*\n\n` +
+          `🖥 *System-Health*\n\n` +
           `OS: ${distro} ${os['release']} (${os['arch']})\n` +
           `Host: ${hostname}\n` +
           `CPU: ${cpu['load_percent']}% (${cpu['cores']} Cores)\n` +
@@ -248,7 +248,7 @@ export class TelegramGateway {
         }
         const data = (await res.json()) as { events: Array<Record<string, unknown>> };
 
-        let text = `📝 *Letzte ${data.events.length} Audit\\-Events*\n\n`;
+        let text = `📝 *Letzte ${data.events.length} Audit-Events*\n\n`;
         for (const e of data.events) {
           const time = String(e['timestamp'] ?? '').slice(11, 19);
           const eventType = escapeMarkdown(String(e['event_type'] ?? ''));
@@ -265,12 +265,12 @@ export class TelegramGateway {
     // /help
     this.bot.onText(/^\/help$/, (msg) => {
       this.bot.sendMessage(msg.chat.id,
-        '🔧 *thinklocal\\-mcp Befehle*\n\n' +
-        '/status — Daemon\\-Status\n' +
+        '🔧 *thinklocal-mcp Befehle*\n\n' +
+        '/status — Daemon-Status\n' +
         '/peers — Verbundene Peers mit Health\n' +
-        '/health — System\\-Health (CPU/RAM/Disk)\n' +
+        '/health — System-Health (CPU/RAM/Disk)\n' +
         '/skills — Verfuegbare Skills im Mesh\n' +
-        '/audit — Letzte 5 Audit\\-Events\n',
+        '/audit — Letzte 5 Audit-Events\n',
         { parse_mode: 'Markdown' },
       );
     });
