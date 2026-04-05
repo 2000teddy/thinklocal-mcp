@@ -4,7 +4,7 @@ import { Agent as UndiciAgent, fetch } from 'undici';
 import { loadConfig } from './config.js';
 import { createLogger } from './logger.js';
 import { loadOrCreateIdentity } from './identity.js';
-import { loadOrCreateTlsBundle, type NodeCertBundle } from './tls.js';
+import { loadOrCreateTlsBundle, getCertDaysLeft, type NodeCertBundle } from './tls.js';
 import { AuditLog } from './audit.js';
 import { MdnsDiscovery } from './discovery.js';
 import { AgentCardServer } from './agent-card.js';
@@ -358,6 +358,19 @@ async function main(): Promise<void> {
     { port: config.daemon.port, agentType: config.daemon.agent_type, proto },
     'Daemon bereit — warte auf Peers...',
   );
+
+  // Zertifikat-Ablauf-Warnung
+  const certDaysLeft = getCertDaysLeft(config.daemon.data_dir);
+  if (certDaysLeft !== null) {
+    if (certDaysLeft <= 7) {
+      log.warn({ certDaysLeft }, 'Zertifikat laeuft in weniger als 7 Tagen ab!');
+      eventBus.emit('system:startup', { warning: 'cert_expiry_soon', certDaysLeft });
+    } else if (certDaysLeft <= 30) {
+      log.info({ certDaysLeft }, 'Zertifikat laeuft in weniger als 30 Tagen ab');
+    } else {
+      log.debug({ certDaysLeft }, 'Zertifikat gueltig');
+    }
+  }
 
   // 12. Graceful Shutdown
   const shutdown = async (signal: string): Promise<void> => {

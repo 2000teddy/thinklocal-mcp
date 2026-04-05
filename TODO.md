@@ -72,7 +72,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [x] 🔴 Gossip-Propagation von Agent-Down-Events — EventBus `peer:leave` (2026-04-03)
 - [x] 🟠 Systemmetriken sammeln (CPU, RAM, Disk, Netzwerk) — `systeminformation` in Agent Card (2026-04-03)
 - [ ] 🟠 Worker-Auslastung tracken
-- [ ] 🟡 Zertifikat-Ablauf-Warnung
+- [x] 🟡 Zertifikat-Ablauf-Warnung — `getCertDaysLeft()` + Daemon-Startup-Log + EventBus (2026-04-05)
 - [ ] 🟡 Capability-Freshness-Tracking
 
 ### 2.3 Dashboard API
