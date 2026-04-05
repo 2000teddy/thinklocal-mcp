@@ -271,7 +271,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 
 ### CI/CD & Build
 - [x] 🔴 GitHub Actions Pipeline — `.github/workflows/ci.yml` (2026-04-03)
-- [ ] 🔴 Linting (ESLint, Ruff, Prettier)
+- [x] 🔴 Linting (ESLint + Prettier) — eslint.config.js + .prettierrc + npm run lint/format (2026-04-05)
 - [ ] 🟠 Docker-Image-Build und -Push
 - [ ] 🟠 Automatische Release-Erstellung
 - [ ] 🟡 Cross-Plattform-Tests (macOS, Linux, Windows via WSL)
