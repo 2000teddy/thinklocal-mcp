@@ -6,6 +6,27 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
+## [0.29.0] — 2026-04-05 20:50 UTC
+
+### Hinzugefuegt
+- **CRL (Zertifikat-Widerrufsliste)**: `crl.ts` — revoke/isRevoked/list + JSON-Persistenz
+- **Deploy --with-ca**: CA-Zertifikat-Transfer fuer mTLS-Trust ueber SSH
+- **Multi-Step-Task-Chains**: `task-chain.ts` — sequenzielle Ausfuehrung mit Result-Forwarding
+- **Version-Kompatibilitaet**: `version-compat.ts` — Feature-Matrix + Graceful Degradation
+- **Recovery-Flows**: `recovery.ts` — Auto-Recovery (Cert, Port, Hostname, DB-Integrity)
+- **Threat Model**: `docs/THREAT-MODEL.md` — Angreifer-Profile, Angriffsvektoren, Trust-Grenzen
+- **Entwicklerhandbuch**: `docs/DEVELOPER-GUIDE.md` — Skills, Adapter, API, Events, Policies
+- **Benutzerhandbuch**: `docs/USER-GUIDE.md` — 10 Sektionen
+- **Dockerfile**: Multi-Stage Build + Release-Workflow
+
+### PRs #58-#64 (7 PRs)
+- Phase 4: Task-Chains (#62), Approval-Gates + Task-Queue (#56), Skill-Dependencies (#57)
+- Phase 6: Deploy CA-Transfer (#63), Recovery-Flows (#60), Version-Compat (#61)
+- Docs: User-Guide + Dev-Guide + Threat-Model + Dockerfile (#58, #59)
+- CRL + Vector Clocks (#64)
+
+---
+
 ## [0.28.0] — 2026-04-05
 
 ### Hinzugefuegt
