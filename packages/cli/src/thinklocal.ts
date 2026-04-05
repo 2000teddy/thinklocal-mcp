@@ -984,18 +984,12 @@ function formatUptime(s: number): string {
 
 // --- Deploy ---
 
-interface DeployOptions {
-  target: string;   // user@host
-  dryRun: boolean;
-  withEnv: boolean;
-}
-
 function sshExec(target: string, command: string, label: string, dryRun = false): boolean {
   if (dryRun) {
     info(`Wuerde ausfuehren: ssh ${target} '${command}'`);
     return true;
   }
-  const result = spawnSync('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', target, command], {
+  const result = spawnSync('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-o', 'LogLevel=ERROR', target, command], {
     stdio: ['ignore', 'pipe', 'pipe'],
     timeout: 120_000,
   });
@@ -1009,7 +1003,7 @@ function sshExec(target: string, command: string, label: string, dryRun = false)
 }
 
 function sshOutput(target: string, command: string): string | null {
-  const result = spawnSync('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', target, command], {
+  const result = spawnSync('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-o', 'LogLevel=ERROR', target, command], {
     stdio: ['ignore', 'pipe', 'pipe'],
     timeout: 30_000,
   });
@@ -1022,7 +1016,7 @@ function scpUpload(localPath: string, target: string, remotePath: string, label:
     info(`Wuerde hochladen: ${localPath} → ${target}:${remotePath}`);
     return true;
   }
-  const result = spawnSync('scp', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', localPath, `${target}:${remotePath}`], {
+  const result = spawnSync('scp', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-o', 'LogLevel=ERROR', localPath, `${target}:${remotePath}`], {
     stdio: ['ignore', 'pipe', 'pipe'],
     timeout: 60_000,
   });
@@ -1140,7 +1134,7 @@ async function cmdDeploy(targetArg: string, flags: string[]): Promise<void> {
       const res = await fetch(`${DAEMON_URL}/api/peers`, { signal: AbortSignal.timeout(3_000) });
       if (res.ok) {
         const data = (await res.json()) as { peers: Array<{ host: string }> };
-        if (data.peers.some((p) => p.host === host || p.host.includes(host))) {
+        if (data.peers.some((p) => p.host === host)) {
           joined = true;
           break;
         }

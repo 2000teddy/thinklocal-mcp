@@ -196,10 +196,11 @@ export class GossipSync {
       'Gossip: Capabilities von Peer importiert',
     );
 
-    // Eigene Capabilities für Rück-Sync zurückgeben
-    const ownCapabilities = this.registry.exportCapabilities();
+    // Nur eigene Capabilities fuer Rueck-Sync zurueckgeben (kein Relay)
+    const ownCapabilities = this.registry.exportCapabilities()
+      .filter((c) => c.agent_id === this.senderSpiffeUri);
     return {
-      capability_hash: this.registry.getCapabilityHash(),
+      capability_hash: this.registry.hashCapabilities(ownCapabilities),
       imported,
       capabilities: ownCapabilities.map((c) => ({
         skill_id: c.skill_id,
