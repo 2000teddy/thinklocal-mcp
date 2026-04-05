@@ -67,11 +67,18 @@ npm start              # Mit mTLS (Produktion)
 npm run start:dev      # Ohne mTLS (Entwicklung)
 ```
 
+Wichtige Unterscheidung:
+
+- `npm start` startet den Daemon entsprechend deiner Konfiguration und kann netzwerkexponiert sein.
+- `thinklocal bootstrap` und der Installer richten standardmaessig einen `localhost-only` Service mit `TLMCP_BIND_HOST=127.0.0.1` und `TLMCP_NO_TLS=1` ein.
+- Dieser Default ist fuer lokalen Betrieb gedacht, nicht fuer LAN-Exposure.
+
 Konfiguration via Umgebungsvariablen:
 
 | Variable | Default | Beschreibung |
 |----------|---------|-------------|
 | `TLMCP_PORT` | `9440` | HTTP(S)-Port |
+| `TLMCP_BIND_HOST` | `0.0.0.0` | Bind-Adresse; fuer lokalen Service typischerweise `127.0.0.1` |
 | `TLMCP_AGENT_TYPE` | `claude-code` | Agent-Typ |
 | `TLMCP_DATA_DIR` | `~/.thinklocal` | Datenverzeichnis |
 | `TLMCP_NO_TLS` | `0` | `1` = TLS deaktivieren (nur Entwicklung!) |
@@ -147,6 +154,8 @@ journalctl --user -u thinklocal-daemon -f   # Live-Logs
 curl http://localhost:9440/health
 # Antwort: {"status":"ok","timestamp":"..."}
 ```
+
+Der Installer- und Bootstrap-Pfad nutzt bewusst diese lokale HTTP-URL, weil der Standard-Service auf `127.0.0.1` gebunden wird.
 
 ### Status-Abfrage
 

@@ -194,10 +194,13 @@ export class AgentCardServer {
   async start(): Promise<void> {
     await this.server.listen({
       port: this.opts.config.daemon.port,
-      host: '0.0.0.0',
+      host: this.opts.config.daemon.bind_host,
     });
     const proto = this.useTls ? 'HTTPS (mTLS)' : 'HTTP';
-    this.opts.log?.info({ port: this.opts.config.daemon.port, proto }, 'Agent Card Server gestartet');
+    this.opts.log?.info(
+      { port: this.opts.config.daemon.port, bindHost: this.opts.config.daemon.bind_host, proto },
+      'Agent Card Server gestartet',
+    );
   }
 
   async stop(): Promise<void> {

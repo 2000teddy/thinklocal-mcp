@@ -36,6 +36,19 @@ Details werden nach Behebung in den CHANGES.md veröffentlicht.
 | Side-Channel-Angriffe (Timing etc.) | ❌ Nicht im Scope |
 | Physischer Zugriff auf Gerät | ❌ Nicht im Scope |
 
+### Aktueller Runtime-Default
+
+Der Standard-Installer und `thinklocal bootstrap` richten derzeit absichtlich einen lokalen Betriebsmodus ein:
+
+- Bind-Adresse: `127.0.0.1`
+- Transport: HTTP ohne TLS (`TLMCP_NO_TLS=1`)
+- Ziel: lokale Nutzung durch Dashboard, CLI und MCP-Bridge ohne Netzfreigabe
+
+Das ist kein Widerspruch zur langfristigen Zero-Trust-Architektur, aber eine wichtige Betriebsrealitaet:
+
+- **lokaler Default**: localhost-only, einfacher, nicht fuer LAN-Exposure gedacht
+- **netzwerkexponierter Betrieb**: nur mit bewusst aktivierter TLS/mTLS-Konfiguration und passender Vertrauensverteilung
+
 ### Bekannte Risiken
 
 1. **Prompt Injection Cascades** — Kompromittierter Agent koennte boesartige Prompts ueber Task-Delegation verbreiten. Mitigation: Human Approval Gates, Task-Content-Validierung, Sandboxing.
@@ -120,6 +133,8 @@ Prompts an andere Agents weiterleiten. Szenarien:
 | SPAKE2 Key-Derivation mit SHA-256 statt HKDF | Schwaecher als RFC 5869 | HKDF-SHA256 mit Salt |
 | Tasks nur in-memory | Gehen bei Daemon-Restart verloren | SQLite-Persistenz |
 | Keine Skill-Sandbox | Code laeuft im Daemon-Prozess | WASM/Docker Sandbox |
+
+Hinweis zum ersten Punkt: Im Standard-Installationspfad reduziert `127.0.0.1` die Angriffsoberflaeche erheblich. Das Risiko gilt weiterhin fuer bewusst netzwerkexponierte Daemon-Instanzen.
 
 ### Durchgefuehrte Security-Reviews
 

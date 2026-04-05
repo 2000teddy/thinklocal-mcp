@@ -303,6 +303,7 @@ Type=simple
 ExecStart=$NODE_PATH $TSX_PATH $INDEX_PATH
 Environment=TLMCP_CONFIG=$INSTALL_DIR/config/daemon.toml
 Environment=TLMCP_DATA_DIR=$HOME/.thinklocal
+Environment=TLMCP_BIND_HOST=127.0.0.1
 Environment=TLMCP_NO_TLS=1
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 Environment=NODE_ENV=production
@@ -502,7 +503,7 @@ main() {
     ok "Installation abgeschlossen!"
     echo ""
     echo "  Services:"
-    echo "    Daemon:    http://localhost:9440  (laeuft als Service)"
+    echo "    Daemon:    http://localhost:9440  (localhost-only Service)"
     echo "    Dashboard: http://localhost:3000  (laeuft als Service)"
     echo ""
     echo "  Befehle:"

@@ -2,6 +2,7 @@
 
 [daemon]
 port = 9440
+bind_host = "0.0.0.0"   # Fuer localhost-only Betrieb z.B. auf 127.0.0.1 setzen
 hostname = ""            # Leer = Auto-Detect via os.hostname()
 agent_type = "claude-code"
 data_dir = "~/.thinklocal"

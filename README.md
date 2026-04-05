@@ -239,6 +239,17 @@ Die MCP-Tools werden automatisch geladen (via `~/.mcp.json`):
 
 > **Ausfuehrliche Anleitung**: [INSTALL.md](./INSTALL.md) — Installation, Service-Setup, Claude Desktop, Fehlerbehebung, Deinstallation
 
+### Aktuelles Standard-Betriebsmodell
+
+Der aktuelle Default ist absichtlich konservativ und lokal:
+
+- `thinklocal bootstrap` und der Installer richten einen `localhost-only` Daemon auf `127.0.0.1:9440` ein
+- dieser lokale Service laeuft standardmaessig mit `TLMCP_NO_TLS=1`
+- dadurch funktionieren Dashboard, CLI und MCP-Bridge lokal ohne CA-Verteilung
+- fuer echten netzwerkweiten Mesh-Betrieb muss der Daemon bewusst auf eine Netzadresse gebunden und TLS/mTLS explizit aktiviert werden
+
+Das ist wichtig, weil die Dokumentation an manchen Stellen noch das Zielbild eines vollstaendig mTLS-basierten Default-Mesh beschreibt, waehrend der aktuelle Runtime-Default bewusst ein lokaler Sicherheitsmodus ist.
+
 ---
 
 ## Branch-Strategie für Multi-Agenten-Entwicklung

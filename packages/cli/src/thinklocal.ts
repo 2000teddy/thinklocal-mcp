@@ -28,6 +28,7 @@ const DAEMON_PORT = Number(process.env['TLMCP_PORT'] ?? '9440');
 const DAEMON_URL = `http://localhost:${DAEMON_PORT}`;
 const INSTALL_DIR = resolve(import.meta.dirname, '..', '..', '..');
 const ALLOW_PLAINTEXT_GIT_CREDENTIALS = process.env['TLMCP_ALLOW_PLAINTEXT_GIT_CREDENTIALS'] === '1';
+const LOCAL_BIND_HOST = process.env['TLMCP_BIND_HOST'] ?? '127.0.0.1';
 
 // --- Sicherheits-Hilfsfunktionen ---
 
@@ -225,6 +226,8 @@ async function cmdStart(): Promise<void> {
       ...process.env,
       TLMCP_DATA_DIR: DATA_DIR,
       TLMCP_CONFIG: resolve(INSTALL_DIR, 'config', 'daemon.toml'),
+      TLMCP_BIND_HOST: LOCAL_BIND_HOST,
+      TLMCP_NO_TLS: process.env['TLMCP_NO_TLS'] ?? '1',
     },
   });
 
@@ -432,7 +435,12 @@ async function cmdBootstrap(): Promise<void> {
   const indexPath2 = resolve(INSTALL_DIR, 'packages', 'daemon', 'src', 'index.ts');
   const keyGenResult = spawnSync(tsxPath, [indexPath2], {
     cwd: INSTALL_DIR,
-    env: { ...process.env, TLMCP_DATA_DIR: DATA_DIR, TLMCP_NO_TLS: '1' },
+    env: {
+      ...process.env,
+      TLMCP_DATA_DIR: DATA_DIR,
+      TLMCP_BIND_HOST: LOCAL_BIND_HOST,
+      TLMCP_NO_TLS: process.env['TLMCP_NO_TLS'] ?? '1',
+    },
     timeout: 8_000,
     encoding: 'utf-8',
   });
@@ -874,6 +882,8 @@ function installLaunchdService(nodePath: string, tsxPath: string, indexPath: str
         <string>${xmlEscape(configPath)}</string>
         <key>TLMCP_DATA_DIR</key>
         <string>${xmlEscape(DATA_DIR)}</string>
+        <key>TLMCP_BIND_HOST</key>
+        <string>${xmlEscape(LOCAL_BIND_HOST)}</string>
         <key>TLMCP_NO_TLS</key>
         <string>1</string>
         <key>PATH</key>
@@ -927,6 +937,7 @@ Type=simple
 ExecStart=${[nodePath, tsxPath, indexPath].map(systemdEscape).join(' ')}
 Environment=${systemdEscape(`TLMCP_CONFIG=${configPath}`)}
 Environment=${systemdEscape(`TLMCP_DATA_DIR=${DATA_DIR}`)}
+Environment=${systemdEscape(`TLMCP_BIND_HOST=${LOCAL_BIND_HOST}`)}
 Environment=${systemdEscape('TLMCP_NO_TLS=1')}
 Environment="PATH=/usr/local/bin:/usr/bin:/bin"
 Environment="NODE_ENV=production"
@@ -1354,6 +1365,7 @@ async function main(): Promise<void> {
   ${C.bold}Env:${C.reset}
     TLMCP_PORT=9440          Daemon-Port
     TLMCP_DATA_DIR=~/.thinklocal  Datenverzeichnis
+    TLMCP_BIND_HOST=127.0.0.1     Bind-Adresse des lokalen Daemons
 `);
       return;
   }

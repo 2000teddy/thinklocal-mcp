@@ -22,6 +22,7 @@ import { MeshEventBus } from './events.js';
 import { registerWebSocket } from './websocket.js';
 import { CredentialVault } from './vault.js';
 import { loadOrCreateVaultPassphrase } from './vault-passphrase.js';
+import { isLoopbackHost } from './runtime-mode.js';
 import { TaskExecutor } from './task-executor.js';
 import type { SecretRequestPayload, SecretResponsePayload } from './messages.js';
 import { SYSTEM_MONITOR_MANIFEST } from './builtin-skills/system-monitor.js';
@@ -37,7 +38,10 @@ async function main(): Promise<void> {
   const config = loadConfig(configPath);
   const log = createLogger(config.logging.level, 'thinklocal-daemon');
 
-  log.info({ port: config.daemon.port, agentType: config.daemon.agent_type }, 'Starte Daemon...');
+  log.info(
+    { port: config.daemon.port, bindHost: config.daemon.bind_host, agentType: config.daemon.agent_type },
+    'Starte Daemon...',
+  );
 
   // 1. Identität laden oder generieren
   const identity = await loadOrCreateIdentity(
@@ -60,7 +64,14 @@ async function main(): Promise<void> {
     );
     log.info('mTLS aktiviert — HTTPS mit gegenseitiger Zertifikatsprüfung');
   } else {
-    log.warn('mTLS DEAKTIVIERT (TLMCP_NO_TLS=1) — nur für Entwicklung!');
+    if (isLoopbackHost(config.daemon.bind_host)) {
+      log.warn('TLS deaktiviert, aber Daemon ist auf Loopback gebunden — lokaler Betriebsmodus');
+    } else {
+      log.error(
+        { bindHost: config.daemon.bind_host },
+        'TLS deaktiviert und Daemon nicht auf Loopback beschraenkt — unsicherer Netzwerkbetrieb',
+      );
+    }
   }
 
   // Undici-Dispatcher für ausgehende HTTPS-Verbindungen (vertraut nur unserer Mesh-CA)

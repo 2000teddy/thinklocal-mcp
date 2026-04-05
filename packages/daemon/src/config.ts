@@ -12,6 +12,7 @@ export interface StaticPeer {
 export interface DaemonConfig {
   daemon: {
     port: number;
+    bind_host: string;
     hostname: string;
     agent_type: string;
     data_dir: string;
@@ -32,6 +33,7 @@ export interface DaemonConfig {
 const DEFAULTS: DaemonConfig = {
   daemon: {
     port: 9440,
+    bind_host: '0.0.0.0',
     hostname: osHostname(),
     agent_type: 'claude-code',
     data_dir: resolve(homedir(), '.thinklocal'),
@@ -67,6 +69,7 @@ export function loadConfig(configPath?: string): DaemonConfig {
   // 2. Umgebungsvariablen überschreiben (TLMCP_-Präfix)
   const env = process.env;
   if (env['TLMCP_PORT']) cfg.daemon.port = readPositiveInt('TLMCP_PORT', cfg.daemon.port);
+  if (env['TLMCP_BIND_HOST']) cfg.daemon.bind_host = env['TLMCP_BIND_HOST'];
   if (env['TLMCP_HOSTNAME']) cfg.daemon.hostname = env['TLMCP_HOSTNAME'];
   if (env['TLMCP_AGENT_TYPE']) cfg.daemon.agent_type = env['TLMCP_AGENT_TYPE'];
   if (env['TLMCP_DATA_DIR']) cfg.daemon.data_dir = env['TLMCP_DATA_DIR'];
