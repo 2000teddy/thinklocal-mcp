@@ -17,6 +17,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import fastifyJwt from '@fastify/jwt';
+import { createKeychainStore } from './keychain.js';
 import type { Logger } from 'pino';
 
 // Oeffentliche Pfade die KEINEN Token brauchen
@@ -33,17 +34,36 @@ const PUBLIC_PATHS = new Set([
 
 /**
  * Laedt oder generiert das JWT-Secret.
+ * Bevorzugt OS-Keychain, Fallback auf Datei.
  */
 function loadOrCreateSecret(dataDir: string, log?: Logger): string {
-  const secretPath = resolve(dataDir, 'jwt-secret');
-  if (existsSync(secretPath)) {
-    return readFileSync(secretPath, 'utf-8').trim();
+  const keychain = createKeychainStore(log);
+
+  // 1. Keychain probieren
+  if (keychain) {
+    const fromKeychain = keychain.get('jwt-secret');
+    if (fromKeychain) return fromKeychain;
   }
 
+  // 2. Datei-Fallback
+  const secretPath = resolve(dataDir, 'jwt-secret');
+  if (existsSync(secretPath)) {
+    const fromFile = readFileSync(secretPath, 'utf-8').trim();
+    // In Keychain migrieren wenn verfuegbar
+    keychain?.set('jwt-secret', fromFile);
+    return fromFile;
+  }
+
+  // 3. Neues Secret generieren
   const secret = randomBytes(32).toString('hex');
-  mkdirSync(dirname(secretPath), { recursive: true });
-  writeFileSync(secretPath, secret, { mode: 0o600 });
-  log?.info('JWT-Secret generiert');
+  if (keychain) {
+    keychain.set('jwt-secret', secret);
+    log?.info('JWT-Secret generiert (OS-Keychain)');
+  } else {
+    mkdirSync(dirname(secretPath), { recursive: true });
+    writeFileSync(secretPath, secret, { mode: 0o600 });
+    log?.info('JWT-Secret generiert (Datei-Fallback)');
+  }
   return secret;
 }
 

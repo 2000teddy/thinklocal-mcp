@@ -12,6 +12,7 @@
  */
 
 import { Validator } from '@cfworker/json-schema';
+import { createHash } from 'node:crypto';
 import type { Logger } from 'pino';
 
 export interface SchemaDefinition {
@@ -37,7 +38,8 @@ export class SchemaValidator {
    * Cached den Validator fuer wiederholte Aufrufe.
    */
   validate(data: unknown, schema: SchemaDefinition, label = 'data'): ValidationResult {
-    const schemaId = (schema['$id'] as string) ?? JSON.stringify(schema).slice(0, 64);
+    const schemaId = (schema['$id'] as string) ??
+      createHash('sha256').update(JSON.stringify(schema)).digest('hex');
 
     let validator = this.cache.get(schemaId);
     if (!validator) {
