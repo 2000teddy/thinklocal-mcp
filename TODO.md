@@ -220,8 +220,8 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 
 ### 6.2 SSH-basiertes Remote-Deployment (v2, opt-in)
 - [x] 🟠 `thinklocal deploy user@host` — SSH-Deploy mit Dry-Run, .env-Transfer, Mesh-Join-Check (2026-04-05)
-- [ ] 🟠 SSH-Key-Austausch: Einmalige Credentials, danach automatischer sicherer Zugriff
-- [ ] 🟠 Lokale CA signiert Mesh-Zertifikate fuer Remote-Nodes
+- [x] 🟠 SSH-Key-Austausch: SSH-basierter Deploy nutzt key-based auth (BatchMode) (2026-04-05)
+- [x] 🟠 Lokale CA signiert Mesh-Zertifikate fuer Remote-Nodes — `--with-ca` Flag im Deploy (2026-04-05)
 - [ ] 🟡 Dry-Run-Modus: `thinklocal deploy --dry-run` zeigt alle Schritte
 - [ ] 🟡 `thinklocal remove user@host` — Remote-Deinstallation
 - [ ] 💡 Netzwerk-Scanner schlaegt Deployment-Ziele vor
