@@ -198,7 +198,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 ### 5.5 Linux Support (Ubuntu/Debian)
 - [x] 🔴 Install-Script mit Plattform-Erkennung (macOS/Linux) — `scripts/install.sh` (2026-04-04)
 - [x] 🔴 systemd User-Service mit gleicher UX wie macOS — inkl. enable-linger (2026-04-04)
-- [ ] 🟠 `.deb`-Paket fuer apt-Installation
+- [x] 🟠 `.deb`-Paket fuer apt-Installation — `scripts/build-deb.sh` + systemd-Service + Sicherheits-Haertung (2026-04-05)
 - [ ] 🟡 Docker-Image als Alternative
 
 ### 5.6 Distribution + Auto-Update
