@@ -1,6 +1,6 @@
 {
   "name": "thinklocal-mcp",
-  "version": "0.19.0",
+  "version": "0.24.0",
   "description": "Encrypted P2P communication between AI CLI agents on the local network",
   "private": true,
   "type": "module",
@@ -20,11 +20,19 @@
     "test": "npx vitest run",
     "test:unit": "cd packages/daemon && npx vitest run",
     "test:integration": "npx vitest run tests/integration/",
+    "lint": "eslint packages/daemon/src packages/cli/src packages/dashboard-ui/src",
+    "lint:fix": "eslint --fix packages/daemon/src packages/cli/src packages/dashboard-ui/src",
+    "format": "prettier --check 'packages/**/*.{ts,tsx}'",
+    "format:fix": "prettier --write 'packages/**/*.{ts,tsx}'",
     "health": "curl -sf http://localhost:9440/health && echo '' || echo 'Daemon nicht erreichbar'"
   },
   "devDependencies": {
-    "vitest": "^3.0.0",
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.2.0",
+    "prettier": "^3.8.1",
     "tsx": "^4.19.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.58.0",
+    "vitest": "^3.0.0"
   }
 }
