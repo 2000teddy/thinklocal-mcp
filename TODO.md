@@ -242,7 +242,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [x] 🔴 Wire-Protokoll-Spezifikation (vollständig) — `docs/WIRE-PROTOCOL.md` (2026-04-05)
 - [ ] 🟠 Threat Model & Sicherheitsdesign-Dokument
 - [ ] 🟠 API-Dokumentation (OpenAPI + GraphQL Schema)
-- [ ] 🟡 Benutzerhandbuch (Installation, Konfiguration, Troubleshooting)
+- [x] 🟡 Benutzerhandbuch (Installation, Konfiguration, Troubleshooting) — `docs/USER-GUIDE.md` 10 Sektionen (2026-04-05)
 - [ ] 🟡 Entwicklerhandbuch (eigene Adapter/Skills schreiben)
 
 ### Testing
@@ -256,8 +256,8 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 ### CI/CD & Build
 - [x] 🔴 GitHub Actions Pipeline — `.github/workflows/ci.yml` (2026-04-03)
 - [x] 🔴 Linting (ESLint + Prettier) — eslint.config.js + .prettierrc + npm run lint/format (2026-04-05)
-- [ ] 🟠 Docker-Image-Build und -Push
-- [ ] 🟠 Automatische Release-Erstellung
+- [x] 🟠 Docker-Image-Build und -Push — Dockerfile Multi-Stage + .dockerignore (2026-04-05)
+- [x] 🟠 Automatische Release-Erstellung — `.github/workflows/release.yml` bei Tags (2026-04-05)
 - [ ] 🟡 Cross-Plattform-Tests (macOS, Linux, Windows via WSL)
 
 ### Konfiguration & Deployment

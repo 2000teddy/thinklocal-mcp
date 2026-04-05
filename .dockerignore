@@ -1,0 +1,12 @@
+node_modules
+.git
+.claude
+*.log
+.env
+packages/dashboard-ui/node_modules
+packages/cli
+scripts
+docs
+tests
+*.md
+!README.md
