@@ -17,14 +17,48 @@ main                                    # Geschützt — nur mit Human-Merge-App
 
 1. **Kein Agent pusht direkt auf `main`** — alle Änderungen gehen über Pull Requests
 2. **Jeder Agent checkt seinen eigenen Branch aus** für größere Änderungen
-3. **PRs für sicherheitskritische Pfade** erfordern menschliche Merge-Genehmigung:
+3. **Sourcecode-Arbeit läuft in einem eigenen Worktree pro Agent** — der Haupt-Checkout bleibt Integrationspunkt für Menschen
+4. **PRs für sicherheitskritische Pfade** erfordern menschliche Merge-Genehmigung:
    - `packages/vault/`
    - `packages/daemon/` (Krypto-/Auth-Code)
    - `docs/security/`
    - Alle `*.pem`, `*.key`, `*.cert` Dateien
-4. **Signierte Commits** sind Pflicht für sicherheitskritische Pfade
-5. **ADRs** (Architecture Decision Records) für Protokoll- oder Sicherheitsänderungen
-6. **Contract-Tests** müssen vor dem Merge jeder Protokolländerung bestehen
+5. **Signierte Commits** sind Pflicht für sicherheitskritische Pfade
+6. **ADRs** (Architecture Decision Records) für Protokoll- oder Sicherheitsänderungen
+7. **Contract-Tests** müssen vor dem Merge jeder Protokolländerung bestehen
+
+## Worktree-Workflow fuer Agenten
+
+Empfohlenes Muster fuer parallele Agent-Arbeit:
+
+1. Im Haupt-Checkout auf `main` bleiben. Von dort wird nur integriert.
+2. Fuer jeden Agent einen separaten Worktree unter `.claude/worktrees/` oder `.codex/worktrees/` anlegen.
+3. Im Worktree auf einem Agent-Branch arbeiten und dort committen.
+4. Der Maintainer uebernimmt die fertigen Agent-Commits selektiv per `git cherry-pick` nach `main`.
+5. Danach richtet der Agent seinen Worktree wieder auf den aktuellen lokalen `main` aus, bevor neue Arbeit beginnt.
+
+Beispiel:
+
+```bash
+cd ~/Entwicklung_local/thinklocal-mcp
+git worktree add .codex/worktrees/codex-source -b agent/codex/source-worktree main
+
+# im Worktree arbeiten und committen
+git -C .codex/worktrees/codex-source commit -m "[codex] mesh: ..."
+
+# im Haupt-Checkout integrieren
+git checkout main
+git cherry-pick <commit-a> <commit-b>
+
+# Worktree fuer die naechste Runde synchronisieren
+git -C .codex/worktrees/codex-source reset --hard main
+```
+
+Warum `cherry-pick` statt direktem Merge:
+
+- nur die wirklich gewuenschten Agent-Commits werden integriert
+- Konflikte bleiben auf klar abgegrenzte Commits beschraenkt
+- mehrere Agenten koennen parallel arbeiten, ohne dieselbe Branch-Historie teilen zu muessen
 
 ### Commit-Format
 

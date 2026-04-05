@@ -278,6 +278,8 @@ Der Installer verwendet standardmaessig `local`. Fuer netzwerkweiten Mesh-Betrie
 
 Siehe [CONTRIBUTING.md](./CONTRIBUTING.md) für Details.
 
+Fuer parallele Agent-Arbeit wird empfohlen, pro Agent einen eigenen Worktree zu verwenden, im Worktree zu committen und die fertigen Commits selektiv per `git cherry-pick` nach `main` zu uebernehmen. Danach wird der Worktree wieder auf den aktuellen lokalen `main` ausgerichtet.
+
 ---
 
 ## Verwandte Standards
