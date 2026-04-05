@@ -5,6 +5,26 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
+## [0.22.0] — 2026-04-05
+
+### Hinzugefuegt
+- **Dashboard Dark/Light Mode**: Toggle in Sidebar, CSS-Variablen fuer beide Themes, Badge-Farben angepasst, Praeferenz in localStorage persistiert
+- **Statische Peer-Liste**: Konfigurierbar in `daemon.toml` oder via `TLMCP_STATIC_PEERS` Env-Variable — ermoeglicht Mesh ueber VPN/Subnetz-Grenzen ohne mDNS
+- **Telegram chatId-Persistenz**: Gespeichert in `~/.thinklocal/telegram-chat-id` — kein `/start` mehr noetig nach Daemon-Restart
+
+### Behoben
+- **Gossip Hash-Mismatch** (Code Review Gemini 2.5 Pro): Hash wird jetzt nur ueber eigene Capabilities berechnet — verhindert unnoetige Sync-Zyklen
+- **Gossip Stale-Capability-Relay**: Offline-Peers werden aus Registry entfernt, Gossip sendet nur eigene Capabilities
+- **Telegram Markdown V1**: Hyphens nicht mehr escaped (nur V2 braucht das)
+- **Bootstrap Service-Update**: Aktualisiert bestehende launchd/systemd Services statt zu skippen
+- **Static Peers**: Parallele Verbindung via Promise.allSettled + dynamisches Protokoll
+
+### Code Reviews
+- GPT-5.1: Telegram Gateway Hardening (PR #38)
+- Gemini 2.5 Pro: Statische Peers + chatId + Gossip Fix
+
+---
+
 ## [0.21.0] — 2026-04-04
 
 ### Behoben (Code Review GPT-5.1)
