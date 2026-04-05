@@ -235,7 +235,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [ ] 💡 Architektur wie OpenClaw: Swift App startet/steuert Node.js Daemon als Subprocess
 
 ### 6.2 SSH-basiertes Remote-Deployment (v2, opt-in)
-- [ ] 🟠 `thinklocal deploy user@host` — SSH-Bootstrap mit Node-Check, Install, Service-Setup
+- [x] 🟠 `thinklocal deploy user@host` — SSH-Deploy mit Dry-Run, .env-Transfer, Mesh-Join-Check (2026-04-05)
 - [ ] 🟠 SSH-Key-Austausch: Einmalige Credentials, danach automatischer sicherer Zugriff
 - [ ] 🟠 Lokale CA signiert Mesh-Zertifikate fuer Remote-Nodes
 - [ ] 🟡 Dry-Run-Modus: `thinklocal deploy --dry-run` zeigt alle Schritte
