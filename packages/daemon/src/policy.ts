@@ -186,6 +186,60 @@ export class PolicyEngine {
     return this.policies.length < before;
   }
 
+  // --- Policy-Versionierung + Mesh-Verteilung ---
+
+  /** Aktuelle Policy-Version (Hash ueber alle Policies) */
+  getVersion(): string {
+    const data = this.policies
+      .map((p) => `${p.name}:${p.action}:${p.subject}:${p.resource}:${p.effect}:${p.priority ?? 0}`)
+      .sort()
+      .join('|');
+    const { createHash } = require('node:crypto');
+    return createHash('sha256').update(data).digest('hex').slice(0, 16);
+  }
+
+  /**
+   * Exportiert alle Custom-Policies (ohne Defaults) fuer Mesh-Verteilung.
+   * Kann von einem Peer importiert werden.
+   */
+  exportForSync(): { version: string; policies: Policy[] } {
+    const customPolicies = this.policies.filter(
+      (p) => !p.name.startsWith('default-'),
+    );
+    return {
+      version: this.getVersion(),
+      policies: customPolicies,
+    };
+  }
+
+  /**
+   * Importiert Policies von einem Peer (Mesh-Sync).
+   * Akzeptiert nur wenn Version neuer (Version-String verglichen).
+   */
+  importFromPeer(data: { version: string; policies: Policy[] }, peerId: string): number {
+    let imported = 0;
+    for (const policy of data.policies) {
+      // Nur importieren wenn nicht bereits vorhanden
+      if (!this.policies.find((p) => p.name === policy.name)) {
+        this.policies.push({ ...policy });
+        imported++;
+      }
+    }
+    if (imported > 0) {
+      this.log?.info({ from: peerId, imported, version: data.version }, 'Policies von Peer importiert');
+    }
+    return imported;
+  }
+
+  /** Speichert aktuelle Custom-Policies auf Disk */
+  save(): void {
+    const policyPath = resolve(this.dataDir, 'policies.json');
+    const custom = this.policies.filter((p) => !p.name.startsWith('default-'));
+    const { writeFileSync } = require('node:fs');
+    writeFileSync(policyPath, JSON.stringify(custom, null, 2));
+    this.log?.info({ count: custom.length }, 'Policies gespeichert');
+  }
+
   // --- Interne Methoden ---
 
   private loadCustomPolicies(): void {
