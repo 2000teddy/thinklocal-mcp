@@ -6,19 +6,32 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [0.30.0] — 2026-04-05 22:10 UTC
+## [0.30.0] — 2026-04-05 22:22 UTC
 
 ### Hinzugefuegt
 - **Unix-Socket-Optimierung**: `unix-socket.ts` — Server+Client fuer Same-Host-Agents, Framed Protocol (4-Byte Length + JSON), FrameBuffer mit Max-Message-Size-Schutz, ~30% weniger Latenz als TCP
-- **CLI-Adapter-Konfiguration**: `cli-adapters.ts` — Setup-Generatoren fuer Codex CLI, Gemini CLI, Claude Desktop, Claude Code. Erkennt vorhandene Config, merged ohne Ueberschreiben
-- **`thinklocal setup`-Kommando**: Neuer CLI-Befehl zum Konfigurieren von AI-Tools (`thinklocal setup codex|gemini|claude-desktop|claude-code|all`)
+- **CLI-Adapter-Konfiguration**: `cli-adapters.ts` — Setup-Generatoren fuer Codex CLI, Gemini CLI, Claude Desktop, Claude Code
+- **`thinklocal setup`-Kommando**: Konfiguriert AI-Tools (`thinklocal setup codex|gemini|claude-desktop|claude-code|all`)
+- **`thinklocal remove user@host`**: Remote-Deinstallation via SSH mit `--purge` Option
+- **Homebrew-Formel**: `Formula/thinklocal.rb` mit launchd-Service, 3 Binaries (thinklocal, tlmcp-daemon, tlmcp-mcp)
+- **`.deb`-Paket**: `scripts/build-deb.sh` mit systemd-Service und Sicherheitshaertung
+- **Docker Compose**: `docker-compose.yml` 3-Node Test-Umgebung mit eigenem Bridge-Netzwerk
+- **GraphQL-Schema-Doku**: `docs/GRAPHQL-SCHEMA.md` mit Beispiel-Queries und Subscriptions
+- **Release-Checksums**: SHA256SUMS.txt + Archive + .deb in GitHub Release
+- **Security-Tests**: 20 Tests (Replay, TTL, ECDSA, Path-Traversal, Rate-Limit, QR-Token)
 - **QR-Code Pairing**: `qr-pairing.ts` — 32-Byte Token als Alternative zur 6-stelligen PIN
-- **JWT Token-Refresh**: `api-auth.ts` — `/api/auth/refresh` Endpoint fuer Token-Erneuerung
-- **Task-Router Tiebreak**: Zufaellige Auswahl bei gleichem Score fuer bessere Lastverteilung
+- **JWT Token-Refresh**: `api-auth.ts` — `/api/auth/refresh` Endpoint
 
-### Tests
-- 13 Unix-Socket-Tests (localhost-Erkennung, Socket-Pfad, Integration, Timeout, Oversize)
-- 7 CLI-Adapter-Tests (Config-Formate, Merge-Verhalten, env-Handling)
+### Verbessert
+- **mesh-client.ts**: Exponential Backoff (Jitter) fuer transiente HTTP-Fehler (5xx, 429)
+- **graphql-api.ts**: Subscription Queue-Limit (100), Idle-Timeout (5min), Handler-Leak-Fix
+- **policy.ts**: matchesPattern-Dokumentation mit Beispielen und Limitierungen
+- **release.yml**: Security-Tests + .deb-Build + Archive-Checksums im CI
+- **Task-Router**: Zufaelliger Tiebreak bei gleichem Score
+
+### Tests (Neu)
+- 20 Security-Tests, 13 Unix-Socket-Tests, 7 CLI-Adapter-Tests
+- Gesamt: 300+ Tests
 
 ---
 
