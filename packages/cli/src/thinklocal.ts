@@ -27,6 +27,7 @@ const DATA_DIR = process.env['TLMCP_DATA_DIR'] ?? resolve(HOME, '.thinklocal');
 const DAEMON_PORT = Number(process.env['TLMCP_PORT'] ?? '9440');
 const DAEMON_URL = `http://localhost:${DAEMON_PORT}`;
 const INSTALL_DIR = resolve(import.meta.dirname, '..', '..', '..');
+const ALLOW_PLAINTEXT_GIT_CREDENTIALS = process.env['TLMCP_ALLOW_PLAINTEXT_GIT_CREDENTIALS'] === '1';
 
 // --- Sicherheits-Hilfsfunktionen ---
 
@@ -51,6 +52,19 @@ function atomicWrite(filePath: string, content: string, mode = 0o600): void {
   const tmp = `${filePath}.${process.pid}.tmp`;
   writeFileSync(tmp, content, { mode });
   renameSync(tmp, filePath);
+}
+
+function getClaudeDesktopConfigPath(): string {
+  if (PLATFORM === 'darwin') {
+    return resolve(HOME, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
+  }
+  if (PLATFORM === 'linux') {
+    return resolve(HOME, '.config', 'Claude', 'claude_desktop_config.json');
+  }
+  if (PLATFORM === 'win32') {
+    return resolve(process.env['APPDATA'] ?? HOME, 'Claude', 'claude_desktop_config.json');
+  }
+  return '';
 }
 
 /** Laedt .env-Datei und gibt key=value Paare zurueck (nur bekannte Service-Variablen) */
@@ -331,12 +345,7 @@ async function cmdDoctor(): Promise<void> {
   }
 
   // 8. Claude Desktop Config
-  let claudeConfigPath = '';
-  if (PLATFORM === 'darwin') {
-    claudeConfigPath = resolve(HOME, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
-  } else if (PLATFORM === 'linux') {
-    claudeConfigPath = resolve(HOME, '.config', 'Claude', 'claude_desktop_config.json');
-  }
+  const claudeConfigPath = getClaudeDesktopConfigPath();
   if (claudeConfigPath && existsSync(claudeConfigPath)) {
     const cfg = readFileSync(claudeConfigPath, 'utf-8');
     if (cfg.includes('thinklocal')) {
@@ -407,12 +416,7 @@ async function cmdBootstrap(): Promise<void> {
   upsertMcpConfig(mcpPath, thinklocalMcpEntry, '~/.mcp.json (Claude Code)');
 
   // 4. Claude Desktop Config
-  let claudeConfigPath = '';
-  if (PLATFORM === 'darwin') {
-    claudeConfigPath = resolve(HOME, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
-  } else if (PLATFORM === 'linux') {
-    claudeConfigPath = resolve(HOME, '.config', 'Claude', 'claude_desktop_config.json');
-  }
+  const claudeConfigPath = getClaudeDesktopConfigPath();
   if (claudeConfigPath) {
     upsertMcpConfig(claudeConfigPath, thinklocalMcpEntry, 'Claude Desktop');
   }
@@ -598,12 +602,7 @@ async function cmdMcpConfig(target?: string): Promise<void> {
     const mcpPath = resolve(HOME, '.mcp.json');
     upsertMcpConfig(mcpPath, snippet['thinklocal'], '~/.mcp.json (Claude Code)');
 
-    let claudeConfigPath = '';
-    if (PLATFORM === 'darwin') {
-      claudeConfigPath = resolve(HOME, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
-    } else if (PLATFORM === 'linux') {
-      claudeConfigPath = resolve(HOME, '.config', 'Claude', 'claude_desktop_config.json');
-    }
+    const claudeConfigPath = getClaudeDesktopConfigPath();
     if (claudeConfigPath) {
       upsertMcpConfig(claudeConfigPath, snippet['thinklocal'], 'Claude Desktop');
     }
@@ -617,10 +616,9 @@ async function cmdMcpConfig(target?: string): Promise<void> {
 
   console.log(`\n  ${C.bold}Config-Dateien:${C.reset}`);
   console.log(`    Claude Code:    ~/.mcp.json`);
-  if (PLATFORM === 'darwin') {
-    console.log(`    Claude Desktop: ~/Library/Application Support/Claude/claude_desktop_config.json`);
-  } else if (PLATFORM === 'linux') {
-    console.log(`    Claude Desktop: ~/.config/Claude/claude_desktop_config.json`);
+  const claudeDesktopConfigPath = getClaudeDesktopConfigPath();
+  if (claudeDesktopConfigPath) {
+    console.log(`    Claude Desktop: ${claudeDesktopConfigPath.replace(HOME, '~')}`);
   }
 
   console.log(`\n  ${C.bold}Oder automatisch:${C.reset}`);
@@ -777,23 +775,25 @@ function importEnvCredentials(installDir: string): void {
   if (envVars['GITHUB_TOKEN'] && envVars['GITHUB_USER']) {
     try {
       const ghUser = envVars['GITHUB_USER'];
-      const ghToken = envVars['GITHUB_TOKEN'];
       const ghEmail = envVars['GITHUB_EMAIL'] ?? `${ghUser}@users.noreply.github.com`;
 
-      // Git Credential-Helper konfigurieren
       spawnSync('git', ['config', '--global', 'user.name', ghUser], { encoding: 'utf-8' });
       spawnSync('git', ['config', '--global', 'user.email', ghEmail], { encoding: 'utf-8' });
+      ok('Git Benutzername und E-Mail konfiguriert');
 
-      // Credential-Helper fuer HTTPS speichern (store statt cache fuer Persistenz)
-      spawnSync('git', ['config', '--global', 'credential.helper', 'store'], { encoding: 'utf-8' });
-
-      // Token in git-credentials speichern
-      const credPath = resolve(HOME, '.git-credentials');
-      const credLine = `https://${ghUser}:${ghToken}@github.com\n`;
-      if (!existsSync(credPath) || !readFileSync(credPath, 'utf-8').includes('github.com')) {
-        atomicWrite(credPath, credLine);
+      if (ALLOW_PLAINTEXT_GIT_CREDENTIALS) {
+        const ghToken = envVars['GITHUB_TOKEN'];
+        spawnSync('git', ['config', '--global', 'credential.helper', 'store'], { encoding: 'utf-8' });
+        const credPath = resolve(HOME, '.git-credentials');
+        const credLine = `https://${ghUser}:${ghToken}@github.com\n`;
+        if (!existsSync(credPath) || !readFileSync(credPath, 'utf-8').includes('github.com')) {
+          atomicWrite(credPath, credLine);
+        }
+        ok('GitHub Token im Klartext-Credential-Store hinterlegt (explizites Opt-in)');
+      } else {
+        warn('GITHUB_TOKEN gefunden, wird aber nicht automatisch in ~/.git-credentials gespeichert');
+        info('Opt-in fuer Klartextspeicherung: TLMCP_ALLOW_PLAINTEXT_GIT_CREDENTIALS=1 thinklocal bootstrap');
       }
-      ok('Git konfiguriert (GitHub Token fuer automatischen Push)');
     } catch {
       warn('Git-Konfiguration fehlgeschlagen');
     }

@@ -27,6 +27,14 @@ export interface AdapterSetupResult {
   mcpConfig: Record<string, unknown>;
 }
 
+function getClaudeDesktopConfigPath(): string {
+  return process.platform === 'darwin'
+    ? resolve(homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json')
+    : process.platform === 'win32'
+      ? resolve(process.env['APPDATA'] ?? homedir(), 'Claude', 'claude_desktop_config.json')
+      : resolve(homedir(), '.config', 'Claude', 'claude_desktop_config.json');
+}
+
 /**
  * Ermittelt den Pfad zum mcp-stdio.ts Einstiegspunkt.
  */
@@ -131,11 +139,7 @@ export function setupGeminiCli(daemonUrl?: string, log?: Logger): AdapterSetupRe
  * Format: { "mcpServers": { "name": { "command": "...", "args": [...] } } }
  */
 export function setupClaudeDesktop(daemonUrl?: string, log?: Logger): AdapterSetupResult {
-  const configPath = process.platform === 'darwin'
-    ? resolve(homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json')
-    : process.platform === 'win32'
-      ? resolve(process.env['APPDATA'] ?? homedir(), 'Claude', 'claude_desktop_config.json')
-      : resolve(homedir(), '.config', 'claude', 'claude_desktop_config.json');
+  const configPath = getClaudeDesktopConfigPath();
 
   const mcpConfig = baseMcpServerConfig(daemonUrl);
 
@@ -245,12 +249,12 @@ export function listSupportedTools(): Array<{ tool: string; configPath: string; 
     },
     {
       tool: 'claude-desktop',
-      configPath: process.platform === 'darwin'
-        ? resolve(homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json')
-        : resolve(homedir(), '.config', 'claude', 'claude_desktop_config.json'),
+      configPath: getClaudeDesktopConfigPath(),
       installed: process.platform === 'darwin'
         ? existsSync(resolve(homedir(), 'Library', 'Application Support', 'Claude'))
-        : existsSync(resolve(homedir(), '.config', 'claude')),
+        : process.platform === 'win32'
+          ? existsSync(resolve(process.env['APPDATA'] ?? homedir(), 'Claude'))
+          : existsSync(resolve(homedir(), '.config', 'Claude')),
     },
     {
       tool: 'claude-code',

@@ -2,7 +2,7 @@
 
 ## Voraussetzungen
 
-- **Node.js 20+** ([nodejs.org](https://nodejs.org))
+- **Node.js 22+** ([nodejs.org](https://nodejs.org))
 - **Git** ([git-scm.com](https://git-scm.com))
 - Betriebssystem: macOS, Linux (Ubuntu/Debian), oder Windows 10+
 
@@ -76,8 +76,9 @@ Konfiguration via Umgebungsvariablen:
 | `TLMCP_DATA_DIR` | `~/.thinklocal` | Datenverzeichnis |
 | `TLMCP_NO_TLS` | `0` | `1` = TLS deaktivieren (nur Entwicklung!) |
 | `TLMCP_CONFIG` | `config/daemon.toml` | Pfad zur TOML-Konfiguration |
-| `TLMCP_VAULT_PASSPHRASE` | (Default) | Vault-Verschluesselungspasswort |
+| `TLMCP_VAULT_PASSPHRASE` | auto-generiert | Vault-Verschluesselungspasswort; ohne Env wird ein zufaelliger Wert erzeugt und persistent gespeichert |
 | `TLMCP_LOG_LEVEL` | `info` | Log-Level: trace, debug, info, warn, error |
+| `TLMCP_ALLOW_PLAINTEXT_GIT_CREDENTIALS` | `0` | Nur wenn `1`, darf `bootstrap` `GITHUB_TOKEN` in `~/.git-credentials` hinterlegen |
 
 ---
 

@@ -21,6 +21,7 @@ import { registerPairingRoutes } from './pairing-handler.js';
 import { MeshEventBus } from './events.js';
 import { registerWebSocket } from './websocket.js';
 import { CredentialVault } from './vault.js';
+import { loadOrCreateVaultPassphrase } from './vault-passphrase.js';
 import { TaskExecutor } from './task-executor.js';
 import type { SecretRequestPayload, SecretResponsePayload } from './messages.js';
 import { SYSTEM_MONITOR_MANIFEST } from './builtin-skills/system-monitor.js';
@@ -82,7 +83,11 @@ async function main(): Promise<void> {
   eventBus.emit('system:startup', { agentId: identity.spiffeUri, port: config.daemon.port });
 
   // 4b. Credential Vault initialisieren
-  const vaultPassphrase = process.env['TLMCP_VAULT_PASSPHRASE'] ?? 'thinklocal-dev-vault';
+  const vaultPassphrase = loadOrCreateVaultPassphrase(
+    config.daemon.data_dir,
+    process.env['TLMCP_VAULT_PASSPHRASE'],
+    log,
+  );
   const vault = new CredentialVault(config.daemon.data_dir, vaultPassphrase, log);
 
   // 4c. Rate-Limiter initialisieren

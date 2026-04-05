@@ -5,6 +5,14 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 
 ---
 
+## Code-Review beim dokumentieren entdeckt :
+
+- [x] 🔴 **Unsicherer Vault-Default** — behoben: statt bekanntem Default wird die Vault-Passphrase jetzt aus `TLMCP_VAULT_PASSPHRASE`, OS-Keychain oder einem zufaellig generierten persistenten Wert geladen.
+- [ ] 🔴 **Service-Setup deaktiviert TLS standardmaessig** — `packages/cli/src/thinklocal.ts` schreibt bei `bootstrap`, launchd und systemd `TLMCP_NO_TLS=1` in die Service-Definitionen. Das widerspricht dem dokumentierten Sicherheitsmodell und braucht eine koordinierte Umstellung von CLI, Installer, Dashboard und Doku.
+- [x] 🟠 **GitHub-Credentials werden im Klartext persistiert** — behoben: `GITHUB_TOKEN` wird nicht mehr automatisch in `~/.git-credentials` geschrieben; Klartextpersistenz ist jetzt nur noch ueber `TLMCP_ALLOW_PLAINTEXT_GIT_CREDENTIALS=1` moeglich.
+- [x] 🟠 **Linux-Claude-Desktop-Pfad inkonsistent** — behoben: Linux nutzt jetzt konsistent `~/.config/Claude/claude_desktop_config.json`.
+- [ ] 🟡 **Dokumentiertes Sicherheitsniveau und Runtime-Verhalten driften auseinander** — strukturell offen; README/SECURITY, Installer und lokale Runtime-Defaults muessen auf ein gemeinsames Betriebsmodell gebracht werden.
+
 ## Phase 1 — Fundament: Identität, Verschlüsselung, Discovery (Wochen 1-3)
 
 ### 1.1 Agent-Identität & Kryptografie
