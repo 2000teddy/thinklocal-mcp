@@ -1,0 +1,85 @@
+# docker-compose.yml — Multi-Node Test-Umgebung fuer thinklocal-mcp
+#
+# Startet 3 Daemon-Instanzen die sich per mDNS finden.
+# Nutzung:
+#   docker compose up -d        # Starten
+#   docker compose logs -f      # Logs
+#   docker compose down          # Stoppen
+#
+# Dashboard: http://localhost:9440 (Node 1)
+
+services:
+  node1:
+    build: .
+    container_name: thinklocal-node1
+    hostname: node1
+    ports:
+      - "9440:9440"
+    environment:
+      - TLMCP_PORT=9440
+      - TLMCP_HOSTNAME=node1
+      - TLMCP_AGENT_TYPE=claude-code
+      - TLMCP_DATA_DIR=/data/thinklocal
+      - TLMCP_LOG_LEVEL=debug
+      - TLMCP_NO_TLS=1
+      - TLMCP_STATIC_PEERS=node2:9441,node3:9442
+    volumes:
+      - node1-data:/data/thinklocal
+    networks:
+      mesh:
+        ipv4_address: 172.28.0.10
+    restart: unless-stopped
+
+  node2:
+    build: .
+    container_name: thinklocal-node2
+    hostname: node2
+    ports:
+      - "9441:9441"
+    environment:
+      - TLMCP_PORT=9441
+      - TLMCP_HOSTNAME=node2
+      - TLMCP_AGENT_TYPE=gemini-cli
+      - TLMCP_DATA_DIR=/data/thinklocal
+      - TLMCP_LOG_LEVEL=debug
+      - TLMCP_NO_TLS=1
+      - TLMCP_STATIC_PEERS=node1:9440,node3:9442
+    volumes:
+      - node2-data:/data/thinklocal
+    networks:
+      mesh:
+        ipv4_address: 172.28.0.11
+    restart: unless-stopped
+
+  node3:
+    build: .
+    container_name: thinklocal-node3
+    hostname: node3
+    ports:
+      - "9442:9442"
+    environment:
+      - TLMCP_PORT=9442
+      - TLMCP_HOSTNAME=node3
+      - TLMCP_AGENT_TYPE=codex-cli
+      - TLMCP_DATA_DIR=/data/thinklocal
+      - TLMCP_LOG_LEVEL=debug
+      - TLMCP_NO_TLS=1
+      - TLMCP_STATIC_PEERS=node1:9440,node2:9441
+    volumes:
+      - node3-data:/data/thinklocal
+    networks:
+      mesh:
+        ipv4_address: 172.28.0.12
+    restart: unless-stopped
+
+volumes:
+  node1-data:
+  node2-data:
+  node3-data:
+
+networks:
+  mesh:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
