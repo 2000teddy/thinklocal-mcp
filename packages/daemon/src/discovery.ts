@@ -6,6 +6,7 @@ export interface DiscoveredPeer {
   host: string;
   port: number;
   agentId: string;
+  p2pPeerId?: string;
   capabilityHash: string;
   certFingerprint: string;
   endpoint: string;
@@ -32,6 +33,7 @@ export class MdnsDiscovery {
     port: number,
     txt: {
       agentId: string;
+      p2pPeerId?: string;
       capabilityHash: string;
       certFingerprint: string;
       proto: 'http' | 'https';
@@ -43,6 +45,7 @@ export class MdnsDiscovery {
       port,
       txt: {
         'agent-id': txt.agentId,
+        'p2p-peer-id': txt.p2pPeerId ?? '',
         'capability-hash': txt.capabilityHash,
         'cert-fingerprint': txt.certFingerprint,
         proto: txt.proto,
@@ -72,6 +75,7 @@ export class MdnsDiscovery {
           host: resolvedHost,
           port: service.port,
           agentId: txt['agent-id'],
+          p2pPeerId: txt['p2p-peer-id'] || undefined,
           capabilityHash: txt['capability-hash'] ?? '',
           certFingerprint: txt['cert-fingerprint'] ?? '',
           endpoint: `${proto}://${resolvedHost}:${service.port}`,

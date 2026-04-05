@@ -16,6 +16,11 @@ heartbeat_timeout_missed = 3
 [discovery]
 mdns_service_type = "_thinklocal._tcp"
 
+[libp2p]
+enabled = true                  # Wird im local-Modus implizit deaktiviert, ausser per Env-Override
+listen_port = 9540              # Default: daemon.port + 100
+mdns_service_tag = "thinklocal-mcp"
+
 # Statische Peers als Fallback wenn mDNS nicht funktioniert (z.B. ueber VPN)
 # Beispiel:
 # [[discovery.static_peers]]

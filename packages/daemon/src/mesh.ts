@@ -15,6 +15,12 @@ export interface MeshPeer {
   lastSeen: number;
   missedBeats: number;
   agentCard: AgentCard | null;
+  libp2p: {
+    peerId: string | null;
+    listenMultiaddrs: string[];
+    connected: boolean;
+    status: 'unavailable' | 'discovered' | 'connected';
+  };
 }
 
 export interface MeshEvents {
@@ -53,6 +59,12 @@ export class MeshManager {
       lastSeen: Date.now(),
       missedBeats: 0,
       agentCard: null,
+      libp2p: {
+        peerId: discovered.p2pPeerId ?? null,
+        listenMultiaddrs: [],
+        connected: false,
+        status: discovered.p2pPeerId ? 'discovered' : 'unavailable',
+      },
     };
 
     this.peers.set(discovered.agentId, peer);
@@ -87,6 +99,12 @@ export class MeshManager {
     const peer = this.peers.get(agentId);
     if (peer) {
       peer.agentCard = card;
+      peer.libp2p.peerId = card.mesh.libp2p?.peer_id ?? peer.libp2p.peerId;
+      peer.libp2p.listenMultiaddrs = [...(card.mesh.libp2p?.listen_multiaddrs ?? peer.libp2p.listenMultiaddrs)];
+      peer.libp2p.connected = card.mesh.libp2p?.connected_peers ? card.mesh.libp2p.connected_peers > 0 : peer.libp2p.connected;
+      peer.libp2p.status = card.mesh.libp2p?.status === 'ready'
+        ? (peer.libp2p.connected ? 'connected' : 'discovered')
+        : peer.libp2p.status;
     }
   }
 

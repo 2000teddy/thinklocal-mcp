@@ -60,6 +60,8 @@ export function registerDashboardApi(server: FastifyInstance, deps: DashboardApi
       runtime_mode: config.daemon.runtime_mode,
       tls_enabled: config.daemon.tls_enabled,
       agent_type: config.daemon.agent_type,
+      libp2p_enabled: config.libp2p.enabled,
+      libp2p_port: config.libp2p.listen_port,
       uptime_seconds: Math.floor(process.uptime()),
       peers_online: mesh.getOnlinePeers().length,
       capabilities_count: registry.getAllCapabilities().length,

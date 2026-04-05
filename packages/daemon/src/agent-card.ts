@@ -12,6 +12,7 @@ import {
 import { ReplayGuard } from './replay.js';
 import { RateLimiter } from './ratelimit.js';
 import type { Logger } from 'pino';
+import type { Libp2pRuntimeState } from './libp2p-runtime.js';
 
 export interface AgentCard {
   name: string;
@@ -42,6 +43,16 @@ export interface AgentCard {
     joined_at: string;
     trust_level: string;
     peers_connected: number;
+    libp2p: {
+      enabled: boolean;
+      status: 'disabled' | 'ready' | 'degraded';
+      peer_id: string | null;
+      listen_multiaddrs: string[];
+      connected_peers: number;
+      noise: boolean;
+      mdns: boolean;
+      reason: string | null;
+    };
   };
 }
 
@@ -62,6 +73,7 @@ export interface AgentCardServerOptions {
   onMessage?: MessageHandler;
   /** Rate-Limiter für alle Endpoints */
   rateLimiter?: RateLimiter;
+  getLibp2pState?: () => Libp2pRuntimeState;
 }
 
 export class AgentCardServer {
@@ -233,6 +245,18 @@ export class AgentCardServer {
 
     const diskUsed = disk.length > 0 ? (disk[0].use ?? 0) : 0;
 
+    const libp2p = this.opts.getLibp2pState?.() ?? {
+      enabled: false,
+      status: 'disabled' as const,
+      peerId: null,
+      listenMultiaddrs: [],
+      connectedPeers: 0,
+      noise: false,
+      mdns: false,
+      reason: 'libp2p not configured',
+      available: false,
+    };
+
     return {
       name: `${this.opts.config.daemon.hostname}-${this.opts.config.daemon.agent_type}`,
       version: '0.2.0',
@@ -262,6 +286,16 @@ export class AgentCardServer {
         joined_at: this.joinedAt,
         trust_level: this.useTls ? 'mtls-self-signed' : 'none',
         peers_connected: this.peerCount,
+        libp2p: {
+          enabled: libp2p.enabled,
+          status: libp2p.status,
+          peer_id: libp2p.peerId,
+          listen_multiaddrs: [...libp2p.listenMultiaddrs],
+          connected_peers: libp2p.connectedPeers,
+          noise: libp2p.noise,
+          mdns: libp2p.mdns,
+          reason: libp2p.reason,
+        },
       },
     };
   }

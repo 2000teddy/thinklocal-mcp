@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { homedir, hostname as osHostname } from 'node:os';
 import TOML from '@iarna/toml';
 import { resolveRuntimeSettings, type RuntimeMode } from './runtime-mode.js';
+import { resolveLibp2pEnabled, resolveLibp2pListenPort } from './libp2p-runtime.js';
 
 export interface StaticPeer {
   host: string;
@@ -28,6 +29,11 @@ export interface DaemonConfig {
     mdns_service_type: string;
     static_peers: StaticPeer[];
   };
+  libp2p: {
+    enabled: boolean;
+    listen_port: number;
+    mdns_service_tag: string;
+  };
   logging: {
     level: string;
   };
@@ -51,6 +57,11 @@ const DEFAULTS: DaemonConfig = {
     mdns_service_type: '_thinklocal._tcp',
     static_peers: [],
   },
+  libp2p: {
+    enabled: true,
+    listen_port: 9540,
+    mdns_service_tag: 'thinklocal-mcp',
+  },
   logging: {
     level: 'info',
   },
@@ -62,12 +73,14 @@ function expandHome(p: string): string {
 
 export function loadConfig(configPath?: string): DaemonConfig {
   const cfg = structuredClone(DEFAULTS);
+  let tomlHasExplicitLibp2pPort = false;
 
   // 1. TOML-Datei laden (falls vorhanden)
   const tomlPath = configPath ?? resolve(process.cwd(), 'config', 'daemon.toml');
   if (existsSync(tomlPath)) {
     const raw = readFileSync(tomlPath, 'utf-8');
     const parsed = TOML.parse(raw);
+    tomlHasExplicitLibp2pPort = typeof (parsed as { libp2p?: { listen_port?: unknown } }).libp2p?.listen_port === 'number';
     deepMerge(cfg as unknown as JsonObject, parsed as unknown as JsonObject);
   }
 
@@ -79,6 +92,9 @@ export function loadConfig(configPath?: string): DaemonConfig {
   if (env['TLMCP_RUNTIME_MODE']) cfg.daemon.runtime_mode = env['TLMCP_RUNTIME_MODE'] === 'local' ? 'local' : 'lan';
   if (env['TLMCP_AGENT_TYPE']) cfg.daemon.agent_type = env['TLMCP_AGENT_TYPE'];
   if (env['TLMCP_DATA_DIR']) cfg.daemon.data_dir = env['TLMCP_DATA_DIR'];
+  if (env['TLMCP_LIBP2P_ENABLED']) cfg.libp2p.enabled = env['TLMCP_LIBP2P_ENABLED'] === '1';
+  if (env['TLMCP_LIBP2P_PORT']) cfg.libp2p.listen_port = readPositiveInt('TLMCP_LIBP2P_PORT', cfg.libp2p.listen_port);
+  if (env['TLMCP_LIBP2P_MDNS_TAG']) cfg.libp2p.mdns_service_tag = env['TLMCP_LIBP2P_MDNS_TAG'];
   if (env['TLMCP_LOG_LEVEL']) cfg.logging.level = env['TLMCP_LOG_LEVEL'];
   if (env['TLMCP_HEARTBEAT_MS'])
     cfg.mesh.heartbeat_interval_ms = readPositiveInt('TLMCP_HEARTBEAT_MS', cfg.mesh.heartbeat_interval_ms);
@@ -108,6 +124,15 @@ export function loadConfig(configPath?: string): DaemonConfig {
   cfg.daemon.runtime_mode = runtime.mode;
   cfg.daemon.bind_host = runtime.bindHost;
   cfg.daemon.tls_enabled = runtime.tlsEnabled;
+  cfg.libp2p.enabled = resolveLibp2pEnabled({
+    runtimeMode: cfg.daemon.runtime_mode,
+    explicitEnvOverride: env['TLMCP_LIBP2P_ENABLED'],
+  });
+  cfg.libp2p.listen_port = resolveLibp2pListenPort({
+    daemonPort: cfg.daemon.port,
+    configuredPort: cfg.libp2p.listen_port,
+    explicitPortConfigured: Boolean(env['TLMCP_LIBP2P_PORT']) || tomlHasExplicitLibp2pPort,
+  });
 
   return cfg;
 }

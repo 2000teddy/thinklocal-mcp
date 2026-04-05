@@ -24,6 +24,7 @@ import { CredentialVault } from './vault.js';
 import { loadOrCreateVaultPassphrase } from './vault-passphrase.js';
 import { isLoopbackHost } from './runtime-mode.js';
 import { TaskExecutor } from './task-executor.js';
+import { createLibp2pRuntime } from './libp2p-runtime.js';
 import type { SecretRequestPayload, SecretResponsePayload } from './messages.js';
 import { SYSTEM_MONITOR_MANIFEST } from './builtin-skills/system-monitor.js';
 import { INFLUXDB_MANIFEST, influxdbHealthCheck } from './builtin-skills/influxdb.js';
@@ -128,6 +129,14 @@ async function main(): Promise<void> {
     log.info('InfluxDB nicht erreichbar — Skill nicht registriert');
   }
 
+  const libp2pRuntime = await createLibp2pRuntime({
+    enabled: config.libp2p.enabled,
+    bindHost: config.daemon.bind_host,
+    listenPort: config.libp2p.listen_port,
+    mdnsServiceTag: config.libp2p.mdns_service_tag,
+  }, log);
+  await libp2pRuntime.start();
+
   // 6. Mesh-Manager starten
   const mesh = new MeshManager(
     config.mesh.heartbeat_interval_ms,
@@ -226,6 +235,7 @@ async function main(): Promise<void> {
           return null;
       }
     },
+    getLibp2pState: () => libp2pRuntime.getState(),
   });
   // 8b. Task-Manager + Executor initialisieren
   const taskManager = new TaskManager(log);
@@ -278,6 +288,7 @@ async function main(): Promise<void> {
     config.daemon.port,
     {
       agentId: identity.spiffeUri,
+      p2pPeerId: libp2pRuntime.getState().peerId ?? undefined,
       capabilityHash: '',
       certFingerprint: identity.fingerprint,
       proto: proto as 'http' | 'https',
@@ -406,6 +417,7 @@ async function main(): Promise<void> {
     vault.close();
     rateLimiter.stop();
     discovery.stop();
+    await libp2pRuntime.stop();
     await cardServer.stop();
     audit.append('PEER_LEAVE', identity.spiffeUri, 'graceful shutdown');
     audit.close();

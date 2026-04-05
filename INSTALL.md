@@ -80,6 +80,8 @@ Konfiguration via Umgebungsvariablen:
 | `TLMCP_PORT` | `9440` | HTTP(S)-Port |
 | `TLMCP_RUNTIME_MODE` | `lan` | `local` oder `lan`; steuert Default fuer Bind-Adresse und TLS |
 | `TLMCP_BIND_HOST` | `0.0.0.0` | Bind-Adresse; fuer lokalen Service typischerweise `127.0.0.1` |
+| `TLMCP_LIBP2P_ENABLED` | abhaengig von `runtime_mode` | `lan` aktiviert libp2p standardmaessig, `local` deaktiviert es |
+| `TLMCP_LIBP2P_PORT` | `daemon.port + 100` | TCP-Port fuer libp2p/Noise |
 | `TLMCP_AGENT_TYPE` | `claude-code` | Agent-Typ |
 | `TLMCP_DATA_DIR` | `~/.thinklocal` | Datenverzeichnis |
 | `TLMCP_NO_TLS` | `0` | `1` = TLS deaktivieren (nur Entwicklung!) |

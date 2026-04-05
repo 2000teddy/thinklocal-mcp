@@ -63,7 +63,7 @@ Aktuell arbeiten AI-Agenten auf verschiedenen Rechnern isoliert voneinander. Wen
 
 | Schicht | Technologie | Zweck |
 |---------|------------|-------|
-| **Transport** | mTLS über HTTPS / JSON-RPC 2.0 | Verschlüsselte Kommunikation |
+| **Transport** | mTLS über HTTPS + libp2p/Noise | Verschlüsselte Kommunikation, lokaler Control-Plane plus P2P-Overlay |
 | **Discovery** | mDNS/Bonjour + Fallback Registry | Zero-Config Erkennung |
 | **Protocol** | MCP (Tools/Resources) + A2A Agent Cards | Standardisierte Interaktion |
 | **Identity** | Lokale CA (step-ca / cfssl) + TOFU | Zertifikatsverwaltung |
@@ -179,6 +179,7 @@ Ein Skill ist ein portables MCP-Server-Paket mit Manifest:
 | **Node Daemon** | TypeScript / Node.js (Bun) | Native MCP SDK, async I/O |
 | **mDNS** | `bonjour-service` (npm) | Zero-Config Discovery |
 | **mTLS/CA** | `node-forge` + `step-ca` | Leichtgewichtige lokale CA |
+| **P2P Overlay** | `libp2p` + Noise + mDNS | Peer-Sessions und spaetere Mesh-Erweiterung |
 | **Protocol** | JSON-RPC 2.0 über HTTPS | MCP/A2A-kompatibel |
 | **Dashboard** | React 19 + Next.js 15 + Tailwind | Modernes Frontend |
 | **Realtime** | WebSocket (Socket.io) | Live-Updates |

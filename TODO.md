@@ -31,8 +31,8 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [x] 🟡 Device-Pairing-Persistenz (einmal gepairt → automatisch vertraut) — `PairingStore` in JSON-Datei (2026-04-03)
 
 ### 1.3 Mesh-Networking
-- [ ] 🔴 libp2p Node.js/TypeScript Integration
-- [ ] 🔴 Noise Protocol für verschlüsselte Kanäle
+- [x] 🔴 libp2p Node.js/TypeScript Integration — `libp2p-runtime.ts` + Config/Agent-Card/Discovery-Integration, dual-stack neben HTTP(S) (2026-04-05)
+- [x] 🔴 Noise Protocol für verschlüsselte Kanäle — libp2p Runtime nutzt `@chainsafe/libp2p-noise` fuer Peer-Sessions (2026-04-05)
 - [x] 🔴 mTLS über alle Verbindungen — Fastify HTTPS + undici Dispatcher mit CA (2026-04-03)
 - [x] 🔴 mDNS Service Discovery (`_thinklocal._tcp.local`) — `discovery.ts` (2026-04-03)
 - [x] 🔴 TXT-Records: Agent-ID, Capability-Hash, Control-Endpoint, Cert-Fingerprint — `discovery.ts` (2026-04-03)
