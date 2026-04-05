@@ -1,0 +1,53 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install daemon dependencies
+        working-directory: packages/daemon
+        run: npm ci
+
+      - name: TypeScript check
+        working-directory: packages/daemon
+        run: npx tsc --noEmit
+
+      - name: Run tests
+        working-directory: packages/daemon
+        run: npx vitest run
+
+      - name: Build Docker image
+        run: docker build -t thinklocal-mcp:${{ github.ref_name }} .
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          body: |
+            ## Installation
+
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/2000teddy/thinklocal-mcp/${{ github.ref_name }}/scripts/install.sh | bash
+            ```
+
+            ## Docker
+
+            ```bash
+            docker build -t thinklocal-mcp .
+            docker run -d -p 9440:9440 thinklocal-mcp
+            ```
