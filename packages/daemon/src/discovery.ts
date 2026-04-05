@@ -24,6 +24,7 @@ export class MdnsDiscovery {
   constructor(
     private serviceType: string,
     private log?: Logger,
+    private requireTls = false,
   ) {
     this.bonjour = new Bonjour();
   }
@@ -70,6 +71,16 @@ export class MdnsDiscovery {
 
         // Endpoint aus host:port ableiten — Protokoll aus TXT lesen (http/https)
         const proto = txt['proto'] === 'https' ? 'https' : 'http';
+
+        // Reject unencrypted peers when TLS is required (HIGH finding)
+        if (this.requireTls && proto !== 'https') {
+          this.log?.warn(
+            { peer: service.name, proto },
+            'Peer ohne TLS ignoriert (requireTls aktiv)',
+          );
+          return;
+        }
+
         const peer: DiscoveredPeer = {
           name: service.name,
           host: resolvedHost,

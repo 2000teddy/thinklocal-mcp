@@ -285,7 +285,7 @@ async function main(): Promise<void> {
   const proto = cardServer.protocol;
 
   // 9. mDNS Discovery starten
-  const discovery = new MdnsDiscovery(config.discovery.mdns_service_type, log);
+  const discovery = new MdnsDiscovery(config.discovery.mdns_service_type, log, config.daemon.tls_enabled);
 
   discovery.publish(
     `${config.daemon.hostname}-${config.daemon.agent_type}`,

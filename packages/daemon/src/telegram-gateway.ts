@@ -27,6 +27,11 @@ function escapeMarkdown(text: string): string {
   return text.replace(/[_*`[\]]/g, '\\$&');
 }
 
+/** Aktuelle Uhrzeit als HH:MM:SS fuer Antwort-Header */
+function timestamp(): string {
+  return new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+}
+
 /** Parse allowed chat IDs from env (comma-separated) */
 const ALLOWED_CHAT_IDS = (process.env['TELEGRAM_ALLOWED_CHATS'] ?? '')
   .split(',')
@@ -43,7 +48,7 @@ export interface TelegramGatewayConfig {
   /** Pfad zur Persistenz-Datei fuer chatId (optional) */
   chatIdFile?: string;
   /** Optionaler fetch-Dispatcher fuer HTTPS mit self-signed CA */
-  fetchDispatcher?: import('undici').Dispatcher;
+  fetchDispatcher?: unknown;
 }
 
 export class TelegramGateway {
@@ -92,14 +97,14 @@ export class TelegramGateway {
 
   /** Fetch mit optionalem TLS-Dispatcher (fuer self-signed mTLS) */
   private daemonFetch(path: string, init?: RequestInit): Promise<Response> {
-    const opts: RequestInit & { dispatcher?: unknown } = {
+    const opts: Record<string, unknown> = {
       signal: AbortSignal.timeout(5_000),
       ...init,
     };
     if (this.config.fetchDispatcher) {
-      opts.dispatcher = this.config.fetchDispatcher;
+      opts['dispatcher'] = this.config.fetchDispatcher;
     }
-    return fetch(`${this.config.daemonUrl}${path}`, opts);
+    return fetch(`${this.config.daemonUrl}${path}`, opts as RequestInit);
   }
 
   /** Simple per-command rate limiter (min interval in ms) */
@@ -110,6 +115,14 @@ export class TelegramGateway {
     if (now - last < minMs) return true;
     this.lastCommandAt.set(key, now);
     return false;
+  }
+
+  /** Prueft ob der Chat autorisiert ist (Allowlist oder registrierte chatId) */
+  private isAuthorized(chatId: string): boolean {
+    // Wenn Allowlist gesetzt, nur diese erlauben
+    if (ALLOWED_CHAT_IDS.length > 0) return ALLOWED_CHAT_IDS.includes(chatId);
+    // Sonst: nur der registrierte Chat (via /start)
+    return this.chatId !== null && chatId === this.chatId;
   }
 
   // --- Telegram-Befehle ---
@@ -144,19 +157,21 @@ export class TelegramGateway {
 
     // /status — Daemon-Status
     this.bot.onText(/^\/status$/, async (msg) => {
-      if (this.isRateLimited(String(msg.chat.id), '/status')) return;
+      const chatId = String(msg.chat.id);
+      if (!this.isAuthorized(chatId)) { this.bot.sendMessage(msg.chat.id, '⛔️ Zugriff verweigert'); return; }
+      if (this.isRateLimited(chatId, '/status')) return;
       try {
         const res = await this.daemonFetch('/api/status');
         if (!res.ok) {
           this.log?.warn({ status: res.status }, 'Daemon /api/status nicht OK');
-          this.bot.sendMessage(msg.chat.id, '❌ Daemon-API Fehler');
+          this.bot.sendMessage(msg.chat.id, `❌ Daemon-API Fehler (${timestamp()})`);
           return;
         }
         const status = (await res.json()) as Record<string, unknown>;
         const agentId = escapeMarkdown(String(status['agent_id'] ?? 'unknown'));
         const host = escapeMarkdown(String(status['hostname'] ?? 'unknown'));
         this.bot.sendMessage(msg.chat.id,
-          `📊 *Mesh-Status*\n\n` +
+          `📊 *Mesh-Status* _(${timestamp()})_\n\n` +
           `Agent: \`${agentId}\`\n` +
           `Host: ${host}:${status['port']}\n` +
           `Uptime: ${formatUptime(status['uptime_seconds'] as number)}\n` +
@@ -167,28 +182,30 @@ export class TelegramGateway {
         );
       } catch (err) {
         this.log?.warn({ err, command: '/status' }, 'Telegram-Befehl fehlgeschlagen');
-        this.bot.sendMessage(msg.chat.id, '❌ Daemon nicht erreichbar');
+        this.bot.sendMessage(msg.chat.id, `❌ Daemon nicht erreichbar (${timestamp()})`);
       }
     });
 
     // /peers — Verbundene Peers
     this.bot.onText(/^\/peers$/, async (msg) => {
-      if (this.isRateLimited(String(msg.chat.id), '/peers')) return;
+      const chatId = String(msg.chat.id);
+      if (!this.isAuthorized(chatId)) { this.bot.sendMessage(msg.chat.id, '⛔️ Zugriff verweigert'); return; }
+      if (this.isRateLimited(chatId, '/peers')) return;
       try {
         const res = await this.daemonFetch('/api/peers');
         if (!res.ok) {
           this.log?.warn({ status: res.status }, 'Daemon /api/peers nicht OK');
-          this.bot.sendMessage(msg.chat.id, '❌ Daemon-API Fehler');
+          this.bot.sendMessage(msg.chat.id, `❌ Daemon-API Fehler (${timestamp()})`);
           return;
         }
         const data = (await res.json()) as { peers: Array<Record<string, unknown>> };
 
         if (data.peers.length === 0) {
-          this.bot.sendMessage(msg.chat.id, '📡 Keine Peers verbunden (allein im Mesh)');
+          this.bot.sendMessage(msg.chat.id, `📡 Keine Peers verbunden (${timestamp()})`);
           return;
         }
 
-        let text = `📡 *${data.peers.length} Peer(s) verbunden*\n\n`;
+        let text = `📡 *${data.peers.length} Peer(s) verbunden* _(${timestamp()})_\n\n`;
         for (const p of data.peers) {
           const card = p['agent_card'] as Record<string, unknown> | null;
           const health = card?.['health'] as Record<string, number> | null;
@@ -204,13 +221,15 @@ export class TelegramGateway {
         this.bot.sendMessage(msg.chat.id, text, { parse_mode: 'Markdown' });
       } catch (err) {
         this.log?.warn({ err, command: '/peers' }, 'Telegram-Befehl fehlgeschlagen');
-        this.bot.sendMessage(msg.chat.id, '❌ Peer-Daten nicht abrufbar');
+        this.bot.sendMessage(msg.chat.id, `❌ Peer-Daten nicht abrufbar (${timestamp()})`);
       }
     });
 
     // /health — System-Health (rate-limited: 10s)
     this.bot.onText(/^\/health$/, async (msg) => {
-      if (this.isRateLimited(String(msg.chat.id), '/health', 10_000)) {
+      const chatId = String(msg.chat.id);
+      if (!this.isAuthorized(chatId)) { this.bot.sendMessage(msg.chat.id, '⛔️ Zugriff verweigert'); return; }
+      if (this.isRateLimited(chatId, '/health', 10_000)) {
         this.bot.sendMessage(msg.chat.id, '⏳ Bitte kurz warten...');
         return;
       }
@@ -222,7 +241,7 @@ export class TelegramGateway {
         });
         if (!res.ok) {
           this.log?.warn({ status: res.status }, 'Daemon /api/tasks/execute nicht OK');
-          this.bot.sendMessage(msg.chat.id, '❌ Daemon-API Fehler');
+          this.bot.sendMessage(msg.chat.id, `❌ Daemon-API Fehler (${timestamp()})`);
           return;
         }
         const data = (await res.json()) as { result: Record<string, unknown> };
@@ -234,7 +253,7 @@ export class TelegramGateway {
         const distro = escapeMarkdown(String(os['distro'] ?? ''));
 
         this.bot.sendMessage(msg.chat.id,
-          `🖥 *System-Health*\n\n` +
+          `🖥 *System-Health* _(${timestamp()})_\n\n` +
           `OS: ${distro} ${os['release']} (${os['arch']})\n` +
           `Host: ${hostname}\n` +
           `CPU: ${cpu['load_percent']}% (${cpu['cores']} Cores)\n` +
@@ -244,28 +263,30 @@ export class TelegramGateway {
         );
       } catch (err) {
         this.log?.warn({ err, command: '/health' }, 'Telegram-Befehl fehlgeschlagen');
-        this.bot.sendMessage(msg.chat.id, '❌ Health-Daten nicht abrufbar');
+        this.bot.sendMessage(msg.chat.id, `❌ Health-Daten nicht abrufbar (${timestamp()})`);
       }
     });
 
     // /skills — Verfuegbare Skills
     this.bot.onText(/^\/skills$/, async (msg) => {
-      if (this.isRateLimited(String(msg.chat.id), '/skills')) return;
+      const chatId = String(msg.chat.id);
+      if (!this.isAuthorized(chatId)) { this.bot.sendMessage(msg.chat.id, '⛔️ Zugriff verweigert'); return; }
+      if (this.isRateLimited(chatId, '/skills')) return;
       try {
         const res = await this.daemonFetch('/api/capabilities');
         if (!res.ok) {
           this.log?.warn({ status: res.status }, 'Daemon /api/capabilities nicht OK');
-          this.bot.sendMessage(msg.chat.id, '❌ Daemon-API Fehler');
+          this.bot.sendMessage(msg.chat.id, `❌ Daemon-API Fehler (${timestamp()})`);
           return;
         }
         const data = (await res.json()) as { capabilities: Array<Record<string, unknown>> };
 
         if (data.capabilities.length === 0) {
-          this.bot.sendMessage(msg.chat.id, '🧩 Keine Skills registriert');
+          this.bot.sendMessage(msg.chat.id, `🧩 Keine Skills registriert (${timestamp()})`);
           return;
         }
 
-        let text = `🧩 *${data.capabilities.length} Skill(s)*\n\n`;
+        let text = `🧩 *${data.capabilities.length} Skill(s)* _(${timestamp()})_\n\n`;
         for (const c of data.capabilities) {
           const agent = escapeMarkdown(String(c['agent_id'] ?? '').split('/').pop() ?? '');
           const skillId = escapeMarkdown(String(c['skill_id'] ?? ''));
@@ -274,23 +295,25 @@ export class TelegramGateway {
         this.bot.sendMessage(msg.chat.id, text, { parse_mode: 'Markdown' });
       } catch (err) {
         this.log?.warn({ err, command: '/skills' }, 'Telegram-Befehl fehlgeschlagen');
-        this.bot.sendMessage(msg.chat.id, '❌ Skills nicht abrufbar');
+        this.bot.sendMessage(msg.chat.id, `❌ Skills nicht abrufbar (${timestamp()})`);
       }
     });
 
     // /audit — Letzte Events
     this.bot.onText(/^\/audit$/, async (msg) => {
-      if (this.isRateLimited(String(msg.chat.id), '/audit')) return;
+      const chatId = String(msg.chat.id);
+      if (!this.isAuthorized(chatId)) { this.bot.sendMessage(msg.chat.id, '⛔️ Zugriff verweigert'); return; }
+      if (this.isRateLimited(chatId, '/audit')) return;
       try {
         const res = await this.daemonFetch('/api/audit?limit=5');
         if (!res.ok) {
           this.log?.warn({ status: res.status }, 'Daemon /api/audit nicht OK');
-          this.bot.sendMessage(msg.chat.id, '❌ Daemon-API Fehler');
+          this.bot.sendMessage(msg.chat.id, `❌ Daemon-API Fehler (${timestamp()})`);
           return;
         }
         const data = (await res.json()) as { events: Array<Record<string, unknown>> };
 
-        let text = `📝 *Letzte ${data.events.length} Audit-Events*\n\n`;
+        let text = `📝 *Letzte ${data.events.length} Audit-Events* _(${timestamp()})_\n\n`;
         for (const e of data.events) {
           const time = String(e['timestamp'] ?? '').slice(11, 19);
           const eventType = escapeMarkdown(String(e['event_type'] ?? ''));
@@ -300,14 +323,16 @@ export class TelegramGateway {
         this.bot.sendMessage(msg.chat.id, text, { parse_mode: 'Markdown' });
       } catch (err) {
         this.log?.warn({ err, command: '/audit' }, 'Telegram-Befehl fehlgeschlagen');
-        this.bot.sendMessage(msg.chat.id, '❌ Audit-Log nicht abrufbar');
+        this.bot.sendMessage(msg.chat.id, `❌ Audit-Log nicht abrufbar (${timestamp()})`);
       }
     });
 
     // /help
     this.bot.onText(/^\/help$/, (msg) => {
+      const chatId = String(msg.chat.id);
+      if (!this.isAuthorized(chatId)) { this.bot.sendMessage(msg.chat.id, '⛔️ Zugriff verweigert'); return; }
       this.bot.sendMessage(msg.chat.id,
-        '🔧 *thinklocal-mcp Befehle*\n\n' +
+        `🔧 *thinklocal-mcp Befehle* _(${timestamp()})_\n\n` +
         '/status — Daemon-Status\n' +
         '/peers — Verbundene Peers mit Health\n' +
         '/health — System-Health (CPU/RAM/Disk)\n' +
@@ -325,24 +350,25 @@ export class TelegramGateway {
       if (!this.chatId) return;
 
       // Nur relevante Events weiterleiten (kein Spam)
+      const ts = timestamp();
       switch (event.type) {
         case 'peer:join':
-          this.sendNotification(`🟢 Peer beigetreten: ${event.data['agentId'] ?? 'unknown'}`);
+          this.sendNotification(`🟢 [${ts}] Peer beigetreten: ${event.data['agentId'] ?? 'unknown'}`);
           break;
         case 'peer:leave':
-          this.sendNotification(`🔴 Peer verlassen: ${event.data['agentId'] ?? 'unknown'}`);
+          this.sendNotification(`🔴 [${ts}] Peer verlassen: ${event.data['agentId'] ?? 'unknown'}`);
           break;
         case 'task:completed':
-          this.sendNotification(`✅ Task abgeschlossen: ${event.data['skillId'] ?? 'unknown'}`);
+          this.sendNotification(`✅ [${ts}] Task abgeschlossen: ${event.data['skillId'] ?? 'unknown'}`);
           break;
         case 'task:failed':
-          this.sendNotification(`❌ Task fehlgeschlagen: ${event.data['skillId'] ?? ''} — ${event.data['error'] ?? ''}`);
+          this.sendNotification(`❌ [${ts}] Task fehlgeschlagen: ${event.data['skillId'] ?? ''} — ${event.data['error'] ?? ''}`);
           break;
         case 'system:startup':
-          this.sendNotification(`🚀 Daemon gestartet: ${event.data['agentId'] ?? ''}`);
+          this.sendNotification(`🚀 [${ts}] Daemon gestartet: ${event.data['agentId'] ?? ''}`);
           break;
         case 'system:shutdown':
-          this.sendNotification(`⏹️ Daemon gestoppt`);
+          this.sendNotification(`⏹️ [${ts}] Daemon gestoppt`);
           break;
         // Heartbeats, capability:synced etc. werden NICHT gesendet (zu viel Spam)
       }

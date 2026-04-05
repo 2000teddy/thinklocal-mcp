@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
-import { request as httpRequest } from 'node:http';
+import { request as httpRequest, type RequestOptions } from 'node:http';
 import { Agent as HttpsAgent, request as httpsRequest } from 'node:https';
 import { isLoopbackHost, type RuntimeMode } from './runtime-mode.js';
 
@@ -32,6 +32,16 @@ function loadLocalCa(dataDir: string): string | undefined {
   return readFileSync(caPath, 'utf-8');
 }
 
+function loadClientCert(dataDir: string): { cert: string; key: string } | undefined {
+  const certPath = resolve(dataDir, 'tls', 'client.crt.pem');
+  const keyPath = resolve(dataDir, 'tls', 'client.key.pem');
+  if (!existsSync(certPath) || !existsSync(keyPath)) return undefined;
+  return {
+    cert: readFileSync(certPath, 'utf-8'),
+    key: readFileSync(keyPath, 'utf-8'),
+  };
+}
+
 export async function requestDaemon(
   path: string,
   options: DaemonRequestOptions = {},
@@ -51,7 +61,7 @@ export async function requestDaemon(
 
   return new Promise((resolvePromise, reject) => {
     const reqFactory = url.protocol === 'https:' ? httpsRequest : httpRequest;
-    const requestOptions: Parameters<typeof httpRequest>[0] & Parameters<typeof httpsRequest>[0] = {
+    const requestOptions: RequestOptions = {
       protocol: url.protocol,
       hostname: url.hostname,
       port: url.port,
@@ -62,8 +72,14 @@ export async function requestDaemon(
 
     if (url.protocol === 'https:' && isLoopbackHost(url.hostname)) {
       const ca = loadLocalCa(dataDir);
+      const clientCert = loadClientCert(dataDir);
       if (ca) {
-        requestOptions.agent = new HttpsAgent({ ca, rejectUnauthorized: true });
+        const agentOpts: Record<string, unknown> = { ca, rejectUnauthorized: true };
+        if (clientCert) {
+          agentOpts.cert = clientCert.cert;
+          agentOpts.key = clientCert.key;
+        }
+        requestOptions.agent = new HttpsAgent(agentOpts);
       }
     }
 

@@ -57,7 +57,7 @@ export class UnixSocketServer {
   private maxMessageSize: number;
 
   constructor(
-    private config: UnixSocketConfig,
+    config: UnixSocketConfig,
     private onMessage: (msg: UnixSocketMessage, respond: (response: UnixSocketMessage) => void) => void,
     private log?: Logger,
   ) {
