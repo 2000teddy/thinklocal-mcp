@@ -87,21 +87,25 @@ check_prerequisites() {
         ok "git $(git --version | awk '{print $3}')"
     fi
 
-    # 3. Node.js
+    # 3. Node.js (mindestens v22 fuer undici/fetch Support)
     if command -v node &>/dev/null; then
         NODE_VERSION=$(node -v | sed 's/v//' | cut -d. -f1)
-        if [ "$NODE_VERSION" -lt 18 ]; then
-            warn "Node.js v$NODE_VERSION ist zu alt (mindestens v18 benoetigt)"
-            info "Installiere Node.js 22 via nvm..."
+        if [ "$NODE_VERSION" -lt 22 ]; then
+            warn "Node.js v$(node -v) ist zu alt (v22+ benoetigt fuer native fetch/undici)"
+            info "Installiere Node.js 22 via nvm (bestehende Version bleibt erhalten)..."
             install_node_via_nvm
-        elif [ "$NODE_VERSION" -lt 20 ]; then
-            warn "Node.js $(node -v) — Version 20+ empfohlen (v18 funktioniert eingeschraenkt)"
         else
             ok "Node.js $(node -v)"
         fi
     else
         info "Node.js fehlt — installiere via nvm..."
         install_node_via_nvm
+    fi
+
+    # nvm laden falls vorhanden (fuer NVM_BIN)
+    if [ -d "$HOME/.nvm" ]; then
+        export NVM_DIR="$HOME/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
     fi
 
     # 4. npm (kommt mit Node.js)
@@ -262,6 +266,15 @@ install_macos_service() {
 install_linux_service() {
     info "Installiere systemd Service..."
     local NODE_PATH
+
+    # nvm nochmal laden (falls erst in dieser Session installiert)
+    if [ -d "$HOME/.nvm" ]; then
+        export NVM_DIR="$HOME/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+        # Sicherstellen dass nvm v22 aktiv ist
+        nvm use 22 2>/dev/null || true
+    fi
+
     # nvm-aware Node-Pfad: realpath folgt Symlinks, command -v findet auch nvm-Nodes
     NODE_PATH=$(command -v node)
     # Wenn nvm aktiv ist, bevorzuge den nvm-Pfad
