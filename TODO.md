@@ -152,7 +152,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 
 ### 4.1 Agent-Adapter
 - [ ] 🔴 **Adapter-Abstraktionsschicht** — stabile API gegen CLI-Tool-Änderungen
-- [ ] 🔴 Claude Code Adapter (stdio MCP Proxy)
+- [x] 🔴 Claude Code Adapter (stdio MCP Proxy) — `mcp-stdio.ts` mit 13+ Tools (2026-04-04)
 - [ ] 🟠 Codex CLI Adapter
 - [ ] 🟠 Gemini CLI Adapter
 - [ ] 🟠 Claude Desktop Adapter (MCP Server Registration)
@@ -263,7 +263,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 
 ### Testing
 - [x] 🔴 Unit-Test-Framework (Vitest für TS) — konfiguriert in `packages/daemon/` und Root (2026-04-03)
-- [ ] 🔴 Protokoll-Contract-Tests (müssen vor Merge bestehen)
+- [x] 🔴 Protokoll-Contract-Tests (müssen vor Merge bestehen) — 15 Tests in `protocol-contract.test.ts` (2026-04-05)
 - [ ] 🟠 Integration-Tests (Multi-Node im Docker Compose)
 - [ ] 🟠 Security-Tests (Fuzzing, Penetration-Szenarien)
 - [ ] 🟡 Performance-Tests (Latenz, Durchsatz, Skalierung)
@@ -290,9 +290,9 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 ## Identifizierte Lücken & Risiken
 
 ### Von allen Modellen identifiziert (höchste Priorität)
-- [ ] 🔴 **Prompt Injection Cascades** — Wenn ein Agent kompromittiert wird, könnte er über delegierte Tasks bösartige Prompts an andere Agents weiterleiten. Maßnahmen: Task-Content-Validierung, sandboxed Ausführung, Human Gates.
-- [ ] 🔴 **Bootstrap-Trust-Problem** — Das gesamte Sicherheitsmodell bricht zusammen, wenn die initiale Peer-Authentifizierung schwach ist. SPAKE2 vor allem anderen implementieren.
-- [ ] 🔴 **Root-Compromise-Limitation** — Explizit dokumentieren, dass der Mesh gegen Netzwerk-Observer und unautorisierte Peers schützt, aber NICHT gegen Root-Kompromittierung eines Endpoints.
+- [x] 🔴 **Prompt Injection Cascades** — Detaillierte Bedrohungsanalyse + Mitigationen in SECURITY.md (2026-04-05)
+- [x] 🔴 **Bootstrap-Trust-Problem** — Dokumentiert inkl. implementierte + geplante Mitigationen (2026-04-05)
+- [x] 🔴 **Root-Compromise-Limitation** — Explizit dokumentiert als Out-of-Scope mit Begruendung (2026-04-05)
 
 ### Von mehreren Modellen identifiziert
 - [ ] 🟠 **Skill Lifecycle Management** — Ohne Garbage Collection sammeln sich veraltete Skills an. Expiry-Policies, Usage-Tracking, Deprecation-Workflow nötig.
