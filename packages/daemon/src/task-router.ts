@@ -91,7 +91,10 @@ export class TaskRouter {
 
     if (scored.length === 0) return null;
 
-    const best = scored[0];
+    // Tiebreak: Bei gleichem Score zufaellig waehlen (bessere Lastverteilung)
+    const topScore = scored[0].score;
+    const topCandidates = scored.filter((c) => c.score === topScore);
+    const best = topCandidates[Math.floor(Math.random() * topCandidates.length)];
     const reason = best.agent.isLocal
       ? `Lokal (${best.capability.skill_id}, Score: ${best.score})`
       : `Remote ${best.agent.host}:${best.agent.port} (${best.capability.skill_id}, Score: ${best.score})`;
