@@ -6,6 +6,22 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
+## [0.30.0] — 2026-04-05 22:10 UTC
+
+### Hinzugefuegt
+- **Unix-Socket-Optimierung**: `unix-socket.ts` — Server+Client fuer Same-Host-Agents, Framed Protocol (4-Byte Length + JSON), FrameBuffer mit Max-Message-Size-Schutz, ~30% weniger Latenz als TCP
+- **CLI-Adapter-Konfiguration**: `cli-adapters.ts` — Setup-Generatoren fuer Codex CLI, Gemini CLI, Claude Desktop, Claude Code. Erkennt vorhandene Config, merged ohne Ueberschreiben
+- **`thinklocal setup`-Kommando**: Neuer CLI-Befehl zum Konfigurieren von AI-Tools (`thinklocal setup codex|gemini|claude-desktop|claude-code|all`)
+- **QR-Code Pairing**: `qr-pairing.ts` — 32-Byte Token als Alternative zur 6-stelligen PIN
+- **JWT Token-Refresh**: `api-auth.ts` — `/api/auth/refresh` Endpoint fuer Token-Erneuerung
+- **Task-Router Tiebreak**: Zufaellige Auswahl bei gleichem Score fuer bessere Lastverteilung
+
+### Tests
+- 13 Unix-Socket-Tests (localhost-Erkennung, Socket-Pfad, Integration, Timeout, Oversize)
+- 7 CLI-Adapter-Tests (Config-Formate, Merge-Verhalten, env-Handling)
+
+---
+
 ## [0.29.0] — 2026-04-05 20:50 UTC
 
 ### Hinzugefuegt

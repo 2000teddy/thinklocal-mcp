@@ -1174,6 +1174,54 @@ async function cmdDeploy(targetArg: string, flags: string[]): Promise<void> {
   console.log(`\n  ${C.green}${C.bold}Deploy abgeschlossen!${C.reset}\n`);
 }
 
+// --- Setup CLI Adapters ---
+
+async function cmdSetup(tool?: string): Promise<void> {
+  const { setupAdapter, listSupportedTools, type SupportedTool } = await import(
+    '../../daemon/src/cli-adapters.js'
+  );
+
+  if (!tool) {
+    // Zeige verfuegbare Tools
+    console.log(`\n  ${C.bold}thinklocal setup${C.reset} — MCP-Server in AI-Tools konfigurieren\n`);
+    const tools = listSupportedTools();
+    for (const t of tools) {
+      const status = t.installed ? `${C.green}installiert${C.reset}` : `${C.dim}nicht gefunden${C.reset}`;
+      console.log(`    ${C.bold}${t.tool.padEnd(16)}${C.reset} ${status}  ${C.dim}${t.configPath}${C.reset}`);
+    }
+    console.log(`\n  ${C.bold}Nutzung:${C.reset}`);
+    console.log(`    thinklocal setup codex          # Codex CLI konfigurieren`);
+    console.log(`    thinklocal setup gemini          # Gemini CLI konfigurieren`);
+    console.log(`    thinklocal setup claude-desktop   # Claude Desktop konfigurieren`);
+    console.log(`    thinklocal setup claude-code      # Claude Code konfigurieren`);
+    console.log(`    thinklocal setup all              # Alle gefundenen Tools konfigurieren`);
+    console.log();
+    return;
+  }
+
+  const validTools = ['codex', 'gemini', 'claude-desktop', 'claude-code', 'all'];
+  if (!validTools.includes(tool)) {
+    console.log(`  ${C.red}Unbekanntes Tool: ${tool}${C.reset}`);
+    console.log(`  Verfuegbar: ${validTools.join(', ')}`);
+    return;
+  }
+
+  const results = setupAdapter(tool as SupportedTool, DAEMON_URL);
+
+  console.log(`\n  ${C.bold}MCP-Server Setup${C.reset}\n`);
+  for (const r of results) {
+    const icon = r.action === 'already_configured' ? '✓' : r.action === 'created' ? '✚' : '↻';
+    const color = r.action === 'already_configured' ? C.dim : C.green;
+    console.log(`    ${color}${icon} ${r.tool.padEnd(16)}${C.reset} → ${r.configPath}`);
+    if (r.action !== 'already_configured') {
+      console.log(`      ${C.dim}Aktion: ${r.action === 'created' ? 'Neu erstellt' : 'Aktualisiert'}${C.reset}`);
+    }
+  }
+
+  console.log(`\n  ${C.dim}Daemon-URL: ${DAEMON_URL}${C.reset}`);
+  console.log(`  ${C.dim}Starte den Daemon mit: thinklocal start${C.reset}\n`);
+}
+
 // --- Main ---
 
 async function main(): Promise<void> {
@@ -1198,6 +1246,8 @@ async function main(): Promise<void> {
       return cmdMcpConfig(args[1]);
     case 'deploy':
       return cmdDeploy(args[1], args.slice(2));
+    case 'setup':
+      return cmdSetup(args[1]);
     case 'config':
       if (args[1] === 'show' || !args[1]) return cmdConfigShow();
       break;
@@ -1219,6 +1269,8 @@ async function main(): Promise<void> {
     peers          Verbundene Peers mit Health-Daten
     check <host>   Remote-Daemon pruefen (host oder host:port)
     deploy <u@h>   Remote-Deployment via SSH (Linux)
+    setup <tool>   MCP-Server in AI-Tool konfigurieren
+                   Tools: codex, gemini, claude-desktop, claude-code, all
     mcp            MCP-Config-Snippet anzeigen
     mcp install    MCP in Claude Desktop + Code eintragen
     config show    Konfiguration anzeigen
