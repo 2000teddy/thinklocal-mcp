@@ -10,7 +10,8 @@
  * und stellt Mesh-Funktionen als MCP-Tools bereit.
  *
  * Konfiguration via Env:
- *   TLMCP_DAEMON_URL=http://localhost:9440 (Default)
+ *   TLMCP_DAEMON_URL=http://localhost:9440   (local-Modus)
+ *   TLMCP_DAEMON_URL=https://localhost:9440  (lan-Modus)
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -18,23 +19,26 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { systemHealth, systemProcesses, systemNetwork, systemDisk } from './builtin-skills/system-monitor.js';
 import { influxdbQuery, influxdbDatabases, influxdbMeasurements, influxdbWrite } from './builtin-skills/influxdb.js';
+import { getDefaultDataDir, requestDaemonJson } from './local-daemon-client.js';
+import { parseRuntimeMode } from './runtime-mode.js';
 
-const DAEMON_URL = process.env['TLMCP_DAEMON_URL'] ?? 'http://localhost:9440';
+const DATA_DIR = process.env['TLMCP_DATA_DIR'] ?? getDefaultDataDir();
+const DAEMON_PORT = Number(process.env['TLMCP_PORT'] ?? '9440');
+const RUNTIME_MODE = parseRuntimeMode(process.env['TLMCP_RUNTIME_MODE']);
+const DAEMON_URL = process.env['TLMCP_DAEMON_URL']
+  ?? (RUNTIME_MODE === 'lan' ? `https://localhost:${DAEMON_PORT}` : `http://localhost:${DAEMON_PORT}`);
 
 async function fetchDaemon(path: string): Promise<unknown> {
-  const res = await fetch(`${DAEMON_URL}${path}`);
-  if (!res.ok) throw new Error(`Daemon API error: ${res.status} ${res.statusText}`);
-  return res.json();
+  return requestDaemonJson(path, { baseUrl: DAEMON_URL, dataDir: DATA_DIR });
 }
 
 async function postDaemon(path: string, body: unknown): Promise<unknown> {
-  const res = await fetch(`${DAEMON_URL}${path}`, {
+  return requestDaemonJson(path, {
+    baseUrl: DAEMON_URL,
+    body,
+    dataDir: DATA_DIR,
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`Daemon API error: ${res.status} ${res.statusText}`);
-  return res.json();
 }
 
 const server = new McpServer({

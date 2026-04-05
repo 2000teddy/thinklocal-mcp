@@ -15,6 +15,50 @@ REPO_URL="https://github.com/2000teddy/thinklocal-mcp.git"
 INSTALL_DIR="${TLMCP_INSTALL_DIR:-$HOME/thinklocal-mcp}"
 DATA_DIR="$HOME/.thinklocal"
 LOG_DIR="$DATA_DIR/logs"
+RUNTIME_MODE="${TLMCP_RUNTIME_MODE:-local}"
+
+get_local_daemon_url() {
+    if [ "$RUNTIME_MODE" = "lan" ]; then
+        echo "https://localhost:9440"
+    else
+        echo "http://localhost:9440"
+    fi
+}
+
+write_mcp_config() {
+    local target_path="$1"
+    local tsx_path="$2"
+    local daemon_url
+    daemon_url="$(get_local_daemon_url)"
+
+    cat > "$target_path" << MCPEOF
+{
+  "mcpServers": {
+    "thinklocal": {
+      "command": "$tsx_path",
+      "args": ["$INSTALL_DIR/packages/daemon/src/mcp-stdio.ts"],
+      "env": {
+        "TLMCP_DAEMON_URL": "$daemon_url",
+        "TLMCP_DATA_DIR": "$HOME/.thinklocal",
+        "TLMCP_RUNTIME_MODE": "$RUNTIME_MODE"
+      }
+    }
+  }
+}
+MCPEOF
+}
+
+curl_local_daemon() {
+    local path="$1"
+    local daemon_url
+    daemon_url="$(get_local_daemon_url)"
+
+    if [ "$RUNTIME_MODE" = "lan" ]; then
+        curl -sf --cacert "$HOME/.thinklocal/tls/ca.crt.pem" "${daemon_url}${path}"
+    else
+        curl -sf "${daemon_url}${path}"
+    fi
+}
 
 # nvm laden falls vorhanden (curl | bash startet Non-Login-Shell)
 export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
@@ -303,8 +347,7 @@ Type=simple
 ExecStart=$NODE_PATH $TSX_PATH $INDEX_PATH
 Environment=TLMCP_CONFIG=$INSTALL_DIR/config/daemon.toml
 Environment=TLMCP_DATA_DIR=$HOME/.thinklocal
-Environment=TLMCP_BIND_HOST=127.0.0.1
-Environment=TLMCP_NO_TLS=1
+Environment=TLMCP_RUNTIME_MODE=$RUNTIME_MODE
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 Environment=NODE_ENV=production
 WorkingDirectory=$INSTALL_DIR
@@ -390,19 +433,7 @@ setup_mcp() {
     if [ -f "$MCP_JSON" ] && grep -q "thinklocal" "$MCP_JSON" 2>/dev/null; then
         ok "~/.mcp.json bereits konfiguriert"
     else
-        cat > "$MCP_JSON" << MCPEOF
-{
-  "mcpServers": {
-    "thinklocal": {
-      "command": "$TSX_PATH",
-      "args": ["$INSTALL_DIR/packages/daemon/src/mcp-stdio.ts"],
-      "env": {
-        "TLMCP_DAEMON_URL": "http://localhost:9440"
-      }
-    }
-  }
-}
-MCPEOF
+        write_mcp_config "$MCP_JSON" "$TSX_PATH"
         ok "~/.mcp.json erstellt (Claude Code global)"
     fi
 
@@ -418,19 +449,7 @@ MCPEOF
         info "Claude Desktop Config: $CLAUDE_DESKTOP_CONFIG"
         if [ ! -f "$CLAUDE_DESKTOP_CONFIG" ]; then
             mkdir -p "$(dirname "$CLAUDE_DESKTOP_CONFIG")"
-            cat > "$CLAUDE_DESKTOP_CONFIG" << CDEOF
-{
-  "mcpServers": {
-    "thinklocal": {
-      "command": "$TSX_PATH",
-      "args": ["$INSTALL_DIR/packages/daemon/src/mcp-stdio.ts"],
-      "env": {
-        "TLMCP_DAEMON_URL": "http://localhost:9440"
-      }
-    }
-  }
-}
-CDEOF
+            write_mcp_config "$CLAUDE_DESKTOP_CONFIG" "$TSX_PATH"
             ok "Claude Desktop konfiguriert"
         else
             warn "Claude Desktop Config existiert bereits — bitte manuell thinklocal hinzufuegen:"
@@ -450,11 +469,13 @@ CDEOF
 verify_installation() {
     info "Pruefe Installation..."
     sleep 3
+    local daemon_url
+    daemon_url="$(get_local_daemon_url)"
 
-    if curl -sf http://localhost:9440/health > /dev/null 2>&1; then
-        ok "Daemon laeuft! (http://localhost:9440/health)"
+    if curl_local_daemon /health > /dev/null 2>&1; then
+        ok "Daemon laeuft! (${daemon_url}/health)"
         local STATUS
-        STATUS=$(curl -s http://localhost:9440/api/status)
+        STATUS=$(curl_local_daemon /api/status)
         echo ""
         echo "  Agent:    $(echo "$STATUS" | grep -o '"agent_id":"[^"]*"' | cut -d'"' -f4)"
         echo "  Hostname: $(echo "$STATUS" | grep -o '"hostname":"[^"]*"' | cut -d'"' -f4)"
@@ -503,7 +524,7 @@ main() {
     ok "Installation abgeschlossen!"
     echo ""
     echo "  Services:"
-    echo "    Daemon:    http://localhost:9440  (localhost-only Service)"
+    echo "    Daemon:    $(get_local_daemon_url)  (Modus: $RUNTIME_MODE)"
     echo "    Dashboard: http://localhost:3000  (laeuft als Service)"
     echo ""
     echo "  Befehle:"

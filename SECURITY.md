@@ -40,14 +40,15 @@ Details werden nach Behebung in den CHANGES.md veröffentlicht.
 
 Der Standard-Installer und `thinklocal bootstrap` richten derzeit absichtlich einen lokalen Betriebsmodus ein:
 
+- Runtime-Modus: `local`
 - Bind-Adresse: `127.0.0.1`
-- Transport: HTTP ohne TLS (`TLMCP_NO_TLS=1`)
+- Transport: HTTP ohne TLS
 - Ziel: lokale Nutzung durch Dashboard, CLI und MCP-Bridge ohne Netzfreigabe
 
 Das ist kein Widerspruch zur langfristigen Zero-Trust-Architektur, aber eine wichtige Betriebsrealitaet:
 
-- **lokaler Default**: localhost-only, einfacher, nicht fuer LAN-Exposure gedacht
-- **netzwerkexponierter Betrieb**: nur mit bewusst aktivierter TLS/mTLS-Konfiguration und passender Vertrauensverteilung
+- **lokaler Default**: `local`, localhost-only, einfacher, nicht fuer LAN-Exposure gedacht
+- **netzwerkexponierter Betrieb**: `lan`, nur mit TLS/mTLS und passender Vertrauensverteilung
 
 ### Bekannte Risiken
 

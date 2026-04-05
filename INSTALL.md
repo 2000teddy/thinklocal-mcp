@@ -69,15 +69,16 @@ npm run start:dev      # Ohne mTLS (Entwicklung)
 
 Wichtige Unterscheidung:
 
-- `npm start` startet den Daemon entsprechend deiner Konfiguration und kann netzwerkexponiert sein.
-- `thinklocal bootstrap` und der Installer richten standardmaessig einen `localhost-only` Service mit `TLMCP_BIND_HOST=127.0.0.1` und `TLMCP_NO_TLS=1` ein.
-- Dieser Default ist fuer lokalen Betrieb gedacht, nicht fuer LAN-Exposure.
+- `TLMCP_RUNTIME_MODE=local`: localhost-only, kein TLS, fuer lokalen Betrieb
+- `TLMCP_RUNTIME_MODE=lan`: 0.0.0.0 + TLS/mTLS, fuer echten LAN-Mesh-Betrieb
+- `thinklocal bootstrap` und der Installer verwenden standardmaessig `local`
 
 Konfiguration via Umgebungsvariablen:
 
 | Variable | Default | Beschreibung |
 |----------|---------|-------------|
 | `TLMCP_PORT` | `9440` | HTTP(S)-Port |
+| `TLMCP_RUNTIME_MODE` | `lan` | `local` oder `lan`; steuert Default fuer Bind-Adresse und TLS |
 | `TLMCP_BIND_HOST` | `0.0.0.0` | Bind-Adresse; fuer lokalen Service typischerweise `127.0.0.1` |
 | `TLMCP_AGENT_TYPE` | `claude-code` | Agent-Typ |
 | `TLMCP_DATA_DIR` | `~/.thinklocal` | Datenverzeichnis |
@@ -155,7 +156,7 @@ curl http://localhost:9440/health
 # Antwort: {"status":"ok","timestamp":"..."}
 ```
 
-Der Installer- und Bootstrap-Pfad nutzt bewusst diese lokale HTTP-URL, weil der Standard-Service auf `127.0.0.1` gebunden wird.
+Im `local`-Modus ist das bewusst die Standard-URL. Im `lan`-Modus laufen lokale Clients ueber `https://localhost:9440` und vertrauen der lokalen Mesh-CA.
 
 ### Status-Abfrage
 

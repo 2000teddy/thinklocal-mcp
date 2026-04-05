@@ -2,8 +2,10 @@
 
 [daemon]
 port = 9440
-bind_host = "0.0.0.0"   # Fuer localhost-only Betrieb z.B. auf 127.0.0.1 setzen
+runtime_mode = "lan"    # local = localhost-only ohne TLS, lan = 0.0.0.0 mit TLS
+bind_host = "0.0.0.0"   # Optionaler Override; wird sonst aus runtime_mode abgeleitet
 hostname = ""            # Leer = Auto-Detect via os.hostname()
+tls_enabled = true       # Optionaler Override; wird sonst aus runtime_mode abgeleitet
 agent_type = "claude-code"
 data_dir = "~/.thinklocal"
 

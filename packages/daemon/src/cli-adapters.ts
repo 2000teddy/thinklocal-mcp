@@ -15,6 +15,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import type { Logger } from 'pino';
+import { parseRuntimeMode } from './runtime-mode.js';
 
 export interface AdapterSetupResult {
   /** Welches Tool konfiguriert wurde */
@@ -52,10 +53,14 @@ function baseMcpServerConfig(daemonUrl?: string): {
   env: Record<string, string>;
 } {
   const entryPoint = getMcpEntryPoint();
+  const dataDir = process.env['TLMCP_DATA_DIR'] ?? resolve(homedir(), '.thinklocal');
+  const runtimeMode = parseRuntimeMode(process.env['TLMCP_RUNTIME_MODE']);
   return {
     command: 'npx',
     args: ['tsx', entryPoint],
     env: {
+      TLMCP_DATA_DIR: dataDir,
+      TLMCP_RUNTIME_MODE: runtimeMode,
       ...(daemonUrl ? { TLMCP_DAEMON_URL: daemonUrl } : {}),
     },
   };

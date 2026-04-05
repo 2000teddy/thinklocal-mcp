@@ -39,7 +39,13 @@ async function main(): Promise<void> {
   const log = createLogger(config.logging.level, 'thinklocal-daemon');
 
   log.info(
-    { port: config.daemon.port, bindHost: config.daemon.bind_host, agentType: config.daemon.agent_type },
+    {
+      port: config.daemon.port,
+      bindHost: config.daemon.bind_host,
+      runtimeMode: config.daemon.runtime_mode,
+      tlsEnabled: config.daemon.tls_enabled,
+      agentType: config.daemon.agent_type,
+    },
     'Starte Daemon...',
   );
 
@@ -54,8 +60,7 @@ async function main(): Promise<void> {
 
   // 2. TLS-Bundle laden oder erstellen (CA + Node-Zertifikat)
   let tlsBundle: NodeCertBundle | undefined;
-  const tlsDisabled = process.env['TLMCP_NO_TLS'] === '1';
-  if (!tlsDisabled) {
+  if (config.daemon.tls_enabled) {
     tlsBundle = loadOrCreateTlsBundle(
       config.daemon.data_dir,
       config.daemon.hostname,
@@ -65,10 +70,13 @@ async function main(): Promise<void> {
     log.info('mTLS aktiviert — HTTPS mit gegenseitiger Zertifikatsprüfung');
   } else {
     if (isLoopbackHost(config.daemon.bind_host)) {
-      log.warn('TLS deaktiviert, aber Daemon ist auf Loopback gebunden — lokaler Betriebsmodus');
+      log.warn(
+        { runtimeMode: config.daemon.runtime_mode },
+        'TLS deaktiviert, aber Daemon ist auf Loopback gebunden — lokaler Betriebsmodus',
+      );
     } else {
       log.error(
-        { bindHost: config.daemon.bind_host },
+        { bindHost: config.daemon.bind_host, runtimeMode: config.daemon.runtime_mode },
         'TLS deaktiviert und Daemon nicht auf Loopback beschraenkt — unsicherer Netzwerkbetrieb',
       );
     }

@@ -14,29 +14,37 @@
  *   tlmcp audit           — Audit-Log anzeigen
  */
 
-const DAEMON_URL = process.env['TLMCP_DAEMON_URL'] ?? 'http://localhost:9440';
+import { getDefaultDataDir, requestDaemonJson } from '../../daemon/src/local-daemon-client.js';
+import { parseRuntimeMode } from '../../daemon/src/runtime-mode.js';
+
+const DATA_DIR = process.env['TLMCP_DATA_DIR'] ?? getDefaultDataDir();
+const DAEMON_PORT = Number(process.env['TLMCP_PORT'] ?? '9440');
+const RUNTIME_MODE = parseRuntimeMode(process.env['TLMCP_RUNTIME_MODE']);
+const DAEMON_URL = process.env['TLMCP_DAEMON_URL']
+  ?? (RUNTIME_MODE === 'lan' ? `https://localhost:${DAEMON_PORT}` : `http://localhost:${DAEMON_PORT}`);
 
 async function fetchJson(path: string): Promise<unknown> {
-  const res = await fetch(`${DAEMON_URL}${path}`);
-  if (!res.ok) {
-    console.error(`Fehler: ${res.status} ${res.statusText}`);
+  try {
+    return await requestDaemonJson(path, { baseUrl: DAEMON_URL, dataDir: DATA_DIR });
+  } catch (err) {
+    console.error(`Fehler: ${err instanceof Error ? err.message : String(err)}`);
     console.error(`Daemon erreichbar? (${DAEMON_URL})`);
     process.exit(1);
   }
-  return res.json();
 }
 
 async function postJson(path: string, body: unknown = {}): Promise<unknown> {
-  const res = await fetch(`${DAEMON_URL}${path}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    console.error(`Fehler: ${res.status} ${res.statusText}`);
+  try {
+    return await requestDaemonJson(path, {
+      baseUrl: DAEMON_URL,
+      body,
+      dataDir: DATA_DIR,
+      method: 'POST',
+    });
+  } catch (err) {
+    console.error(`Fehler: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);
   }
-  return res.json();
 }
 
 function print(data: unknown): void {
@@ -235,7 +243,7 @@ async function main(): Promise<void> {
     pairing status      Pairing-Status anzeigen
     audit [limit]       Audit-Log anzeigen (Default: 20)
 
-  Env: TLMCP_DAEMON_URL (Default: http://localhost:9440)
+  Env: TLMCP_DAEMON_URL (Default je nach TLMCP_RUNTIME_MODE)
 `);
   }
 }

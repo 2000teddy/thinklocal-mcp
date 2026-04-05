@@ -20,15 +20,16 @@ import { resolve } from 'node:path';
 import { homedir, platform } from 'node:os';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, statSync } from 'node:fs';
 import { execSync, spawn, spawnSync } from 'node:child_process';
+import { getDefaultLocalDaemonUrl, requestDaemon, requestDaemonJson } from '../../daemon/src/local-daemon-client.js';
+import { resolveRuntimeSettings, parseRuntimeMode, type RuntimeMode } from '../../daemon/src/runtime-mode.js';
 
 const HOME = homedir();
 const PLATFORM = platform();
 const DATA_DIR = process.env['TLMCP_DATA_DIR'] ?? resolve(HOME, '.thinklocal');
 const DAEMON_PORT = Number(process.env['TLMCP_PORT'] ?? '9440');
-const DAEMON_URL = `http://localhost:${DAEMON_PORT}`;
 const INSTALL_DIR = resolve(import.meta.dirname, '..', '..', '..');
 const ALLOW_PLAINTEXT_GIT_CREDENTIALS = process.env['TLMCP_ALLOW_PLAINTEXT_GIT_CREDENTIALS'] === '1';
-const LOCAL_BIND_HOST = process.env['TLMCP_BIND_HOST'] ?? '127.0.0.1';
+const DEFAULT_RUNTIME_MODE = parseRuntimeMode(process.env['TLMCP_RUNTIME_MODE'] ?? 'local');
 
 // --- Sicherheits-Hilfsfunktionen ---
 
@@ -66,6 +67,21 @@ function getClaudeDesktopConfigPath(): string {
     return resolve(process.env['APPDATA'] ?? HOME, 'Claude', 'claude_desktop_config.json');
   }
   return '';
+}
+
+function resolveCliRuntimeMode(flags: string[], fallback: RuntimeMode = DEFAULT_RUNTIME_MODE): RuntimeMode {
+  if (flags.includes('--local')) return 'local';
+  if (flags.includes('--lan')) return 'lan';
+  return fallback;
+}
+
+function getRuntimeSettingsFor(flags: string[], fallback: RuntimeMode = DEFAULT_RUNTIME_MODE) {
+  return resolveRuntimeSettings({
+    mode: resolveCliRuntimeMode(flags, fallback),
+    bindHost: process.env['TLMCP_BIND_HOST'],
+    port: DAEMON_PORT,
+    tlsEnabled: process.env['TLMCP_NO_TLS'] ? process.env['TLMCP_NO_TLS'] !== '1' : null,
+  });
 }
 
 /** Laedt .env-Datei und gibt key=value Paare zurueck (nur bekannte Service-Variablen) */
@@ -114,8 +130,9 @@ function header(msg: string): void { console.log(`\n  ${C.bold}${msg}${C.reset}\
 async function isDaemonRunning(): Promise<boolean> {
   // 1. HTTP Health-Check (schnellster Weg)
   try {
-    const res = await fetch(`http://localhost:${DAEMON_PORT}/health`, { signal: AbortSignal.timeout(2_000) });
-    if (res.ok) return true;
+    const localUrl = getDefaultLocalDaemonUrl(DAEMON_PORT, DEFAULT_RUNTIME_MODE);
+    const res = await requestDaemon('/health', { baseUrl: localUrl, dataDir: DATA_DIR, timeoutMs: 2_000 });
+    if (res.status >= 200 && res.status < 300) return true;
   } catch { /* weiter */ }
 
   // 2. Port-Check (fuer HTTPS/mTLS wo HTTP fehlschlaegt)
@@ -136,13 +153,34 @@ async function isDaemonRunning(): Promise<boolean> {
 }
 
 async function fetchStatus(): Promise<Record<string, unknown> | null> {
-  for (const proto of ['http', 'https']) {
+  for (const mode of ['local', 'lan'] as const) {
     try {
-      const res = await fetch(`${proto}://localhost:${DAEMON_PORT}/api/status`, { signal: AbortSignal.timeout(3_000) });
-      if (res.ok) return (await res.json()) as Record<string, unknown>;
+      const baseUrl = getDefaultLocalDaemonUrl(DAEMON_PORT, mode);
+      return await requestDaemonJson<Record<string, unknown>>('/api/status', {
+        baseUrl,
+        dataDir: DATA_DIR,
+        timeoutMs: 3_000,
+      });
     } catch { /* try next */ }
   }
   return null;
+}
+
+async function fetchLocalDaemonJson<T>(path: string, timeoutMs = 3_000): Promise<T> {
+  const modes = [DEFAULT_RUNTIME_MODE, DEFAULT_RUNTIME_MODE === 'local' ? 'lan' : 'local'] as const;
+  let lastError: unknown;
+  for (const mode of modes) {
+    try {
+      return await requestDaemonJson<T>(path, {
+        baseUrl: getDefaultLocalDaemonUrl(DAEMON_PORT, mode),
+        dataDir: DATA_DIR,
+        timeoutMs,
+      });
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(`Daemon API nicht erreichbar: ${path}`);
 }
 
 // --- Befehle ---
@@ -171,7 +209,7 @@ async function cmdStatus(): Promise<void> {
   console.log();
 }
 
-async function cmdStart(): Promise<void> {
+async function cmdStart(flags: string[] = []): Promise<void> {
   header('Daemon starten');
 
   if (await isDaemonRunning()) {
@@ -218,6 +256,7 @@ async function cmdStart(): Promise<void> {
 
   const tsxPath = resolve(INSTALL_DIR, 'node_modules', '.bin', 'tsx');
   const indexPath = resolve(INSTALL_DIR, 'packages', 'daemon', 'src', 'index.ts');
+  const runtime = getRuntimeSettingsFor(flags, 'local');
 
   const child = spawn(tsxPath, [indexPath], {
     cwd: INSTALL_DIR,
@@ -226,8 +265,9 @@ async function cmdStart(): Promise<void> {
       ...process.env,
       TLMCP_DATA_DIR: DATA_DIR,
       TLMCP_CONFIG: resolve(INSTALL_DIR, 'config', 'daemon.toml'),
-      TLMCP_BIND_HOST: LOCAL_BIND_HOST,
-      TLMCP_NO_TLS: process.env['TLMCP_NO_TLS'] ?? '1',
+      TLMCP_RUNTIME_MODE: runtime.mode,
+      TLMCP_BIND_HOST: runtime.bindHost,
+      ...(process.env['TLMCP_NO_TLS'] ? { TLMCP_NO_TLS: process.env['TLMCP_NO_TLS'] } : {}),
     },
   });
 
@@ -392,8 +432,9 @@ async function cmdLogs(): Promise<void> {
   process.on('SIGINT', () => { child.kill(); process.exit(0); });
 }
 
-async function cmdBootstrap(): Promise<void> {
+async function cmdBootstrap(flags: string[] = []): Promise<void> {
   header('thinklocal bootstrap — Ersteinrichtung');
+  const runtime = getRuntimeSettingsFor(flags, 'local');
 
   // 1. Datenverzeichnis
   mkdirSync(resolve(DATA_DIR, 'logs'), { recursive: true });
@@ -411,7 +452,11 @@ async function cmdBootstrap(): Promise<void> {
   const thinklocalMcpEntry = {
     command: tsxPath,
     args: [mcpStdioPath],
-    env: { TLMCP_DAEMON_URL: DAEMON_URL },
+    env: {
+      TLMCP_DAEMON_URL: runtime.localDaemonUrl,
+      TLMCP_DATA_DIR: DATA_DIR,
+      TLMCP_RUNTIME_MODE: runtime.mode,
+    },
   };
 
   // 3. ~/.mcp.json (Claude Code global)
@@ -425,7 +470,7 @@ async function cmdBootstrap(): Promise<void> {
   }
 
   // 4. System-Service installieren (launchd / systemd)
-  installService(tsxPath);
+  installService(tsxPath, runtime.mode);
 
   // 5. Credentials aus .env importieren (wenn vorhanden)
   importEnvCredentials(INSTALL_DIR);
@@ -438,8 +483,9 @@ async function cmdBootstrap(): Promise<void> {
     env: {
       ...process.env,
       TLMCP_DATA_DIR: DATA_DIR,
-      TLMCP_BIND_HOST: LOCAL_BIND_HOST,
-      TLMCP_NO_TLS: process.env['TLMCP_NO_TLS'] ?? '1',
+      TLMCP_RUNTIME_MODE: runtime.mode,
+      TLMCP_BIND_HOST: runtime.bindHost,
+      ...(process.env['TLMCP_NO_TLS'] ? { TLMCP_NO_TLS: process.env['TLMCP_NO_TLS'] } : {}),
     },
     timeout: 8_000,
     encoding: 'utf-8',
@@ -483,6 +529,7 @@ async function cmdBootstrap(): Promise<void> {
   console.log();
   console.log(`  Claude Code: Oeffne ein neues Terminal — die Mesh-Tools sind automatisch da.`);
   console.log(`  Dashboard:   npm run dashboard (http://localhost:3000)`);
+  console.log(`  Modus:       ${runtime.mode} (${runtime.tlsEnabled ? 'TLS/mTLS aktiv' : 'localhost-only ohne TLS'})`);
   console.log();
 }
 
@@ -494,8 +541,7 @@ async function cmdPeers(): Promise<void> {
   }
 
   try {
-    const res = await fetch(`${DAEMON_URL}/api/peers`, { signal: AbortSignal.timeout(3_000) });
-    const data = (await res.json()) as { peers: Array<Record<string, unknown>> };
+    const data = await fetchLocalDaemonJson<{ peers: Array<Record<string, unknown>> }>('/api/peers');
 
     if (data.peers.length === 0) {
       info('Keine Peers verbunden (allein im Mesh)');
@@ -601,7 +647,11 @@ async function cmdMcpConfig(target?: string): Promise<void> {
     thinklocal: {
       command: tsxPath,
       args: [mcpStdioPath],
-      env: { TLMCP_DAEMON_URL: DAEMON_URL },
+      env: {
+        TLMCP_DAEMON_URL: getRuntimeSettingsFor([], DEFAULT_RUNTIME_MODE).localDaemonUrl,
+        TLMCP_DATA_DIR: DATA_DIR,
+        TLMCP_RUNTIME_MODE: DEFAULT_RUNTIME_MODE,
+      },
     },
   };
 
@@ -836,22 +886,29 @@ function importEnvCredentials(installDir: string): void {
 
 // --- Service-Installation ---
 
-function installService(tsxPath: string): void {
+function installService(tsxPath: string, runtimeMode: RuntimeMode): void {
   const nodePath = process.execPath;
   const indexPath = resolve(INSTALL_DIR, 'packages', 'daemon', 'src', 'index.ts');
   const configPath = resolve(INSTALL_DIR, 'config', 'daemon.toml');
 
   if (PLATFORM === 'darwin') {
-    installLaunchdService(nodePath, tsxPath, indexPath, configPath);
+    installLaunchdService(nodePath, tsxPath, indexPath, configPath, runtimeMode);
   } else if (PLATFORM === 'linux') {
-    installSystemdService(nodePath, tsxPath, indexPath, configPath);
+    installSystemdService(nodePath, tsxPath, indexPath, configPath, runtimeMode);
   } else {
     warn('Automatische Service-Installation nur auf macOS und Linux');
     info('Windows: scripts/service/thinklocal-daemon.ps1 install');
   }
 }
 
-function installLaunchdService(nodePath: string, tsxPath: string, indexPath: string, configPath: string): void {
+function installLaunchdService(
+  nodePath: string,
+  tsxPath: string,
+  indexPath: string,
+  configPath: string,
+  runtimeMode: RuntimeMode,
+): void {
+  const runtime = resolveRuntimeSettings({ mode: runtimeMode, port: DAEMON_PORT });
   const plistDir = resolve(HOME, 'Library', 'LaunchAgents');
   const plistPath = resolve(plistDir, 'com.thinklocal.daemon.plist');
 
@@ -882,10 +939,10 @@ function installLaunchdService(nodePath: string, tsxPath: string, indexPath: str
         <string>${xmlEscape(configPath)}</string>
         <key>TLMCP_DATA_DIR</key>
         <string>${xmlEscape(DATA_DIR)}</string>
+        <key>TLMCP_RUNTIME_MODE</key>
+        <string>${xmlEscape(runtime.mode)}</string>
         <key>TLMCP_BIND_HOST</key>
-        <string>${xmlEscape(LOCAL_BIND_HOST)}</string>
-        <key>TLMCP_NO_TLS</key>
-        <string>1</string>
+        <string>${xmlEscape(runtime.bindHost)}</string>
         <key>PATH</key>
         <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>${Object.entries(loadServiceEnvVars()).map(([k, v]) => `
         <key>${xmlEscape(k)}</key>
@@ -919,7 +976,14 @@ function installLaunchdService(nodePath: string, tsxPath: string, indexPath: str
   ok(isUpdate ? 'launchd Service aktualisiert (Env-Vars neu geladen)' : 'launchd Service installiert (startet bei Login)');
 }
 
-function installSystemdService(nodePath: string, tsxPath: string, indexPath: string, configPath: string): void {
+function installSystemdService(
+  nodePath: string,
+  tsxPath: string,
+  indexPath: string,
+  configPath: string,
+  runtimeMode: RuntimeMode,
+): void {
+  const runtime = resolveRuntimeSettings({ mode: runtimeMode, port: DAEMON_PORT });
   const serviceDir = resolve(HOME, '.config', 'systemd', 'user');
   const servicePath = resolve(serviceDir, 'thinklocal-daemon.service');
   const isUpdate = existsSync(servicePath);
@@ -937,8 +1001,8 @@ Type=simple
 ExecStart=${[nodePath, tsxPath, indexPath].map(systemdEscape).join(' ')}
 Environment=${systemdEscape(`TLMCP_CONFIG=${configPath}`)}
 Environment=${systemdEscape(`TLMCP_DATA_DIR=${DATA_DIR}`)}
-Environment=${systemdEscape(`TLMCP_BIND_HOST=${LOCAL_BIND_HOST}`)}
-Environment=${systemdEscape('TLMCP_NO_TLS=1')}
+Environment=${systemdEscape(`TLMCP_RUNTIME_MODE=${runtime.mode}`)}
+Environment=${systemdEscape(`TLMCP_BIND_HOST=${runtime.bindHost}`)}
 Environment="PATH=/usr/local/bin:/usr/bin:/bin"
 Environment="NODE_ENV=production"
 ${Object.entries(loadServiceEnvVars()).map(([k, v]) => `Environment=${systemdEscape(`${k}=${v}`)}`).join('\n')}
@@ -1163,13 +1227,10 @@ async function cmdDeploy(targetArg: string, flags: string[]): Promise<void> {
   let joined = false;
   for (let i = 0; i < 6; i++) {
     try {
-      const res = await fetch(`${DAEMON_URL}/api/peers`, { signal: AbortSignal.timeout(3_000) });
-      if (res.ok) {
-        const data = (await res.json()) as { peers: Array<{ host: string }> };
-        if (data.peers.some((p) => p.host === host)) {
-          joined = true;
-          break;
-        }
+      const data = await fetchLocalDaemonJson<{ peers: Array<{ host: string }> }>('/api/peers');
+      if (data.peers.some((p) => p.host === host)) {
+        joined = true;
+        break;
       }
     } catch { /* retry */ }
     await new Promise((r) => setTimeout(r, 5000));
@@ -1217,7 +1278,8 @@ async function cmdSetup(tool?: string): Promise<void> {
     return;
   }
 
-  const results = setupAdapter(tool as SupportedTool, DAEMON_URL);
+  const daemonUrl = getRuntimeSettingsFor([], DEFAULT_RUNTIME_MODE).localDaemonUrl;
+  const results = setupAdapter(tool as SupportedTool, daemonUrl);
 
   console.log(`\n  ${C.bold}MCP-Server Setup${C.reset}\n`);
   for (const r of results) {
@@ -1229,7 +1291,7 @@ async function cmdSetup(tool?: string): Promise<void> {
     }
   }
 
-  console.log(`\n  ${C.dim}Daemon-URL: ${DAEMON_URL}${C.reset}`);
+  console.log(`\n  ${C.dim}Daemon-URL: ${daemonUrl}${C.reset}`);
   console.log(`  ${C.dim}Starte den Daemon mit: thinklocal start${C.reset}\n`);
 }
 
@@ -1304,13 +1366,13 @@ async function main(): Promise<void> {
   const cmd = args[0];
 
   switch (cmd) {
-    case 'start': return cmdStart();
+    case 'start': return cmdStart(args.slice(1));
     case 'stop': return cmdStop();
     case 'restart': return cmdRestart();
     case 'status': return cmdStatus();
     case 'doctor': return cmdDoctor();
     case 'logs': return cmdLogs();
-    case 'bootstrap': return cmdBootstrap();
+    case 'bootstrap': return cmdBootstrap(args.slice(1));
     case 'peers': return cmdPeers();
     case 'uninstall': return cmdUninstall();
     case 'check':
@@ -1336,8 +1398,8 @@ async function main(): Promise<void> {
   ${C.bold}thinklocal${C.reset} — Mesh-Netzwerk fuer AI CLI Agenten
 
   ${C.bold}Befehle:${C.reset}
-    bootstrap      Ersteinrichtung (Keys, Config, Service, MCP)
-    start          Daemon starten (Service oder Vordergrund)
+    bootstrap      Ersteinrichtung (Keys, Config, Service, MCP) [--local|--lan]
+    start          Daemon starten (Service oder Vordergrund) [--local|--lan]
     stop           Daemon stoppen
     restart        Daemon neu starten
     status         Status anzeigen
@@ -1355,8 +1417,9 @@ async function main(): Promise<void> {
     uninstall      Service + Config entfernen
 
   ${C.bold}Beispiele:${C.reset}
-    thinklocal bootstrap     # Einmalig: alles einrichten
-    thinklocal start         # Daemon starten
+    thinklocal bootstrap --local   # Lokaler localhost-only Modus
+    thinklocal bootstrap --lan     # LAN-Mesh mit TLS/mTLS
+    thinklocal start --lan         # Vordergrundstart im LAN-Modus
     thinklocal doctor        # Probleme finden
     thinklocal peers         # Wer ist im Mesh?
     thinklocal deploy chris@10.10.10.56  # Remote-Deploy
@@ -1365,7 +1428,8 @@ async function main(): Promise<void> {
   ${C.bold}Env:${C.reset}
     TLMCP_PORT=9440          Daemon-Port
     TLMCP_DATA_DIR=~/.thinklocal  Datenverzeichnis
-    TLMCP_BIND_HOST=127.0.0.1     Bind-Adresse des lokalen Daemons
+    TLMCP_RUNTIME_MODE=local|lan   Betriebsmodus
+    TLMCP_BIND_HOST=127.0.0.1      Optionaler Bind-Override
 `);
       return;
   }

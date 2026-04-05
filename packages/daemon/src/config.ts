@@ -2,6 +2,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { homedir, hostname as osHostname } from 'node:os';
 import TOML from '@iarna/toml';
+import { resolveRuntimeSettings, type RuntimeMode } from './runtime-mode.js';
 
 export interface StaticPeer {
   host: string;
@@ -14,6 +15,8 @@ export interface DaemonConfig {
     port: number;
     bind_host: string;
     hostname: string;
+    runtime_mode: RuntimeMode;
+    tls_enabled: boolean;
     agent_type: string;
     data_dir: string;
   };
@@ -35,6 +38,8 @@ const DEFAULTS: DaemonConfig = {
     port: 9440,
     bind_host: '0.0.0.0',
     hostname: osHostname(),
+    runtime_mode: 'lan',
+    tls_enabled: true,
     agent_type: 'claude-code',
     data_dir: resolve(homedir(), '.thinklocal'),
   },
@@ -71,11 +76,13 @@ export function loadConfig(configPath?: string): DaemonConfig {
   if (env['TLMCP_PORT']) cfg.daemon.port = readPositiveInt('TLMCP_PORT', cfg.daemon.port);
   if (env['TLMCP_BIND_HOST']) cfg.daemon.bind_host = env['TLMCP_BIND_HOST'];
   if (env['TLMCP_HOSTNAME']) cfg.daemon.hostname = env['TLMCP_HOSTNAME'];
+  if (env['TLMCP_RUNTIME_MODE']) cfg.daemon.runtime_mode = env['TLMCP_RUNTIME_MODE'] === 'local' ? 'local' : 'lan';
   if (env['TLMCP_AGENT_TYPE']) cfg.daemon.agent_type = env['TLMCP_AGENT_TYPE'];
   if (env['TLMCP_DATA_DIR']) cfg.daemon.data_dir = env['TLMCP_DATA_DIR'];
   if (env['TLMCP_LOG_LEVEL']) cfg.logging.level = env['TLMCP_LOG_LEVEL'];
   if (env['TLMCP_HEARTBEAT_MS'])
     cfg.mesh.heartbeat_interval_ms = readPositiveInt('TLMCP_HEARTBEAT_MS', cfg.mesh.heartbeat_interval_ms);
+  if (env['TLMCP_NO_TLS']) cfg.daemon.tls_enabled = env['TLMCP_NO_TLS'] !== '1';
 
   // 2b. Statische Peers aus TLMCP_STATIC_PEERS (komma-separiert: "host:port,host2:port2")
   if (env['TLMCP_STATIC_PEERS']) {
@@ -92,6 +99,15 @@ export function loadConfig(configPath?: string): DaemonConfig {
   // 3. Hostname auffüllen und Pfad expandieren
   if (!cfg.daemon.hostname) cfg.daemon.hostname = osHostname();
   cfg.daemon.data_dir = expandHome(cfg.daemon.data_dir);
+  const runtime = resolveRuntimeSettings({
+    mode: cfg.daemon.runtime_mode,
+    bindHost: cfg.daemon.bind_host,
+    port: cfg.daemon.port,
+    tlsEnabled: cfg.daemon.tls_enabled,
+  });
+  cfg.daemon.runtime_mode = runtime.mode;
+  cfg.daemon.bind_host = runtime.bindHost;
+  cfg.daemon.tls_enabled = runtime.tlsEnabled;
 
   return cfg;
 }
