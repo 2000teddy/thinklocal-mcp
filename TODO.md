@@ -124,8 +124,8 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [ ] 🟡 Deno-Isolate als dritte Sandbox-Option
 
 ### 3.4 Policy Engine
-- [ ] 🔴 OPA/Rego-Integration in Mesh Daemon
-- [ ] 🔴 Standard-Policies: Wer darf was abfragen, installieren, teilen
+- [x] 🔴 Policy Engine (leichtgewichtig statt OPA/Rego) — `policy.ts` mit JSON-Policies, deny-by-default (2026-04-05)
+- [x] 🔴 Standard-Policies: skill.execute (allow), credential.share (approval), skill.install (approval) (2026-04-05)
 - [ ] 🟠 Policy-Verteilung über Mesh (signiert)
 - [ ] 🟠 Policy-Versionierung
 - [ ] 🟡 Cedar als Alternative evaluieren
