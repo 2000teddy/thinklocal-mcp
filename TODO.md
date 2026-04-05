@@ -61,7 +61,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [x] 🔴 TASK_REQUEST / TASK_ACCEPT / TASK_REJECT / TASK_RESULT — `tasks.ts` + `messages.ts` (2026-04-03)
 - [x] 🔴 SKILL_ANNOUNCE / SKILL_TRANSFER — `skills.ts` + Message-Handler (2026-04-03)
 - [x] 🔴 SECRET_REQUEST (mit Human-Gate-Flag) — `index.ts` + `vault.ts` + Dashboard-Vault-View (2026-04-03)
-- [ ] 🔴 AUDIT_EVENT (Mesh-weite Synchronisation)
+- [x] 🔴 AUDIT_EVENT (Mesh-weite Synchronisation) — `peer_audit_events` Tabelle, importPeerEvent(), getRecentForSync() (2026-04-05)
 - [x] 🟠 Korrelierte Request/Response-Verfolgung — `tasks.ts` correlationIndex (2026-04-03)
 - [x] 🟠 Deadline-Propagation und Timeout-Handling — `tasks.ts` checkTimeouts() (2026-04-03)
 - [ ] 🟡 Streaming-Responses für langdauernde Tasks
@@ -134,7 +134,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 ### 3.3 Skill-Sandboxing
 - [ ] 🔴 WASM-Sandbox (Wazero oder wasmtime)
 - [ ] 🔴 Docker-Container-Fallback für komplexe Skills
-- [ ] 🔴 I/O-Schema-Validierung (JSON Schema) vor Ausführung
+- [x] 🔴 I/O-Schema-Validierung (JSON Schema) vor Ausführung — `schema-validator.ts` + @cfworker/json-schema (2026-04-05)
 - [ ] 🟠 Ressourcen-Limits (CPU-Zeit, Speicher, Netzwerk)
 - [ ] 🟠 Kein Dateisystem-Zugriff außerhalb des Skill-Verzeichnisses
 - [ ] 🟡 Deno-Isolate als dritte Sandbox-Option
@@ -152,7 +152,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 
 ### 4.1 Agent-Adapter
 - [ ] 🔴 **Adapter-Abstraktionsschicht** — stabile API gegen CLI-Tool-Änderungen
-- [ ] 🔴 Claude Code Adapter (stdio MCP Proxy)
+- [x] 🔴 Claude Code Adapter (stdio MCP Proxy) — `mcp-stdio.ts` mit 13+ Tools (2026-04-04)
 - [ ] 🟠 Codex CLI Adapter
 - [ ] 🟠 Gemini CLI Adapter
 - [ ] 🟠 Claude Desktop Adapter (MCP Server Registration)
@@ -263,7 +263,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 
 ### Testing
 - [x] 🔴 Unit-Test-Framework (Vitest für TS) — konfiguriert in `packages/daemon/` und Root (2026-04-03)
-- [ ] 🔴 Protokoll-Contract-Tests (müssen vor Merge bestehen)
+- [x] 🔴 Protokoll-Contract-Tests (müssen vor Merge bestehen) — 15 Tests in `protocol-contract.test.ts` (2026-04-05)
 - [ ] 🟠 Integration-Tests (Multi-Node im Docker Compose)
 - [ ] 🟠 Security-Tests (Fuzzing, Penetration-Szenarien)
 - [ ] 🟡 Performance-Tests (Latenz, Durchsatz, Skalierung)
@@ -290,9 +290,9 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 ## Identifizierte Lücken & Risiken
 
 ### Von allen Modellen identifiziert (höchste Priorität)
-- [ ] 🔴 **Prompt Injection Cascades** — Wenn ein Agent kompromittiert wird, könnte er über delegierte Tasks bösartige Prompts an andere Agents weiterleiten. Maßnahmen: Task-Content-Validierung, sandboxed Ausführung, Human Gates.
-- [ ] 🔴 **Bootstrap-Trust-Problem** — Das gesamte Sicherheitsmodell bricht zusammen, wenn die initiale Peer-Authentifizierung schwach ist. SPAKE2 vor allem anderen implementieren.
-- [ ] 🔴 **Root-Compromise-Limitation** — Explizit dokumentieren, dass der Mesh gegen Netzwerk-Observer und unautorisierte Peers schützt, aber NICHT gegen Root-Kompromittierung eines Endpoints.
+- [x] 🔴 **Prompt Injection Cascades** — Detaillierte Bedrohungsanalyse + Mitigationen in SECURITY.md (2026-04-05)
+- [x] 🔴 **Bootstrap-Trust-Problem** — Dokumentiert inkl. implementierte + geplante Mitigationen (2026-04-05)
+- [x] 🔴 **Root-Compromise-Limitation** — Explizit dokumentiert als Out-of-Scope mit Begruendung (2026-04-05)
 
 ### Von mehreren Modellen identifiziert
 - [ ] 🟠 **Skill Lifecycle Management** — Ohne Garbage Collection sammeln sich veraltete Skills an. Expiry-Policies, Usage-Tracking, Deprecation-Workflow nötig.

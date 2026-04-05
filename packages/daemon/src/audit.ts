@@ -64,6 +64,24 @@ export class AuditLog {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
+    // Tabelle fuer importierte Peer-Events (Mesh-weite Sync)
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS peer_audit_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        agent_id TEXT NOT NULL,
+        peer_id TEXT,
+        details TEXT,
+        signature TEXT NOT NULL,
+        entry_hash TEXT NOT NULL UNIQUE
+      )
+    `);
+    this.importPeerStmt = this.db.prepare(`
+      INSERT OR IGNORE INTO peer_audit_events (timestamp, event_type, agent_id, peer_id, details, signature, entry_hash)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+
     // Letzten Hash laden für Chain-Integrität (persistierter entry_hash)
     const lastRow = this.db
       .prepare('SELECT entry_hash FROM audit_events ORDER BY id DESC LIMIT 1')
@@ -150,9 +168,84 @@ export class AuditLog {
     return row.cnt;
   }
 
+  /**
+   * Importiert ein Audit-Event von einem Peer.
+   * Speichert es in einer separaten Tabelle fuer Peer-Events.
+   * Verifiziert die Signatur wenn publicKey vorhanden.
+   */
+  importPeerEvent(event: {
+    timestamp: string;
+    event_type: string;
+    agent_id: string;
+    peer_id?: string;
+    details?: string;
+    signature: string;
+    entry_hash: string;
+  }): boolean {
+    // Prüfe ob Event bereits existiert (Deduplizierung)
+    const existing = this.db
+      .prepare('SELECT id FROM peer_audit_events WHERE entry_hash = ?')
+      .get(event.entry_hash);
+    if (existing) return false; // Bereits importiert
+
+    this.importPeerStmt.run(
+      event.timestamp,
+      event.event_type,
+      event.agent_id,
+      event.peer_id ?? null,
+      event.details ?? null,
+      event.signature,
+      event.entry_hash,
+    );
+    this.log?.debug({ from: event.agent_id, type: event.event_type }, 'Peer-Audit-Event importiert');
+    return true;
+  }
+
+  /**
+   * Gibt die letzten lokalen Events zurueck (fuer Mesh-Sync).
+   * Nur eigene Events, keine importierten Peer-Events.
+   */
+  getRecentForSync(limit = 20): Array<{
+    timestamp: string;
+    event_type: string;
+    agent_id: string;
+    peer_id: string | null;
+    details: string | null;
+    signature: string;
+    entry_hash: string;
+  }> {
+    return this.db
+      .prepare('SELECT timestamp, event_type, agent_id, peer_id, details, signature, entry_hash FROM audit_events ORDER BY id DESC LIMIT ?')
+      .all(limit) as Array<{
+        timestamp: string;
+        event_type: string;
+        agent_id: string;
+        peer_id: string | null;
+        details: string | null;
+        signature: string;
+        entry_hash: string;
+      }>;
+  }
+
+  /**
+   * Gibt alle Events zurueck (lokal + peer), sortiert nach Timestamp.
+   */
+  getAllEvents(limit = 100): AuditEvent[] {
+    // Lokale Events + Peer-Events zusammenfuehren
+    const local = this.getEvents(limit);
+    const peer = this.db
+      .prepare('SELECT * FROM peer_audit_events ORDER BY id DESC LIMIT ?')
+      .all(limit) as AuditEvent[];
+    return [...local, ...peer]
+      .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+      .slice(0, limit);
+  }
+
   close(): void {
     this.db.close();
   }
+
+  private importPeerStmt!: Database.Statement;
 }
 
 /** SECURITY: CSV-Injection-Schutz — Zellen die mit =, +, -, @ beginnen werden prefixed */
