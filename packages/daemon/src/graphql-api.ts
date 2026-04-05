@@ -97,24 +97,25 @@ export async function registerGraphQL(
       Query: {
         status: async (_: unknown, __: unknown, ctx: GraphQLContext) => {
           const res = await fetch(`${ctx.daemonUrl}/api/status`, { signal: AbortSignal.timeout(5_000) });
-          return res.ok ? await res.json() : null;
+          if (!res.ok) throw new Error(`Daemon-API nicht erreichbar: ${res.status} ${res.statusText}`);
+          return res.json();
         },
         peers: async (_: unknown, __: unknown, ctx: GraphQLContext) => {
           const res = await fetch(`${ctx.daemonUrl}/api/peers`, { signal: AbortSignal.timeout(5_000) });
-          if (!res.ok) return [];
+          if (!res.ok) throw new Error(`Peers nicht abrufbar: ${res.status}`);
           const data = (await res.json()) as { peers: unknown[] };
           return data.peers;
         },
         capabilities: async (_: unknown, __: unknown, ctx: GraphQLContext) => {
           const res = await fetch(`${ctx.daemonUrl}/api/capabilities`, { signal: AbortSignal.timeout(5_000) });
-          if (!res.ok) return [];
+          if (!res.ok) throw new Error(`Capabilities nicht abrufbar: ${res.status}`);
           const data = (await res.json()) as { capabilities: unknown[] };
           return data.capabilities;
         },
         auditEvents: async (_: unknown, args: { limit?: number }, ctx: GraphQLContext) => {
           const limit = args.limit ?? 20;
           const res = await fetch(`${ctx.daemonUrl}/api/audit?limit=${limit}`, { signal: AbortSignal.timeout(5_000) });
-          if (!res.ok) return [];
+          if (!res.ok) throw new Error(`Audit-Events nicht abrufbar: ${res.status}`);
           const data = (await res.json()) as { events: unknown[] };
           return data.events;
         },

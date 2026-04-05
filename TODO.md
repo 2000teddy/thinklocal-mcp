@@ -293,9 +293,9 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [ ] 💡 **Protobuf statt JSON** für Capability-Schema — Kimi K2 Vorschlag (effizienter, aber weniger flexibel)
 
 ### Erkenntnisse aus Nachholreviews (2026-04-05)
-- [ ] 🟠 **GraphQL Resolver Error-Handling** — Resolver geben [] statt GraphQL-Error zurueck wenn Daemon nicht erreichbar. Sollten throw Error() nutzen damit Clients wissen WARUM Daten fehlen (Gemini 2.5 Pro)
+- [x] 🟠 **GraphQL Resolver Error-Handling** — throw Error() statt leere Arrays (2026-04-05)
 - [ ] 🟠 **JWT Token-Refresh** — Kein Refresh-Mechanismus, User muss nach 24h neuen Token anfordern. Auto-Refresh oder laengere TTL evaluieren (Gemini 2.5 Pro)
-- [ ] 🟠 **SemVer Prerelease-Vergleich** — compareSemVer behandelt alle Prereleases als gleich (1.0.0-alpha == 1.0.0-beta). Spec-konformen Vergleich implementieren (Gemini 2.5 Pro)
+- [x] 🟠 **SemVer Prerelease-Vergleich** — Spec-konformer Vergleich (numerisch + lexikographisch) (2026-04-05)
 - [ ] 🟡 **Task-Router Tie-Breaking** — Bei gleichem Score wird deterministisch der erste gewaehlt. Zufalls-Tiebreaker fuer bessere Lastverteilung (Gemini 2.5 Pro)
 - [ ] 🟡 **GraphQL Subscription Cleanup** — Async Generator leakt Handler bei Network-Drop ohne finally. Mercurius sollte das handlen, aber Edge-Case (Gemini 2.5 Pro)
 - [ ] 🟡 **mesh-client.ts Retry-Logik** — Keine Wiederholungsversuche bei transienten HTTP-Fehlern (GPT-5.1)
