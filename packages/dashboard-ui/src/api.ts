@@ -94,4 +94,9 @@ export const api = {
   getAudit: (limit = 50) => fetchJson<{ events: AuditEvent[]; count: number; total: number }>(`/api/audit?limit=${limit}`),
   getPairingStatus: () => fetchJson<PairingStatus>('/pairing/status'),
   startPairing: () => fetch('/pairing/start', { method: 'POST' }).then(r => r.json()) as Promise<{ pin: string; expires_in_seconds: number }>,
+  confirmPairing: (pin: string) => fetch('/pairing/confirm', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ pin }),
+  }).then(r => { if (!r.ok) throw new Error(`Pairing fehlgeschlagen: ${r.status}`); return r.json(); }),
 };

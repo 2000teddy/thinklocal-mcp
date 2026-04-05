@@ -1,13 +1,17 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { api } from '../api.ts';
 import { usePolling } from '../hooks/usePolling.ts';
 
-/** Pairing-Interface: PIN generieren, anzeigen, Status pruefen */
+/** Pairing-Interface: PIN generieren, anzeigen, PIN eingeben, Status pruefen */
 export function PairingView() {
   const fetchStatus = useCallback(() => api.getPairingStatus(), []);
   const { data: pairingStatus, refresh } = usePolling(fetchStatus, 5_000);
   const [pin, setPin] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const [confirmingPin, setConfirmingPin] = useState(false);
+  const [confirmResult, setConfirmResult] = useState<'success' | 'error' | null>(null);
+  const pinInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [pinDigits, setPinDigits] = useState<string[]>(['', '', '', '', '', '']);
 
   const handleStartPairing = async () => {
     setStarting(true);
@@ -19,6 +23,45 @@ export function PairingView() {
       alert('Pairing konnte nicht gestartet werden');
     } finally {
       setStarting(false);
+    }
+  };
+
+  const handlePinDigitChange = (index: number, value: string) => {
+    if (!/^\d?$/.test(value)) return; // Nur Ziffern
+    const newDigits = [...pinDigits];
+    newDigits[index] = value;
+    setPinDigits(newDigits);
+
+    // Auto-Focus zum naechsten Feld
+    if (value && index < 5) {
+      pinInputRefs.current[index + 1]?.focus();
+    }
+
+    // Auto-Submit wenn alle 6 Ziffern eingegeben
+    if (newDigits.every((d) => d.length === 1)) {
+      void handleConfirmPin(newDigits.join(''));
+    }
+  };
+
+  const handlePinKeyDown = (index: number, e: React.KeyboardEvent) => {
+    if (e.key === 'Backspace' && !pinDigits[index] && index > 0) {
+      pinInputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleConfirmPin = async (enteredPin: string) => {
+    setConfirmingPin(true);
+    setConfirmResult(null);
+    try {
+      await api.confirmPairing(enteredPin);
+      setConfirmResult('success');
+      refresh();
+    } catch {
+      setConfirmResult('error');
+      setPinDigits(['', '', '', '', '', '']);
+      pinInputRefs.current[0]?.focus();
+    } finally {
+      setConfirmingPin(false);
     }
   };
 
@@ -73,6 +116,60 @@ export function PairingView() {
               {starting ? 'Starte...' : 'Pairing starten'}
             </button>
           </div>
+        )}
+      </div>
+
+      {/* PIN-Eingabe (um PIN eines anderen Nodes einzugeben) */}
+      <div className="card" style={{ marginBottom: '1rem' }}>
+        <h3 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.75rem' }}>
+          PIN eines anderen Nodes eingeben
+        </h3>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.8125rem', marginBottom: '0.75rem' }}>
+          Der andere Node hat eine 6-stellige PIN generiert. Gib sie hier ein:
+        </p>
+        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', marginBottom: '0.75rem' }}>
+          {pinDigits.map((digit, i) => (
+            <input
+              key={i}
+              ref={(el) => { pinInputRefs.current[i] = el; }}
+              type="text"
+              inputMode="numeric"
+              maxLength={1}
+              value={digit}
+              onChange={(e) => handlePinDigitChange(i, e.target.value)}
+              onKeyDown={(e) => handlePinKeyDown(i, e)}
+              disabled={confirmingPin}
+              style={{
+                width: '2.5rem',
+                height: '3rem',
+                fontSize: '1.5rem',
+                fontWeight: 700,
+                fontFamily: 'monospace',
+                textAlign: 'center',
+                border: `2px solid ${confirmResult === 'error' ? 'var(--danger)' : confirmResult === 'success' ? 'var(--success)' : 'var(--border)'}`,
+                borderRadius: '0.5rem',
+                background: 'var(--bg-primary)',
+                color: 'var(--text-primary)',
+                outline: 'none',
+              }}
+              aria-label={`PIN Ziffer ${i + 1}`}
+            />
+          ))}
+        </div>
+        {confirmResult === 'success' && (
+          <p style={{ color: 'var(--success)', fontSize: '0.8125rem', textAlign: 'center' }}>
+            Pairing erfolgreich!
+          </p>
+        )}
+        {confirmResult === 'error' && (
+          <p style={{ color: 'var(--danger)', fontSize: '0.8125rem', textAlign: 'center' }}>
+            Ungueltige PIN. Bitte erneut versuchen.
+          </p>
+        )}
+        {confirmingPin && (
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.8125rem', textAlign: 'center' }}>
+            Pruefe PIN...
+          </p>
         )}
       </div>
 
