@@ -134,7 +134,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 ### 3.3 Skill-Sandboxing
 - [ ] 🔴 WASM-Sandbox (Wazero oder wasmtime)
 - [ ] 🔴 Docker-Container-Fallback für komplexe Skills
-- [ ] 🔴 I/O-Schema-Validierung (JSON Schema) vor Ausführung
+- [x] 🔴 I/O-Schema-Validierung (JSON Schema) vor Ausführung — `schema-validator.ts` + @cfworker/json-schema (2026-04-05)
 - [ ] 🟠 Ressourcen-Limits (CPU-Zeit, Speicher, Netzwerk)
 - [ ] 🟠 Kein Dateisystem-Zugriff außerhalb des Skill-Verzeichnisses
 - [ ] 🟡 Deno-Isolate als dritte Sandbox-Option
