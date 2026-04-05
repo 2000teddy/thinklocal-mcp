@@ -251,7 +251,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [x] 🟠 Integration-Tests (Multi-Node im Docker Compose) — `tests/integration/two-nodes.test.ts` (2026-04-03)
 - [x] 🟠 Security-Tests (Fuzzing, Penetration-Szenarien) — 20 Tests: Replay, TTL, ECDSA, Path-Traversal, Rate-Limit, QR-Token, Input-Sanitisierung (2026-04-05)
 - [x] 🟡 Performance-Tests (Latenz, Durchsatz, Skalierung) — 9 Benchmarks: ECDSA 15k/s, SHA256 992k/s, PatternMatch 4.3M/s, MapLookup 99M/s (2026-04-05)
-- [ ] 🟡 Chaos-Tests (Network Partition, Node-Ausfall)
+- [x] 🟡 Chaos-Tests (Network Partition, Node-Ausfall) — 12 Tests: Split-Brain, Rapid Rejoin, Gossip-Storm, Heartbeat-Verlust, Multi-Ausfall (2026-04-05)
 
 ### CI/CD & Build
 - [x] 🔴 GitHub Actions Pipeline — `.github/workflows/ci.yml` (2026-04-03)
