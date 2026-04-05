@@ -204,7 +204,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 ### 5.6 Distribution + Auto-Update
 - [x] 🟠 Homebrew-Formel (macOS) — `Formula/thinklocal.rb` mit launchd-Service, 3 Binaries (2026-04-05)
 - [ ] 🟠 Auto-Update-Mechanismus (Sparkle fuer App, npm fuer CLI)
-- [ ] 🟡 Signierte Releases (checksums, GPG)
+- [x] 🟡 Signierte Releases (checksums, GPG) — SHA256SUMS.txt + Release-Archive + .deb in GitHub Release (2026-04-05)
 
 ---
 
@@ -222,8 +222,8 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [x] 🟠 `thinklocal deploy user@host` — SSH-Deploy mit Dry-Run, .env-Transfer, Mesh-Join-Check (2026-04-05)
 - [x] 🟠 SSH-Key-Austausch: SSH-basierter Deploy nutzt key-based auth (BatchMode) (2026-04-05)
 - [x] 🟠 Lokale CA signiert Mesh-Zertifikate fuer Remote-Nodes — `--with-ca` Flag im Deploy (2026-04-05)
-- [ ] 🟡 Dry-Run-Modus: `thinklocal deploy --dry-run` zeigt alle Schritte
-- [ ] 🟡 `thinklocal remove user@host` — Remote-Deinstallation
+- [x] 🟡 Dry-Run-Modus: `thinklocal deploy --dry-run` zeigt alle Schritte — bereits in cmdDeploy implementiert (2026-04-05)
+- [x] 🟡 `thinklocal remove user@host` — Remote-Deinstallation mit --purge Option (2026-04-05)
 - [ ] 💡 Netzwerk-Scanner schlaegt Deployment-Ziele vor
 
 ### 6.3 Fehlende Infrastruktur (Konsensus-Findings)

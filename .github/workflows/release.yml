@@ -31,13 +31,41 @@ jobs:
         working-directory: packages/daemon
         run: npx vitest run
 
+      - name: Run security tests
+        run: npx vitest run tests/security/
+
       - name: Build Docker image
         run: docker build -t thinklocal-mcp:${{ github.ref_name }} .
+
+      - name: Create release archive
+        run: |
+          VERSION=${{ github.ref_name }}
+          git archive --format=tar.gz --prefix=thinklocal-mcp-${VERSION}/ HEAD > thinklocal-mcp-${VERSION}.tar.gz
+          git archive --format=zip --prefix=thinklocal-mcp-${VERSION}/ HEAD > thinklocal-mcp-${VERSION}.zip
+
+      - name: Build .deb package
+        run: |
+          VERSION=$(echo "${{ github.ref_name }}" | sed 's/^v//')
+          bash scripts/build-deb.sh "$VERSION"
+
+      - name: Generate checksums
+        run: |
+          VERSION=${{ github.ref_name }}
+          sha256sum thinklocal-mcp-${VERSION}.tar.gz thinklocal-mcp-${VERSION}.zip > SHA256SUMS.txt
+          if [ -f "dist/thinklocal-mcp_*.deb" ]; then
+            sha256sum dist/thinklocal-mcp_*.deb >> SHA256SUMS.txt
+          fi
+          cat SHA256SUMS.txt
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+          files: |
+            thinklocal-mcp-${{ github.ref_name }}.tar.gz
+            thinklocal-mcp-${{ github.ref_name }}.zip
+            SHA256SUMS.txt
+            dist/*.deb
           body: |
             ## Installation
 
@@ -45,9 +73,29 @@ jobs:
             curl -fsSL https://raw.githubusercontent.com/2000teddy/thinklocal-mcp/${{ github.ref_name }}/scripts/install.sh | bash
             ```
 
+            ## Homebrew (macOS)
+
+            ```bash
+            brew tap 2000teddy/tap
+            brew install thinklocal
+            ```
+
+            ## Debian/Ubuntu
+
+            ```bash
+            wget https://github.com/2000teddy/thinklocal-mcp/releases/download/${{ github.ref_name }}/thinklocal-mcp_*.deb
+            sudo dpkg -i thinklocal-mcp_*.deb
+            ```
+
             ## Docker
 
             ```bash
             docker build -t thinklocal-mcp .
             docker run -d -p 9440:9440 thinklocal-mcp
+            ```
+
+            ## Verify
+
+            ```bash
+            sha256sum -c SHA256SUMS.txt
             ```

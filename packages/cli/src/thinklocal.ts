@@ -1222,6 +1222,70 @@ async function cmdSetup(tool?: string): Promise<void> {
   console.log(`  ${C.dim}Starte den Daemon mit: thinklocal start${C.reset}\n`);
 }
 
+// --- Remote Remove ---
+
+async function cmdRemove(targetArg: string, flags: string[]): Promise<void> {
+  const dryRun = flags.includes('--dry-run');
+  const purge = flags.includes('--purge');
+  const target = targetArg;
+
+  if (!target || !target.includes('@')) {
+    console.log(`  Nutzung: thinklocal remove user@host [--dry-run] [--purge]`);
+    console.log(`  Beispiel: thinklocal remove chris@10.10.10.56`);
+    console.log(`  --purge: Entfernt auch Daten und Logs`);
+    return;
+  }
+
+  header(`Remote-Deinstallation von ${target}${dryRun ? ' (Dry-Run)' : ''}`);
+
+  // 1. SSH pruefen
+  info('Pruefe SSH-Verbindung...');
+  const os = sshOutput(target, 'uname -s');
+  if (!os) {
+    fail('SSH-Verbindung fehlgeschlagen');
+    return;
+  }
+  ok(`Verbunden (${os})`);
+
+  // 2. Service stoppen
+  info('Stoppe Service...');
+  await sshExec(target, 'sudo systemctl stop thinklocal-mcp 2>/dev/null; sudo systemctl disable thinklocal-mcp 2>/dev/null; true', 'Service gestoppt', dryRun);
+
+  // 3. launchd stoppen (falls macOS)
+  if (os === 'Darwin') {
+    await sshExec(target, 'launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.thinklocal.daemon.plist 2>/dev/null; true', 'launchd Service gestoppt', dryRun);
+  }
+
+  // 4. Installationsverzeichnis entfernen
+  info('Entferne Installation...');
+  await sshExec(target, 'sudo rm -rf /opt/thinklocal-mcp', 'Installationsverzeichnis entfernt', dryRun);
+  await sshExec(target, 'sudo rm -f /usr/bin/thinklocal /usr/bin/tlmcp-daemon /usr/bin/tlmcp-mcp', 'CLI-Binaries entfernt', dryRun);
+  await sshExec(target, 'sudo rm -f /lib/systemd/system/thinklocal-mcp.service', 'Service-Unit entfernt', dryRun);
+
+  if (purge) {
+    info('Purge: Entferne Daten und Logs...');
+    await sshExec(target, 'sudo rm -rf /var/lib/thinklocal /var/log/thinklocal /etc/thinklocal', 'Daten und Logs entfernt', dryRun);
+
+    // Home-Verzeichnis aufraemen
+    const remoteUser = target.split('@')[0];
+    await sshExec(target, `rm -rf /home/${remoteUser}/.thinklocal`, 'User-Daten entfernt', dryRun);
+  }
+
+  // 5. System-Benutzer entfernen
+  if (purge) {
+    await sshExec(target, 'sudo userdel thinklocal 2>/dev/null; true', 'System-Benutzer entfernt', dryRun);
+  }
+
+  // 6. systemd reload
+  await sshExec(target, 'sudo systemctl daemon-reload 2>/dev/null; true', 'systemd neu geladen', dryRun);
+
+  console.log(`\n  ${C.green}${C.bold}Deinstallation abgeschlossen!${C.reset}`);
+  if (!purge) {
+    console.log(`  ${C.dim}Daten und Logs wurden beibehalten. Nutze --purge um alles zu entfernen.${C.reset}`);
+  }
+  console.log();
+}
+
 // --- Main ---
 
 async function main(): Promise<void> {
@@ -1244,6 +1308,8 @@ async function main(): Promise<void> {
       return;
     case 'mcp':
       return cmdMcpConfig(args[1]);
+    case 'remove':
+      return cmdRemove(args[1], args.slice(2));
     case 'deploy':
       return cmdDeploy(args[1], args.slice(2));
     case 'setup':
@@ -1269,6 +1335,7 @@ async function main(): Promise<void> {
     peers          Verbundene Peers mit Health-Daten
     check <host>   Remote-Daemon pruefen (host oder host:port)
     deploy <u@h>   Remote-Deployment via SSH (Linux)
+    remove <u@h>   Remote-Deinstallation via SSH [--purge]
     setup <tool>   MCP-Server in AI-Tool konfigurieren
                    Tools: codex, gemini, claude-desktop, claude-code, all
     mcp            MCP-Config-Snippet anzeigen
