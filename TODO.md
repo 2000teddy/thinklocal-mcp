@@ -296,7 +296,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [x] 🟠 **GraphQL Resolver Error-Handling** — throw Error() statt leere Arrays (2026-04-05)
 - [x] 🟠 **JWT Token-Refresh** — /api/auth/refresh Endpoint (2026-04-05)
 - [x] 🟠 **SemVer Prerelease-Vergleich** — Spec-konformer Vergleich (numerisch + lexikographisch) (2026-04-05)
-- [ ] 🟡 **Task-Router Tie-Breaking** — Bei gleichem Score wird deterministisch der erste gewaehlt. Zufalls-Tiebreaker fuer bessere Lastverteilung (Gemini 2.5 Pro)
+- [x] 🟡 **Task-Router Tie-Breaking** — Zufalls-Tiebreaker bei gleichem Score (2026-04-05)
 - [ ] 🟡 **GraphQL Subscription Cleanup** — Async Generator leakt Handler bei Network-Drop ohne finally. Mercurius sollte das handlen, aber Edge-Case (Gemini 2.5 Pro)
 - [ ] 🟡 **mesh-client.ts Retry-Logik** — Keine Wiederholungsversuche bei transienten HTTP-Fehlern (GPT-5.1)
 - [ ] 🟡 **Policy-Pattern Dokumentation** — matchesPattern unterstuetzt nur *, prefix* und exakt. Dokumentieren damit Admins keine Regex/Glob-Semantik erwarten (GPT-5.1)
