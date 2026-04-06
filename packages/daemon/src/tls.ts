@@ -169,7 +169,6 @@ export function loadOrCreateTlsBundle(
 
   // 2. Node-Zertifikat laden oder erstellen
   if (existsSync(nodeCertPath) && existsSync(nodeKeyPath)) {
-    // Prüfe ob das Zertifikat noch gültig ist
     const certPem = readFileSync(nodeCertPath, 'utf-8');
     const cert = forge.pki.certificateFromPem(certPem);
     const now = new Date();
@@ -177,15 +176,29 @@ export function loadOrCreateTlsBundle(
       (cert.validity.notAfter.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
     );
 
-    if (daysLeft > 7) {
-      log?.info({ daysLeft }, 'Vorhandenes Node-Zertifikat geladen');
-      return {
-        certPem,
-        keyPem: readFileSync(nodeKeyPath, 'utf-8'),
-        caCertPem: ca.caCertPem,
-      };
+    // Pruefe Ablauf
+    if (daysLeft <= 7) {
+      log?.warn({ daysLeft }, 'Node-Zertifikat läuft bald ab, erstelle neues...');
+    } else {
+      // Pruefe ob die SPIFFE-URI im Cert noch zur aktuellen Identitaet passt.
+      // Notwendig nach der stableNodeId-Migration: wenn identity.spiffeUri sich
+      // geaendert hat (z.B. von host/<oldHostname> zu host/<stableNodeId>), muessen
+      // wir das Cert reissuen — sonst lehnen Peers den mTLS-Handshake ab oder wir
+      // praesentieren eine veraltete Identitaet.
+      const certSpiffeUri = extractSpiffeUri(certPem);
+      if (certSpiffeUri === spiffeUri) {
+        log?.info({ daysLeft }, 'Vorhandenes Node-Zertifikat geladen');
+        return {
+          certPem,
+          keyPem: readFileSync(nodeKeyPath, 'utf-8'),
+          caCertPem: ca.caCertPem,
+        };
+      }
+      log?.warn(
+        { certSpiffeUri, currentSpiffeUri: spiffeUri },
+        'SPIFFE-URI im Cert weicht von aktueller Identitaet ab — reissue (stableNodeId-Migration?)',
+      );
     }
-    log?.warn({ daysLeft }, 'Node-Zertifikat läuft bald ab, erstelle neues...');
   }
 
   // Lokale IPs sammeln für SANs
