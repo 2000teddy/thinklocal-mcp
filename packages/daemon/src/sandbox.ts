@@ -12,7 +12,8 @@
  * Phase 3: Docker-Container
  */
 
-import { fork, spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { fork, spawn, type ChildProcess, type ChildProcessByStdio } from 'node:child_process';
+import type { Readable } from 'node:stream';
 import { dirname, isAbsolute, normalize, relative, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import type { Logger } from 'pino';
@@ -286,7 +287,7 @@ export class SkillSandbox {
         cwd: getSkillDir(modulePath),
         env: createMinimalRunnerEnv(),
         stdio: ['ignore', 'pipe', 'pipe'],
-      }) as ChildProcessWithoutNullStreams;
+      }) as ChildProcessByStdio<null, Readable, Readable>;
 
       let stdout = '';
       let stderr = '';
@@ -391,7 +392,7 @@ export class SkillSandbox {
         cwd: getSkillDir(entryPath),
         env: createMinimalRunnerEnv(),
         stdio: ['ignore', 'pipe', 'pipe'],
-      }) as ChildProcessWithoutNullStreams;
+      }) as ChildProcessByStdio<null, Readable, Readable>;
 
       let stdout = '';
       let stderr = '';
