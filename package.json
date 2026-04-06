@@ -24,7 +24,7 @@
     "lint:fix": "eslint --fix packages/daemon/src packages/cli/src packages/dashboard-ui/src",
     "format": "prettier --check 'packages/**/*.{ts,tsx}'",
     "format:fix": "prettier --write 'packages/**/*.{ts,tsx}'",
-    "health": "curl -sf http://localhost:9440/health && echo '' || echo 'Daemon nicht erreichbar'"
+    "health": "bash scripts/health-check.sh"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
