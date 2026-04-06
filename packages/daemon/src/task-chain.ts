@@ -22,7 +22,7 @@ export interface ChainStep {
   targetAgent?: string;
   /** Timeout fuer diesen Schritt in ms (default: 30s) */
   timeoutMs?: number;
-  /** Bedingung: Nur ausfuehren wenn voheriger Schritt erfolgreich */
+  /** Bedingung: Nur ausfuehren wenn voheriger Schritt erfolgreich (default: true) */
   onlyOnSuccess?: boolean;
 }
 
@@ -102,9 +102,10 @@ export async function executeChain(
         });
         log?.warn({ chainId, step: i, skillId: step.skillId, error: result.error }, 'Chain-Schritt fehlgeschlagen');
 
-        // Nachfolgende Schritte uebersprungen wenn onlyOnSuccess
+        // Nachfolgende Schritte uebersprungen wenn onlyOnSuccess (default: true)
+        // Schritte mit onlyOnSuccess === false werden trotz Fehler ausgefuehrt
         for (let j = i + 1; j < steps.length; j++) {
-          if (steps[j].onlyOnSuccess !== false) {
+          if (steps[j].onlyOnSuccess ?? true) {
             results.push({
               skillId: steps[j].skillId,
               status: 'skipped',

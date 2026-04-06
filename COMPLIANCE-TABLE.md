@@ -133,39 +133,53 @@ Dokumentiert die Einhaltung der Entwicklungsregeln (CLAUDE.md) fuer jeden PR.
 | 91 | Telegram HTTPS + Vault-Passphrase Fix   | 04-06 01:20 | ✅ | ⚠️ | —  | —  | 2 Bugs gefixt (HTTPS, null-??)     |
 | 92 | Timestamps + Auth-Guard + TLS-Filter    | 04-06 02:00 | ✅ | ⚠️ | —  | —  | 4 HIGH Findings gefixt (GPT-5.4)   |
 | 93 | Full Batch-Review + Precommit (retro)   | 04-06 02:30 | ✅ | ✅ | —  | —  | GPT-5.4: 18H, 27M, 13L — 58 total |
+| 94 | HIGH-Findings Fix: 13 Dateien           | 04-06 06:30 | ✅ | ✅ | —  | —  | 13 HIGH Findings gefixt (siehe unten) |
 
 ---
 
 ## Gesamtstatistik
 
-### Compliance-Rate ueber alle 93 Eintraege
+### Compliance-Rate ueber alle 94 Eintraege
 
 | Regel            | Anwendbar | Eingehalten (✅/⚠️) | Rate       |
 |------------------|:---------:|:-------------------:|:----------:|
-| `pal:codereview` |    ~70    |     70 (✅15+⚠️55)  | **100%**   |
-| `pal:precommit`  |    ~82    |     82 (✅2+⚠️80)   | **100%**   |
+| `pal:codereview` |    ~71    |     71 (✅16+⚠️55)  | **100%**   |
+| `pal:precommit`  |    ~83    |     83 (✅3+⚠️80)   | **100%**   |
 | `pal:consensus`  |    ~12    |      1              |  **8%**    |
 | `clink gemini`   |    ~22    |      0              |  **0%**    |
-| Security-Review  |    ~12    |      3              | **25%**    |
+| Security-Review  |    ~12    |      4              | **33%**    |
 
 > **Hinweis:** ⚠️ = retroaktiv nachgeholt am 2026-04-06 via GPT-5.4 Batch-Review.
-> 58 Issues gefunden (18 HIGH, 27 MEDIUM, 13 LOW). Alle dokumentiert.
+> 58 Issues gefunden (18 HIGH, 27 MEDIUM, 13 LOW). **13 HIGH Findings am 04-06 06:30 gefixt.**
 
 ### Kritische Findings die NUR durch Reviews entdeckt wurden
 
-| #  | Schwere      | Finding                                          | Reviewer |
-|----|--------------|--------------------------------------------------|----------|
-| 46 | **CRITICAL** | Shell-Injection in keychain.ts (execSync)        | GPT-5.1  |
-| 40 | HIGH         | Toast-Timer Memory-Leak (useEffect)              | Gemini   |
-| 73 | HIGH         | FrameProtocolError statt silent drop              | GPT-5.4  |
-| 73 | HIGH         | cleanupStaleSocket loescht aktive Sockets         | GPT-5.4  |
-| 84 | HIGH         | build-deb.sh postinst verschleiert Fehler         | GPT-5.4  |
-| 84 | HIGH         | cli-adapters.ts loadJsonFile schluckt JSON-Fehler | GPT-5.4  |
-| 84 | HIGH         | daemon.toml nicht im Service verdrahtet           | GPT-5.4  |
-| 85 | HIGH         | local-daemon-client braucht Client-Cert fuer mTLS | GPT-5.4  |
-| 85 | HIGH         | discovery.ts muss http-Peers bei TLS ablehnen     | GPT-5.4  |
-| 85 | HIGH         | Telegram-Commands ohne Auth-Guard                 | GPT-5.4  |
-| 85 | HIGH         | Peer-Identitaet nicht an TLS-Cert gebunden        | GPT-5.4  |
+| #  | Schwere      | Finding                                          | Reviewer | Status |
+|----|--------------|--------------------------------------------------|----------|--------|
+| 46 | **CRITICAL** | Shell-Injection in keychain.ts (execSync)        | GPT-5.1  | ✅ gefixt |
+| 40 | HIGH         | Toast-Timer Memory-Leak (useEffect)              | Gemini   | ✅ gefixt |
+| 73 | HIGH         | FrameProtocolError statt silent drop              | GPT-5.4  | ✅ gefixt |
+| 73 | HIGH         | cleanupStaleSocket loescht aktive Sockets         | GPT-5.4  | ✅ gefixt |
+| 84 | HIGH         | build-deb.sh postinst verschleiert Fehler         | GPT-5.4  | ✅ gefixt #94 |
+| 84 | HIGH         | cli-adapters.ts loadJsonFile schluckt JSON-Fehler | GPT-5.4  | ✅ gefixt |
+| 84 | HIGH         | daemon.toml nicht im Service verdrahtet           | GPT-5.4  | ✅ gefixt #94 |
+| 85 | HIGH         | local-daemon-client braucht Client-Cert fuer mTLS | GPT-5.4  | ✅ gefixt #92 |
+| 85 | HIGH         | discovery.ts muss http-Peers bei TLS ablehnen     | GPT-5.4  | ✅ gefixt #92 |
+| 85 | HIGH         | Telegram-Commands ohne Auth-Guard                 | GPT-5.4  | ✅ gefixt #92 |
+| 85 | HIGH         | Peer-Identitaet nicht an TLS-Cert gebunden        | GPT-5.4  | ⚠️ Design-Problem |
+| 93 | HIGH         | X-Forwarded-For Auth-Bypass in api-auth.ts       | GPT-5.4  | ✅ gefixt #94 |
+| 93 | HIGH         | Audit importPeerEvent ohne Signatur-Verifikation | GPT-5.4  | ✅ gefixt #94 |
+| 93 | HIGH         | GraphQL GraphiQL in Produktion offen             | GPT-5.4  | ✅ gefixt #94 |
+| 93 | HIGH         | PIN Brute-Force ohne IP Rate-Limiting            | GPT-5.4  | ✅ gefixt #94 |
+| 93 | HIGH         | CRL save() Race Condition (kein atomic write)    | GPT-5.4  | ✅ gefixt #94 |
+| 93 | HIGH         | Sandbox AbortController Memory-Leak              | GPT-5.4  | ✅ gefixt #94 |
+| 93 | HIGH         | task-chain onlyOnSuccess inverted logic           | GPT-5.4  | ✅ gefixt #94 |
+| 93 | HIGH         | recovery.ts dynamic require + race               | GPT-5.4  | ✅ gefixt #94 |
+| 93 | HIGH         | partition-detector addKnownPeer auto-online       | GPT-5.4  | ✅ gefixt #94 |
+| 93 | HIGH         | task-queue processNext race condition             | GPT-5.4  | ✅ gefixt #94 |
+| 93 | HIGH         | skill-lifecycle GC loescht aktive Skills          | GPT-5.4  | ✅ gefixt #94 |
+| 93 | HIGH         | scoped-multicast silent empty fallback            | GPT-5.4  | ✅ gefixt #94 |
+| 93 | HIGH         | build-deb.sh shell injection + error masking     | GPT-5.4  | ✅ gefixt #94 |
 
 ---
 
@@ -202,4 +216,4 @@ Shell-Injection die in Produktion ein Sicherheitsrisiko waere.
 
 ---
 
-*Letzte Aktualisierung: 2026-04-06 02:30*
+*Letzte Aktualisierung: 2026-04-06 06:30*

@@ -6,7 +6,7 @@
  * und bei der Agent-Card-Verifikation geprueft.
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import type { Logger } from 'pino';
 
@@ -87,7 +87,10 @@ export class CertificateRevocationList {
   private save(): void {
     try {
       mkdirSync(dirname(this.filePath), { recursive: true });
-      writeFileSync(this.filePath, JSON.stringify([...this.entries.values()], null, 2));
+      // SECURITY: Atomic write — tmp-Datei schreiben, dann rename (verhindert Race Conditions)
+      const tmpPath = this.filePath + '.tmp';
+      writeFileSync(tmpPath, JSON.stringify([...this.entries.values()], null, 2));
+      renameSync(tmpPath, this.filePath);
     } catch (err) {
       this.log?.warn({ err }, 'CRL speichern fehlgeschlagen');
     }

@@ -48,7 +48,11 @@ export function resolveMulticastTargets(
           .map((c) => c.agent_id),
       );
       const targets = [...allPeers.values()].filter((p) => matchingAgents.has(p.agentId));
-      log?.debug({ scope: scope.skillId, targets: targets.length }, 'Scoped Multicast: capability');
+      if (targets.length === 0) {
+        log?.warn({ scope: scope.skillId, availablePeers: allPeers.size }, 'Scoped Multicast: Keine Peers mit Capability gefunden');
+      } else {
+        log?.debug({ scope: scope.skillId, targets: targets.length }, 'Scoped Multicast: capability');
+      }
       return targets;
     }
 
@@ -59,7 +63,11 @@ export function resolveMulticastTargets(
           .map((c) => c.agent_id),
       );
       const targets = [...allPeers.values()].filter((p) => matchingAgents.has(p.agentId));
-      log?.debug({ scope: scope.category, targets: targets.length }, 'Scoped Multicast: category');
+      if (targets.length === 0) {
+        log?.warn({ scope: scope.category, availablePeers: allPeers.size }, 'Scoped Multicast: Keine Peers mit Kategorie gefunden');
+      } else {
+        log?.debug({ scope: scope.category, targets: targets.length }, 'Scoped Multicast: category');
+      }
       return targets;
     }
 
@@ -68,7 +76,11 @@ export function resolveMulticastTargets(
       const targets = [...allPeers.values()].filter((p) =>
         p.agentId.endsWith(`/agent/${scope.agentType}`),
       );
-      log?.debug({ scope: scope.agentType, targets: targets.length }, 'Scoped Multicast: agent-type');
+      if (targets.length === 0) {
+        log?.warn({ scope: scope.agentType, availablePeers: allPeers.size }, 'Scoped Multicast: Kein Peer mit Agent-Type gefunden');
+      } else {
+        log?.debug({ scope: scope.agentType, targets: targets.length }, 'Scoped Multicast: agent-type');
+      }
       return targets;
     }
 

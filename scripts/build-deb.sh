@@ -63,10 +63,14 @@ chmod 750 /var/lib/thinklocal
 chmod 750 /var/log/thinklocal
 
 # npm Dependencies installieren
-cd /opt/thinklocal-mcp
-npm install --omit=dev --ignore-scripts 2>/dev/null || true
-cd packages/daemon
-npm install --omit=dev 2>/dev/null || true
+cd /opt/thinklocal-mcp || exit 1
+if ! npm install --omit=dev --ignore-scripts; then
+    echo "WARNUNG: npm install im Root fehlgeschlagen" >&2
+fi
+cd packages/daemon || exit 1
+if ! npm install --omit=dev; then
+    echo "WARNUNG: npm install fuer daemon fehlgeschlagen" >&2
+fi
 
 # Systemd Service aktivieren
 systemctl daemon-reload
@@ -147,7 +151,8 @@ mkdir -p "$PKG_DIR${INSTALL_DIR}/config"
 # Wird im postinst per ln -sf verlinkt
 
 # Systemd Service-Unit
-cat > "$PKG_DIR/lib/systemd/system/thinklocal-mcp.service" << EOF
+# SECURITY: Quoted heredoc ('SVCEOF') verhindert Shell-Variable-Injection
+cat > "$PKG_DIR/lib/systemd/system/thinklocal-mcp.service" << 'SVCEOF'
 [Unit]
 Description=ThinkLocal-MCP Mesh Daemon
 Documentation=https://github.com/2000teddy/thinklocal-mcp
@@ -158,8 +163,9 @@ Wants=network-online.target
 Type=simple
 User=thinklocal
 Group=thinklocal
-WorkingDirectory=${INSTALL_DIR}
-ExecStart=/usr/bin/node --import tsx ${INSTALL_DIR}/packages/daemon/src/index.ts
+WorkingDirectory=/opt/thinklocal-mcp
+ExecStart=/usr/bin/node --import tsx /opt/thinklocal-mcp/packages/daemon/src/index.ts
+EnvironmentFile=-/etc/thinklocal/daemon.env
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
@@ -183,24 +189,25 @@ Environment=TLMCP_LOG_LEVEL=info
 
 [Install]
 WantedBy=multi-user.target
-EOF
+SVCEOF
 
 # CLI Wrapper-Scripts
-cat > "$PKG_DIR/usr/bin/thinklocal" << EOF
+# SECURITY: Quoted heredoc verhindert Variable-Injection in Wrapper-Scripts
+cat > "$PKG_DIR/usr/bin/thinklocal" << 'EOF'
 #!/bin/bash
-exec node --import tsx ${INSTALL_DIR}/packages/cli/src/thinklocal.ts "\$@"
+exec node --import tsx /opt/thinklocal-mcp/packages/cli/src/thinklocal.ts "$@"
 EOF
 chmod 755 "$PKG_DIR/usr/bin/thinklocal"
 
-cat > "$PKG_DIR/usr/bin/tlmcp-daemon" << EOF
+cat > "$PKG_DIR/usr/bin/tlmcp-daemon" << 'EOF'
 #!/bin/bash
-exec node --import tsx ${INSTALL_DIR}/packages/daemon/src/index.ts "\$@"
+exec node --import tsx /opt/thinklocal-mcp/packages/daemon/src/index.ts "$@"
 EOF
 chmod 755 "$PKG_DIR/usr/bin/tlmcp-daemon"
 
-cat > "$PKG_DIR/usr/bin/tlmcp-mcp" << EOF
+cat > "$PKG_DIR/usr/bin/tlmcp-mcp" << 'EOF'
 #!/bin/bash
-exec node --import tsx ${INSTALL_DIR}/packages/daemon/src/mcp-stdio.ts "\$@"
+exec node --import tsx /opt/thinklocal-mcp/packages/daemon/src/mcp-stdio.ts "$@"
 EOF
 chmod 755 "$PKG_DIR/usr/bin/tlmcp-mcp"
 

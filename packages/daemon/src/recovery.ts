@@ -8,11 +8,12 @@
  * - Defekte Datenbanken → Backup + Recreate
  */
 
-import { existsSync, unlinkSync, renameSync } from 'node:fs';
+import { existsSync, unlinkSync, renameSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createServer } from 'node:net';
 import { hostname as osHostname } from 'node:os';
 import { getCertDaysLeft } from './tls.js';
+import Database from 'better-sqlite3';
 import type { Logger } from 'pino';
 
 export interface RecoveryResult {
@@ -109,19 +110,16 @@ function checkHostnameChange(dataDir: string, log?: Logger): RecoveryResult {
   if (!existsSync(hostFile)) {
     // Erster Start — Hostname speichern
     try {
-      const { writeFileSync } = require('node:fs');
       writeFileSync(hostFile, currentHostname);
     } catch { /* ok */ }
     return { issue: 'none', recovered: true, action: 'Hostname gespeichert' };
   }
 
-  const { readFileSync } = require('node:fs');
   const lastHostname = readFileSync(hostFile, 'utf-8').trim();
 
   if (lastHostname !== currentHostname) {
     log?.info({ previous: lastHostname, current: currentHostname }, 'Recovery: Hostname geaendert');
     try {
-      const { writeFileSync } = require('node:fs');
       writeFileSync(hostFile, currentHostname);
     } catch { /* ok */ }
     return {
@@ -147,7 +145,6 @@ function checkDatabaseIntegrity(dataDir: string, log?: Logger): RecoveryResult {
 
     try {
       // Versuche die DB zu oeffnen (quick integrity check)
-      const Database = require('better-sqlite3');
       const db = new Database(dbPath, { readonly: true });
       db.pragma('integrity_check');
       db.close();

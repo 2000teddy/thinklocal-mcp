@@ -180,8 +180,9 @@ export async function registerGraphQL(
     },
     context: (): GraphQLContext => ({ daemonUrl }),
     subscription: true,
-    graphiql: true, // GraphiQL UI unter /graphiql
+    // SECURITY: GraphiQL nur in Entwicklung aktivieren (nicht in Produktion)
+    graphiql: process.env['NODE_ENV'] !== 'production',
   });
 
-  log?.info('GraphQL API registriert (/graphql + /graphiql)');
+  log?.info({ graphiql: process.env['NODE_ENV'] !== 'production' }, 'GraphQL API registriert (/graphql)');
 }

@@ -36,10 +36,13 @@ export class PartitionDetector {
     private log?: Logger,
   ) {}
 
-  /** Registriert einen bekannten Peer (beim Join) */
+  /** Registriert einen bekannten Peer (beim Join).
+   *  SECURITY: Peer wird NICHT automatisch als online markiert.
+   *  Der Heartbeat muss die Verbindung bestaetigen (via peerReconnected).
+   */
   addKnownPeer(agentId: string): void {
     this.expectedPeers.add(agentId);
-    this.currentPeers.add(agentId);
+    // NICHT zu currentPeers hinzufuegen — Heartbeat muss zuerst bestaetigen
     this.lostPeers.delete(agentId);
     this.evaluateState();
   }

@@ -105,7 +105,9 @@ export async function registerApiAuth(
     if (PUBLIC_PATHS.has(path)) return;
 
     // Localhost-Requests ohne Auth erlauben (fuer CLI + MCP)
-    const remoteAddr = request.ip;
+    // SECURITY: request.socket.remoteAddress statt request.ip verwenden,
+    // da request.ip durch X-Forwarded-For gespooft werden kann
+    const remoteAddr = request.socket.remoteAddress;
     if (remoteAddr === '127.0.0.1' || remoteAddr === '::1' || remoteAddr === '::ffff:127.0.0.1') {
       return;
     }
@@ -120,7 +122,8 @@ export async function registerApiAuth(
 
   // Token-Generierungs-Endpoint (nur localhost)
   app.post('/api/auth/token', async (request: FastifyRequest, reply: FastifyReply) => {
-    const remoteAddr = request.ip;
+    // SECURITY: request.socket.remoteAddress statt request.ip (X-Forwarded-For bypass)
+    const remoteAddr = request.socket.remoteAddress;
     if (remoteAddr !== '127.0.0.1' && remoteAddr !== '::1' && remoteAddr !== '::ffff:127.0.0.1') {
       reply.code(403).send({ error: 'Forbidden', message: 'Token-Generierung nur von localhost' });
       return;

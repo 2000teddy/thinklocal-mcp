@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import { resolve } from 'node:path';
 import { mkdirSync } from 'node:fs';
-import { signData } from './identity.js';
+import { signData, verifySignature } from './identity.js';
 import { createHash } from 'node:crypto';
 import type { Logger } from 'pino';
 
@@ -171,7 +171,7 @@ export class AuditLog {
   /**
    * Importiert ein Audit-Event von einem Peer.
    * Speichert es in einer separaten Tabelle fuer Peer-Events.
-   * Verifiziert die Signatur wenn publicKey vorhanden.
+   * SECURITY: Verifiziert die Signatur wenn publicKey vorhanden.
    */
   importPeerEvent(event: {
     timestamp: string;
@@ -181,7 +181,27 @@ export class AuditLog {
     details?: string;
     signature: string;
     entry_hash: string;
-  }): boolean {
+  }, peerPublicKeyPem?: string): boolean {
+    // SECURITY: Signatur verifizieren wenn Public Key verfuegbar
+    if (peerPublicKeyPem) {
+      const payload = Buffer.from(
+        `${event.timestamp}|${event.event_type}|${event.agent_id}|${event.peer_id ?? ''}|${event.details ?? ''}`,
+      );
+      const sigBuffer = Buffer.from(event.signature, 'base64');
+      try {
+        const valid = verifySignature(peerPublicKeyPem, payload, sigBuffer);
+        if (!valid) {
+          this.log?.warn({ from: event.agent_id, type: event.event_type }, 'Peer-Audit-Event: Signatur ungueltig — abgelehnt');
+          return false;
+        }
+      } catch (err) {
+        this.log?.warn({ from: event.agent_id, err }, 'Peer-Audit-Event: Signaturpruefung fehlgeschlagen — abgelehnt');
+        return false;
+      }
+    } else {
+      this.log?.debug({ from: event.agent_id }, 'Peer-Audit-Event: Kein Public Key — Signatur nicht geprueft');
+    }
+
     // INSERT OR IGNORE mit UNIQUE entry_hash — ein Query statt zwei
     const info = this.importPeerStmt.run(
       event.timestamp,

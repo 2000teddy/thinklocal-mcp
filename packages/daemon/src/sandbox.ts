@@ -126,6 +126,7 @@ export class SkillSandbox {
       let output: unknown = null;
       let error: string | undefined;
       let stderr = '';
+      let timeoutHandle: ReturnType<typeof setTimeout>;
 
       // IPC-Kommunikation: Skill sendet Ergebnis via process.send()
       child.on('message', (msg: unknown) => {
@@ -137,6 +138,7 @@ export class SkillSandbox {
       });
 
       child.on('exit', (code) => {
+        clearTimeout(timeoutHandle);
         const durationMs = Date.now() - start;
 
         if (code === 0) {
@@ -157,6 +159,7 @@ export class SkillSandbox {
       });
 
       child.on('error', (err) => {
+        clearTimeout(timeoutHandle);
         const durationMs = Date.now() - start;
         resolvePromise({
           success: false,
@@ -168,9 +171,10 @@ export class SkillSandbox {
       // Input an den Skill senden
       child.send({ type: 'execute', input });
 
-      // Timeout-Schutz
-      setTimeout(() => {
+      // SECURITY: Timeout-Schutz mit Cleanup (verhindert Memory-Leak bei AbortController)
+      timeoutHandle = setTimeout(() => {
         if (!child.killed) {
+          abortController.abort();
           child.kill('SIGTERM');
           this.log?.warn({ scriptPath, timeoutMs: cfg.timeoutMs }, 'Skill-Sandbox: Timeout');
         }

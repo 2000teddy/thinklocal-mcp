@@ -92,6 +92,16 @@ export class SkillLifecycleManager {
     let removed = 0;
 
     for (const [skillId, entry] of this.skills) {
+      // SECURITY: Active Skills werden NIE per GC geloescht (nur expired/deprecated/disabled)
+      if (entry.status === 'active') {
+        // Aber abgelaufene Skills werden markiert
+        if (entry.expiresAt && new Date(entry.expiresAt).getTime() < now) {
+          entry.status = 'expired';
+          this.log?.info({ skillId }, 'Skill als expired markiert');
+        }
+        continue;
+      }
+
       // Abgelaufen?
       if (entry.expiresAt && new Date(entry.expiresAt).getTime() < now) {
         this.skills.delete(skillId);
@@ -100,23 +110,13 @@ export class SkillLifecycleManager {
         continue;
       }
 
-      // Seit X Tagen nicht genutzt?
-      if (entry.lastUsedAt) {
-        const lastUsed = new Date(entry.lastUsedAt).getTime();
-        if (now - lastUsed > unusedDays * 86400_000 && entry.status !== 'active') {
-          this.skills.delete(skillId);
-          removed++;
-          this.log?.info({ skillId, daysSinceUse: Math.floor((now - lastUsed) / 86400_000) }, 'Skill entfernt (ungenutzt)');
-          continue;
-        }
-      } else if (entry.usageCount === 0) {
-        // Nie genutzt und installiert vor > unusedDays
-        const installed = new Date(entry.installedAt).getTime();
-        if (now - installed > unusedDays * 86400_000) {
-          this.skills.delete(skillId);
-          removed++;
-          this.log?.info({ skillId }, 'Skill entfernt (nie genutzt)');
-        }
+      // Seit X Tagen nicht genutzt? (nur deprecated/disabled)
+      const lastActivity = entry.lastUsedAt ?? entry.installedAt;
+      const lastActivityTime = new Date(lastActivity).getTime();
+      if (now - lastActivityTime > unusedDays * 86400_000) {
+        this.skills.delete(skillId);
+        removed++;
+        this.log?.info({ skillId, status: entry.status, daysSinceActivity: Math.floor((now - lastActivityTime) / 86400_000) }, 'Skill entfernt (ungenutzt)');
       }
     }
 

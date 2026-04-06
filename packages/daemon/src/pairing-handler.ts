@@ -51,6 +51,30 @@ export function registerPairingRoutes(server: FastifyInstance, deps: PairingHand
   let activeSession: PairingSession | null = null;
   let failedAttempts = 0;
 
+  // SECURITY: Globale Rate-Limiting pro IP (persistent ueber Session-Resets)
+  const ipFailures = new Map<string, { count: number; lastAttempt: number }>();
+  const MAX_FAILURES_PER_IP = 10; // Max 10 Fehlversuche pro IP
+  const IP_LOCKOUT_MS = 15 * 60_000; // 15 Minuten Lockout nach Ueberschreitung
+
+  function isIpLocked(ip: string): boolean {
+    const entry = ipFailures.get(ip);
+    if (!entry) return false;
+    if (entry.count >= MAX_FAILURES_PER_IP) {
+      if (Date.now() - entry.lastAttempt < IP_LOCKOUT_MS) return true;
+      // Lockout abgelaufen — Reset
+      ipFailures.delete(ip);
+      return false;
+    }
+    return false;
+  }
+
+  function recordIpFailure(ip: string): void {
+    const entry = ipFailures.get(ip) ?? { count: 0, lastAttempt: 0 };
+    entry.count++;
+    entry.lastAttempt = Date.now();
+    ipFailures.set(ip, entry);
+  }
+
   // Session-Timeout: 5 Minuten
   const SESSION_TIMEOUT_MS = 5 * 60_000;
 
@@ -108,6 +132,13 @@ export function registerPairingRoutes(server: FastifyInstance, deps: PairingHand
   server.post('/pairing/init', async (request: FastifyRequest, reply: FastifyReply) => {
     cleanExpiredSession();
 
+    // SECURITY: IP-basiertes Rate-Limiting (persistent ueber Sessions)
+    const clientIp = request.socket.remoteAddress ?? 'unknown';
+    if (isIpLocked(clientIp)) {
+      log?.warn({ ip: clientIp }, 'Pairing: IP gesperrt wegen zu vieler Fehlversuche');
+      return reply.code(429).send({ error: 'Too many attempts. Try again later.', retry_after_seconds: Math.floor(IP_LOCKOUT_MS / 1000) });
+    }
+
     const body = request.body as {
       agent_id: string;
       hostname: string;
@@ -126,10 +157,11 @@ export function registerPairingRoutes(server: FastifyInstance, deps: PairingHand
 
     // SECURITY: PIN muss mit der lokal generierten PIN uebereinstimmen
     if (body.pin !== activeSession.pin) {
-      // Fehlversuch zaehlen — nach 3 Versuchen Session invalidieren
+      // Fehlversuch zaehlen — Session UND IP-basiert
       failedAttempts++;
+      recordIpFailure(clientIp);
       if (failedAttempts >= 3) {
-        log?.warn({ attempts: failedAttempts }, 'Pairing: 3 falsche PIN-Versuche — Session invalidiert');
+        log?.warn({ attempts: failedAttempts, ip: clientIp }, 'Pairing: 3 falsche PIN-Versuche — Session invalidiert');
         activeSession = null;
         failedAttempts = 0;
         return reply.code(403).send({ error: 'Too many failed attempts. Session invalidated.' });

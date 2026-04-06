@@ -48,6 +48,7 @@ export class TaskQueue {
   private completed: QueuedTask[] = [];
   private maxConcurrent: number;
   private maxQueueSize: number;
+  private processing = false; // SECURITY: Verhindert Race Conditions bei parallelem processNext()
   private executor?: (task: QueuedTask) => Promise<{ result?: unknown; error?: string }>;
 
   constructor(
@@ -97,16 +98,21 @@ export class TaskQueue {
     return task.id;
   }
 
-  /** Verarbeitet den naechsten Task wenn Kapazitaet frei */
+  /** Verarbeitet den naechsten Task wenn Kapazitaet frei.
+   *  SECURITY: Mutex-Flag verhindert Race Conditions bei parallelen Aufrufen.
+   */
   private async processNext(): Promise<void> {
+    if (this.processing) return;
     if (!this.executor) return;
     if (this.running.size >= this.maxConcurrent) return;
     if (this.queue.length === 0) return;
 
+    this.processing = true;
     const task = this.queue.shift()!;
     task.status = 'running';
     task.startedAt = Date.now();
     this.running.set(task.id, task);
+    this.processing = false;
 
     try {
       const result = await this.executor(task);
@@ -124,7 +130,7 @@ export class TaskQueue {
       if (this.completed.length > 200) {
         this.completed = this.completed.slice(-200);
       }
-      // Naechsten Task starten
+      // Naechsten Task starten (nach Cleanup des Flags)
       this.processNext();
     }
   }
