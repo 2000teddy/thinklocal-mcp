@@ -102,8 +102,9 @@ export async function executeChain(
         });
         log?.warn({ chainId, step: i, skillId: step.skillId, error: result.error }, 'Chain-Schritt fehlgeschlagen');
 
-        // Nachfolgende Schritte uebersprungen wenn onlyOnSuccess (default: true)
-        // Schritte mit onlyOnSuccess === false werden trotz Fehler ausgefuehrt
+        // Nachfolgende Schritte mit onlyOnSuccess (default: true) werden uebersprungen.
+        // Schritte mit onlyOnSuccess === false werden als 'skipped' markiert aber NICHT ausgefuehrt —
+        // die Chain bricht bei Fehler immer ab (return partial).
         for (let j = i + 1; j < steps.length; j++) {
           if (steps[j].onlyOnSuccess ?? true) {
             results.push({

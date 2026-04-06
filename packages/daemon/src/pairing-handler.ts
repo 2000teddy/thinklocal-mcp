@@ -73,6 +73,16 @@ export function registerPairingRoutes(server: FastifyInstance, deps: PairingHand
     entry.count++;
     entry.lastAttempt = Date.now();
     ipFailures.set(ip, entry);
+
+    // Pruning: Entferne abgelaufene Eintraege um Memory-Leak zu verhindern
+    if (ipFailures.size > 100) {
+      const now = Date.now();
+      for (const [key, val] of ipFailures) {
+        if (now - val.lastAttempt > IP_LOCKOUT_MS) {
+          ipFailures.delete(key);
+        }
+      }
+    }
   }
 
   // Session-Timeout: 5 Minuten

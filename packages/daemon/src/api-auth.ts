@@ -18,6 +18,7 @@ import { resolve, dirname } from 'node:path';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import fastifyJwt from '@fastify/jwt';
 import { createKeychainStore } from './keychain.js';
+import { isLoopbackHost } from './runtime-mode.js';
 import type { Logger } from 'pino';
 
 // Oeffentliche Pfade die KEINEN Token brauchen
@@ -106,9 +107,10 @@ export async function registerApiAuth(
 
     // Localhost-Requests ohne Auth erlauben (fuer CLI + MCP)
     // SECURITY: request.socket.remoteAddress statt request.ip verwenden,
-    // da request.ip durch X-Forwarded-For gespooft werden kann
-    const remoteAddr = request.socket.remoteAddress;
-    if (remoteAddr === '127.0.0.1' || remoteAddr === '::1' || remoteAddr === '::ffff:127.0.0.1') {
+    // da request.ip durch X-Forwarded-For gespooft werden kann.
+    // Nutze isLoopbackHost() fuer konsistente Loopback-Erkennung (127.0.0.0/8, ::1, etc.)
+    const remoteAddr = request.socket.remoteAddress ?? '';
+    if (isLoopbackHost(remoteAddr)) {
       return;
     }
 
@@ -122,9 +124,9 @@ export async function registerApiAuth(
 
   // Token-Generierungs-Endpoint (nur localhost)
   app.post('/api/auth/token', async (request: FastifyRequest, reply: FastifyReply) => {
-    // SECURITY: request.socket.remoteAddress statt request.ip (X-Forwarded-For bypass)
-    const remoteAddr = request.socket.remoteAddress;
-    if (remoteAddr !== '127.0.0.1' && remoteAddr !== '::1' && remoteAddr !== '::ffff:127.0.0.1') {
+    // SECURITY: request.socket.remoteAddress + isLoopbackHost (X-Forwarded-For bypass)
+    const remoteAddr = request.socket.remoteAddress ?? '';
+    if (!isLoopbackHost(remoteAddr)) {
       reply.code(403).send({ error: 'Forbidden', message: 'Token-Generierung nur von localhost' });
       return;
     }
