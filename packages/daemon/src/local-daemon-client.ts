@@ -33,13 +33,20 @@ function loadLocalCa(dataDir: string): string | undefined {
 }
 
 function loadClientCert(dataDir: string): { cert: string; key: string } | undefined {
-  const certPath = resolve(dataDir, 'tls', 'client.crt.pem');
-  const keyPath = resolve(dataDir, 'tls', 'client.key.pem');
-  if (!existsSync(certPath) || !existsSync(keyPath)) return undefined;
-  return {
-    cert: readFileSync(certPath, 'utf-8'),
-    key: readFileSync(keyPath, 'utf-8'),
-  };
+  // Try dedicated client cert first, then fall back to node cert (used for mTLS)
+  const candidates = [
+    { cert: resolve(dataDir, 'tls', 'client.crt.pem'), key: resolve(dataDir, 'tls', 'client.key.pem') },
+    { cert: resolve(dataDir, 'tls', 'node.crt.pem'), key: resolve(dataDir, 'tls', 'node.key.pem') },
+  ];
+  for (const paths of candidates) {
+    if (existsSync(paths.cert) && existsSync(paths.key)) {
+      return {
+        cert: readFileSync(paths.cert, 'utf-8'),
+        key: readFileSync(paths.key, 'utf-8'),
+      };
+    }
+  }
+  return undefined;
 }
 
 export async function requestDaemon(

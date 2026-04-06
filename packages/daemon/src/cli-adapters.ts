@@ -54,7 +54,7 @@ function baseMcpServerConfig(daemonUrl?: string): {
 } {
   const entryPoint = getMcpEntryPoint();
   const dataDir = process.env['TLMCP_DATA_DIR'] ?? resolve(homedir(), '.thinklocal');
-  const runtimeMode = parseRuntimeMode(process.env['TLMCP_RUNTIME_MODE']);
+  const runtimeMode = parseRuntimeMode(process.env['TLMCP_RUNTIME_MODE'] ?? 'local');
   return {
     command: 'npx',
     args: ['tsx', entryPoint],

@@ -20,7 +20,11 @@ export function resolveRuntimeSettings(args: {
   tlsEnabled?: boolean | null;
 }): RuntimeSettings {
   const mode = parseRuntimeMode(args.mode);
-  const bindHost = args.bindHost?.trim() || (mode === 'local' ? '127.0.0.1' : '0.0.0.0');
+  let bindHost = args.bindHost?.trim() || (mode === 'local' ? '127.0.0.1' : '0.0.0.0');
+  // Enforce: local mode MUST bind to loopback only (security invariant)
+  if (mode === 'local' && !isLoopbackHost(bindHost)) {
+    bindHost = '127.0.0.1';
+  }
   const tlsEnabled = args.tlsEnabled ?? (mode === 'lan');
   const proto = tlsEnabled ? 'https' : 'http';
   return {

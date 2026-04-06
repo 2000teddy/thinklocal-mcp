@@ -24,7 +24,7 @@ import { parseRuntimeMode } from './runtime-mode.js';
 
 const DATA_DIR = process.env['TLMCP_DATA_DIR'] ?? getDefaultDataDir();
 const DAEMON_PORT = Number(process.env['TLMCP_PORT'] ?? '9440');
-const RUNTIME_MODE = parseRuntimeMode(process.env['TLMCP_RUNTIME_MODE']);
+const RUNTIME_MODE = parseRuntimeMode(process.env['TLMCP_RUNTIME_MODE'] ?? 'local');
 const DAEMON_URL = process.env['TLMCP_DAEMON_URL']
   ?? (RUNTIME_MODE === 'lan' ? `https://localhost:${DAEMON_PORT}` : `http://localhost:${DAEMON_PORT}`);
 
