@@ -85,6 +85,7 @@ async function main(): Promise<void> {
       config.daemon.hostname,
       identity.spiffeUri,
       log,
+      identity.stableNodeId,
     );
     log.info('mTLS aktiviert — HTTPS mit gegenseitiger Zertifikatsprüfung');
   } else {

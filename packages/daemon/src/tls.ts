@@ -33,7 +33,7 @@ const NODE_CERT_VALIDITY_DAYS = 90;
  * Erstellt eine neue Self-Signed CA für das Mesh.
  * Wird nur beim allerersten Node-Start aufgerufen.
  */
-export function createMeshCA(meshName = 'thinklocal'): CaBundle {
+export function createMeshCA(meshName = 'thinklocal', nodeId?: string): CaBundle {
   const keys = forge.pki.rsa.generateKeyPair(2048);
   const cert = forge.pki.createCertificate();
 
@@ -43,8 +43,15 @@ export function createMeshCA(meshName = 'thinklocal'): CaBundle {
   cert.validity.notAfter = new Date();
   cert.validity.notAfter.setDate(cert.validity.notAfter.getDate() + CA_VALIDITY_DAYS);
 
+  // SECURITY-CRITICAL: Each node MUST have a unique CA Subject DN, otherwise
+  // OpenSSL/Node.js issuer-name lookup picks the wrong CA when multiple peer
+  // CAs are loaded into the trust store, causing "certificate signature
+  // failure" during cross-node mTLS handshakes. The nodeId disambiguates.
+  // Without nodeId (legacy callers, tests): falls back to a random suffix
+  // so collisions are still avoided.
+  const caSuffix = nodeId ?? generateSerialNumber().slice(0, 16);
   const attrs = [
-    { name: 'commonName', value: `${meshName} Mesh CA` },
+    { name: 'commonName', value: `${meshName} Mesh CA ${caSuffix}` },
     { name: 'organizationName', value: 'thinklocal-mcp' },
   ];
   cert.setSubject(attrs);
@@ -142,6 +149,7 @@ export function loadOrCreateTlsBundle(
   hostname: string,
   spiffeUri: string,
   log?: Logger,
+  nodeId?: string,
 ): NodeCertBundle {
   const tlsDir = resolve(dataDir, 'tls');
   mkdirSync(tlsDir, { recursive: true });
@@ -151,24 +159,73 @@ export function loadOrCreateTlsBundle(
   const nodeCertPath = resolve(tlsDir, 'node.crt.pem');
   const nodeKeyPath = resolve(tlsDir, 'node.key.pem');
 
-  // 1. CA laden oder erstellen
+  // 1. CA laden oder erstellen.
+  // Migration: Wenn eine bestehende CA das alte (kollidierende) Subject hat,
+  // wird sie durch eine neue mit nodeId-Suffix ersetzt. Alte Files werden
+  // als .legacy.pem gesichert, falls jemand sie noch braucht.
   let ca: CaBundle;
+  let needsCaReissue = false;
+
   if (existsSync(caCertPath) && existsSync(caKeyPath)) {
-    log?.info('Vorhandene Mesh-CA geladen');
-    ca = {
-      caCertPem: readFileSync(caCertPath, 'utf-8'),
-      caKeyPem: readFileSync(caKeyPath, 'utf-8'),
-    };
+    const existingCertPem = readFileSync(caCertPath, 'utf-8');
+    try {
+      const existingCert = forge.pki.certificateFromPem(existingCertPem);
+      const subjectCn = existingCert.subject.getField('CN')?.value as string | undefined;
+
+      // Detect old colliding subject: "thinklocal Mesh CA" without any suffix
+      const isLegacyColliding = subjectCn === 'thinklocal Mesh CA';
+      if (isLegacyColliding) {
+        log?.warn(
+          { subjectCn },
+          'CA-Subject kollidiert mit anderen Nodes (Legacy-Format) — generiere neue CA mit nodeId-Suffix',
+        );
+        // Backup old files
+        const legacyCertPath = resolve(tlsDir, 'ca.crt.legacy.pem');
+        const legacyKeyPath = resolve(tlsDir, 'ca.key.legacy.pem');
+        writeFileSync(legacyCertPath, existingCertPem, { mode: 0o644 });
+        writeFileSync(legacyKeyPath, readFileSync(caKeyPath, 'utf-8'), { mode: 0o600 });
+        log?.info({ legacyCertPath }, 'Legacy-CA gesichert');
+        needsCaReissue = true;
+      } else {
+        log?.info({ subjectCn }, 'Vorhandene Mesh-CA geladen');
+        ca = {
+          caCertPem: existingCertPem,
+          caKeyPem: readFileSync(caKeyPath, 'utf-8'),
+        };
+      }
+    } catch (err) {
+      log?.warn({ err }, 'Konnte vorhandene CA nicht parsen — generiere neu');
+      needsCaReissue = true;
+    }
   } else {
-    log?.info('Generiere neue Mesh-CA...');
-    ca = createMeshCA();
-    writeFileSync(caCertPath, ca.caCertPem, { mode: 0o644 });
-    writeFileSync(caKeyPath, ca.caKeyPem, { mode: 0o600 });
-    log?.info({ caCertPath }, 'Mesh-CA gespeichert');
+    needsCaReissue = true;
   }
 
-  // 2. Node-Zertifikat laden oder erstellen
-  if (existsSync(nodeCertPath) && existsSync(nodeKeyPath)) {
+  if (needsCaReissue) {
+    log?.info('Generiere neue Mesh-CA...');
+    ca = createMeshCA('thinklocal', nodeId);
+    writeFileSync(caCertPath, ca.caCertPem, { mode: 0o644 });
+    writeFileSync(caKeyPath, ca.caKeyPem, { mode: 0o600 });
+    log?.info({ caCertPath, nodeId }, 'Mesh-CA gespeichert');
+    // Force node cert reissue too, since it must be signed by the new CA
+    if (existsSync(nodeCertPath)) {
+      const legacyNodeCert = resolve(tlsDir, 'node.crt.legacy.pem');
+      const legacyNodeKey = resolve(tlsDir, 'node.key.legacy.pem');
+      writeFileSync(legacyNodeCert, readFileSync(nodeCertPath, 'utf-8'), { mode: 0o644 });
+      if (existsSync(nodeKeyPath)) {
+        writeFileSync(legacyNodeKey, readFileSync(nodeKeyPath, 'utf-8'), { mode: 0o600 });
+      }
+      log?.info({ legacyNodeCert }, 'Legacy Node-Cert gesichert, wird neu ausgestellt');
+    }
+  }
+  // After this point, `ca` is guaranteed to be set.
+  ca = ca!;
+
+  // 2. Node-Zertifikat laden oder erstellen.
+  // Wenn die CA gerade neu ausgestellt wurde, MUSS das Node-Cert auch neu —
+  // ein altes Node-Cert das von der alten CA signiert ist, wuerde sonst
+  // gegenueber der neuen CA ungueltig sein.
+  if (!needsCaReissue && existsSync(nodeCertPath) && existsSync(nodeKeyPath)) {
     const certPem = readFileSync(nodeCertPath, 'utf-8');
     const cert = forge.pki.certificateFromPem(certPem);
     const now = new Date();
