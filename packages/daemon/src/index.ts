@@ -18,6 +18,7 @@ import { SkillManager, type SkillAnnouncePayload } from './skills.js';
 import { registerDashboardApi } from './dashboard-api.js';
 import { PairingStore } from './pairing.js';
 import { registerPairingRoutes } from './pairing-handler.js';
+import { TrustStoreNotifier } from './trust-store.js';
 import { MeshEventBus } from './events.js';
 import { registerWebSocket } from './websocket.js';
 import { CredentialVault } from './vault.js';
@@ -100,11 +101,27 @@ async function main(): Promise<void> {
     }
   }
 
-  // Undici-Dispatcher für ausgehende HTTPS-Verbindungen (vertraut nur unserer Mesh-CA)
+  // SPAKE2 Trust-Bootstrap: PairingStore muss VOR dem Trust-Store angelegt
+  // werden, damit die CA-Certs aller bereits gepairten Peers beim Start sofort
+  // ins aggregierte Bundle einfliessen (bootstrap trust von Disk).
+  const pairingStore = new PairingStore(config.daemon.data_dir, log);
+
+  // Aggregiertes mTLS Trust-Bundle: eigene CA + alle gepairten Peer-CAs.
+  // Ohne diese Aggregation scheitert der mTLS-Handshake zwischen Peers mit
+  // "certificate signature failure", weil jeder Node nur seine eigene CA
+  // kennt — die Pairing-Daten wurden zwar auf Disk persistiert, aber nie
+  // in den aktiven TLS-Kontext geladen.
+  const trustStoreNotifier = tlsBundle
+    ? new TrustStoreNotifier(tlsBundle.caCertPem, pairingStore, log)
+    : undefined;
+  const initialCaBundle = trustStoreNotifier?.current() ?? [];
+
+  // Undici-Dispatcher für ausgehende HTTPS-Verbindungen. Vertraut der eigenen
+  // Mesh-CA PLUS allen gepairten Peer-CAs.
   const tlsDispatcher = tlsBundle
     ? new UndiciAgent({
         connect: {
-          ca: tlsBundle.caCertPem,
+          ca: initialCaBundle,
           cert: tlsBundle.certPem,
           key: tlsBundle.keyPem,
           rejectUnauthorized: true,
@@ -193,11 +210,14 @@ async function main(): Promise<void> {
     skillManager,
   );
 
-  // 8. Agent Card Server starten (HTTP oder HTTPS)
+  // 8. Agent Card Server starten (HTTP oder HTTPS).
+  // trustedCaBundle: aggregiert eigene CA + gepairte Peer-CAs. Hot-Reload bei
+  // neuen Pairings ist Phase 2 — aktuell zaehlt der Snapshot zum Startzeitpunkt.
   const cardServer = new AgentCardServer({
     identity,
     config,
     tls: tlsBundle,
+    trustedCaBundle: trustStoreNotifier?.current(),
     log,
     rateLimiter,
     getPeerPublicKey: (agentId: string) => {
@@ -269,8 +289,8 @@ async function main(): Promise<void> {
     log,
   });
 
-  // 8c. Pairing-Store + Routen registrieren
-  const pairingStore = new PairingStore(config.daemon.data_dir, log);
+  // 8c. Pairing-Routen registrieren (pairingStore wurde oben bereits erzeugt,
+  // damit der Trust-Store die bestehenden CAs beim Start kennt).
   registerPairingRoutes(cardServer.getServer(), {
     store: pairingStore,
     agentId: identity.spiffeUri,
