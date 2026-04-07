@@ -125,8 +125,8 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [x] 🟠 Rollback-Mechanismus bei fehlgeschlagener Installation — `skill-rollback.ts` backup/restore (2026-04-05)
 
 ### 3.3 Skill-Sandboxing
-- [ ] 🔴 WASM-Sandbox (Wazero oder wasmtime)
-- [ ] 🔴 Docker-Container-Fallback für komplexe Skills
+- [x] 🔴 WASM-Sandbox (Wazero oder wasmtime) — `sandbox.ts` fuehrt `runtime=wasm` ueber `wasmtime`/WASI mit isoliertem `--dir`, Timeout und `SKILL_INPUT_BASE64`-Contract aus (2026-04-06)
+- [x] 🔴 Docker-Container-Fallback für komplexe Skills — `sandbox.ts` fuehrt `runtime=docker` read-only mit `docker run`, Memory-/PID-Limits, optional gesperrtem Netzwerk und `SKILL_INPUT_BASE64` aus (2026-04-06)
 - [x] 🔴 I/O-Schema-Validierung (JSON Schema) vor Ausführung — `schema-validator.ts` + @cfworker/json-schema (2026-04-05)
 - [x] 🟠 Ressourcen-Limits (CPU-Zeit, Speicher, Netzwerk) — `sandbox.ts` SkillSandbox mit Timeout, Memory-Limit, Netzwerk-Flag (2026-04-05)
 - [x] 🟠 Kein Dateisystem-Zugriff außerhalb des Skill-Verzeichnisses — `isPathAllowed()` mit Path-Traversal-Schutz (2026-04-05)
