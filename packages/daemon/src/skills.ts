@@ -33,8 +33,8 @@ export interface SkillManifest {
   author: string;
   /** SHA-256 Hash des Skill-Pakets */
   integrity: string;
-  /** Runtime: node, python, wasm, docker */
-  runtime: 'node' | 'python' | 'wasm' | 'docker';
+  /** Runtime: node, python, wasm, docker, deno */
+  runtime: 'node' | 'python' | 'wasm' | 'docker' | 'deno';
   /** Einstiegspunkt relativ zum Skill-Verzeichnis */
   entrypoint: string;
   /** npm/pip-Abhängigkeiten */

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildDockerArgs, buildWasmtimeArgs, isPathAllowed, parseSandboxStdout } from './sandbox.js';
+import { buildDenoArgs, buildDockerArgs, buildWasmtimeArgs, isPathAllowed, parseSandboxStdout } from './sandbox.js';
 
 describe('Sandbox', () => {
   describe('isPathAllowed', () => {
@@ -118,6 +118,31 @@ describe('Sandbox', () => {
       expect(args).toContain('bridge');
       expect(args).toContain('python:3.12-alpine');
       expect(args.slice(-2)).toEqual(['python', '/workspace/python/tool.py']);
+    });
+  });
+
+  describe('buildDenoArgs', () => {
+    it('baut einen eingeschraenkten deno-run Aufruf ohne Netzwerk', () => {
+      const args = buildDenoArgs('/home/user/skills/deno/main.ts', '/home/user/skills', {
+        allowNetwork: false,
+      });
+
+      expect(args).toEqual([
+        'run',
+        '--quiet',
+        '--no-prompt',
+        '--allow-read=/home/user/skills',
+        '--allow-env=SANDBOX,SKILL_DIR,SKILL_INPUT_BASE64,DENO_DIR',
+        '/home/user/skills/deno/main.ts',
+      ]);
+    });
+
+    it('erlaubt optional Netzwerk fuer deno-skills', () => {
+      const args = buildDenoArgs('/home/user/skills/deno/main.ts', '/home/user/skills', {
+        allowNetwork: true,
+      });
+
+      expect(args).toContain('--allow-net');
     });
   });
 });
