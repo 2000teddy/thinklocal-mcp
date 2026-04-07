@@ -18,7 +18,7 @@ import { dirname, isAbsolute, normalize, relative, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import type { Logger } from 'pino';
 
-export type SandboxRuntime = 'node' | 'wasm' | 'docker';
+export type SandboxRuntime = 'node' | 'wasm' | 'docker' | 'deno';
 
 export interface SandboxConfig {
   /** Max CPU-Zeit in ms (default: 30s) */
@@ -35,6 +35,8 @@ export interface SandboxConfig {
   dockerRunner?: string;
   /** Optionales Docker-Image fuer den Skill-Fallback */
   dockerImage?: string;
+  /** Pfad/Binaername fuer den Deno-Runner (default: deno) */
+  denoRunner?: string;
 }
 
 export interface SandboxResult {
@@ -189,6 +191,34 @@ export function buildDockerArgs(
 }
 
 /**
+ * Skill-Contract fuer Deno-Isolate:
+ * - `deno run --no-prompt` ohne interaktive Rechteanfragen
+ * - Dateizugriff ist auf das Skill-Verzeichnis begrenzt
+ * - nur SANDBOX, SKILL_DIR, SKILL_INPUT_BASE64 und DENO_DIR sind freigegeben
+ * - Netzwerk bleibt standardmaessig gesperrt
+ */
+export function buildDenoArgs(
+  entryPath: string,
+  allowedDir: string,
+  config: Pick<Required<SandboxConfig>, 'allowNetwork'>,
+): string[] {
+  const args = [
+    'run',
+    '--quiet',
+    '--no-prompt',
+    `--allow-read=${resolve(allowedDir)}`,
+    '--allow-env=SANDBOX,SKILL_DIR,SKILL_INPUT_BASE64,DENO_DIR',
+    entryPath,
+  ];
+
+  if (config.allowNetwork) {
+    args.splice(4, 0, '--allow-net');
+  }
+
+  return args;
+}
+
+/**
  * Fuehrt einen Skill in einer sandboxed Umgebung aus.
  *
  * Implementierung: Node.js child_process.fork() mit:
@@ -215,6 +245,7 @@ export class SkillSandbox {
       wasmRunner: config?.wasmRunner ?? process.env['TLMCP_WASMTIME_BIN'] ?? 'wasmtime',
       dockerRunner: config?.dockerRunner ?? process.env['TLMCP_DOCKER_BIN'] ?? 'docker',
       dockerImage: config?.dockerImage ?? process.env['TLMCP_SKILL_DOCKER_IMAGE'] ?? '',
+      denoRunner: config?.denoRunner ?? process.env['TLMCP_DENO_BIN'] ?? 'deno',
     };
     this.deps = {
       forkProcess: deps?.forkProcess ?? fork,
@@ -249,6 +280,10 @@ export class SkillSandbox {
 
     if (runtime === 'docker') {
       return this.executeDocker(entryPath, input, config);
+    }
+
+    if (runtime === 'deno') {
+      return this.executeDeno(entryPath, input, config);
     }
 
     return this.executeNode(entryPath, input, config);
@@ -444,6 +479,108 @@ export class SkillSandbox {
         const error =
           (err as NodeJS.ErrnoException).code === 'ENOENT'
             ? `Docker-Runner nicht gefunden: ${cfg.dockerRunner}`
+            : err.message;
+        resolveOnce({
+          success: false,
+          error,
+          durationMs,
+        });
+      });
+    });
+  }
+
+  /**
+   * Fuehrt einen Skill ueber Deno mit expliziten Berechtigungen aus.
+   */
+  async executeDeno(
+    entryPath: string,
+    input: unknown,
+    config?: Partial<SandboxConfig>,
+  ): Promise<SandboxResult> {
+    const cfg = { ...this.defaultConfig, ...config };
+    const start = Date.now();
+
+    if (!isPathAllowed(entryPath, cfg.allowedDir)) {
+      return {
+        success: false,
+        error: `Zugriff verweigert: ${entryPath} liegt ausserhalb von ${cfg.allowedDir}`,
+        durationMs: 0,
+      };
+    }
+
+    if (!this.deps.pathExists(entryPath)) {
+      return {
+        success: false,
+        error: `Deno-Skill nicht gefunden: ${entryPath}`,
+        durationMs: 0,
+      };
+    }
+
+    const childEnv = {
+      ...createMinimalRunnerEnv(),
+      SANDBOX: '1',
+      SKILL_DIR: getSkillDir(entryPath),
+      SKILL_INPUT_BASE64: Buffer.from(JSON.stringify(input ?? null), 'utf8').toString('base64'),
+      DENO_DIR: resolve(getSkillDir(entryPath), '.deno-cache'),
+    };
+
+    return new Promise<SandboxResult>((resolvePromise) => {
+      const child = this.deps.spawnProcess(cfg.denoRunner, buildDenoArgs(entryPath, cfg.allowedDir, cfg), {
+        cwd: getSkillDir(entryPath),
+        env: childEnv,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }) as ChildProcessByStdio<null, Readable, Readable>;
+
+      let stdout = '';
+      let stderr = '';
+      let settled = false;
+      const timeout = setTimeout(() => {
+        if (!child.killed) {
+          child.kill('SIGTERM');
+          this.log?.warn({ entryPath, timeoutMs: cfg.timeoutMs }, 'Deno-Sandbox: Timeout');
+        }
+      }, cfg.timeoutMs);
+
+      const resolveOnce = (result: SandboxResult): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        resolvePromise(result);
+      };
+
+      child.stdout.on('data', (data: Buffer) => {
+        stdout += data.toString();
+      });
+
+      child.stderr.on('data', (data: Buffer) => {
+        stderr += data.toString();
+      });
+
+      child.on('exit', (code) => {
+        const durationMs = Date.now() - start;
+
+        if (code === 0) {
+          resolveOnce({
+            success: true,
+            output: parseSandboxStdout(stdout),
+            durationMs,
+          });
+        } else {
+          const error = stderr.trim() || `Exit code ${code}`;
+          this.log?.warn({ entryPath, code, error, durationMs }, 'Deno-Sandbox: Fehlgeschlagen');
+          resolveOnce({
+            success: false,
+            error,
+            durationMs,
+          });
+        }
+      });
+
+      child.on('error', (err) => {
+        const durationMs = Date.now() - start;
+        const error =
+          (err as NodeJS.ErrnoException).code === 'ENOENT'
+            ? `Deno-Runner nicht gefunden: ${cfg.denoRunner}`
             : err.message;
         resolveOnce({
           success: false,

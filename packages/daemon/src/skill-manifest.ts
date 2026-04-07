@@ -10,7 +10,7 @@ import type { Logger } from 'pino';
 
 // --- Skill-Manifest TypeScript-Typen ---
 
-export type SkillRuntime = 'node' | 'wasm' | 'docker' | 'python' | 'binary';
+export type SkillRuntime = 'node' | 'wasm' | 'docker' | 'python' | 'binary' | 'deno';
 
 export interface SkillManifest {
   /** Eindeutige Skill-ID (z.B. "influxdb.query") */
@@ -79,7 +79,7 @@ export const SKILL_MANIFEST_SCHEMA = {
     },
     runtime: {
       type: 'string',
-      enum: ['node', 'wasm', 'docker', 'python', 'binary'],
+      enum: ['node', 'wasm', 'docker', 'python', 'binary', 'deno'],
     },
     entrypoint: {
       type: 'string',
