@@ -50,14 +50,31 @@ async function main(): Promise<void> {
     'Starte Daemon...',
   );
 
-  // 1. Identität laden oder generieren
+  // 1. Identität laden oder generieren.
+  //
+  // ACHTUNG: Wir uebergeben hier bewusst KEINEN hostname mehr.
+  // loadOrCreateIdentity faellt dadurch auf loadOrCreateStableNodeId() zurueck —
+  // eine Hardware-basierte ID, die in keys/node-id.txt persistiert wird und
+  // unabhaengig vom OS-Hostname ist. So bleibt die SPIFFE-URI auch dann stabil,
+  // wenn macOS den Hostnamen dynamisch aendert (minimac-200 → minimac-1014 → ...).
+  //
+  // config.daemon.hostname wird weiterhin fuer mDNS-Service-Name und Agent-Card-URLs
+  // verwendet — dort ist der OS-Hostname das Richtige.
   const identity = await loadOrCreateIdentity(
     config.daemon.data_dir,
     config.daemon.agent_type,
-    config.daemon.hostname,
+    undefined,
     log,
   );
-  log.info({ spiffeUri: identity.spiffeUri, fingerprint: identity.fingerprint.slice(0, 16) }, 'Identität geladen');
+  log.info(
+    {
+      spiffeUri: identity.spiffeUri,
+      fingerprint: identity.fingerprint.slice(0, 16),
+      stableNodeId: identity.stableNodeId,
+      osHostname: config.daemon.hostname,
+    },
+    'Identität geladen',
+  );
 
   // 2. TLS-Bundle laden oder erstellen (CA + Node-Zertifikat)
   let tlsBundle: NodeCertBundle | undefined;

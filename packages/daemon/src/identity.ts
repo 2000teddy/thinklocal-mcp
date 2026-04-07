@@ -9,10 +9,79 @@ export interface AgentIdentity {
   publicKeyPem: string;
   /** PEM-encoded ECDSA private key */
   privateKeyPem: string;
-  /** SPIFFE URI: spiffe://thinklocal/host/<hostname>/agent/<type> */
+  /** SPIFFE URI: spiffe://thinklocal/host/<stableNodeId>/agent/<type> */
   spiffeUri: string;
   /** Hex-encoded SHA-256 fingerprint of the public key */
   fingerprint: string;
+  /** Stable node identifier (16 hex chars), unaffected by OS hostname drift */
+  stableNodeId: string;
+}
+
+/**
+ * Berechnet eine stabile Node-ID, die sich NICHT mit dem OS-Hostname aendert.
+ * Quelle: sortierte MAC-Adressen + CPU-Modell + Plattform/Architektur.
+ *
+ * Bewusste Auslassung: os.hostname(). Auf macOS aendert sich der Hostname
+ * dynamisch (minimac-200, minimac-795, minimac-1014, ...) wenn die Maschine
+ * im Netz mit anderen Bonjour-Geraeten kollidiert. Eine SPIFFE-URI darf
+ * davon nicht abhaengen, sonst werden Peers nach jedem Reboot neu identifiziert.
+ *
+ * Rueckgabe: 16 Hex-Zeichen aus dem SHA-256 ueber die Hardware-Merkmale.
+ */
+export function computeStableNodeId(): string {
+  const parts: string[] = [];
+
+  // MAC-Adressen — stabil ueber Reboots, OS-Updates, Hostname-Wechsel.
+  const macs: string[] = [];
+  for (const ifaceList of Object.values(networkInterfaces())) {
+    if (!ifaceList) continue;
+    for (const iface of ifaceList) {
+      if (iface.mac && iface.mac !== '00:00:00:00:00:00' && !iface.internal) {
+        macs.push(iface.mac.toLowerCase());
+      }
+    }
+  }
+  macs.sort();
+  parts.push('mac:' + macs.join(','));
+
+  // CPU-Modell + Anzahl Kerne
+  const cpuList = cpus();
+  if (cpuList.length > 0) {
+    parts.push('cpu:' + cpuList[0].model + ':' + cpuList.length);
+  }
+
+  // Plattform + Architektur
+  parts.push('plat:' + platform() + ':' + arch());
+
+  return createHash('sha256').update(parts.join('|')).digest('hex').slice(0, 16);
+}
+
+/**
+ * Laedt die persistierte Node-ID aus dataDir/keys/node-id.txt.
+ * Falls noch nicht vorhanden, wird sie aus computeStableNodeId() abgeleitet
+ * und atomar geschrieben.
+ *
+ * Diese Indirektion erlaubt zukuenftige manuelle Ueberschreibung (z.B. wenn
+ * die Hardware ausgetauscht wird, der Operator aber dieselbe logische Identitaet
+ * behalten will). Solange die Datei existiert, ist ihr Inhalt die Wahrheit.
+ */
+export function loadOrCreateStableNodeId(dataDir: string, log?: Logger): string {
+  const keyDir = resolve(dataDir, 'keys');
+  const idPath = resolve(keyDir, 'node-id.txt');
+
+  if (existsSync(idPath)) {
+    const id = readFileSync(idPath, 'utf-8').trim();
+    if (/^[0-9a-f]{16}$/.test(id)) {
+      return id;
+    }
+    log?.warn({ idPath, id }, 'node-id.txt enthaelt ungueltigen Wert, regeneriere');
+  }
+
+  mkdirSync(keyDir, { recursive: true });
+  const newId = computeStableNodeId();
+  writeFileSync(idPath, newId + '\n', { mode: 0o644 });
+  log?.info({ idPath, stableNodeId: newId }, 'Neue stabile Node-ID generiert');
+  return newId;
 }
 
 function computeFingerprint(publicKeyPem: string): string {
@@ -29,16 +98,20 @@ export async function loadOrCreateIdentity(
   const pubPath = resolve(keyDir, 'agent.pub.pem');
   const privPath = resolve(keyDir, 'agent.key.pem');
 
+  // Stabile Node-ID — unabhaengig vom OS-Hostname.
+  // Ueberschreibung via Parameter `hostname` weiterhin moeglich (Tests, Migration).
+  const stableNodeId = hostname ?? loadOrCreateStableNodeId(dataDir, log);
+
   if (existsSync(pubPath) && existsSync(privPath)) {
     log?.info('Vorhandenes Keypair geladen');
     const publicKeyPem = readFileSync(pubPath, 'utf-8');
     const privateKeyPem = readFileSync(privPath, 'utf-8');
-    const host = hostname ?? osHostname();
     return {
       publicKeyPem,
       privateKeyPem,
-      spiffeUri: `spiffe://thinklocal/host/${host}/agent/${agentType}`,
+      spiffeUri: `spiffe://thinklocal/host/${stableNodeId}/agent/${agentType}`,
       fingerprint: computeFingerprint(publicKeyPem),
+      stableNodeId,
     };
   }
 
@@ -55,12 +128,12 @@ export async function loadOrCreateIdentity(
   writeFileSync(privPath, privateKey, { mode: 0o600 });
   log?.info({ pubPath }, 'Keypair gespeichert');
 
-  const host = hostname ?? osHostname();
   return {
     publicKeyPem: publicKey,
     privateKeyPem: privateKey,
-    spiffeUri: `spiffe://thinklocal/host/${host}/agent/${agentType}`,
+    spiffeUri: `spiffe://thinklocal/host/${stableNodeId}/agent/${agentType}`,
     fingerprint: computeFingerprint(publicKey),
+    stableNodeId,
   };
 }
 
