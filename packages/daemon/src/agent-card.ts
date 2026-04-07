@@ -86,6 +86,14 @@ export interface AgentCardServerOptions {
   identity: AgentIdentity;
   config: DaemonConfig;
   tls?: NodeCertBundle;
+  /**
+   * Aggregierte CA-Bundle-Liste fuer den Fastify-HTTPS-`ca`-Parameter.
+   * Enthaelt die eigene Mesh-CA UND optional die CAs gepairter Peers
+   * (aus dem SPAKE2 Trust-Bootstrap). Wenn nicht gesetzt, fallback auf
+   * `tls.caCertPem` als einzelner String — das ist das alte Verhalten
+   * und fuehrt dazu, dass nur die eigene CA akzeptiert wird.
+   */
+  trustedCaBundle?: string[];
   log?: Logger;
   /** Map von bekannten Peer-Public-Keys (agentId → PEM) für Signaturprüfung */
   getPeerPublicKey?: (agentId: string) => string | undefined;
@@ -114,14 +122,20 @@ export class AgentCardServer {
       bodyLimit: 1_048_576, // 1 MB max
     };
 
-    // mTLS konfigurieren wenn TLS-Bundle vorhanden
+    // mTLS konfigurieren wenn TLS-Bundle vorhanden.
+    // `ca` bevorzugt das aggregierte Bundle (eigene CA + gepairte Peer-CAs),
+    // faellt zurueck auf die eigene CA allein wenn kein Bundle uebergeben wurde.
     if (opts.tls) {
+      const trustedCa: string | string[] =
+        opts.trustedCaBundle && opts.trustedCaBundle.length > 0
+          ? opts.trustedCaBundle
+          : opts.tls.caCertPem;
       serverOpts['https'] = {
         key: opts.tls.keyPem,
         cert: opts.tls.certPem,
-        ca: opts.tls.caCertPem,
+        ca: trustedCa,
         requestCert: true, // Client-Zertifikat anfordern (mTLS)
-        rejectUnauthorized: true, // Client-Certs gegen Mesh-CA validieren
+        rejectUnauthorized: true, // Client-Certs gegen vertraute CAs validieren
       };
     }
 
