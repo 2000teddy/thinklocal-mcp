@@ -174,6 +174,14 @@ export function loadOrCreateTlsBundle(
 
       // Detect old colliding subject: "thinklocal Mesh CA" without any suffix
       const isLegacyColliding = subjectCn === 'thinklocal Mesh CA';
+
+      // SECURITY (PR #77 GPT-5.4 review): Check CA validity window. An expired
+      // CA must not be silently reused — peers will reject the chain anyway.
+      const now = new Date();
+      const caValid =
+        now >= existingCert.validity.notBefore &&
+        now <= existingCert.validity.notAfter;
+
       if (isLegacyColliding) {
         log?.warn(
           { subjectCn },
@@ -185,6 +193,15 @@ export function loadOrCreateTlsBundle(
         writeFileSync(legacyCertPath, existingCertPem, { mode: 0o644 });
         writeFileSync(legacyKeyPath, readFileSync(caKeyPath, 'utf-8'), { mode: 0o600 });
         log?.info({ legacyCertPath }, 'Legacy-CA gesichert');
+        needsCaReissue = true;
+      } else if (!caValid) {
+        log?.warn(
+          {
+            notBefore: existingCert.validity.notBefore,
+            notAfter: existingCert.validity.notAfter,
+          },
+          'Vorhandene Mesh-CA ist abgelaufen oder noch nicht gueltig — reissue',
+        );
         needsCaReissue = true;
       } else {
         log?.info({ subjectCn }, 'Vorhandene Mesh-CA geladen');
@@ -225,36 +242,51 @@ export function loadOrCreateTlsBundle(
   // Wenn die CA gerade neu ausgestellt wurde, MUSS das Node-Cert auch neu —
   // ein altes Node-Cert das von der alten CA signiert ist, wuerde sonst
   // gegenueber der neuen CA ungueltig sein.
+  //
+  // SECURITY (PR #77 GPT-5.4 review HIGH finding): Reuse-Pfad muss VOLL
+  // validieren, sonst kann ein partial-migration-crash einen Node-Cert
+  // hinterlassen, das nicht mehr von der aktuellen CA signiert ist und
+  // die SPIFFE-URI dennoch zufaellig matcht. Wir pruefen jetzt:
+  //   1. Cert parst (try/catch)
+  //   2. Cert ist zeitlich gueltig (>7 Tage Restlaufzeit)
+  //   3. SPIFFE-URI matcht aktuelle Identitaet
+  //   4. Cert-Signatur verifiziert gegen aktuelle CA (issuer match)
   if (!needsCaReissue && existsSync(nodeCertPath) && existsSync(nodeKeyPath)) {
-    const certPem = readFileSync(nodeCertPath, 'utf-8');
-    const cert = forge.pki.certificateFromPem(certPem);
-    const now = new Date();
-    const daysLeft = Math.floor(
-      (cert.validity.notAfter.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
-    );
+    try {
+      const certPem = readFileSync(nodeCertPath, 'utf-8');
+      const keyPem = readFileSync(nodeKeyPath, 'utf-8');
+      const cert = forge.pki.certificateFromPem(certPem);
+      const caCert = forge.pki.certificateFromPem(ca.caCertPem);
 
-    // Pruefe Ablauf
-    if (daysLeft <= 7) {
-      log?.warn({ daysLeft }, 'Node-Zertifikat läuft bald ab, erstelle neues...');
-    } else {
-      // Pruefe ob die SPIFFE-URI im Cert noch zur aktuellen Identitaet passt.
-      // Notwendig nach der stableNodeId-Migration: wenn identity.spiffeUri sich
-      // geaendert hat (z.B. von host/<oldHostname> zu host/<stableNodeId>), muessen
-      // wir das Cert reissuen — sonst lehnen Peers den mTLS-Handshake ab oder wir
-      // praesentieren eine veraltete Identitaet.
+      const now = new Date();
+      const daysLeft = Math.floor(
+        (cert.validity.notAfter.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+      );
       const certSpiffeUri = extractSpiffeUri(certPem);
-      if (certSpiffeUri === spiffeUri) {
+
+      // Signatur-Verifikation: ist das Cert von der aktuellen CA signiert?
+      let signedByCurrentCa = false;
+      try {
+        signedByCurrentCa = caCert.verify(cert);
+      } catch {
+        signedByCurrentCa = false;
+      }
+
+      if (daysLeft > 7 && certSpiffeUri === spiffeUri && signedByCurrentCa) {
         log?.info({ daysLeft }, 'Vorhandenes Node-Zertifikat geladen');
         return {
           certPem,
-          keyPem: readFileSync(nodeKeyPath, 'utf-8'),
+          keyPem,
           caCertPem: ca.caCertPem,
         };
       }
+
       log?.warn(
-        { certSpiffeUri, currentSpiffeUri: spiffeUri },
-        'SPIFFE-URI im Cert weicht von aktueller Identitaet ab — reissue (stableNodeId-Migration?)',
+        { daysLeft, certSpiffeUri, currentSpiffeUri: spiffeUri, signedByCurrentCa },
+        'Vorhandenes Node-Zertifikat ungueltig fuer aktuelle CA/Identitaet — reissue',
       );
+    } catch (err) {
+      log?.warn({ err }, 'Vorhandenes Node-Zertifikat unlesbar — reissue');
     }
   }
 
@@ -275,7 +307,11 @@ export function loadOrCreateTlsBundle(
  * Nützlich fuer proaktive Warnungen im Dashboard und Telegram.
  */
 export function getCertDaysLeft(dataDir: string): number | null {
-  const certPath = resolve(dataDir, 'certs', 'node.crt');
+  // SECURITY (PR #77 GPT-5.4 review LOW finding): The path was wrong —
+  // pointed at dataDir/certs/node.crt but loadOrCreateTlsBundle writes to
+  // dataDir/tls/node.crt.pem. As a result startup warnings for soon-to-expire
+  // certs never fired.
+  const certPath = resolve(dataDir, 'tls', 'node.crt.pem');
   if (!existsSync(certPath)) return null;
   try {
     const certPem = readFileSync(certPath, 'utf-8');

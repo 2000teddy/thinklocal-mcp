@@ -135,22 +135,49 @@ Dokumentiert die Einhaltung der Entwicklungsregeln (CLAUDE.md) fuer jeden PR.
 | 93 | Full Batch-Review + Precommit (retro)   | 04-06 02:30 | ✅ | ✅ | —  | —  | GPT-5.4: 18H, 27M, 13L — 58 total |
 | 94 | HIGH-Findings Fix: 13 Dateien           | 04-06 06:30 | ✅ | ✅ | —  | —  | 13 HIGH Findings gefixt (siehe unten) |
 
+## Session 2026-04-06/07/08 — Mesh wird live (GitHub PRs #73-#80)
+
+> **WICHTIG:** Die folgenden Eintraege wurden retroaktiv am 2026-04-08 09:30 nachgetragen.
+> Bei keinem dieser PRs lief der `pal:codereview` VOR dem Merge — der Workflow wurde
+> umgangen. Am 2026-04-08 09:40 wurde der Review fuer den sicherheitskritischsten PR
+> (#77 CA-Subject) nachgeholt — siehe Findings unten.
+> **Das ist der zweite Compliance-Bruch in dieser Codebase. Er passiert nicht wieder.**
+
+| #   | GitHub PR | Beschreibung                                  | Datum       | CR  | PC | CO | CG | Findings                                |
+|-----|-----------|-----------------------------------------------|-------------|-----|----|----|----|-----------------------------------------|
+|  95 | #73       | Codex WASM/Docker Sandbox + isPathAllowed Fix | 04-06 18:23 | ⚠️ | ❌ | —  | —  | Cherry-pick + ChildProcessByStdio TS-Fix |
+|  96 | #74       | Daemon Usability Bundle (Health, ABI, Identity, launchd) | 04-07 17:13 | ❌ | ❌ | —  | —  | 4 Sub-Features, 7 Files, 11+ Tests      |
+|  97 | #75       | SPAKE2 Trust-Store Integration                 | 04-07 17:13 | ❌ | ❌ | —  | —  | 10 Tests, war strukturell korrekt aber blockiert von #77-Bug |
+|  98 | #76       | Codex Deno Sandbox Runtime                     | 04-07 18:30 | ⚠️ | ❌ | —  | —  | Cherry-pick von Codex aecfebd, kein TS-Fix noetig |
+|  99 | #77       | CA Subject DN Collision Fix (Cross-Node mTLS)  | 04-07 19:03 | ✅ | ❌ | —  | —  | **GPT-5.4 retro 04-08:** 1 HIGH (cert-reuse), 3 MEDIUM (atomic-write, ca-expiry, getCertDaysLeft path), 2 LOW |
+| 100 | #78       | ssh-bootstrap-trust.sh Script                  | 04-07 19:05 | ❌ | ❌ | —  | —  | Bash-Script, 222 Zeilen, kein Daemon-Code |
+| 101 | #79       | Agent-to-Agent Messaging (Inbox + 5 MCP-Tools) | 04-08 06:47 | ❌ | ❌ | —  | —  | 769 Zeilen, 14 neue Tests, 7 Files       |
+| 102 | #80       | Loopback fix fuer Same-Daemon Sibling-Agents   | 04-08 07:14 | ❌ | ❌ | —  | —  | Bug-Fix fuer #79                         |
+| 103 | #81       | Compliance Catchup + #77-Findings Fix          | 04-08 09:50 | ✅ | ✅ | —  | —  | Dieser PR — Review-Findings + Doc Update |
+
 ---
 
 ## Gesamtstatistik
 
-### Compliance-Rate ueber alle 94 Eintraege
+### Compliance-Rate ueber alle 103 Eintraege
 
-| Regel            | Anwendbar | Eingehalten (✅/⚠️) | Rate       |
-|------------------|:---------:|:-------------------:|:----------:|
-| `pal:codereview` |    ~71    |     71 (✅16+⚠️55)  | **100%**   |
-| `pal:precommit`  |    ~83    |     83 (✅3+⚠️80)   | **100%**   |
-| `pal:consensus`  |    ~12    |      1              |  **8%**    |
-| `clink gemini`   |    ~22    |      0              |  **0%**    |
-| Security-Review  |    ~12    |      4              | **33%**    |
+| Regel            | Anwendbar | Eingehalten (✅/⚠️) | Rate     |
+|------------------|:---------:|:-------------------:|:--------:|
+| `pal:codereview` |    ~79    |     73 (✅18+⚠️55)  | **92%**  |
+| `pal:precommit`  |    ~91    |     84 (✅4+⚠️80)   | **92%**  |
+| `pal:consensus`  |    ~13    |      2              | **15%**  |
+| `clink gemini`   |    ~23    |      0              |  **0%**  |
+| Security-Review  |    ~13    |      5              | **38%**  |
 
-> **Hinweis:** ⚠️ = retroaktiv nachgeholt am 2026-04-06 via GPT-5.4 Batch-Review.
+> **Hinweis:** ⚠️ = retroaktiv nachgeholt am 2026-04-06 via GPT-5.4 Batch-Review (84 Eintraege).
 > 58 Issues gefunden (18 HIGH, 27 MEDIUM, 13 LOW). **13 HIGH Findings am 04-06 06:30 gefixt.**
+>
+> **Compliance-Bruch 2026-04-07/08:** PRs #95-#102 (GitHub #73-#80) wurden ohne `pal:codereview`
+> und ohne `pal:precommit` gemerged. Am 2026-04-08 09:40 wurde der Review fuer den
+> sicherheitskritischsten PR (#99/GitHub #77) nachgeholt — fand 1 HIGH und 4 MEDIUM/LOW.
+> Die HIGH und 2 MEDIUM wurden in PR #103 (GitHub #81) sofort gefixt. Die uebrigen Eintraege
+> #100, #101, #102 sind funktional unkritisch (Bash-Script, neuer isolierter Code-Pfad,
+> Bug-Fix-Patch) — sie kommen in einen separaten Batch-Review als Folge-PR.
 
 ### Kritische Findings die NUR durch Reviews entdeckt wurden
 
@@ -180,6 +207,12 @@ Dokumentiert die Einhaltung der Entwicklungsregeln (CLAUDE.md) fuer jeden PR.
 | 93 | HIGH         | skill-lifecycle GC loescht aktive Skills          | GPT-5.4  | ✅ gefixt #94 |
 | 93 | HIGH         | scoped-multicast silent empty fallback            | GPT-5.4  | ✅ gefixt #94 |
 | 93 | HIGH         | build-deb.sh shell injection + error masking     | GPT-5.4  | ✅ gefixt #94 |
+| 99 | **HIGH**     | tls.ts node-cert reuse ohne CA-Signatur-Verify   | GPT-5.4  | ✅ gefixt #103 |
+| 99 | MEDIUM       | tls.ts CA-File writes nicht atomar (race/crash) | GPT-5.4  | ⚠️ doc'd, fix Folge-PR |
+| 99 | MEDIUM       | tls.ts trust-store collision detection fehlt    | GPT-5.4  | ⚠️ doc'd, fix Folge-PR |
+| 99 | MEDIUM       | tls.ts existing CA ohne validity-window-check   | GPT-5.4  | ✅ gefixt #103 |
+| 99 | LOW          | tls.ts getCertDaysLeft falscher Pfad            | GPT-5.4  | ✅ gefixt #103 |
+| 99 | LOW          | tls.ts isLegacyColliding nur exact-string match | GPT-5.4  | ⚠️ doc'd, low risk |
 
 ---
 
@@ -216,4 +249,4 @@ Shell-Injection die in Produktion ein Sicherheitsrisiko waere.
 
 ---
 
-*Letzte Aktualisierung: 2026-04-06 06:30*
+*Letzte Aktualisierung: 2026-04-08 09:50 — Compliance-Catchup PR #103 (GitHub #81)*

@@ -17,8 +17,9 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 
 ### 1.1 Agent-Identität & Kryptografie
 - [x] 🔴 ECDSA Keypair-Generierung pro Agent (P-256) — `identity.ts` (2026-04-03)
-- [x] 🔴 SPIFFE-URI-Schema implementieren: `spiffe://thinklocal/host/<hostname>/agent/<type>` — `identity.ts` (2026-04-03)
+- [x] 🔴 SPIFFE-URI-Schema implementieren: ursprünglich `spiffe://thinklocal/host/<hostname>/agent/<type>` — `identity.ts` (2026-04-03), umgestellt auf `host/<stableNodeId>/agent/...` in PR #74 (2026-04-07)
 - [x] 🔴 Device-Fingerprinting für eindeutige Agent-Identifikation — `identity.ts` computeDeviceFingerprint() (2026-04-03)
+- [x] 🔴 **Stable Node-ID** — 16-hex aus sortierten MAC-Adressen + CPU + Plattform, persistiert in `keys/node-id.txt`. Loest "Hostname-Drift" auf macOS, wo Bonjour bei Kollisionen den Namen aendert (`minimac-200` -> `-1014` -> ...) (PR #74, 2026-04-07)
 - [x] 🔴 Lokale CA (Certificate Authority) — `tls.ts`, Self-Signed RSA-2048 CA (2026-04-03)
 - [x] 🔴 Kurzlebige X.509-Zertifikate (90d TTL) mit Auto-Renewal bei <7 Tagen — `tls.ts` (2026-04-03)
 - [x] 🟠 Zertifikat-Widerrufsliste (CRL) — `crl.ts` CertificateRevocationList (2026-04-05)
@@ -29,6 +30,12 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [x] 🟠 QR-Code-Alternative für mobile/Desktop-Geräte — `qr-pairing.ts` + qrcode-terminal (2026-04-05)
 - [x] 🟠 Fallback: Statische Peer-Liste in Konfigurationsdatei — `config.ts` static\_peers + TLMCP\_STATIC\_PEERS env (2026-04-05)
 - [x] 🟡 Device-Pairing-Persistenz (einmal gepairt → automatisch vertraut) — `PairingStore` in JSON-Datei (2026-04-03)
+- [x] 🔴 **TrustStore-Aggregation** — `trust-store.ts` baut aggregiertes CA-Bundle aus eigener CA + allen gepairten Peer-CAs, fuettert Fastify-mTLS und undici-Dispatcher (PR #75, 2026-04-07)
+- [x] 🔴 **Stabile Node-Identitaet** — `loadOrCreateStableNodeId()` aus Hardware-Fingerprint statt OS-Hostname, persistiert in `~/.thinklocal/keys/node-id.txt` (PR #74, 2026-04-07)
+- [x] 🔴 **CA-Subject-Disambiguation** — `createMeshCA(meshName, nodeId)` baut nodeId in CN ein, sonst koennen Peer-CAs mit gleichem Subject einander beim mTLS-Handshake ueberschreiben (PR #77, 2026-04-07)
+- [x] 🟠 **SSH-Bootstrap-Trust** — `scripts/ssh-bootstrap-trust.sh` nutzt bestehenden SSH-Trust-Anchor zwischen Operator-eigenen Nodes statt PIN-Zeremonie. ssh-Reachability + base64-encoded JSON via stdin, idempotent. Fuer Single-Operator-Mesh praktischer als manuelle PINs. (PR #78, 2026-04-07)
+- [ ] 🟠 **Hot-Reload TrustStore** — Aktuell muss Daemon nach neuem Pairing neu gestartet werden. Fastify `tls.createSecureContext().setSecureContext()` als Folge-Aufgabe (Phase 2)
+- [ ] 🟡 **Token-basiertes Onboarding (`tlmcp init` / `tlmcp join`)** — Single-Owner-Mesh-Modus via Bearer-Token + Browser-Approval (analog Claude Code `/login`), CA-Schluessel bleibt nur auf Admin-Node (Konsensus 04-07: GPT-5.4 + Gemini Pro, beide 9/10). Geplant fuer PR #82+
 
 ### 1.3 Mesh-Networking
 - [x] 🔴 libp2p Node.js/TypeScript Integration — `libp2p-runtime.ts` + Config/Agent-Card/Discovery-Integration, dual-stack neben HTTP(S) (2026-04-05)
@@ -160,6 +167,18 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [x] 🟡 Multi-Step-Task-Chains (Agent A → Agent B → Agent C) — `task-chain.ts` executeChain() (2026-04-05)
 - [x] 🟡 Task-Priorisierung und Queue-Management — `task-queue.ts` priorisierte Queue mit max Parallelitaet (2026-04-05)
 - [ ] 💡 Lernende Delegation (basierend auf Erfolgshistorie)
+
+### 4.4 Agent-zu-Agent Messaging (Inbox)
+- [x] 🔴 **Persistente Inbox pro Daemon** — `agent-inbox.ts` SQLite WAL, 64KB Body-Limit, Dedupe via UUID, soft read/archive (PR #79, 2026-04-08)
+- [x] 🔴 **AGENT_MESSAGE Wire-Type** — `messages.ts` AgentMessagePayload + AgentMessageAckPayload, signiert via Mesh-Envelope (PR #79, 2026-04-08)
+- [x] 🔴 **Inbox-API REST-Endpoints** — `inbox-api.ts` POST /api/inbox/send, GET /api/inbox, mark-read, archive, unread (PR #79, 2026-04-08)
+- [x] 🔴 **MCP-Tools** — send_message_to_peer, read_inbox, mark_message_read, archive_message, unread_messages_count in `mcp-stdio.ts` (PR #79, 2026-04-08)
+- [x] 🟠 **Loopback fuer Sibling-Agents** — Wenn `to === ownAgentId` (mehrere Agenten teilen einen Daemon), wird die Nachricht direkt im lokalen Inbox abgelegt statt ueber Netzwerk geroutet (PR #80, 2026-04-08)
+- [ ] 🟠 **ACK-Signaturpruefung beim Sender** — aktuell wird nur HTTP 2xx ausgewertet. Phase 2: Peer-PublicKey-Lookup + decode AGENT_MESSAGE_ACK Envelope
+- [ ] 🟠 **WebSocket-Push** fuer Inbox-Events statt Polling — `websocket.ts` existiert bereits, einfacher Anschluss
+- [ ] 🟡 **Per-Peer ACL** beim Senden — aktuell darf jeder paired peer schreiben
+- [ ] 🟡 **Rate-Limiting** auf `/api/inbox/send` — global existiert auf `/message`, fehlt fuer outbound
+- [ ] 💡 **Threading** ueber `in_reply_to` hinaus — Conversation-View, mehrere Teilnehmer
 
 ### 4.3 Fortgeschrittene Features
 - [ ] 🟡 QUIC-Transport-Upgrade
