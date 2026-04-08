@@ -38,6 +38,15 @@ PAIRED_FILE="$PAIRING_DIR/paired-peers.json"
 SSH_USER="${TLMCP_SSH_USER:-chris}"
 REMOTE_PATH="${TLMCP_REMOTE_PATH:-.thinklocal}"
 
+# SECURITY (PR #78 GPT-5.4 retro MEDIUM): REMOTE_PATH wird in remote
+# Shell-Kommandos interpoliert. Unkontrollierte Werte (Quotes, Semikolons,
+# Backticks) koennten Remote-Shell-Injection ermoeglichen. Validieren.
+if ! [[ "$REMOTE_PATH" =~ ^[a-zA-Z0-9._/-]+$ ]]; then
+  echo "FEHLER: TLMCP_REMOTE_PATH enthaelt ungueltige Zeichen: $REMOTE_PATH" >&2
+  echo "Erlaubt: [a-zA-Z0-9._/-]" >&2
+  exit 1
+fi
+
 # --- Hilfsfunktionen ---
 die() { echo "FEHLER: $*" >&2; exit 1; }
 log() { echo "[bootstrap-trust] $*"; }
@@ -87,7 +96,15 @@ log "  node-id:     $OWN_NODE_ID"
 log "  fingerprint: $OWN_FINGERPRINT"
 
 mkdir -p "$PAIRING_DIR"
-[ -f "$PAIRED_FILE" ] || echo '[]' > "$PAIRED_FILE"
+# SECURITY (PR #78 GPT-5.4 retro LOW): explicit 0600 permissions on local
+# paired-peers.json, unlike the default umask which gives 0644.
+if [ ! -f "$PAIRED_FILE" ]; then
+  (umask 077 && echo '[]' > "$PAIRED_FILE")
+fi
+chmod 600 "$PAIRED_FILE"
+
+# Track errors across peers (for a non-zero exit code at the end)
+had_errors=0
 
 # --- 2. Helper: Peer-Eintrag in JSON-Datei einfuegen oder updaten ---
 upsert_peer_local() {
@@ -128,6 +145,7 @@ for PEER in "${PEERS[@]}"; do
   # 3a. SSH-Reachability test
   if ! ssh -o ConnectTimeout=5 -o BatchMode=yes "$SSH_USER@$PEER" 'true' 2>/dev/null; then
     log "  ✗ SSH zu $SSH_USER@$PEER fehlgeschlagen — ueberspringe"
+    had_errors=1
     continue
   fi
 
@@ -142,10 +160,17 @@ for PEER in "${PEERS[@]}"; do
   PEER_HOSTNAME="$(ssh "$SSH_USER@$PEER" 'hostname -s' 2>/dev/null)"
   PEER_AGENT_TYPE="${TLMCP_PEER_AGENT_TYPE:-claude-code}"
 
-  if [ -n "$PEER_NODE_ID" ]; then
-    # Neuer Daemon: stable node-id verfuegbar
+  # SECURITY (PR #78 GPT-5.4 retro LOW): validate node-id format before using.
+  # Ein korruptes oder manipuliertes node-id.txt auf dem Peer koennte sonst
+  # beliebige Strings in unsere lokale paired-peers.json injizieren.
+  if [[ "$PEER_NODE_ID" =~ ^[0-9a-f]{16}$ ]]; then
+    # Neuer Daemon: stable node-id verfuegbar und valide
     PEER_SPIFFE="spiffe://thinklocal/host/${PEER_NODE_ID}/agent/${PEER_AGENT_TYPE}"
     log "  → Modus: stable node-id"
+  elif [ -n "$PEER_NODE_ID" ]; then
+    log "  ✗ Ungueltige node-id auf Peer (erwarte 16 hex): '$PEER_NODE_ID' — ueberspringe"
+    had_errors=1
+    continue
   else
     # Legacy-Daemon: SPIFFE aus Hostname (original-Schreibweise des Peers).
     # Wir nutzen `hostname` (nicht `hostname -s`), weil der alte Daemon
@@ -202,6 +227,7 @@ REMOTE_EOF
   else
     log "  ✗ Remote-Schreiben fehlgeschlagen:"
     echo "$REMOTE_RESULT" | sed 's/^/    /' >&2
+    had_errors=1
   fi
 done
 
@@ -219,4 +245,12 @@ for PEER in "${PEERS[@]}"; do
 done
 log "  3. mesh_status pruefen — peers_online sollte > 0 sein"
 log ""
+
+# SECURITY (PR #78 GPT-5.4 retro MEDIUM): exit non-zero wenn mindestens ein
+# Peer fehlgeschlagen ist — sonst sehen Automationstools keinen Fehler,
+# obwohl nur ein Teil der Trust-Operationen erfolgreich war.
+if [ "$had_errors" -ne 0 ]; then
+  log "Fertig MIT Fehlern."
+  exit 1
+fi
 log "Fertig."

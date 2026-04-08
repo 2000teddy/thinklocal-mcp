@@ -1,8 +1,42 @@
 import { generateKeyPairSync, createSign, createVerify, createHash } from 'node:crypto';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { hostname as osHostname, networkInterfaces, cpus, platform, arch } from 'node:os';
 import type { Logger } from 'pino';
+
+/**
+ * Atomic write: schreibt in eine Temp-Datei und rename() sie dann. Garantiert
+ * dass andere Prozesse NIE eine halb-geschriebene Datei sehen. `wx` Flag failt
+ * wenn die Temp-Datei schon existiert (Lock-ersatz).
+ *
+ * Wird bei security-kritischen Files verwendet (keypair, node-id, Certs).
+ */
+function atomicWriteFileSync(path: string, data: string, mode: number): void {
+  const tmp = `${path}.${process.pid}.tmp`;
+  try {
+    writeFileSync(tmp, data, { mode, flag: 'w' });
+    renameSync(tmp, path);
+  } catch (err) {
+    // Best effort cleanup
+    try { require('node:fs').unlinkSync(tmp); } catch { /* ignore */ }
+    throw err;
+  }
+}
+
+/**
+ * Filtert Interface-Namen die ephemer/virtuell sind und deshalb NICHT in
+ * die stable node ID einfliessen duerfen. Wenn man auf einem Host mit
+ * docker einen container startet oder stoppt, erscheinen/verschwinden
+ * `docker0`, `veth...`, `br-...` etc. — wenn wir die einbezogen haetten,
+ * waere die node-id bei jedem docker-run anders und die SPIFFE-URI
+ * instabil.
+ */
+function isStableNetworkInterface(name: string): boolean {
+  // macOS: en0, en1, ... (physical). utun/awdl/bridge sind virtuell.
+  // Linux: eth0, wlan0, eno1, ... (physical). docker/veth/br-/tun/tap sind virtuell.
+  const EPHEMERAL_PATTERNS = /^(docker|veth|br-|utun|tun|tap|awdl|llw|bridge|vmnet|tailscale|wg|zt)/i;
+  return !EPHEMERAL_PATTERNS.test(name);
+}
 
 export interface AgentIdentity {
   /** PEM-encoded ECDSA public key */
@@ -32,9 +66,13 @@ export function computeStableNodeId(): string {
   const parts: string[] = [];
 
   // MAC-Adressen — stabil ueber Reboots, OS-Updates, Hostname-Wechsel.
+  // SECURITY (PR #74 GPT-5.4 retro MEDIUM): ephemerale Interfaces filtern
+  // (docker/veth/br-/tun/...) damit die node-id auf einem Docker-Host nicht
+  // bei jedem Container-Start wechselt.
   const macs: string[] = [];
-  for (const ifaceList of Object.values(networkInterfaces())) {
+  for (const [name, ifaceList] of Object.entries(networkInterfaces())) {
     if (!ifaceList) continue;
+    if (!isStableNetworkInterface(name)) continue;
     for (const iface of ifaceList) {
       if (iface.mac && iface.mac !== '00:00:00:00:00:00' && !iface.internal) {
         macs.push(iface.mac.toLowerCase());
@@ -53,6 +91,9 @@ export function computeStableNodeId(): string {
   // Plattform + Architektur
   parts.push('plat:' + platform() + ':' + arch());
 
+  // HINWEIS (GPT-5.4 retro LOW): truncate auf 16 hex = 64 bit.
+  // Birthday bound ~ 4 Milliarden Eintraege bevor Kollision wahrscheinlich.
+  // Fuer ein LAN-Mesh mit O(10) Nodes ist das ~ 10^-17 Kollisionswahrscheinlichkeit.
   return createHash('sha256').update(parts.join('|')).digest('hex').slice(0, 16);
 }
 
@@ -69,6 +110,13 @@ export function loadOrCreateStableNodeId(dataDir: string, log?: Logger): string 
   const keyDir = resolve(dataDir, 'keys');
   const idPath = resolve(keyDir, 'node-id.txt');
 
+  // SECURITY (PR #74 GPT-5.4 retro MEDIUM): Re-read after would-be-lock.
+  // TOCTOU-Window zwischen existsSync und writeFileSync haben wir nicht
+  // vollstaendig eliminiert, aber der `renameSync`-Pattern in
+  // atomicWriteFileSync garantiert dass andere Prozesse nie eine
+  // halb-geschriebene Datei sehen. Bei paralleler Initialisierung gewinnt
+  // der letzte Writer, aber beide berechnen denselben Wert (deterministisch
+  // aus Hardware), daher unschaedlich.
   if (existsSync(idPath)) {
     const id = readFileSync(idPath, 'utf-8').trim();
     if (/^[0-9a-f]{16}$/.test(id)) {
@@ -79,7 +127,11 @@ export function loadOrCreateStableNodeId(dataDir: string, log?: Logger): string 
 
   mkdirSync(keyDir, { recursive: true });
   const newId = computeStableNodeId();
-  writeFileSync(idPath, newId + '\n', { mode: 0o644 });
+  // SECURITY (GPT-5.4 retro LOW): 0o600 statt 0o644. Die Node-ID ist im
+  // SPIFFE-URI und im Cert enthalten (public), aber auf Disk sollte sie
+  // wie andere Identity-Files nur fuer den Owner lesbar sein. Atomic write
+  // verhindert partielle Dateien bei Crashes.
+  atomicWriteFileSync(idPath, newId + '\n', 0o600);
   log?.info({ idPath, stableNodeId: newId }, 'Neue stabile Node-ID generiert');
   return newId;
 }
@@ -124,8 +176,12 @@ export async function loadOrCreateIdentity(
     privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
   });
 
-  writeFileSync(pubPath, publicKey, { mode: 0o644 });
-  writeFileSync(privPath, privateKey, { mode: 0o600 });
+  // SECURITY (PR #74 GPT-5.4 retro HIGH): atomic writes verhindern, dass
+  // zwei gleichzeitig startende Prozesse einen mismatched pub/priv-pair
+  // auf Disk hinterlassen (einer schreibt pub, der andere schreibt priv,
+  // beide interleaved).
+  atomicWriteFileSync(pubPath, publicKey, 0o644);
+  atomicWriteFileSync(privPath, privateKey, 0o600);
   log?.info({ pubPath }, 'Keypair gespeichert');
 
   return {

@@ -20,6 +20,7 @@
  * rebuild() — aufrufbar nach einem erfolgreichen Pairing.
  */
 
+import { createHash, X509Certificate } from 'node:crypto';
 import type { PairingStore } from './pairing.js';
 import type { Logger } from 'pino';
 
@@ -35,13 +36,49 @@ import type { Logger } from 'pino';
 export function buildTrustedCaBundle(
   ownCaCertPem: string,
   pairingStore?: PairingStore,
+  log?: Logger,
 ): string[] {
-  const bundle: string[] = [ownCaCertPem];
+  const bundle: string[] = [];
+  const fingerprints = new Set<string>();
 
+  // Helper: validate PEM als X.509, return fingerprint or null.
+  const fingerprint = (pem: string, label: string): string | null => {
+    try {
+      new X509Certificate(pem);
+      return createHash('sha256').update(pem).digest('hex');
+    } catch (err) {
+      log?.warn(
+        { label, err: err instanceof Error ? err.message : String(err) },
+        'Trust-Store: ignoriere ungueltiges CA-PEM',
+      );
+      return null;
+    }
+  };
+
+  // Own CA zuerst
+  const ownFp = fingerprint(ownCaCertPem, 'own-ca');
+  if (ownFp) {
+    bundle.push(ownCaCertPem);
+    fingerprints.add(ownFp);
+  }
+
+  // SECURITY (PR #75 GPT-5.4 retro MEDIUM): parse + validate + dedupe peer CAs.
+  // Sortiert nach agentId fuer deterministische Reihenfolge (hilft beim Debuggen),
+  // SHA-256-dedup auf die PEM-Bytes verhindert dass dieselbe CA zweimal im Bundle
+  // steht (z.B. wenn zwei Peers zufaellig die gleiche CA publizieren — kaputte
+  // Config, aber wir sollten nicht darueber stolpern).
   if (pairingStore) {
-    for (const peer of pairingStore.getAllPeers()) {
-      if (peer.caCertPem && peer.caCertPem.includes('BEGIN CERTIFICATE')) {
+    const sortedPeers = pairingStore
+      .getAllPeers()
+      .slice()
+      .sort((a, b) => a.agentId.localeCompare(b.agentId));
+
+    for (const peer of sortedPeers) {
+      if (!peer.caCertPem) continue;
+      const fp = fingerprint(peer.caCertPem, peer.agentId);
+      if (fp && !fingerprints.has(fp)) {
         bundle.push(peer.caCertPem);
+        fingerprints.add(fp);
       }
     }
   }
@@ -78,7 +115,7 @@ export class TrustStoreNotifier {
 
   /** Berechnet das Bundle neu und benachrichtigt alle Listener. */
   rebuild(): string[] {
-    const bundle = buildTrustedCaBundle(this.ownCaCertPem, this.pairingStore);
+    const bundle = buildTrustedCaBundle(this.ownCaCertPem, this.pairingStore, this.log);
     this.log?.info(
       { count: bundle.length, pairedPeers: this.pairingStore.getAllPeers().length },
       'Trust-Store rebuild',
@@ -95,6 +132,6 @@ export class TrustStoreNotifier {
 
   /** Liefert das aktuelle Bundle ohne Listener zu triggern. */
   current(): string[] {
-    return buildTrustedCaBundle(this.ownCaCertPem, this.pairingStore);
+    return buildTrustedCaBundle(this.ownCaCertPem, this.pairingStore, this.log);
   }
 }
