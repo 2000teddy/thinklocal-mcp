@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { request as httpRequest, type RequestOptions } from 'node:http';
 import { Agent as HttpsAgent, request as httpsRequest } from 'node:https';
-import { isLoopbackHost, type RuntimeMode } from './runtime-mode.js';
+import { type RuntimeMode } from './runtime-mode.js';
 
 export interface DaemonRequestOptions {
   baseUrl?: string;
@@ -30,6 +30,45 @@ function loadLocalCa(dataDir: string): string | undefined {
   const caPath = getLocalCaPath(dataDir);
   if (!existsSync(caPath)) return undefined;
   return readFileSync(caPath, 'utf-8');
+}
+
+/**
+ * Laedt den vollen Mesh Trust-Store fuer mTLS Outbound-Verbindungen:
+ * - eigene Mesh-CA (tls/ca.crt.pem)
+ * - CAs aller via SPAKE2/ssh-bootstrap gepairten Peers (aus pairing/paired-peers.json)
+ *
+ * Rueckgabe ist ein string[] mit PEM-Bloecken oder undefined wenn nichts
+ * geladen werden konnte. Node's https.Agent akzeptiert ca als Array.
+ *
+ * Das ist der gleiche Pattern wie im Daemon selbst (siehe trust-store.ts),
+ * nur fuer den Out-of-Process MCP-Stdio-Server, der seinen eigenen
+ * https-Agent bauen muss.
+ */
+function loadMeshTrustBundle(dataDir: string): string[] | undefined {
+  const bundle: string[] = [];
+
+  const ownCa = loadLocalCa(dataDir);
+  if (ownCa) {
+    bundle.push(ownCa);
+  }
+
+  // Peer-CAs aus paired-peers.json
+  const pairingFile = resolve(dataDir, 'pairing', 'paired-peers.json');
+  if (existsSync(pairingFile)) {
+    try {
+      const raw = readFileSync(pairingFile, 'utf-8');
+      const peers = JSON.parse(raw) as Array<{ caCertPem?: string }>;
+      for (const peer of peers) {
+        if (peer.caCertPem && peer.caCertPem.includes('BEGIN CERTIFICATE')) {
+          bundle.push(peer.caCertPem);
+        }
+      }
+    } catch {
+      // Best effort — wenn paired-peers.json kaputt ist, arbeiten wir nur mit der eigenen CA
+    }
+  }
+
+  return bundle.length > 0 ? bundle : undefined;
 }
 
 function loadClientCert(dataDir: string): { cert: string; key: string } | undefined {
@@ -77,8 +116,20 @@ export async function requestDaemon(
       headers,
     };
 
-    if (url.protocol === 'https:' && isLoopbackHost(url.hostname)) {
-      const ca = loadLocalCa(dataDir);
+    // mTLS-Agent fuer HTTPS. Frueher nur fuer loopback aktiviert — aber dann
+    // scheitert execute_remote_skill gegen LAN-Peers (siehe Codex-Bugreport
+    // vom 2026-04-08). Jetzt immer: wenn HTTPS-URL und lokale Certs vorhanden,
+    // wird der Mesh-Trust-Store geladen. Das ist semantisch korrekt, denn der
+    // Trust-Store enthaelt die CAs ALLER gepairten Peers (PR #75) — nicht nur
+    // localhost. Wenn der Peer nicht gepairt ist, scheitert der TLS-Handshake
+    // sauber mit "certificate signature failure" statt mit dem kryptischen
+    // "Empty reply from server" aus dem Codex-Befund.
+    //
+    // Fuer Remote-Peers lesen wir zusaetzlich die paired-peers.json und
+    // aggregieren die Peer-CAs ins Agent-CA-Bundle, damit mTLS gegen fremde
+    // Subjects funktioniert.
+    if (url.protocol === 'https:') {
+      const ca = loadMeshTrustBundle(dataDir);
       const clientCert = loadClientCert(dataDir);
       if (ca) {
         const agentOpts: Record<string, unknown> = { ca, rejectUnauthorized: true };

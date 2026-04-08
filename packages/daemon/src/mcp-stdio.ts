@@ -236,21 +236,32 @@ server.tool(
       return { content: [{ type: 'text' as const, text: JSON.stringify(taskData, null, 2) }] };
     }
 
-    // 3. Remote-Skill ausfuehren via Peer-API
+    // 3. Remote-Skill ausfuehren via Peer-API.
+    //
+    // SECURITY (Codex-Bugreport 2026-04-08): frueher wurde hier ein plain
+    // `http://<peer>/api/tasks/execute` gebaut und via global `fetch` ohne
+    // mTLS-Dispatcher aufgerufen. Im LAN-Modus laeuft der Peer aber mit
+    // HTTPS+mTLS — Resultat war ein kryptisches "Empty reply from server"
+    // bzw. TLS-Read-Fehler, und die Cross-Node-Skill-Execution war effektiv
+    // kaputt.
+    //
+    // Fix: URL-Schema nach RUNTIME_MODE waehlen und requestDaemonJson nutzen.
+    // Dieser Client laedt automatisch das volle Mesh-Trust-Bundle (eigene
+    // Mesh-CA + alle Peer-CAs aus paired-peers.json) plus das eigene
+    // node.crt/key als Client-Cert — exakt was fuer mTLS gegen einen
+    // gepairten Peer benoetigt wird.
     try {
-      const peerUrl = `http://${peer.host}:${peer.port}`;
-      const result = await fetch(`${peerUrl}/api/tasks/execute`, {
+      const peerProto = RUNTIME_MODE === 'lan' ? 'https' : 'http';
+      const peerUrl = `${peerProto}://${peer.host}:${peer.port}`;
+
+      const data = await requestDaemonJson('/api/tasks/execute', {
+        baseUrl: peerUrl,
+        body: { skill_id, input: input ?? {} },
+        dataDir: DATA_DIR,
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ skill_id, input: input ?? {} }),
-        signal: AbortSignal.timeout(30_000),
+        timeoutMs: 30_000,
       });
 
-      if (!result.ok) {
-        return { content: [{ type: 'text' as const, text: JSON.stringify({ error: `Remote-Ausfuehrung fehlgeschlagen: ${result.status}` }) }] };
-      }
-
-      const data = await result.json();
       return {
         content: [{
           type: 'text' as const,
@@ -262,7 +273,8 @@ server.tool(
         }],
       };
     } catch (err) {
-      return { content: [{ type: 'text' as const, text: JSON.stringify({ error: `Verbindung zu ${peer.host}:${peer.port} fehlgeschlagen: ${err}` }) }] };
+      const msg = err instanceof Error ? err.message : String(err);
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ error: `Verbindung zu ${peer.host}:${peer.port} fehlgeschlagen: ${msg}` }) }] };
     }
   },
 );
