@@ -1,21 +1,23 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildTrustedCaBundle, TrustStoreNotifier } from './trust-store.js';
 import { PairingStore, type PairedPeer } from './pairing.js';
+import { createMeshCA } from './tls.js';
 
-const FAKE_OWN_CA = `-----BEGIN CERTIFICATE-----
-MIIBdzCCAR2gAwIBAgIUOWN_FAKE_OWN_CA_FAKE_OWN_CA_FAKE_Cw
------END CERTIFICATE-----`;
+// Generate real (in-memory) CA certs so the X509Certificate validation in
+// buildTrustedCaBundle accepts them. PR #83 (GPT-5.4 retro-review of #75)
+// added parse-validation which rejected the old FAKE hardcoded strings.
+let FAKE_OWN_CA: string;
+let FAKE_PEER1_CA: string;
+let FAKE_PEER2_CA: string;
 
-const FAKE_PEER1_CA = `-----BEGIN CERTIFICATE-----
-MIIBdzCCAR2gAwIBAgIUFAKE_PEER_ONE_FAKE_PEER_ONE_FAKE_00
------END CERTIFICATE-----`;
-
-const FAKE_PEER2_CA = `-----BEGIN CERTIFICATE-----
-MIIBdzCCAR2gAwIBAgIUFAKE_PEER_TWO_FAKE_PEER_TWO_FAKE_00
------END CERTIFICATE-----`;
+beforeAll(() => {
+  FAKE_OWN_CA = createMeshCA('thinklocal', 'testownca00000000').caCertPem;
+  FAKE_PEER1_CA = createMeshCA('thinklocal', 'testpeer00000001').caCertPem;
+  FAKE_PEER2_CA = createMeshCA('thinklocal', 'testpeer00000002').caCertPem;
+});
 
 function makePeer(id: string, caCertPem: string): PairedPeer {
   return {
@@ -73,14 +75,17 @@ describe('trust-store', () => {
       expect(bundle).toEqual([FAKE_OWN_CA, FAKE_PEER1_CA]);
     });
 
-    it('eigene CA wird nicht dedupliziert wenn ein Peer zufaellig denselben Text hat', () => {
-      // Edge case: wenn die own CA identisch ist mit einer Peer CA,
-      // taucht sie zweimal auf. Das ist OK — Node's tls.ca akzeptiert Duplikate.
+    it('dedupliziert eigene CA wenn ein Peer zufaellig denselben Text hat', () => {
+      // PR #83 (GPT-5.4 retro): buildTrustedCaBundle dedupliziert per SHA-256
+      // der PEM-Bytes. Wenn ein Peer dieselbe CA hat wie wir, soll sie nur
+      // einmal im Bundle stehen — sonst wird das Bundle unnoetig gross und
+      // das Debugging erschwert.
       const store = new PairingStore(tmpDir);
       store.addPeer(makePeer('clone', FAKE_OWN_CA));
 
       const bundle = buildTrustedCaBundle(FAKE_OWN_CA, store);
-      expect(bundle).toHaveLength(2);
+      expect(bundle).toHaveLength(1);
+      expect(bundle[0]).toBe(FAKE_OWN_CA);
     });
   });
 

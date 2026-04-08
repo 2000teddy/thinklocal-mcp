@@ -204,11 +204,34 @@ export function loadOrCreateTlsBundle(
         );
         needsCaReissue = true;
       } else {
-        log?.info({ subjectCn }, 'Vorhandene Mesh-CA geladen');
-        ca = {
-          caCertPem: existingCertPem,
-          caKeyPem: readFileSync(caKeyPath, 'utf-8'),
-        };
+        // SECURITY (GPT-5.4 retro HIGH 2nd pass): cert/key pair match check.
+        // Ein partial-migration-crash oder manuelle Recovery koennte eine
+        // ca.crt.pem und ca.key.pem aus verschiedenen Generationen zurueck-
+        // lassen. Wir pruefen, dass sie wirklich zueinander passen bevor
+        // wir sie als "unser Mesh-CA" weiterverwenden.
+        const existingCaKeyPem = readFileSync(caKeyPath, 'utf-8');
+        let caPairMatches = false;
+        try {
+          const caPrivKey = forge.pki.privateKeyFromPem(existingCaKeyPem) as forge.pki.rsa.PrivateKey;
+          const caPubKey = existingCert.publicKey as forge.pki.rsa.PublicKey;
+          caPairMatches = caPrivKey.n.equals(caPubKey.n) && caPrivKey.e.equals(caPubKey.e);
+        } catch {
+          caPairMatches = false;
+        }
+
+        if (!caPairMatches) {
+          log?.warn(
+            { subjectCn },
+            'Mesh-CA Cert und Key passen nicht zusammen (partial migration state?) — reissue',
+          );
+          needsCaReissue = true;
+        } else {
+          log?.info({ subjectCn }, 'Vorhandene Mesh-CA geladen');
+          ca = {
+            caCertPem: existingCertPem,
+            caKeyPem: existingCaKeyPem,
+          };
+        }
       }
     } catch (err) {
       log?.warn({ err }, 'Konnte vorhandene CA nicht parsen — generiere neu');
@@ -264,6 +287,9 @@ export function loadOrCreateTlsBundle(
       );
       const certSpiffeUri = extractSpiffeUri(certPem);
 
+      // Full validity window check (GPT-5.4 2nd retro: "not yet valid" possible with clock skew)
+      const fullyValid = now >= cert.validity.notBefore && now <= cert.validity.notAfter;
+
       // Signatur-Verifikation: ist das Cert von der aktuellen CA signiert?
       let signedByCurrentCa = false;
       try {
@@ -272,7 +298,20 @@ export function loadOrCreateTlsBundle(
         signedByCurrentCa = false;
       }
 
-      if (daysLeft > 7 && certSpiffeUri === spiffeUri && signedByCurrentCa) {
+      // SECURITY (GPT-5.4 retro HIGH 2nd pass): cert<->key pair consistency.
+      // Ein partial-migration-crash koennte node.crt und node.key aus
+      // verschiedenen Generationen mischen. Verifizieren dass die Public-
+      // Keys wirklich zueinander passen.
+      let certKeyMatches = false;
+      try {
+        const privKey = forge.pki.privateKeyFromPem(keyPem) as forge.pki.rsa.PrivateKey;
+        const certPubKey = cert.publicKey as forge.pki.rsa.PublicKey;
+        certKeyMatches = privKey.n.equals(certPubKey.n) && privKey.e.equals(certPubKey.e);
+      } catch {
+        certKeyMatches = false;
+      }
+
+      if (fullyValid && daysLeft > 7 && certSpiffeUri === spiffeUri && signedByCurrentCa && certKeyMatches) {
         log?.info({ daysLeft }, 'Vorhandenes Node-Zertifikat geladen');
         return {
           certPem,
@@ -282,7 +321,7 @@ export function loadOrCreateTlsBundle(
       }
 
       log?.warn(
-        { daysLeft, certSpiffeUri, currentSpiffeUri: spiffeUri, signedByCurrentCa },
+        { daysLeft, certSpiffeUri, currentSpiffeUri: spiffeUri, fullyValid, signedByCurrentCa, certKeyMatches },
         'Vorhandenes Node-Zertifikat ungueltig fuer aktuelle CA/Identitaet — reissue',
       );
     } catch (err) {

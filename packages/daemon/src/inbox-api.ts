@@ -28,6 +28,7 @@ import {
 } from './messages.js';
 import type { AgentInbox } from './agent-inbox.js';
 import type { MeshManager } from './mesh.js';
+import type { RateLimiter } from './ratelimit.js';
 import type { Logger } from 'pino';
 
 export interface InboxApiDeps {
@@ -37,6 +38,7 @@ export interface InboxApiDeps {
   ownPublicKeyPem: string;
   ownPrivateKeyPem: string;
   tlsDispatcher?: UndiciAgent;
+  rateLimiter?: RateLimiter;
   log?: Logger;
   /**
    * Audit-Hook (optional). Wird mit dem outbound message_id aufgerufen,
@@ -53,12 +55,52 @@ interface SendBody {
 }
 
 const MAX_BODY_BYTES = 64 * 1024;
+const MAX_LIMIT = 500;
+
+/**
+ * Pruefen ob Aufrufer eine lokale (loopback) Connection hat.
+ *
+ * SECURITY (PR #79 GPT-5.4 retro CRITICAL): Die Inbox-Routes sind nur fuer
+ * den lokalen MCP-Stdio-Server gedacht (Codex/Claude auf demselben Host).
+ * Remote-Inbox-Zugriff wuerde die Daemon-Signatur als Oracle verfuegbar
+ * machen: /api/inbox/send nutzt ownPrivateKeyPem um Envelopes zu signieren,
+ * jeder Aufrufer kann dann Nachrichten als "ich selbst" senden.
+ *
+ * Deshalb: requireLocal() rejectet non-loopback Aufrufer mit 403, bevor
+ * irgendwelche Inbox-Operationen ausgefuehrt werden.
+ */
+function requireLocal(request: FastifyRequest, reply: FastifyReply): boolean {
+  const ip = request.ip;
+  const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+  if (!isLocal) {
+    void reply.code(403).send({ error: 'inbox API is local-only', remote: ip });
+    return false;
+  }
+  return true;
+}
 
 export function registerInboxApi(server: FastifyInstance, deps: InboxApiDeps): void {
-  const { inbox, mesh, ownAgentId, ownPrivateKeyPem, tlsDispatcher, log, onSent } = deps;
+  const { inbox, mesh, ownAgentId, ownPrivateKeyPem, tlsDispatcher, rateLimiter, log, onSent } = deps;
+
+  /**
+   * Rate-Limiting Gate. Nutzt den vorhandenen RateLimiter aus dem Daemon
+   * (falls uebergeben), mit Caller-IP als Key. Verhindert, dass ein
+   * kompromittierter/fehlerhafter MCP-Client den Inbox-SQLite flooden kann.
+   */
+  function checkRate(request: FastifyRequest, reply: FastifyReply, op: string): boolean {
+    if (!rateLimiter) return true;
+    const key = `inbox:${op}:${request.ip}`;
+    if (!rateLimiter.allow(key)) {
+      void reply.code(429).send({ error: 'Too Many Requests', op });
+      return false;
+    }
+    return true;
+  }
 
   // ---- POST /api/inbox/send ----
   server.post('/api/inbox/send', async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!requireLocal(request, reply)) return;
+    if (!checkRate(request, reply, 'send')) return;
     const body = request.body as SendBody | undefined;
     if (!body || typeof body !== 'object') {
       return reply.code(400).send({ error: 'missing JSON body' });
@@ -173,12 +215,25 @@ export function registerInboxApi(server: FastifyInstance, deps: InboxApiDeps): v
   });
 
   // ---- GET /api/inbox ----
-  server.get('/api/inbox', async (request: FastifyRequest) => {
+  server.get('/api/inbox', async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!requireLocal(request, reply)) return;
+    if (!checkRate(request, reply, 'list')) return;
     const query = request.query as Record<string, string | undefined>;
+
+    // SECURITY (GPT-5.4 retro MEDIUM): validate limit to prevent large SQLite reads
+    let limit: number | undefined;
+    if (query['limit']) {
+      const parsed = Number(query['limit']);
+      if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAX_LIMIT) {
+        return reply.code(400).send({ error: `limit must be integer in [1, ${MAX_LIMIT}]` });
+      }
+      limit = parsed;
+    }
+
     const messages = inbox.list({
       unreadOnly: query['unread'] === 'true',
       fromAgent: query['from'] || undefined,
-      limit: query['limit'] ? Number(query['limit']) : undefined,
+      limit,
       includeArchived: query['include_archived'] === 'true',
     });
     return {
@@ -201,6 +256,8 @@ export function registerInboxApi(server: FastifyInstance, deps: InboxApiDeps): v
 
   // ---- POST /api/inbox/mark-read ----
   server.post('/api/inbox/mark-read', async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!requireLocal(request, reply)) return;
+    if (!checkRate(request, reply, 'mark-read')) return;
     const body = request.body as { message_id?: string } | undefined;
     if (!body?.message_id) {
       return reply.code(400).send({ error: 'missing message_id' });
@@ -211,6 +268,8 @@ export function registerInboxApi(server: FastifyInstance, deps: InboxApiDeps): v
 
   // ---- POST /api/inbox/archive ----
   server.post('/api/inbox/archive', async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!requireLocal(request, reply)) return;
+    if (!checkRate(request, reply, 'archive')) return;
     const body = request.body as { message_id?: string } | undefined;
     if (!body?.message_id) {
       return reply.code(400).send({ error: 'missing message_id' });
@@ -220,7 +279,9 @@ export function registerInboxApi(server: FastifyInstance, deps: InboxApiDeps): v
   });
 
   // ---- GET /api/inbox/unread ----
-  server.get('/api/inbox/unread', async (request: FastifyRequest) => {
+  server.get('/api/inbox/unread', async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!requireLocal(request, reply)) return;
+    if (!checkRate(request, reply, 'unread')) return;
     const query = request.query as Record<string, string | undefined>;
     return { unread_count: inbox.unreadCount(query['from'] || undefined) };
   });

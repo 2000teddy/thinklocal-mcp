@@ -293,6 +293,23 @@ async function main(): Promise<void> {
               status: 'rejected',
               reason: 'recipient mismatch',
             };
+          } else if (!pairingStore.isPaired(envelope.sender)) {
+            // SECURITY (PR #79 GPT-5.4 retro MEDIUM): Pruefen ob Sender
+            // in unserem Trust-Perimeter ist. Signaturpruefung durch
+            // agent-card.ts beweist nur "kommt von einem Cert mit bekannter
+            // CA", nicht "ich habe explizit mit diesem Agent gepairt".
+            // Ein Peer der gestern gepairt war und heute kompromittiert ist,
+            // wuerde sonst bis in alle Ewigkeit in meinen Inbox schreiben.
+            log.warn(
+              { from: envelope.sender, message_id: msg.message_id },
+              'AGENT_MESSAGE von nicht-gepairtem Sender abgelehnt',
+            );
+            ack = {
+              message_id: msg.message_id,
+              received_at: new Date().toISOString(),
+              status: 'rejected',
+              reason: 'sender not in pairing store',
+            };
           } else {
             const result = agentInbox.store(envelope.sender, msg);
             if (result.status === 'rejected') {
@@ -310,13 +327,17 @@ async function main(): Promise<void> {
                 status: 'delivered',
                 reason: result.status === 'duplicate' ? 'already in inbox' : undefined,
               };
-              audit.append('AGENT_MESSAGE_RX', envelope.sender, msg.message_id);
-              eventBus.emit('audit:new', {
-                type: 'AGENT_MESSAGE',
-                from: envelope.sender,
-                message_id: msg.message_id,
-                subject: msg.subject ?? null,
-              });
+              // SECURITY (GPT-5.4 retro LOW): nur fresh deliveries auditieren,
+              // nicht Duplikate — sonst wird das Audit-Log unnoetig noisy.
+              if (result.status === 'delivered') {
+                audit.append('AGENT_MESSAGE_RX', envelope.sender, msg.message_id);
+                eventBus.emit('audit:new', {
+                  type: 'AGENT_MESSAGE',
+                  from: envelope.sender,
+                  message_id: msg.message_id,
+                  subject: msg.subject ?? null,
+                });
+              }
             }
           }
 
@@ -366,6 +387,7 @@ async function main(): Promise<void> {
     ownPublicKeyPem: identity.publicKeyPem,
     ownPrivateKeyPem: identity.privateKeyPem,
     tlsDispatcher,
+    rateLimiter,
     log,
     onSent: (messageId, to) => {
       audit.append('AGENT_MESSAGE_TX', to, messageId);
@@ -532,6 +554,7 @@ async function main(): Promise<void> {
     mesh.stopHeartbeatLoop();
     taskManager.stop();
     vault.close();
+    agentInbox.close();
     rateLimiter.stop();
     discovery.stop();
     await libp2pRuntime.stop();
