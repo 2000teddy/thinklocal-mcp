@@ -11,7 +11,9 @@ export type AuditEventType =
   | 'HEARTBEAT'
   | 'CAPABILITY_QUERY'
   | 'TASK_DELEGATE'
-  | 'CREDENTIAL_ACCESS';
+  | 'CREDENTIAL_ACCESS'
+  | 'AGENT_MESSAGE_RX'
+  | 'AGENT_MESSAGE_TX';
 
 export interface AuditEvent {
   id: number;
