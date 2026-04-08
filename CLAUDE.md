@@ -1,5 +1,33 @@
 # CLAUDE.md — Eingangsprompt für Claude Code
 
+## UNVERHANDELBARE REIHENFOLGE (ab 2026-04-08)
+
+**Vor jedem PR zwingend in dieser Reihenfolge:**
+
+1. **CO** — `pal:consensus` (bei Design-Fragen/Architektur, 2-3 Modelle)
+2. **CG** — `clink gemini` (Test-Skizzen, Type-Ableitung, Boilerplate)
+3. **Design-Doku** — `docs/architecture/ADR-NNN-*.md` oder SECURITY.md-Update **VOR dem Code**
+4. **Code** — Implementierung
+5. **TS** — **Tests:** Unit-Tests (Vitest), Integration-Tests (`tests/integration/`), Regression-Tests fuer jeden gefixten Bug. Full Suite muss **gruen** sein bevor CR laeuft. Coverage-Ziel: kritische Pfade 100%, Gesamt ≥80%. `docs/TESTING.md` dokumentiert die Patterns.
+6. **CR** — `pal:codereview` mit GPT-5.4 oder Gemini Pro
+7. **HIGH-Findings fixen** — sofort, niemals als TODO verschieben. **Jeder HIGH/CRITICAL Finding bekommt einen Regression-Test.** Tests wieder gruen.
+8. **PC** — `pal:precommit`
+9. **git commit** — signed
+10. **DO** — Documentation: README / USER-GUIDE / API-REFERENCE / CHANGES.md / TODO.md / TESTING.md
+11. **PR** — `gh pr create`, COMPLIANCE-TABLE.md Zeile mit CO/CG/TS/CR/PC/DO
+12. **Merge** — nur nach vollstaendigem Compliance-Check
+13. **Peer-Deploy + Live-Test** — Live-Verifikation gehoert auch zu TS, wird im PR-Body dokumentiert
+
+**Spalten in COMPLIANCE-TABLE.md:** CO, CG, **TS**, CR, PC, DO. Jede anwendbare Spalte muss ✅ sein bevor der PR merged wird.
+
+**Eine reine Bug-Fix-PR darf CO + CG auslassen — aber TS + CR + PC + DO NIE.**
+
+**Eine Doc-only-PR (wie #84) darf alles ausser CO (bei Architektur-Dokus) + DO auslassen.**
+
+**Wenn du dich beim Coden dabei ertappst, dass du diese Reihenfolge umgehen willst, hast du PR #83 nicht verinnerlicht.** Am 2026-04-07/08 wurden 5+ Stunden Re-Work produziert weil Reviews uebersprungen wurden. Reviews kosten 5 Minuten pro PR.
+
+**Tests waren bisher implizit und deshalb unsichtbar als Compliance-Verstoss.** Ab 2026-04-08 21:40 (Christians Einwand): TS hat eine eigene Spalte, weil "selbstverstaendlich" bei LLM-Agenten bedeutet "nicht gemacht". Siehe `docs/TESTING.md` fuer Patterns und Minimalanforderungen.
+
 ## Projekt: thinklocal-mcp
 
 Verschlüsselte Peer-to-Peer-Kommunikation zwischen AI CLI Agenten im lokalen Netzwerk.
