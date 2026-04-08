@@ -36,7 +36,42 @@ export const MessageType = {
   SKILL_TRANSFER: 'SKILL_TRANSFER',
   SECRET_REQUEST: 'SECRET_REQUEST',
   SECRET_RESPONSE: 'SECRET_RESPONSE',
+  AGENT_MESSAGE: 'AGENT_MESSAGE',
+  AGENT_MESSAGE_ACK: 'AGENT_MESSAGE_ACK',
 } as const;
+
+// --- Agent-to-Agent Messaging ---
+
+/**
+ * Free-form message sent from one AI agent to another over the mesh.
+ * Use cases: coordination between Claude and Codex, task handoff notes,
+ * status reports, human-readable broadcasts.
+ *
+ * This is NOT a task or skill invocation — it's a simple text/JSON channel
+ * that lands in the recipient's inbox and is read on demand via MCP.
+ */
+export interface AgentMessagePayload {
+  /** UUID for deduplication and acknowledgment */
+  message_id: string;
+  /** Target SPIFFE-URI (redundant with envelope.recipient but kept for audit) */
+  to: string;
+  /** Human-readable subject line (optional, ≤ 200 chars) */
+  subject?: string;
+  /** Body text, JSON-serializable object, or plain string. ≤ 64 KB. */
+  body: string | Record<string, unknown>;
+  /** Optional correlation ID to reply to a previous message */
+  in_reply_to?: string;
+  /** ISO 8601 timestamp when the sender created this message */
+  sent_at: string;
+}
+
+export interface AgentMessageAckPayload {
+  message_id: string;
+  received_at: string;
+  /** 'delivered' = landed in inbox, 'rejected' = filtered/denied */
+  status: 'delivered' | 'rejected';
+  reason?: string;
+}
 
 export type MessageTypeName = (typeof MessageType)[keyof typeof MessageType];
 
@@ -160,7 +195,9 @@ export type MessagePayload =
   | TaskRejectPayload
   | TaskResultPayload
   | SecretRequestPayload
-  | SecretResponsePayload;
+  | SecretResponsePayload
+  | AgentMessagePayload
+  | AgentMessageAckPayload;
 
 // --- Envelope ---
 

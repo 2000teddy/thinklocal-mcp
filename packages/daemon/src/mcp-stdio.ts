@@ -73,6 +73,75 @@ server.tool('mesh_status', 'Zeigt den Gesamtstatus des Mesh-Daemons', {}, async 
   return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
 });
 
+// --- Agent-to-Agent Messaging ---
+
+server.tool(
+  'send_message_to_peer',
+  'Sendet eine direkte Nachricht an einen anderen Agent im Mesh. Der Empfaenger ist eine SPIFFE-URI (z.B. spiffe://thinklocal/host/<nodeId>/agent/<type>). Body als String — fuer JSON-Inhalt einfach JSON.stringify() vorher anwenden.',
+  {
+    to: z.string().describe('SPIFFE-URI des Ziel-Agents (aus discover_peers)'),
+    body: z.string().describe('Nachrichteninhalt als String (JSON.stringify wenn strukturiert)'),
+    subject: z.string().max(200).optional().describe('Optionaler Betreff (max 200 Zeichen)'),
+    in_reply_to: z.string().optional().describe('message_id einer vorherigen Nachricht (fuer Reply)'),
+  },
+  async ({ to, body, subject, in_reply_to }) => {
+    const data = await postDaemon('/api/inbox/send', { to, body, subject, in_reply_to });
+    return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool(
+  'read_inbox',
+  'Liest eingehende Nachrichten aus der Inbox. Optionale Filter: nur ungelesene, von einem bestimmten Absender, Limit, inkl. archivierter.',
+  {
+    unread_only: z.boolean().optional().describe('Nur ungelesene Nachrichten'),
+    from: z.string().optional().describe('Filter: nur von dieser SPIFFE-URI'),
+    limit: z.number().int().min(1).max(500).optional().describe('Max Anzahl (default 50)'),
+    include_archived: z.boolean().optional().describe('Auch archivierte einbeziehen'),
+  },
+  async ({ unread_only, from, limit, include_archived }) => {
+    const params: string[] = [];
+    if (unread_only) params.push('unread=true');
+    if (from) params.push(`from=${encodeURIComponent(from)}`);
+    if (limit !== undefined) params.push(`limit=${limit}`);
+    if (include_archived) params.push('include_archived=true');
+    const path = '/api/inbox' + (params.length ? `?${params.join('&')}` : '');
+    const data = await fetchDaemon(path);
+    return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool(
+  'mark_message_read',
+  'Markiert eine Nachricht in der Inbox als gelesen.',
+  { message_id: z.string().describe('UUID der Nachricht aus read_inbox') },
+  async ({ message_id }) => {
+    const data = await postDaemon('/api/inbox/mark-read', { message_id });
+    return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool(
+  'archive_message',
+  'Archiviert eine Nachricht (soft delete — bleibt im Audit-Log).',
+  { message_id: z.string() },
+  async ({ message_id }) => {
+    const data = await postDaemon('/api/inbox/archive', { message_id });
+    return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool(
+  'unread_messages_count',
+  'Zaehlt ungelesene Nachrichten in der Inbox. Optional gefiltert nach Absender.',
+  { from: z.string().optional() },
+  async ({ from }) => {
+    const path = from ? `/api/inbox/unread?from=${encodeURIComponent(from)}` : '/api/inbox/unread';
+    const data = await fetchDaemon(path);
+    return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
 server.tool('list_tasks', 'Listet alle Tasks im Mesh', { state: z.string().optional() }, async ({ state }) => {
   const path = state ? `/api/tasks?state=${encodeURIComponent(state)}` : '/api/tasks';
   const data = await fetchDaemon(path);

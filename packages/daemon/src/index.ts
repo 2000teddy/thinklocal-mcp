@@ -16,6 +16,7 @@ import { MessageType, encodeAndSign, createEnvelope, type MessageEnvelope } from
 import { TaskManager } from './tasks.js';
 import { SkillManager, type SkillAnnouncePayload } from './skills.js';
 import { registerDashboardApi } from './dashboard-api.js';
+import { registerInboxApi } from './inbox-api.js';
 import { PairingStore } from './pairing.js';
 import { registerPairingRoutes } from './pairing-handler.js';
 import { TrustStoreNotifier } from './trust-store.js';
@@ -26,7 +27,8 @@ import { loadOrCreateVaultPassphrase } from './vault-passphrase.js';
 import { isLoopbackHost } from './runtime-mode.js';
 import { TaskExecutor } from './task-executor.js';
 import { createLibp2pRuntime } from './libp2p-runtime.js';
-import type { SecretRequestPayload, SecretResponsePayload } from './messages.js';
+import type { SecretRequestPayload, SecretResponsePayload, AgentMessagePayload, AgentMessageAckPayload } from './messages.js';
+import { AgentInbox } from './agent-inbox.js';
 import { SYSTEM_MONITOR_MANIFEST } from './builtin-skills/system-monitor.js';
 import { INFLUXDB_MANIFEST, influxdbHealthCheck } from './builtin-skills/influxdb.js';
 import { TelegramGateway } from './telegram-gateway.js';
@@ -101,6 +103,11 @@ async function main(): Promise<void> {
       );
     }
   }
+
+  // Agent-to-Agent Inbox fuer Messaging zwischen Agents im Mesh.
+  // Wird weiter unten in den onMessage-Handler eingebunden und ueber MCP-Tools
+  // send_message_to_peer / read_inbox / mark_read freigegeben.
+  const agentInbox = new AgentInbox(config.daemon.data_dir, log);
 
   // SPAKE2 Trust-Bootstrap: PairingStore muss VOR dem Trust-Store angelegt
   // werden, damit die CA-Certs aller bereits gepairten Peers beim Start sofort
@@ -272,6 +279,55 @@ async function main(): Promise<void> {
           const secretResp = createEnvelope(MessageType.SECRET_RESPONSE, identity.spiffeUri, responsePayload, { correlation_id: envelope.correlation_id });
           return encodeAndSign(secretResp, identity.privateKeyPem);
         }
+        case MessageType.AGENT_MESSAGE: {
+          // Free-form agent-to-agent message (human-initiated or agent-initiated).
+          // Signature wurde bereits von agent-card.ts verifiziert. Wir pruefen nur
+          // noch ob der Sender in unserem Trust-Perimeter ist.
+          const msg = envelope.payload as AgentMessagePayload;
+          let ack: AgentMessageAckPayload;
+
+          if (msg.to !== identity.spiffeUri) {
+            ack = {
+              message_id: msg.message_id,
+              received_at: new Date().toISOString(),
+              status: 'rejected',
+              reason: 'recipient mismatch',
+            };
+          } else {
+            const result = agentInbox.store(envelope.sender, msg);
+            if (result.status === 'rejected') {
+              ack = {
+                message_id: msg.message_id,
+                received_at: new Date().toISOString(),
+                status: 'rejected',
+                reason: result.reason,
+              };
+            } else {
+              // delivered oder duplicate -> beide zaehlen als "angekommen"
+              ack = {
+                message_id: msg.message_id,
+                received_at: new Date().toISOString(),
+                status: 'delivered',
+                reason: result.status === 'duplicate' ? 'already in inbox' : undefined,
+              };
+              audit.append('AGENT_MESSAGE_RX', envelope.sender, msg.message_id);
+              eventBus.emit('audit:new', {
+                type: 'AGENT_MESSAGE',
+                from: envelope.sender,
+                message_id: msg.message_id,
+                subject: msg.subject ?? null,
+              });
+            }
+          }
+
+          const ackEnvelope = createEnvelope(
+            MessageType.AGENT_MESSAGE_ACK,
+            identity.spiffeUri,
+            ack,
+            { correlation_id: envelope.correlation_id },
+          );
+          return encodeAndSign(ackEnvelope, identity.privateKeyPem);
+        }
         default:
           log.debug({ type: envelope.type }, 'Unbekannter Nachrichtentyp');
           return null;
@@ -299,6 +355,17 @@ async function main(): Promise<void> {
     publicKeyPem: identity.publicKeyPem,
     caCertPem: tlsBundle?.caCertPem ?? '',
     fingerprint: identity.fingerprint,
+    log,
+  });
+
+  // 8c2. Agent-to-Agent Messaging API
+  registerInboxApi(cardServer.getServer(), {
+    inbox: agentInbox,
+    mesh,
+    ownAgentId: identity.spiffeUri,
+    ownPublicKeyPem: identity.publicKeyPem,
+    ownPrivateKeyPem: identity.privateKeyPem,
+    tlsDispatcher,
     log,
   });
 
