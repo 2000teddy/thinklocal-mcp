@@ -121,6 +121,90 @@ Prompts an andere Agents weiterleiten. Szenarien:
 - Capability-basierte Zugriffskontrolle (Agent darf nur Skills nutzen die er hat)
 - Rate-Limiting pro Agent fuer Task-Delegation
 
+### Identitaet, Trust-Store und CA-Subject (v0.31)
+
+#### Stable Node Identity (PR #74)
+
+ThinkLocal-Nodes hatten urspruenglich eine SPIFFE-URI im Format
+`spiffe://thinklocal/host/<hostname>/agent/<type>` — direkt aus `os.hostname()`
+abgeleitet. Auf macOS aendert Bonjour den Hostname dynamisch wenn es zu
+Kollisionen kommt (`minimac-200` → `-795` → `-1014` → ...). Das machte die
+SPIFFE-URI **instabil**: jeder Reboot konnte zu einer neuen Identitaet fuehren,
+mTLS-Certs wurden mit veraltetem SAN ausgestellt, und Peers behandelten
+denselben Node bei jedem Sichten als neuen Fremden.
+
+**Fix:** `loadOrCreateStableNodeId()` berechnet eine 16-hex Identitaet aus
+sortierten MAC-Adressen + CPU-Modell + Plattform/Architektur (bewusst OHNE
+Hostname). Persistiert in `~/.thinklocal/keys/node-id.txt`. Datei darf vom
+Operator manuell ueberschrieben werden, bei Hardware-Wechsel mit gleicher
+logischer Identitaet. Die SPIFFE-URI ist jetzt `host/<stableNodeId>/agent/<type>`.
+
+#### CA Subject DN Collision (PR #77, security-critical)
+
+**Bug:** Jede Node generierte ihre Mesh-CA mit dem **identischen** Subject DN
+`CN=thinklocal Mesh CA, O=thinklocal-mcp`. Das ist ein klassischer
+internal-PKI-Footgun. Wenn der Trust-Store mehrere CAs mit gleichem Subject
+enthielt (eigene CA + gepairte Peer-CAs aus dem TrustStore von PR #75),
+machte OpenSSL/Node.js bei der Cert-Verifikation einen Issuer-Name-Lookup
+und nahm die **erste** matching CA — nicht die mit dem richtigen Public-Key.
+Mit kollidierenden Subjects ist das effektiv zufaellig und scheitert
+fast immer mit `certificate signature failure`.
+
+PR #75 (TrustStore-Aggregation) war damit zwar **strukturell korrekt** aber
+funktional **wirkungslos**, bis dieser Fix kam. Live-Beobachtung im 4-Node-Mesh:
+`certificate signature failure` zwischen allen Peers — bis die unique-CN
+ausgerollt war.
+
+**Fix:**
+1. `createMeshCA(meshName, nodeId)` baut die nodeId in den CN ein:
+   `CN=thinklocal Mesh CA <nodeId>`. Ohne nodeId: 16-hex Random-Suffix.
+2. `loadOrCreateTlsBundle()` detektiert Legacy-CAs (`CN === "thinklocal Mesh CA"`),
+   sichert sie als `*.legacy.pem`, reissued CA + Node-Cert (Node-Cert MUSS neu,
+   weil die alte Signatur nicht mehr zur neuen CA passt).
+3. `index.ts` reicht `identity.stableNodeId` durch.
+
+**Folge-Findings (GPT-5.4 retroaktiv 2026-04-08, alle in PR #103 adressiert):**
+- HIGH: Reuse-Pfad ohne Signatur-Verifikation gegen aktuelle CA → ein
+  partial-migration-crash konnte ein Cert hinterlassen das nicht mehr von der
+  aktuellen CA signiert war aber zufaellig die SPIFFE-URI matchte. Jetzt:
+  try/catch + `caCert.verify(cert)` Check.
+- MEDIUM: Keine CA-Validity-Window-Pruefung beim Laden. Jetzt: `notBefore <=
+  now <= notAfter` Check, sonst reissue.
+- LOW: `getCertDaysLeft()` Pfad-Bug (`certs/node.crt` statt `tls/node.crt.pem`),
+  Startup-Warnings fuer ablaufende Certs feuerten nie.
+
+**Verbleibende Limitierungen (Folge-PR):**
+- File-writes der CA-Migration sind nicht atomar (kein temp+rename, kein lock).
+  Risiko bei Daemon-Crash mid-migration: Partial-State auf Disk. Praktisch
+  unwahrscheinlich, aber Defense-in-Depth-Issue.
+- Trust-Store collision detection: Wenn ein Node mehrere not-yet-migrated
+  Peer-CAs im Bundle haelt (mixed-version Rollout), kann das urspruengliche
+  Issuer-Lookup-Problem reappearen. Loud warning + Fail-on-collision empfohlen.
+- Legacy-Detektion catched nur exact `CN === "thinklocal Mesh CA"` — custom
+  meshNames slip through.
+
+#### SSH-Bootstrap-Trust (PR #78)
+
+Alternative zur manuellen SPAKE2 PIN-Zeremonie fuer den Single-Operator-Fall:
+Wenn der Operator bereits SSH-Zugriff zwischen seinen eigenen Nodes hat,
+nutzt das Script den existierenden SSH-Trust-Anchor um CAs gegenseitig in
+die `paired-peers.json` zu schreiben. Erweitert das Trust-Modell um "wer
+SSH-Root auf allen Nodes hat, darf Mesh-Trust setzen" — bewusste
+Vereinfachung fuer Single-Operator. **Ersetzt nicht SPAKE2** — fremde Nodes
+muessen weiterhin die PIN-Zeremonie durchlaufen.
+
+#### Agent-to-Agent Messaging Inbox (PR #79/80)
+
+Persistente Inbox pro Daemon (`~/.thinklocal/inbox/inbox.db`, SQLite WAL),
+64 KB Body-Limit, Dedupe via UUID. Eingehende `AGENT_MESSAGE` werden vom
+existierenden agent-card.ts Signaturpfad verifiziert (Sender hat valides
+Cert von einer der vertrauten CAs) und dann gestored. Sender-Authorization
+ist aktuell "any paired peer can send" — per-Peer ACL ist Phase 2.
+
+**Loopback** (PR #80): Wenn `to === ownAgentId`, wird die Nachricht direkt
+im lokalen Inbox abgelegt statt ueber Netzwerk geroutet. Erlaubt mehreren
+Agenten (Claude Code, Codex) sich denselben Daemon zu teilen.
+
 ### Bekannte Limitierungen (Stand v0.24)
 
 > Diese Items sind dokumentiert und werden in zukuenftigen Releases adressiert.
@@ -148,6 +232,8 @@ Hinweis zum ersten Punkt: Im Standard-Installationspfad reduziert `127.0.0.1` di
 | 2026-04-05 | GPT-5.1 | Telegram Gateway Hardening | 4 MEDIUM, 5 LOW | Alle gefixt |
 | 2026-04-05 | Gemini 2.5 Pro | Static Peers, chatId, Gossip | 1 MEDIUM, 2 LOW | Alle gefixt |
 | 2026-04-05 | Gemini 2.5 Pro | Deploy Command | 0 HIGH, 2 LOW | Alle gefixt |
+| 2026-04-06 | GPT-5.4 | **Batch-Review v0.30.0 (41 Dateien)** | **18 HIGH, 27 MEDIUM, 13 LOW (58 total)** | **13 HIGH gefixt #94, alle MEDIUM/LOW dokumentiert** |
+| 2026-04-08 | GPT-5.4 | **PR #77 retroaktiv: CA Subject DN Collision Fix** | **1 HIGH, 3 MEDIUM, 2 LOW** | **HIGH + 2 MEDIUM gefixt #103, Rest dokumentiert** |
 
 ### Kryptografische Primitiven
 

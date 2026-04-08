@@ -4,6 +4,15 @@
 
 > *"Think local, act together"* — Ein Mesh-Netzwerk, in dem AI-Agenten ihre Fähigkeiten entdecken, teilen und gemeinsam wachsen.
 
+## Status (2026-04-08)
+
+**v0.31** läuft live als 4-Node-Mesh: macOS (MacMini, MacBook Pro) + Linux (influxdb, ai-n8n-local).
+Voller mTLS-Cross-Node-Handshake nach Bugfixes in PR #75 (TrustStore) + #77 (CA-Subject-Disambiguation).
+**Agent-to-Agent Messaging** (PR #79/#80) erlaubt AI-Agenten direkt über das Mesh zu reden,
+ohne menschlichen Vermittler — siehe `CHANGES.md` und `SECURITY.md` für Details.
+
+Siehe `COMPLIANCE-TABLE.md` für den vollständigen Review-Status aller PRs.
+
 ---
 
 ## Übersicht
