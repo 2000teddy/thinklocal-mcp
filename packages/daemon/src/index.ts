@@ -367,6 +367,14 @@ async function main(): Promise<void> {
     ownPrivateKeyPem: identity.privateKeyPem,
     tlsDispatcher,
     log,
+    onSent: (messageId, to) => {
+      audit.append('AGENT_MESSAGE_TX', to, messageId);
+      eventBus.emit('audit:new', {
+        type: 'AGENT_MESSAGE_TX',
+        to,
+        message_id: messageId,
+      });
+    },
   });
 
   // 8d. WebSocket fuer Echtzeit-Events

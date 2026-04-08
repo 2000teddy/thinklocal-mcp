@@ -38,6 +38,11 @@ export interface InboxApiDeps {
   ownPrivateKeyPem: string;
   tlsDispatcher?: UndiciAgent;
   log?: Logger;
+  /**
+   * Audit-Hook (optional). Wird mit dem outbound message_id aufgerufen,
+   * damit AGENT_MESSAGE_TX in das audit-log laeuft.
+   */
+  onSent?: (messageId: string, to: string) => void;
 }
 
 interface SendBody {
@@ -50,7 +55,7 @@ interface SendBody {
 const MAX_BODY_BYTES = 64 * 1024;
 
 export function registerInboxApi(server: FastifyInstance, deps: InboxApiDeps): void {
-  const { inbox, mesh, ownAgentId, ownPrivateKeyPem, tlsDispatcher, log } = deps;
+  const { inbox, mesh, ownAgentId, ownPrivateKeyPem, tlsDispatcher, log, onSent } = deps;
 
   // ---- POST /api/inbox/send ----
   server.post('/api/inbox/send', async (request: FastifyRequest, reply: FastifyReply) => {
@@ -73,17 +78,7 @@ export function registerInboxApi(server: FastifyInstance, deps: InboxApiDeps): v
       return reply.code(400).send({ error: 'subject exceeds 200 chars' });
     }
 
-    // Find target peer
-    const peer = mesh.getPeer(body.to);
-    if (!peer || !peer.endpoint) {
-      return reply.code(404).send({
-        error: 'peer not found in mesh',
-        target: body.to,
-        hint: 'Use discover_peers to see known agents',
-      });
-    }
-
-    // Build payload
+    // Build payload first (we need it for both loopback and remote paths)
     const messageId = randomUUID();
     const payload: AgentMessagePayload = {
       message_id: messageId,
@@ -93,6 +88,39 @@ export function registerInboxApi(server: FastifyInstance, deps: InboxApiDeps): v
       in_reply_to: body.in_reply_to,
       sent_at: new Date().toISOString(),
     };
+
+    // ---- LOOPBACK PATH ----
+    // Multiple agents (Claude Code, Codex, Gemini CLI, ...) can share one
+    // daemon. They all see the same SPIFFE-URI from the daemon's perspective.
+    // When an agent sends to its own daemon's URI, we MUST NOT route through
+    // the network — there's no peer to talk to. We store the message directly
+    // in the local inbox so the recipient (= a sibling agent on the same host)
+    // can read it via read_inbox.
+    if (body.to === ownAgentId) {
+      const result = inbox.store(ownAgentId, payload);
+      log?.info(
+        { to: body.to, message_id: messageId, subject: body.subject ?? null, mode: 'loopback' },
+        'AGENT_MESSAGE loopback (sibling-agent on same daemon)',
+      );
+      onSent?.(messageId, body.to);
+      return {
+        status: 'sent',
+        delivery: 'loopback',
+        message_id: messageId,
+        sent_at: payload.sent_at,
+        inbox_status: result.status,
+      };
+    }
+
+    // ---- REMOTE PEER PATH ----
+    const peer = mesh.getPeer(body.to);
+    if (!peer || !peer.endpoint) {
+      return reply.code(404).send({
+        error: 'peer not found in mesh',
+        target: body.to,
+        hint: 'Use discover_peers to see known agents',
+      });
+    }
 
     // Sign and serialize
     const envelope = createEnvelope(MessageType.AGENT_MESSAGE, ownAgentId, payload, {
@@ -125,9 +153,11 @@ export function registerInboxApi(server: FastifyInstance, deps: InboxApiDeps): v
         { to: body.to, message_id: messageId, subject: body.subject ?? null },
         'AGENT_MESSAGE gesendet',
       );
+      onSent?.(messageId, body.to);
 
       return {
         status: 'sent',
+        delivery: 'remote',
         message_id: messageId,
         sent_at: payload.sent_at,
         peer_status: res.status,
