@@ -2,17 +2,42 @@
 
 Dokumentiert die Einhaltung der Entwicklungsregeln (CLAUDE.md) fuer jeden PR.
 
-**Regeln:**
-- CR = `pal:codereview` — Nach jedem fertigen Modul mit GPT-5.4 oder Gemini Pro
-- PC = `pal:precommit` — Vor jedem Commit automatische Validierung
-- CO = `pal:consensus` — Bei Design-Fragen 2-3 Modelle konsultieren
-- CG = `clink gemini` — Isolierte Aufgaben (Tests, Types) an Gemini delegieren
+**Regeln (in der Reihenfolge ihrer Ausfuehrung):**
+
+1. **CO** = `pal:consensus` — **VOR dem Code-Schreiben.** Bei jeder Design-Frage oder Architektur-Aenderung 2-3 Modelle (GPT-5.4, Gemini Pro, ggf. Claude Opus) konsultieren. Nur fuer reine Bug-Fixes oder Docs optional.
+2. **CG** = `clink gemini` — **VOR dem Code-Schreiben.** Isolierte Aufgaben wie Test-Generierung, Type-Ableitung aus JSON-Schema, Boilerplate an Gemini CLI delegieren.
+3. **CR** = `pal:codereview` — **NACH dem Code-Schreiben, VOR dem Commit.** Mit GPT-5.4 oder Gemini Pro. HIGH-Findings blockieren den Merge.
+4. **PC** = `pal:precommit` — **VOR dem Commit.** Automatische Validierung, niemals uebersprungen.
+5. **DO** = **Documentation** — **NACH dem Commit, VOR dem PR.** Jeder neue Code braucht:
+   - **Anwender-Doku:** README-Abschnitt oder `docs/USER-GUIDE.md`-Update fuer sichtbare Aenderungen
+   - **Entwickler-Doku:** `docs/ARCHITECTURE.md`, `docs/DEVELOPER-GUIDE.md` oder ADR in `docs/architecture/` fuer strukturelle Aenderungen
+   - **API-Doku:** `docs/API-REFERENCE.md` fuer neue REST-Endpoints oder MCP-Tools
+   - **TODO.md Update:** erledigte Items abhaken, neue Folge-Tasks ergaenzen
+   - **CHANGES.md Eintrag:** im `[Unreleased]`-Block oder mit neuer Version
 
 **Legende:**
 - ✅ = Regel eingehalten
 - ❌ = Regel nicht eingehalten
 - ⚠️ = Teilweise / nachgeholt
-- — = Nicht anwendbar (Docs, Config, reine Fixes)
+- — = Nicht anwendbar
+
+**Reihenfolge pro PR (verbindlich ab 2026-04-08):**
+
+```
+[Design]        →  CO + CG       (Architektur-Entwurf, Doku-Skizze)
+[Doku-Skizze]   →  .md-Files anlegen oder aktualisieren (SECURITY.md, TODO.md, docs/architecture/ADR-*)
+[Code]          →  Implementierung + Unit-Tests
+[CR]            →  pal:codereview mit GPT-5.4 oder Gemini Pro
+[Fix]           →  HIGH/CRITICAL Findings sofort beheben
+[PC]            →  pal:precommit
+[Commit]        →  git commit (signed)
+[DO]            →  USER-GUIDE, API-REFERENCE, CHANGES.md, TODO.md-Update
+[PR]            →  gh pr create, Compliance-Tabelle aktualisieren
+[Merge]         →  gh pr merge (admin only nach volledem Compliance-Check)
+[Peer-Deploy]   →  Ggf. Restart betroffener Agents + Live-Test
+```
+
+**Automatisierung:** Ab 2026-04-08 wird diese Reihenfolge per Cron-Heartbeat (siehe `docs/architecture/ADR-004-cron-heartbeat.md`, PR in Arbeit) regelmaessig ueberprueft. Ein Agent der gegen die Reihenfolge verstoesst bekommt eine Loopback-Nachricht als Erinnerung.
 
 ---
 
@@ -156,6 +181,17 @@ Dokumentiert die Einhaltung der Entwicklungsregeln (CLAUDE.md) fuer jeden PR.
 | 103 | #81       | Compliance Catchup + #77 Retro-Review-Fixes    | 04-08 09:50 | ✅ | ✅ | —  | —  | Retroaktiver #77 Review + HIGH/MEDIUM/LOW Fixes + Doc Update |
 | 104 | #82       | execute_remote_skill mTLS Fix (Codex-Befund)   | 04-08 10:31 | ⚠️ | ❌ | —  | —  | Codex hat den Bug gemeldet, ich habe ihn gefixt — Light Review durch Codex' Diagnose |
 | 105 | #83       | Batch-Review Fixes fuer #96/#97/#100/#101/#102 | 04-08 14:50 | ✅ | ✅ | —  | —  | **Dieser PR** — 3 retroaktive GPT-5.4 Reviews + sofortiger Fix aller HIGH + kritischen MEDIUMs |
+
+## Session 2026-04-08 ab 20:57 — Neue Regel-Reihenfolge mit DO-Spalte
+
+> **NEU ab PR #106:** Reihenfolge jetzt **CO → CG → Design-Doku → Code → CR → PC → Commit → DO → PR**.
+> Neue Spalte **DO (Documentation)** trackt ob Anwender-/Entwickler-/API-Doku vor dem PR gemacht wurde.
+> Fruehere PRs (#1-#105) haben die DO-Spalte nicht weil sie rueckwirkend nicht sinnvoll eintragbar ist —
+> die historische Doku-Pflege war tatsaechlich luecken-haft und wurde in PR #81 sowie dieser Session aufgeholt.
+
+| #   | GitHub PR | Beschreibung                                  | Datum       | CO | CG | CR | PC | DO | Findings                                |
+|-----|-----------|-----------------------------------------------|-------------|----|----|----|----|----|-----------------------------------------|
+| 106 | TBD       | Cron-Heartbeat + Per-Agent Inbox (Design-only) | 04-08 21:30 | ✅ | ⏳ | —  | —  | ✅ | **Dieser PR** — ADR-004 + ADR-005 + COMPLIANCE neue DO-Spalte + CLAUDE.md Rules. CO-Konsensus durch GPT-5.4 (8/10) + Gemini Pro (9/10), Findings eingearbeitet. CG Folge-PR bei Implementation. CR/PC nur fuer Design-Doku-Aenderungen nicht noetig. |
 
 ---
 

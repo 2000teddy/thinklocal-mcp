@@ -1,5 +1,28 @@
 # CLAUDE.md — Eingangsprompt für Claude Code
 
+## UNVERHANDELBARE REIHENFOLGE (ab 2026-04-08)
+
+**Vor jedem PR zwingend in dieser Reihenfolge:**
+
+1. **CO** — `pal:consensus` (bei Design-Fragen/Architektur, 2-3 Modelle)
+2. **CG** — `clink gemini` (Test-Skizzen, Type-Ableitung, Boilerplate)
+3. **Design-Doku** — `docs/architecture/ADR-NNN-*.md` oder SECURITY.md-Update **VOR dem Code**
+4. **Code** — Implementierung + Unit-Tests
+5. **CR** — `pal:codereview` mit GPT-5.4 oder Gemini Pro
+6. **HIGH-Findings fixen** — sofort, niemals als TODO verschieben
+7. **PC** — `pal:precommit`
+8. **git commit** — signed
+9. **DO** — Documentation: README / USER-GUIDE / API-REFERENCE / CHANGES.md / TODO.md
+10. **PR** — `gh pr create`, COMPLIANCE-TABLE.md Zeile hinzufuegen
+11. **Merge** — nur nach vollstaendigem Compliance-Check
+12. **Peer-Deploy + Live-Test**
+
+**Spalten in COMPLIANCE-TABLE.md:** CO, CG, CR, PC, DO. Jede Spalte muss ✅ sein bevor der PR merged wird.
+
+**Eine reine Bug-Fix-PR darf CO + CG auslassen — aber DO NIE.**
+
+**Wenn du dich beim Coden dabei ertappst, dass du diese Reihenfolge umgehen willst, hast du PR #83 nicht verinnerlicht.** Am 2026-04-07/08 wurden 5+ Stunden Re-Work produziert weil Reviews uebersprungen wurden. Reviews kosten 5 Minuten pro PR.
+
 ## Projekt: thinklocal-mcp
 
 Verschlüsselte Peer-to-Peer-Kommunikation zwischen AI CLI Agenten im lokalen Netzwerk.

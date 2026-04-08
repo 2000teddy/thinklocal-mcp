@@ -168,6 +168,16 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [x] 🟡 Task-Priorisierung und Queue-Management — `task-queue.ts` priorisierte Queue mit max Parallelitaet (2026-04-05)
 - [ ] 💡 Lernende Delegation (basierend auf Erfolgshistorie)
 
+### 4.4.1 Cron-Heartbeat + Per-Agent-Inbox (Proposed, siehe ADR-004, ADR-005)
+
+- [ ] 🔴 **ADR-004 Cron-Heartbeat** — Design-Doku in `docs/architecture/ADR-004-cron-heartbeat.md`. Grund: LLM-Agenten lernen keine "check inbox"-Pattern durch Iteration; nur externe Scheduler/Hooks erzwingen das Verhalten. Phase 1: per-CLI Cron via `CronCreate` (Claude) und aequivalenter Codex-Scheduler. Phase 2: Daemon Register/Heartbeat-Endpoints. Phase 3: WebSocket-Push als Ergaenzung. Phase 4: Regel-Check (Compliance) im Heartbeat-Prompt.
+- [ ] 🔴 **ADR-005 Per-Agent-Inbox** — `to_agent_instance` Spalte in SQLite, SPIFFE-URI um `/instance/<id>` erweitert, `POST /api/agent/register` + `unregister`, `read_inbox` filtert automatisch nach registrierter Instance. Grund: Ein Peer kann mehrere Agents hosten (Claude + Codex + Gemini), die aktuelle Per-Daemon-Inbox macht Privacy zwischen Agents unmoeglich.
+- [ ] 🟠 **Adaptive Cron-Intervall** — exponential backoff bei leerer Inbox (5s → 30s), sofort zurueck auf 5s nach Event. Konfiguration pro Mesh-Modus (local/lan/federated/adhoc).
+- [ ] 🟠 **Compliance-Regel-Check im Heartbeat** — COMPLIANCE-TABLE.md wird bei jedem Heartbeat gescannt, bei offenen Eintraegen ohne CO/CG/CR/PC/DO schreibt der Cron eine Reminder-Nachricht in die eigene Inbox.
+- [ ] 🟡 **Broadcast-Pattern** — `send_message_to_peer(to="spiffe://.../instance/*")` fanout an alle aktiven Instances auf einem Host. Fuer Announcements und System-Events.
+- [ ] 🟡 **WebSocket-Push als Komplement** — `inbox:new` EventBus + WebSocket-Broadcast, MCP-Stdio-Subprocess haelt optional Subscription, schreibt in Memory-Buffer der beim naechsten Cron-Pull ausgewertet wird.
+- [ ] 🟡 **`unregister` on graceful shutdown** — MCP-Stdio verwendet `process.on('exit', ...)` um sich beim Daemon abzumelden. Mitigation gegen "stale agent instances" die nie aufraeumen.
+
 ### 4.4 Agent-zu-Agent Messaging (Inbox)
 - [x] 🔴 **Persistente Inbox pro Daemon** — `agent-inbox.ts` SQLite WAL, 64KB Body-Limit, Dedupe via UUID, soft read/archive (PR #79, 2026-04-08)
 - [x] 🔴 **AGENT_MESSAGE Wire-Type** — `messages.ts` AgentMessagePayload + AgentMessageAckPayload, signiert via Mesh-Envelope (PR #79, 2026-04-08)
