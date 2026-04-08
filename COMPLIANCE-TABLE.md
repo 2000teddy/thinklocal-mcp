@@ -205,7 +205,8 @@ Tests wurden bisher als "selbstverstaendlicher Bestandteil von Code" behandelt u
 
 | #   | GitHub PR | Beschreibung                                  | Datum       | CO | CG | TS | CR | PC | DO | Findings                                |
 |-----|-----------|-----------------------------------------------|-------------|----|----|----|----|----|----|-----------------------------------------|
-| 106 | #84       | Cron-Heartbeat + Per-Agent Inbox (Design-only) + TS-Spalte retro | 04-08 21:30 | ✅ | —  | —  | —  | —  | ✅ | **Dieser PR** — ADR-004 + ADR-005 + COMPLIANCE neue DO+TS-Spalten + CLAUDE.md Rules. CO-Konsensus GPT-5.4 (8/10) + Gemini Pro (9/10). CG/TS/CR/PC nicht anwendbar fuer Doc-only PR. |
+| 106 | #84       | Cron-Heartbeat + Per-Agent Inbox (Design-only) + TS-Spalte retro | 04-08 21:30 | ✅ | —  | —  | —  | —  | ✅ | ADR-004 + ADR-005 + COMPLIANCE neue DO+TS-Spalten + CLAUDE.md Rules. CO-Konsensus GPT-5.4 (8/10) + Gemini Pro (9/10). CG/TS/CR/PC nicht anwendbar fuer Doc-only PR. |
+| 107 | #85       | ADR-006 Agent Session Persistence & Crash Recovery (Design-only) | 04-08 22:55 | ✅ | —  | —  | —  | —  | ✅ | **Dieser PR** — ADR-006 Design-Doku, TODO.md 4.4.2, CHANGES.md 0.32.0. CO-Konsensus GPT-5.4 (8/10) + Gemini 2.5 Pro (8/10), einstimmig auf allen 5 Design-Fragen. CG/TS/CR/PC nicht anwendbar fuer Doc-only PR. |
 
 ---
 

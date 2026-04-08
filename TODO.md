@@ -168,6 +168,14 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [x] 🟡 Task-Priorisierung und Queue-Management — `task-queue.ts` priorisierte Queue mit max Parallelitaet (2026-04-05)
 - [ ] 💡 Lernende Delegation (basierend auf Erfolgshistorie)
 
+### 4.4.2 Agent Session Persistence & Crash Recovery (Proposed, siehe ADR-006)
+
+- [ ] 🔴 **ADR-006 Session Persistence** — Design-Doku in `docs/architecture/ADR-006-session-persistence.md`. Grund: LLM-CLI-Agenten verlieren bei Token-Exhaustion/Crash/Stromausfall ihren gesamten Kontext; manueller Wiedereinstieg dauert 5-15min. Loesung (Konsensus GPT-5.4 + Gemini 2.5 Pro, je 8/10): Daemon-external-Watcher + SQLite Event-Store als Single Source of Truth, Markdown als derived views, daemon-injizierte SESSION_ID, strukturierte HISTORY.md + async LLM-START-PROMPT.md, atomic temp+rename.
+- [ ] 🔴 **Phase 1 MVP** — `atomic-write.ts`, `session_events` SQLite Schema, `ClaudeCodeAdapter`, `session-watcher.ts` (fs.watch + chokidar), `recovery-generator.ts` (deterministisch), `session-binding.ts` (orphan-scan + fingerprint).
+- [ ] 🟠 **Phase 2 Multi-Agent** — `CodexAdapter`, `GeminiCliAdapter`, async START-PROMPT.md via `pal:chat`, MCP-Tools `session.list/resume/dump`, User-Doku `docs/SESSION-RECOVERY.md`.
+- [ ] 🟡 **Phase 3 Curation + Security** — `MEMORY.md` Curation-Policy, Redaction-Filter, Retention + `session.purge`, Prompt-Injection-Markierung.
+- [ ] 🔵 **Phase 4 DEFER** — Encrypted Recovery-Capsule fuer cross-machine failover (nur wenn realer Use-Case auftaucht).
+
 ### 4.4.1 Cron-Heartbeat + Per-Agent-Inbox (Proposed, siehe ADR-004, ADR-005)
 
 - [ ] 🔴 **ADR-004 Cron-Heartbeat** — Design-Doku in `docs/architecture/ADR-004-cron-heartbeat.md`. Grund: LLM-Agenten lernen keine "check inbox"-Pattern durch Iteration; nur externe Scheduler/Hooks erzwingen das Verhalten. Phase 1: per-CLI Cron via `CronCreate` (Claude) und aequivalenter Codex-Scheduler. Phase 2: Daemon Register/Heartbeat-Endpoints. Phase 3: WebSocket-Push als Ergaenzung. Phase 4: Regel-Check (Compliance) im Heartbeat-Prompt.

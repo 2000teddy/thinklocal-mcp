@@ -6,6 +6,31 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
+## [0.32.0] — 2026-04-08 22:55 UTC
+
+**ADR-006: Agent Session Persistence & Crash Recovery (Design)**
+
+### Hinzugefuegt
+
+#### PR #85 — ADR-006 Design Doc
+- **`docs/architecture/ADR-006-session-persistence.md`**: Vollstaendige Design-Doku fuer persistentes Agent-Gedaechtnis. Loest das Problem, dass LLM-CLI-Agenten bei Token-Exhaustion/Crash/Stromausfall ihren gesamten Kontext verlieren und manueller Wiedereinstieg 5-15min dauert.
+- **Kern-Entscheidungen** (Multi-Model-Consensus GPT-5.4 + Gemini 2.5 Pro, beide 8/10 Confidence):
+  1. **External Watcher (Option C)** als Daemon-Ingestor — kein Self-Write, kein dummer Cron. Tail native session files via `fs.watch` + `chokidar` Fallback.
+  2. **Daemon-injizierte `THINKLOCAL_SESSION_ID`** beim Launch — `cwd+branch+type` Fingerprint nur als Such-Key fuer orphaned Dirs, bei Mehrdeutigkeit User-Prompt.
+  3. **Hybrid Kompression**: Lossless Event-Log in SQLite als kanonische Quelle, deterministische strukturierte HISTORY.md (goals/decisions/files/errors/open-questions/next-actions/narrative), async LLM-generiertes START-PROMPT.md (<500 Woerter).
+  4. **Atomic temp+fsync+rename**, Single Writer (Daemon) — Agent schreibt NIE.
+  5. **Lokal first, Mesh-Replication deferred** — kein CRDT-synced Markdown; spaeter optional encrypted Recovery-Capsule.
+- **Risiken explizit dokumentiert**: Summary-Halluzination, Prompt-Injection-Persistenz, Native Format Drift, Sensitive-Data-Spread, MEMORY.md Bloat, Multi-Instance-Collision — je mit Mitigation.
+- **Phasen-Plan**: Phase 1 MVP (atomic-write, event store, ClaudeCodeAdapter, watcher, recovery-generator, binding), Phase 2 Multi-Agent + LLM-Summary, Phase 3 Curation + Security Hardening, Phase 4 DEFER (Cross-Machine Failover).
+- **Integration**: nutzt Cron-Heartbeat-Infra aus ADR-004, `instance-uuid` aus ADR-005.
+- **`TODO.md`**: neue Section 4.4.2 "Agent Session Persistence & Crash Recovery".
+
+### Hintergrund
+
+Christian's Beobachtung (2026-04-08 22:10): nach ad-hoc Vereinbarung mit Codex fuer eine `.codex/HISTORY.md` vor seinem Neustart — "ad-hoc pro Agent ist keine Loesung, das muss mesh-weit standardisiert sein". Consensus hat explizit bestaetigt, dass der laufende Agent nicht zuverlaessig sein eigenes Gedaechtnis dokumentieren kann (der Crash-Turn ist genau der wichtigste und ginge verloren).
+
+---
+
 ## [0.31.0] — 2026-04-08 09:50 UTC
 
 **Mesh-Live-Session: 4 Nodes verbunden, Agent-zu-Agent Messaging funktioniert.**
