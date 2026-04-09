@@ -19,7 +19,11 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { systemHealth, systemProcesses, systemNetwork, systemDisk } from './builtin-skills/system-monitor.js';
 import { influxdbQuery, influxdbDatabases, influxdbMeasurements, influxdbWrite } from './builtin-skills/influxdb.js';
-import { getDefaultDataDir, requestDaemonJson } from './local-daemon-client.js';
+import {
+  getDefaultDataDir,
+  requestDaemonJson,
+  __resetDaemonClientCache,
+} from './local-daemon-client.js';
 import { parseRuntimeMode } from './runtime-mode.js';
 
 const DATA_DIR = process.env['TLMCP_DATA_DIR'] ?? getDefaultDataDir();
@@ -353,7 +357,47 @@ server.tool(
 
 // --- Start ---
 
+/**
+ * Install graceful shutdown handlers so a terminating parent (Claude
+ * Desktop / Code restart, crash, or explicit kill) does not leave the
+ * mcp-stdio tsx subprocess behind as a zombie. Prior to this fix,
+ * `ps aux | grep mcp-stdio` regularly showed stale subprocesses older
+ * than 19h (see PR #86 live-test follow-up). Destroying the cached
+ * HTTPS agent also releases any lingering sockets cleanly.
+ */
+function installShutdownHandlers(): void {
+  let shuttingDown = false;
+  const handle = (signal: NodeJS.Signals | 'exit'): void => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    try {
+      __resetDaemonClientCache();
+    } catch (err) {
+      // Best-effort — don't block exit on cleanup errors, but surface
+      // the reason on stderr so it shows up in the logs.
+      // (Gemini-Pro CR finding 2026-04-09, LOW)
+      process.stderr.write(
+        `[mcp-stdio] shutdown cache-reset failed: ${err instanceof Error ? err.message : String(err)}\n`,
+      );
+    }
+    if (signal !== 'exit') {
+      // Exit with 128+signal convention: SIGINT→130, SIGTERM→143, SIGHUP→129.
+      // Signals are not a "successful completion", so using exit code 0 would
+      // mislead parent supervisors (systemd, launchd, shell scripts).
+      // (Gemini-Pro pre-commit finding 2026-04-09, HIGH)
+      const signalCode: Record<string, number> = { SIGINT: 130, SIGTERM: 143, SIGHUP: 129 };
+      const code = signalCode[signal] ?? 1;
+      setTimeout(() => process.exit(code), 50).unref();
+    }
+  };
+  process.on('SIGTERM', () => handle('SIGTERM'));
+  process.on('SIGINT', () => handle('SIGINT'));
+  process.on('SIGHUP', () => handle('SIGHUP'));
+  process.on('exit', () => handle('exit'));
+}
+
 async function main(): Promise<void> {
+  installShutdownHandlers();
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
