@@ -6,6 +6,51 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
+## [Unreleased] — 2026-04-09
+
+### Hinzugefuegt
+
+#### PR #?? — ADR-004 Phase 1 Cron-Heartbeat (2026-04-09)
+- **`packages/daemon/src/heartbeat/interval.ts`**: pure-function adaptive Backoff
+  + ±20 % Jitter Modul. `nextInterval(state, hadMessages, mode)` mit
+  exponentiellem Backoff bis zum mode-spezifischen Cap, `applyJitter(intervalMs, rng?)`
+  fuer Anti-Thundering-Herd. Mode-Tabelle aus ADR-004 (`local`/`lan`/`federated`/`adhoc`).
+  11 Unit-Tests.
+- **`packages/cli/src/thinklocal-heartbeat.ts`**: neuer Subcommand
+  `thinklocal heartbeat show|status|help`. `show` druckt die zwei Cron-Prompts
+  aus `docs/agents/{inbox,compliance}-heartbeat.md` zum Reinpasten in
+  `CronCreate` der Agent-Harness. `status` liest und pretty-printed
+  `~/.thinklocal/heartbeat.json`. 8 Unit-Tests inkl. Regression fuer JSON-Parse.
+- **`tests/integration/heartbeat-loop.test.ts`**: simuliert die Heartbeat-Loop
+  gegen eine Mock-Inbox und verifiziert die ADR-konforme Pattern
+  `[5s, 10s, 20s, 5s, 5s]`.
+- **`docs/agents/inbox-heartbeat.md`** + **`compliance-heartbeat.md`**:
+  Cron-Prompt-Bodies fuer Inbox-Polling (5 s, adaptiv) und Compliance-Check
+  (5 min, fix). Beide mit Early-Return und Read-Only-Constraints.
+- **ADR-004** Status: `Proposed → Accepted, Phase 1 Implemented`.
+- **USER-GUIDE.md** Section 8a "Cron-Heartbeat aktivieren" mit Schritt-fuer-Schritt
+  Anleitung fuer Claude Code, Codex, Gemini CLI.
+
+### Konsensus-Entscheidungen umgesetzt
+
+- Polling-Jitter ±20 % (GPT-5.4 Anti-Thundering-Herd)
+- Inbox- und Compliance-Heartbeat als getrennte Cron-Jobs (GPT-5.4 Separation of Concerns)
+- Adaptive Backoff nur fuer Inbox, Compliance fix
+- Inbox-Prompt mit Early-Return zur Context-Budget-Schonung
+
+### Code Review (Gemini Pro, 2026-04-09)
+
+0 HIGH/CRITICAL. 2× MEDIUM (REPO_ROOT brittleness, cmdStatus JSON parsing) + 1× LOW
+(unnoetiges async) — alle drei adressiert: Kommentar bei REPO_ROOT, JSON pretty-print
+mit Fallback fuer cmdStatus (+ 2 Regression-Tests), `async` bewusst beibehalten fuer Phase 2.
+
+### Tests
+
+20/20 neue Tests gruen, 0 Regressionen in der bestehenden Suite (200 Tests bleiben gruen,
+12 pre-existing better-sqlite3 Load-Failures unveraendert — separates Infra-Issue).
+
+---
+
 ## [0.31.0] — 2026-04-08 09:50 UTC
 
 **Mesh-Live-Session: 4 Nodes verbunden, Agent-zu-Agent Messaging funktioniert.**

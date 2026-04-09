@@ -218,6 +218,41 @@ cd ~/Entwicklung_local/thinklocal-mcp && npx tsx packages/cli/src/thinklocal.ts 
 
 ---
 
+## 8a. Cron-Heartbeat aktivieren (ADR-004 Phase 1)
+
+Damit Agenten ihre Inbox automatisch checken (statt zu vergessen): jeder Agent
+registriert in seiner Harness zwei wiederkehrende Cron-Jobs.
+
+```bash
+# Prompts auf stdout ausgeben (zum Reinpasten in CronCreate)
+thinklocal heartbeat show
+
+# Aktuelle Heartbeat-Konfiguration ansehen
+thinklocal heartbeat status
+```
+
+**Schritte fuer Claude Code:**
+
+1. `thinklocal heartbeat show` ausfuehren — gibt zwei Sektionen aus
+   (`Inbox Heartbeat` mit Cron `*/5 * * * * *` und `Compliance Heartbeat` mit
+   Cron `0 */5 * * * *`).
+2. In Claude Code je einen `CronCreate`-Job pro Sektion anlegen, der den
+   Prompt-Body als Task-Beschreibung uebernimmt.
+3. Adaptive Backoff: das `interval.ts`-Modul (`packages/daemon/src/heartbeat/interval.ts`)
+   liefert die Polling-Intervalle. Im LAN-Modus startet der Inbox-Heartbeat
+   bei 5 s und backoff't bei leerer Inbox bis 30 s, mit ±20 % Jitter um
+   Thundering-Herd zu vermeiden. Compliance-Heartbeat ist fix bei 5 min.
+4. Verifizieren mit `thinklocal heartbeat status`.
+
+**Schritte fuer Codex/Gemini CLI:** analoges Setup ueber den jeweiligen
+Scheduler, oder ein einmaliger `send_message_to_peer` von Claude an den
+Sibling-Agent mit dem inbox-heartbeat Prompt-Body als Setup-Anweisung.
+
+Siehe `docs/architecture/ADR-004-cron-heartbeat.md` und
+`docs/agents/{inbox,compliance}-heartbeat.md` fuer Details.
+
+---
+
 ## 9. Claude Code Integration
 
 Nach `thinklocal bootstrap` sind die MCP-Tools automatisch verfuegbar.

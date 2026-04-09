@@ -205,7 +205,8 @@ Tests wurden bisher als "selbstverstaendlicher Bestandteil von Code" behandelt u
 
 | #   | GitHub PR | Beschreibung                                  | Datum       | CO | CG | TS | CR | PC | DO | Findings                                |
 |-----|-----------|-----------------------------------------------|-------------|----|----|----|----|----|----|-----------------------------------------|
-| 106 | #84       | Cron-Heartbeat + Per-Agent Inbox (Design-only) + TS-Spalte retro | 04-08 21:30 | ✅ | —  | —  | —  | —  | ✅ | **Dieser PR** — ADR-004 + ADR-005 + COMPLIANCE neue DO+TS-Spalten + CLAUDE.md Rules. CO-Konsensus GPT-5.4 (8/10) + Gemini Pro (9/10). CG/TS/CR/PC nicht anwendbar fuer Doc-only PR. |
+| 106 | #84       | Cron-Heartbeat + Per-Agent Inbox (Design-only) + TS-Spalte retro | 04-08 21:30 | ✅ | —  | —  | —  | —  | ✅ | ADR-004 + ADR-005 + COMPLIANCE neue DO+TS-Spalten + CLAUDE.md Rules. CO-Konsensus GPT-5.4 (8/10) + Gemini Pro (9/10). CG/TS/CR/PC nicht anwendbar fuer Doc-only PR. |
+| 107 | tbd       | ADR-004 Phase 1 Cron-Heartbeat (Code + Tests + Docs)             | 04-09 14:10 | —  | ✅ | ✅ | ✅ | ✅ | ✅ | **Dieser PR.** CO entfaellt (Konsensus liegt aus PR #106 vor). CG via `clink gemini` (Test-Skizzen). TS: 20/20 neue Tests gruen, 0 Regressionen. CR via `pal:codereview` (Gemini Pro): 0 HIGH/CRITICAL, 2× MEDIUM + 1× LOW alle gefixt + Regression-Tests. PC via `pal:precommit`. DO: USER-GUIDE Sec 8a, ADR-004 Status-Update, CHANGES.md, TODO.md, agents/{inbox,compliance}-heartbeat.md. |
 
 ---
 
