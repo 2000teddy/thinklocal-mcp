@@ -13,7 +13,12 @@ export type AuditEventType =
   | 'TASK_DELEGATE'
   | 'CREDENTIAL_ACCESS'
   | 'AGENT_MESSAGE_RX'
-  | 'AGENT_MESSAGE_TX';
+  | 'AGENT_MESSAGE_TX'
+  // ADR-004 Phase 2: agent-instance lifecycle tracking
+  | 'AGENT_REGISTER'
+  | 'AGENT_HEARTBEAT'
+  | 'AGENT_UNREGISTER'
+  | 'AGENT_STALE';
 
 export interface AuditEvent {
   id: number;

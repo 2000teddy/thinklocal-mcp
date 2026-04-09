@@ -10,7 +10,42 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ### Hinzugefuegt
 
-#### PR #?? — ADR-004 Phase 1 Cron-Heartbeat (2026-04-09)
+#### PR #88 — ADR-004 Phase 2 Agent Registry REST API
+
+- **`packages/daemon/src/agent-registry.ts`**: in-memory Agent-Instance Tracking.
+  `register`/`heartbeat`/`unregister`/`sweep`/`listeners` mit deterministisch
+  injectierbarem Clock + `setInterval`/`clearInterval`-Shim. Stale-Eviction
+  nach `3 × heartbeatIntervalMs`. Hard-Cap `maxEntries = 1000` mit dedizierter
+  `AgentRegistryFullError` gegen DoS durch lokale Clients.
+- **`packages/daemon/src/agent-api.ts`**: Fastify-Plugin mit vier
+  loopback-only Endpoints: `POST /api/agent/register` (4-Komponenten-SPIFFE-URI,
+  409 Conflict, 503 wenn voll, 500 bei malformed Daemon-URI), `POST /api/agent/heartbeat`
+  (404 → Client re-registriert), `POST /api/agent/unregister` (idempotent),
+  `GET /api/agent/instances` (read-only). Strict Regex-Validation `[A-Za-z0-9._-]+`,
+  `requireLocal()` Pattern aus PR #83.
+- **`packages/daemon/src/audit.ts`**: 4 neue AuditEventType — `AGENT_REGISTER`,
+  `AGENT_HEARTBEAT`, `AGENT_UNREGISTER`, `AGENT_STALE`.
+- **`packages/daemon/src/index.ts`**: Wire-up mit `start()`/`stop()` im
+  Daemon-Lifecycle.
+- **ADR-004** Status: "Accepted, Phase 1 + Phase 2 Implemented".
+
+#### Tests
+
+34 neue Tests gruen (19 Registry Unit + 15 API Integration via `fastify.inject()`),
+0 Regressionen, `tsc --noEmit` clean.
+
+#### Compliance
+
+- CO: entfaellt (Design-Konsensus aus PR #84)
+- CG: entfaellt (kleiner Scope, Code direkt)
+- TS: 34/34 gruen inkl. 6 Regression-Tests fuer alle Review-Findings
+- CR: `pal:codereview` Gemini Pro — 0 HIGH/CRITICAL, 1× MEDIUM (maxEntries DoS-Cap) + 2× LOW (heartbeat race, SPIFFE-URI silent fallback) — alle gefixt
+- PC: `pal:precommit` Gemini Pro — 1× MEDIUM (unregister race analog zum heartbeat-Fix) — gefixt mit Regression-Test
+- DO: ADR-004 Status-Update + CHANGES.md + COMPLIANCE-TABLE.md Zeile #109
+
+---
+
+#### PR #86 — ADR-004 Phase 1 Cron-Heartbeat (2026-04-09)
 - **`packages/daemon/src/heartbeat/interval.ts`**: pure-function adaptive Backoff
   + ±20 % Jitter Modul. `nextInterval(state, hadMessages, mode)` mit
   exponentiellem Backoff bis zum mode-spezifischen Cap, `applyJitter(intervalMs, rng?)`
