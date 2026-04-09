@@ -10,6 +10,80 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ### Hinzugefuegt
 
+#### PR #89 — ADR-006 Phase 1: Agent Session Persistence & Crash Recovery MVP
+
+Supersedes #85 (Design-only). Liefert die 7 Kern-Module fuer Session-
+Persistence + einen End-to-End Crash+Resume Integration-Test.
+
+- **`packages/daemon/src/atomic-write.ts`**: write(tmp → fsync → rename)
+  Helper. Single-Writer-Garantie fuer `state.json`, `HISTORY.md`,
+  `START-PROMPT.md`. Swallows cleanup errors (kommentiert per CR).
+- **`packages/daemon/src/session-events.ts`**: SQLite-backed append-only
+  event store. WAL + `PRAGMA user_version` fuer Migration. Idempotente
+  Inserts via `UNIQUE(instance_uuid, seq)`. Content-Hash pro Event.
+- **`packages/daemon/src/session-state.ts`**: `state.json` TypeScript
+  interface + `writeSessionState` / `readSessionState` / `isPidAlive`.
+  Writes via atomic-write.
+- **`packages/daemon/src/session-adapters/claude-code-adapter.ts`**:
+  defensive jsonl-Parser fuer `~/.claude/projects/*/sessions/*.jsonl`.
+  UTF-8 BOM-Strip, unknown types → silent skip, malformed JSON → silent
+  skip. Mappt Claude-Code v2.1.x records auf `SessionEventType`.
+- **`packages/daemon/src/recovery-generator.ts`**: DETERMINISTISCHER
+  HISTORY.md Generator (kein LLM). Sektionen: Goals, Decisions,
+  Files Touched, Commands Run, Errors, Next Actions (letzter
+  TodoWrite), Recent Narrative mit UNTRUSTED-Markierung fuer
+  Prompt-Injection-Defense.
+- **`packages/daemon/src/session-watcher.ts`**: poll-basiertes
+  (NICHT fs.watch) tail-ingest. `tick(path, state)` mit in-memory
+  Promise-Lock pro `instanceUuid` gegen Race Conditions. Liest
+  `state.json` unter dem Lock neu als authoritative source. Returns
+  `newState` immutable (keine Input-Mutation). Defers half-written
+  tail lines bis newline ankommt.
+- **`packages/daemon/src/session-binding.ts`**: Orphan-Scan (kill -0)
+  + Fingerprint-Matching auf `(cwd, gitBranch, agentType)`. Liefert
+  0/1/N orphans — caller entscheidet. Injectierbarer `isAlive` fuer Tests.
+- **`tests/integration/session-recovery.test.ts`**: vollstaendiger E2E-
+  Flow: Agent start → jsonl grows → watcher ingests → HISTORY.md
+  generated → Agent "crashes" (pid=99999) → Binding findet Orphan →
+  neuer Agent nimmt pid ueber → mehr Turns → weiter-Ingest.
+
+#### Tests
+
+53/53 neue Tests gruen, 0 Regressionen, `tsc --noEmit` clean.
+- 6 atomic-write (incl. concurrent writers)
+- 6 session-events (idempotent inserts, persistence)
+- 4 session-state (round-trip, isPidAlive edge cases)
+- 13 claude-code-adapter (incl. BOM regression)
+- 10 recovery-generator (incl. determinism check)
+- 8 session-watcher (incl. concurrent tick lock regression + newState contract)
+- 5 session-binding (fingerprint matching, deterministic isAlive)
+- 1 integration (crash+resume E2E)
+
+#### Compliance
+
+- CO: entfaellt (Design-Konsensus in ADR-006 aus PR #85, 2026-04-08)
+- CG: entfaellt (Scope teilweise per Divide-and-Conquer abgeleitet,
+  Layer-basierte Implementation mit Tests parallel zu jedem Modul)
+- TS: 53/53 gruen inkl. 3 Regression-Tests fuer CR-Findings
+- CR: `pal:codereview` Gemini Pro (security focus) — 0 CRITICAL,
+  2× HIGH (watcher race, isPidAlive PID-reuse), 2× MEDIUM (BOM,
+  UNTRUSTED marker doc), 2× LOW (state mutation, cleanup errors) —
+  alle adressiert:
+  - HIGH #1 → Per-instance Promise-Lock im Watcher selbst
+  - HIGH #2 → Dokumentiert in ADR-006 §Bekannte Limitierungen
+  - MEDIUM #3 → UTF-8 BOM strip im adapter + Regression-Test
+  - MEDIUM #4 → Pflicht-Doku fuer resumierende Agents in ADR-006
+  - LOW #5 → `newState` im IngestResult + immutable contract
+  - LOW #6 → Kommentar an swallowed cleanup errors
+- PC: `pal:precommit` Gemini Pro — 1× MEDIUM (State mutation
+  anti-pattern) — vollstaendig entfernt: Watcher ist jetzt strict
+  immutable. Watcher liest `state.json` unter dem Lock neu als
+  authoritative source fuer concurrent callers.
+- DO: ADR-006 Phase 1 Impl-Block + `Bekannte Limitierungen` +
+  CHANGES.md + COMPLIANCE-TABLE.md Zeile #110
+
+---
+
 #### PR #88 — ADR-004 Phase 2 Agent Registry REST API
 
 - **`packages/daemon/src/agent-registry.ts`**: in-memory Agent-Instance Tracking.
