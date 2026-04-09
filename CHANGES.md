@@ -10,6 +10,59 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ### Hinzugefuegt
 
+#### PR #91 — ADR-005 Per-Agent-Inbox Phase 1 (SPIFFE 4-Komponenten + Schema-Migration)
+
+Implementiert den letzten Baustein im ADR-004/005/006 Triptychon: mehrere
+Agent-Instances (Claude Code, Codex, Gemini CLI) koennen sich denselben
+Daemon teilen und behalten ihre eigene Inbox, ohne Nachrichten untereinander
+zu sehen.
+
+- **`packages/daemon/src/spiffe-uri.ts`** (neu) — strikte 3- vs 4-Komponenten
+  SPIFFE-URI-Helper. `parseSpiffeUri`, `normalizeAgentId`, `getAgentInstance`,
+  `buildInstanceUri`, `hasInstance`. Zentraler
+  `SPIFFE_COMPONENT_REGEX = /^[A-Za-z0-9._-]+$/` fuer alle Parse- und Build-
+  Pfade, importiert vom API-Layer fuer kohaerente Validation. 27 Unit-Tests.
+- **`packages/daemon/src/agent-inbox.ts`** — Schema-Migration v1 → v2 via
+  `PRAGMA user_version`. Neue Spalte `to_agent_instance TEXT NULL` + Index.
+  Saubere Trennung: `createSchemaV2` fuer fresh-DBs, `migrateToV2` fuer
+  bestehende v1-DBs. Beide idempotent. `store()` normalisiert `to` und
+  extrahiert Instance-ID. `list()` / `unreadCount()` mit neuen `forInstance`
+  + `includeLegacy` Parametern. Back-compat: `unreadCount(string)` bleibt
+  funktional. 12 neue ADR-005-Tests.
+- **`packages/daemon/src/inbox-api.ts`** — Loopback-Check gegen
+  `normalizeAgentId(body.to) === ownAgentId` (GPT-5.4 Gotcha aus Konsensus
+  2026-04-08 — 4-Komponenten-Targets fielen sonst durch auf den
+  Remote-Peer-Pfad mit 404). Peer-Lookup nutzt normalisierte URI. Store-Pfad
+  persistiert `to_agent_instance`. Neue Query-Parameter `for_instance` +
+  `include_legacy` in `GET /api/inbox` und `GET /api/inbox/unread`.
+  Zentraler `validateInstanceParam` Helper mit importiertem
+  `SPIFFE_COMPONENT_REGEX`. 8 neue Fastify-Inject Tests.
+- **`docs/architecture/ADR-005-per-agent-inbox.md`** — Status auf
+  `Accepted, Phase 1 Implemented`, Impl-Block + Phase-2-Backlog.
+- **`SECURITY.md`** — neuer Abschnitt "SPIFFE-URI 4-Komponenten-Form ist
+  Application-Layer-Routing" mit Threat-Model, `normalizeAgentId` Pflicht-
+  Pattern fuer alle Trust-Entscheidungen, SQL-Injection-Defense.
+
+**Tests:** 61/61 neue Tests gruen (27 SPIFFE + 12 ADR-005 Inbox + 8 Fastify +
+14 back-compat Inbox), 0 Regressionen, `tsc --noEmit` clean.
+
+**Compliance:**
+- CO: entfaellt (Konsensus aus PR #84, 2026-04-08)
+- CG: entfaellt (Scope in 3 Layer strukturiert)
+- TS: 61/61 gruen inkl. 8 SPIFFE-Injection-Regression + 3 CR/PC-Regression
+- CR: pal:codereview Gemini Pro (security) — 0 HIGH/CRITICAL, 2× MEDIUM +
+  1× LOW alle gefixt:
+  - MEDIUM #1 → `SPIFFE_COMPONENT_REGEX` zentral, in `parseSpiffeUri` +
+    `buildInstanceUri` durchgesetzt, 8 Injection-Regression-Tests
+  - MEDIUM #2 → `init()` split in `createSchemaV2` + `migrateToV2`
+  - LOW #3 → `validateInstanceParam` DRY helper
+- PC: pal:precommit Gemini Pro — 1× HIGH (duplizierter Regex im DRY-Helper
+  statt Import aus `spiffe-uri.ts`) — mid-fix **gefixt**: Helper importiert
+  jetzt `SPIFFE_COMPONENT_REGEX`, kein zweiter Regex-Literal mehr im Code.
+- DO: ADR-005 Status + SECURITY.md + CHANGES.md + COMPLIANCE-TABLE.md #111
+
+---
+
 #### PR #89 — ADR-006 Phase 1: Agent Session Persistence & Crash Recovery MVP
 
 Supersedes #85 (Design-only). Liefert die 7 Kern-Module fuer Session-

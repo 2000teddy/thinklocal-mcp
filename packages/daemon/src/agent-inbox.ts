@@ -23,15 +23,32 @@ import { resolve } from 'node:path';
 import { mkdirSync } from 'node:fs';
 import type { Logger } from 'pino';
 import type { AgentMessagePayload } from './messages.js';
+import { getAgentInstance, normalizeAgentId } from './spiffe-uri.js';
 
 const MAX_MESSAGE_BYTES = 64 * 1024;
 const MAX_SUBJECT_LENGTH = 200;
+
+/**
+ * Current schema version. Bumped whenever the SQLite DDL changes.
+ * Stored in `PRAGMA user_version` so re-opens detect and migrate.
+ *
+ *   v1 (pre-ADR-005): messages table without `to_agent_instance`
+ *   v2 (ADR-005):     adds `to_agent_instance TEXT NULL` + index for
+ *                     per-agent-instance routing
+ */
+const CURRENT_SCHEMA_VERSION = 2;
 
 export interface InboxMessage {
   id: number;
   message_id: string;
   from_agent: string;
   to_agent: string;
+  /**
+   * ADR-005: the 4-component instance tail that the sender targeted,
+   * or NULL for legacy rows (pre-migration) and for broadcasts that
+   * used the 3-component daemon URI.
+   */
+  to_agent_instance: string | null;
   subject: string | null;
   body: string;
   in_reply_to: string | null;
@@ -64,13 +81,39 @@ export class AgentInbox {
     this.log?.info({ dbPath }, 'AgentInbox initialisiert');
   }
 
+  /**
+   * Initialise the schema, creating a fresh v2 db from scratch or
+   * running forward-migrations on an existing one. (Gemini-Pro CR
+   * finding 2026-04-09, MEDIUM — cleaner separation than the old
+   * "create v1 then ALTER" flow.)
+   */
   private init(): void {
+    const existingTables = this.db
+      .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='messages'`)
+      .all() as Array<{ name: string }>;
+    const hasTable = existingTables.length > 0;
+
+    if (!hasTable) {
+      this.createSchemaV2();
+    } else {
+      const currentVersion =
+        (this.db.pragma('user_version', { simple: true }) as number) ?? 0;
+      if (currentVersion < 2) {
+        this.migrateToV2();
+      }
+    }
+    this.db.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`);
+  }
+
+  /** Create a pristine v2 schema (fresh database case). */
+  private createSchemaV2(): void {
     this.db.exec(`
-      CREATE TABLE IF NOT EXISTS messages (
+      CREATE TABLE messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         message_id TEXT NOT NULL UNIQUE,
         from_agent TEXT NOT NULL,
         to_agent TEXT NOT NULL,
+        to_agent_instance TEXT,
         subject TEXT,
         body TEXT NOT NULL,
         in_reply_to TEXT,
@@ -79,11 +122,35 @@ export class AgentInbox {
         read_at TEXT,
         archived INTEGER NOT NULL DEFAULT 0
       );
-      CREATE INDEX IF NOT EXISTS idx_messages_unread
+      CREATE INDEX idx_messages_unread
         ON messages (read_at, archived) WHERE read_at IS NULL AND archived = 0;
-      CREATE INDEX IF NOT EXISTS idx_messages_from ON messages (from_agent);
-      CREATE INDEX IF NOT EXISTS idx_messages_sent_at ON messages (sent_at DESC);
+      CREATE INDEX idx_messages_from ON messages (from_agent);
+      CREATE INDEX idx_messages_sent_at ON messages (sent_at DESC);
+      CREATE INDEX idx_messages_instance ON messages (to_agent_instance);
     `);
+    this.log?.info({ schemaVersion: 2 }, '[agent-inbox] fresh db created at v2');
+  }
+
+  /**
+   * ADR-005 migration: add `to_agent_instance` column + index on
+   * an existing v1 database. Idempotent — if the column already
+   * exists (e.g. partial migration) we only rebuild the index.
+   */
+  private migrateToV2(): void {
+    const columns = this.db
+      .prepare(`PRAGMA table_info(messages)`)
+      .all() as Array<{ name: string }>;
+    const hasColumn = columns.some((c) => c.name === 'to_agent_instance');
+    if (!hasColumn) {
+      this.db.exec(`ALTER TABLE messages ADD COLUMN to_agent_instance TEXT`);
+      this.log?.info(
+        { from: 1, to: 2 },
+        '[agent-inbox] migrated schema: added to_agent_instance column',
+      );
+    }
+    this.db.exec(
+      `CREATE INDEX IF NOT EXISTS idx_messages_instance ON messages (to_agent_instance)`,
+    );
   }
 
   /**
@@ -126,17 +193,34 @@ export class AgentInbox {
       return { status: 'duplicate', inbox_id: existing.id };
     }
 
+    // ADR-005: extract the per-instance routing tail (if present).
+    // `to_agent` is stored in its normalised (3-component) form so
+    // legacy queries keep working; the instance tail lives in its
+    // own column. We fail closed on malformed input — a bad payload
+    // with a non-parseable `to` is rejected rather than silently
+    // stripped.
+    let normalizedTo: string;
+    let toInstance: string | null;
+    try {
+      normalizedTo = normalizeAgentId(payload.to);
+      toInstance = getAgentInstance(payload.to) ?? null;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { status: 'rejected', reason: `invalid target URI: ${msg}` };
+    }
+
     const receivedAt = new Date().toISOString();
     const info = this.db
       .prepare(
         `INSERT INTO messages
-         (message_id, from_agent, to_agent, subject, body, in_reply_to, sent_at, received_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+         (message_id, from_agent, to_agent, to_agent_instance, subject, body, in_reply_to, sent_at, received_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         payload.message_id,
         fromAgent,
-        payload.to,
+        normalizedTo,
+        toInstance,
         payload.subject ?? null,
         bodyStr,
         payload.in_reply_to ?? null,
@@ -145,7 +229,12 @@ export class AgentInbox {
       );
 
     this.log?.info(
-      { fromAgent, message_id: payload.message_id, subject: payload.subject },
+      {
+        fromAgent,
+        message_id: payload.message_id,
+        subject: payload.subject,
+        to_instance: toInstance,
+      },
       'Nachricht empfangen und gespeichert',
     );
     return { status: 'delivered', inbox_id: info.lastInsertRowid as number };
@@ -158,12 +247,24 @@ export class AgentInbox {
    * @param opts.fromAgent Filter nach Absender
    * @param opts.limit Max Anzahl
    * @param opts.includeArchived Auch archivierte
+   * @param opts.forInstance  ADR-005: filter to messages addressed to a
+   *   specific agent-instance. When set, only rows with
+   *   `to_agent_instance = <value>` are returned; legacy rows
+   *   (`to_agent_instance IS NULL`) are included iff `includeLegacy`
+   *   is also true. When `forInstance` is omitted, all rows match
+   *   (back-compat with pre-ADR-005 callers).
+   * @param opts.includeLegacy  ADR-005: include pre-migration rows
+   *   (`to_agent_instance IS NULL`) in the result. Defaults to `true`
+   *   when `forInstance` is unset (back-compat), and `false` when
+   *   `forInstance` is set (strict per-instance isolation).
    */
   list(opts?: {
     unreadOnly?: boolean;
     fromAgent?: string;
     limit?: number;
     includeArchived?: boolean;
+    forInstance?: string;
+    includeLegacy?: boolean;
   }): InboxMessage[] {
     const limit = opts?.limit ?? 50;
     const clauses: string[] = [];
@@ -178,6 +279,16 @@ export class AgentInbox {
     if (opts?.fromAgent) {
       clauses.push('from_agent = ?');
       params.push(opts.fromAgent);
+    }
+    // ADR-005: per-instance filter.
+    if (opts?.forInstance) {
+      const includeLegacy = opts.includeLegacy ?? false;
+      if (includeLegacy) {
+        clauses.push('(to_agent_instance = ? OR to_agent_instance IS NULL)');
+      } else {
+        clauses.push('to_agent_instance = ?');
+      }
+      params.push(opts.forInstance);
     }
 
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
@@ -203,16 +314,38 @@ export class AgentInbox {
     return info.changes > 0;
   }
 
-  /** Zaehlt ungelesene Nachrichten. */
-  unreadCount(fromAgent?: string): number {
-    const sql = fromAgent
-      ? 'SELECT COUNT(*) as n FROM messages WHERE read_at IS NULL AND archived = 0 AND from_agent = ?'
-      : 'SELECT COUNT(*) as n FROM messages WHERE read_at IS NULL AND archived = 0';
-    const row = (
-      fromAgent
-        ? this.db.prepare(sql).get(fromAgent)
-        : this.db.prepare(sql).get()
-    ) as { n: number };
+  /**
+   * Zaehlt ungelesene Nachrichten.
+   *
+   * @param opts.fromAgent     optionaler Absender-Filter
+   * @param opts.forInstance   ADR-005: nur Messages fuer diese Instance zaehlen
+   * @param opts.includeLegacy ADR-005: legacy rows (NULL) mitzaehlen. Default
+   *   analog zu `list()`: true wenn forInstance unset, false sonst.
+   */
+  unreadCount(
+    opts?: { fromAgent?: string; forInstance?: string; includeLegacy?: boolean } | string,
+  ): number {
+    // Back-compat: string argument still works and is treated as `fromAgent`.
+    const options: { fromAgent?: string; forInstance?: string; includeLegacy?: boolean } =
+      typeof opts === 'string' ? { fromAgent: opts } : (opts ?? {});
+
+    const clauses = ['read_at IS NULL', 'archived = 0'];
+    const params: string[] = [];
+    if (options.fromAgent) {
+      clauses.push('from_agent = ?');
+      params.push(options.fromAgent);
+    }
+    if (options.forInstance) {
+      const includeLegacy = options.includeLegacy ?? false;
+      if (includeLegacy) {
+        clauses.push('(to_agent_instance = ? OR to_agent_instance IS NULL)');
+      } else {
+        clauses.push('to_agent_instance = ?');
+      }
+      params.push(options.forInstance);
+    }
+    const sql = `SELECT COUNT(*) as n FROM messages WHERE ${clauses.join(' AND ')}`;
+    const row = this.db.prepare(sql).get(...params) as { n: number };
     return row.n;
   }
 
