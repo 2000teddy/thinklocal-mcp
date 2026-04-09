@@ -49,6 +49,54 @@ mit Fallback fuer cmdStatus (+ 2 Regression-Tests), `async` bewusst beibehalten 
 20/20 neue Tests gruen, 0 Regressionen in der bestehenden Suite (200 Tests bleiben gruen,
 12 pre-existing better-sqlite3 Load-Failures unveraendert — separates Infra-Issue).
 
+### Behoben
+
+#### PR #87 — Socket-Pool-Fix fuer langlaufenden MCP-Stdio-Subprocess (Bug-Fix)
+
+- **`packages/daemon/src/local-daemon-client.ts`**: bisher wurde bei **jedem**
+  `requestDaemon`-Call ein neuer `HttpsAgent` ohne `keepAlive` erzeugt. In
+  einem langlaufenden mcp-stdio-Subprocess (der die ganze Claude-Code-Session
+  am Leben bleibt) fuehrte das zu Socket-Pool-Exhaustion: TIME_WAIT-Akkumulation,
+  ungepoolte TLS-Handshakes, haengende Sockets ohne Timeout-Trigger. Symptom
+  nach ~4 h: **`socket hang up`** auf jeden MCP-Tool-Call, obwohl der Daemon
+  einwandfrei laeuft (siehe PR #86 Live-Test-Follow-Up).
+- **Fix**: globaler `HttpsAgent`-Cache pro `dataDir` mit `keepAlive: true`,
+  `maxSockets: 50`, `maxFreeSockets: 10`, `scheduling: 'lifo'`. Invalidierung
+  ueber `mtime`-Fingerprint der Trust-Material-Dateien (`ca.crt.pem`,
+  `paired-peers.json`, Client-Certs); bei Rotation wird der alte Agent mit
+  `agent.destroy()` sauber abgebaut und ein neuer aufgebaut. Trust-Bundle
+  wird nicht mehr bei jedem Call neu gelesen.
+- **`packages/daemon/src/mcp-stdio.ts`**: Graceful-Shutdown-Handler fuer
+  `SIGTERM`/`SIGINT`/`SIGHUP`/`exit`. Rufen `__resetDaemonClientCache()` und
+  exiten mit dem 128+signal-Code (`SIGINT` → 130, `SIGTERM` → 143,
+  `SIGHUP` → 129), damit Supervisor (launchd, systemd) das Ende korrekt
+  einordnen. Verhindert die Zombie-Subprocesses, die `ps aux | grep mcp-stdio`
+  zuletzt als >19 h alte Hangs gezeigt hat.
+- **`packages/daemon/src/local-daemon-client.test.ts`** (neu): 5 Regression-Tests:
+  100 sequenzielle HTTP-Requests ohne Leak, HTTP-only-Pfad ohne Cache-Entry,
+  HTTPS-Cache genau 1 Entry nach mehreren Calls zum selben `dataDir`,
+  Cache-Invalidierung bei `mtime`-Aenderung, `__resetDaemonClientCache` leert
+  komplett.
+
+#### Konsequenzen
+
+- ADR-004 Phase 1 (PR #86) ist in der Praxis erst mit diesem Fix nutzbar.
+- Erkenntnis aus Live-Test: **Memory-Hinweis `mcp_subprocess_staleness.md`
+  war halb richtig** — der Fix ist kein Thin-Client-Rewrite, sondern ein
+  5-Zeilen-Architektur-Bug (fehlender keepAlive + fehlendes Pooling). Kein
+  ADR-007 noetig.
+
+#### Compliance
+
+- CG: entfaellt (Bug-Fix, keine neue API)
+- TS: 5/5 Tests gruen, 0 Regressionen
+- CR: `pal:codereview` (Gemini Pro) — 0 HIGH/CRITICAL, 1× MEDIUM + 3× LOW, alle gefixt
+- PC: `pal:precommit` (Gemini Pro) — 1× CRITICAL (Race) als False-Positive
+  via `pal:challenge` bestaetigt (Funktion ist vollstaendig synchron,
+  atomisch im Node Event-Loop — defensiver Kommentar eingebaut), 1× HIGH
+  (Exit-Code) gefixt
+- DO: CHANGES.md + COMPLIANCE-TABLE.md (neue Zeile #108)
+
 ---
 
 ## [0.31.0] — 2026-04-08 09:50 UTC
