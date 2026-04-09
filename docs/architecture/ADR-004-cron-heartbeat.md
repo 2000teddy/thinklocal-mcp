@@ -1,6 +1,6 @@
 # ADR-004: Cron-Heartbeat fuer Agent-Inbox-Polling
 
-**Status:** Accepted, Phase 1 Implemented (2026-04-09)
+**Status:** Accepted, Phase 1 + Phase 2 Implemented (2026-04-09)
 **Datum:** 2026-04-08
 **Autor:** Claude Code (basierend auf Christians Kernanalyse)
 **Verwandt:** ADR-005 (Per-Agent-Inbox), PR #79 (Messaging), PR #80 (Loopback)
@@ -206,6 +206,24 @@ Jeder Cron-Pull startet einen neuen Claude-Code-Turn, der Context verbraucht. Mi
 - ✅ `tests/integration/heartbeat-loop.test.ts` — Loop-Simulation gegen Mock-Inbox
 - ✅ CG erbracht durch `clink gemini` (Test-Skizzen), Code via Claude (Codex-Timeout)
 - ✅ DO durch ADR-Update + USER-GUIDE-Section + COMPLIANCE-TABLE.md
+
+### Phase 2 Implementation (2026-04-09, PR #88)
+
+- ✅ `packages/daemon/src/agent-registry.ts` — in-memory `Map<instanceId, entry>` mit register / heartbeat / unregister / sweep / listener-subscription. Staleness = `3 × heartbeatIntervalMs`. Background-`setInterval` via injectierbarem Clock + Timer-Shim (testbar ohne echten Timer). 16 Unit-Tests.
+- ✅ `packages/daemon/src/agent-api.ts` — Fastify-Plugin mit loopback-only REST-Endpoints:
+  - `POST /api/agent/register` → `{ instance_spiffe_uri, heartbeat_interval_ms, inbox_schema_version }`, baut die 4-Komponenten-SPIFFE-URI (`/agent/<type>/instance/<id>`) aus der Daemon-3-Komponenten-URI + `agent_type` + `instance_id`, 409 bei Re-Register mit anderem `agent_type`, 400 bei unzulaessigem `instance_id` (Regex `[A-Za-z0-9._-]+`)
+  - `POST /api/agent/heartbeat` → 404 wenn unbekannt (Client re-registriert)
+  - `POST /api/agent/unregister` → idempotent (200 mit `existed: bool`)
+  - `GET /api/agent/instances` → read-only Liste fuer Dashboard/Debug
+  12 Integration-Tests via `fastify.inject()`.
+- ✅ Neue Audit-Event-Types in `audit.ts`: `AGENT_REGISTER`, `AGENT_HEARTBEAT`, `AGENT_UNREGISTER`, `AGENT_STALE`.
+- ✅ Wire-up in `index.ts`: Registry-Instanz erzeugt, `start()` beim Daemon-Start, Routes registriert, `stop()` im graceful shutdown vor `libp2pRuntime.stop()` und `cardServer.stop()`.
+- ✅ Loopback-Schutz via `requireLocal()` wie in `inbox-api.ts` (PR #83 Pattern).
+
+### Noch offen fuer Phase 3
+
+- WebSocket-Push-Complement (Event-Bus `inbox:new` → Dashboard + MCP-Stdio-Listener)
+- Client-initiated Long-Poll sobald MCP-Harness das unterstuetzt
 
 ### Nicht angenommen
 

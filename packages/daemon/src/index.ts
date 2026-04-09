@@ -17,6 +17,8 @@ import { TaskManager } from './tasks.js';
 import { SkillManager, type SkillAnnouncePayload } from './skills.js';
 import { registerDashboardApi } from './dashboard-api.js';
 import { registerInboxApi } from './inbox-api.js';
+import { AgentRegistry } from './agent-registry.js';
+import { registerAgentApi } from './agent-api.js';
 import { PairingStore } from './pairing.js';
 import { registerPairingRoutes } from './pairing-handler.js';
 import { TrustStoreNotifier } from './trust-store.js';
@@ -399,6 +401,24 @@ async function main(): Promise<void> {
     },
   });
 
+  // 8c3. Agent Registry REST API (ADR-004 Phase 2)
+  // Loopback-only endpoints for each local agent-instance (Claude Code,
+  // Codex, Gemini CLI, …) to register itself + send heartbeats. Stale
+  // entries are auto-evicted after 3 * heartbeat interval.
+  const agentRegistry = new AgentRegistry({
+    heartbeatIntervalMs: 5_000,
+    staleFactor: 3,
+    log,
+  });
+  agentRegistry.start();
+  registerAgentApi(cardServer.getServer(), {
+    registry: agentRegistry,
+    audit,
+    daemonSpiffeUri: identity.spiffeUri,
+    inboxSchemaVersion: 1,
+    log,
+  });
+
   // 8d. WebSocket fuer Echtzeit-Events
   await registerWebSocket(cardServer.getServer(), eventBus, log);
 
@@ -553,6 +573,7 @@ async function main(): Promise<void> {
     gossip.stop();
     mesh.stopHeartbeatLoop();
     taskManager.stop();
+    agentRegistry.stop();
     vault.close();
     agentInbox.close();
     rateLimiter.stop();
