@@ -22,6 +22,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, statSyn
 import { execSync, spawn, spawnSync } from 'node:child_process';
 import { getDefaultLocalDaemonUrl, requestDaemon, requestDaemonJson } from '../../daemon/src/local-daemon-client.js';
 import { resolveRuntimeSettings, parseRuntimeMode, type RuntimeMode } from '../../daemon/src/runtime-mode.js';
+import { runHeartbeatCommand } from './thinklocal-heartbeat.js';
 
 const HOME = homedir();
 const PLATFORM = platform();
@@ -1390,6 +1391,11 @@ async function main(): Promise<void> {
     case 'config':
       if (args[1] === 'show' || !args[1]) return cmdConfigShow();
       break;
+    case 'heartbeat': {
+      const code = await runHeartbeatCommand(args.slice(1));
+      process.exitCode = code;
+      return;
+    }
     case undefined:
     case '--help':
     case '-h':
@@ -1414,6 +1420,7 @@ async function main(): Promise<void> {
     mcp            MCP-Config-Snippet anzeigen
     mcp install    MCP in Claude Desktop + Code eintragen
     config show    Konfiguration anzeigen
+    heartbeat      Cron-Heartbeat-Prompts (ADR-004 Phase 1) anzeigen / status
     uninstall      Service + Config entfernen
 
   ${C.bold}Beispiele:${C.reset}

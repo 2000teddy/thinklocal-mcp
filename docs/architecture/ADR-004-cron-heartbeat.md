@@ -1,6 +1,6 @@
 # ADR-004: Cron-Heartbeat fuer Agent-Inbox-Polling
 
-**Status:** Proposed
+**Status:** Accepted, Phase 1 Implemented (2026-04-09)
 **Datum:** 2026-04-08
 **Autor:** Claude Code (basierend auf Christians Kernanalyse)
 **Verwandt:** ADR-005 (Per-Agent-Inbox), PR #79 (Messaging), PR #80 (Loopback)
@@ -197,10 +197,15 @@ Jeder Cron-Pull startet einen neuen Claude-Code-Turn, der Context verbraucht. Mi
 
 3. **Client-initiated Long-Poll bevorzugt spaeter** — GPT-5.4 Vorschlag: sobald Harness unterstuetzt, auf Long-Poll/SSE wechseln statt Cron. Wird in Phase 3 als Alternative zum WebSocket-Push dokumentiert.
 
-### Noch offen fuer Phase 1
+### Phase 1 Implementation (2026-04-09, dieser PR)
 
-- CG (`clink gemini`) fuer Test-Skizzen des Cron-Mechanismus
-- DO (Documentation) wurde im Zuge dieser ADR + CLAUDE.md + COMPLIANCE-TABLE.md Update bereits erbracht
+- ✅ `packages/daemon/src/heartbeat/interval.ts` — adaptive Backoff + ±20% Jitter (pure functions, 11 Unit-Tests)
+- ✅ `packages/cli/src/thinklocal-heartbeat.ts` — `thinklocal heartbeat show|status|help` Subcommand (6 Unit-Tests)
+- ✅ `docs/agents/inbox-heartbeat.md` — Inbox-Cron-Prompt (5s, adaptiv, Early-Return)
+- ✅ `docs/agents/compliance-heartbeat.md` — Compliance-Cron-Prompt (5min, fix, separate Concerns)
+- ✅ `tests/integration/heartbeat-loop.test.ts` — Loop-Simulation gegen Mock-Inbox
+- ✅ CG erbracht durch `clink gemini` (Test-Skizzen), Code via Claude (Codex-Timeout)
+- ✅ DO durch ADR-Update + USER-GUIDE-Section + COMPLIANCE-TABLE.md
 
 ### Nicht angenommen
 
