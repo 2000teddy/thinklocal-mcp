@@ -124,6 +124,43 @@ describe('parseClaudeCodeBuffer', () => {
       'assistant_message',
     ]);
   });
+
+  // Regression for Live-Test 2026-04-09: Claude Code v2.1.92 emits
+  // assistant turns with `type: "assistant"` directly, not wrapped
+  // in a `type: "message"` envelope. The adapter's fixtures used
+  // the envelope shape so this gap was invisible until running
+  // against real data on MacMini + ai-n8n + MacBook Pro.
+  it('recognises `type: "assistant"` records from real Claude Code v2.1.92 sessions', () => {
+    const realAssistant = JSON.stringify({
+      type: 'assistant',
+      message: {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'I will build the module.' },
+          { type: 'tool_use', name: 'Edit', input: { file_path: '/x.ts' } },
+        ],
+      },
+      uuid: 'asst-1',
+      timestamp: '2026-04-09T19:00:00.000Z',
+      sessionId: 'sess-alpha',
+      cwd: '/tmp',
+      gitBranch: 'main',
+      version: '2.1.92',
+    });
+    const e = parseClaudeCodeLine(realAssistant, 0);
+    expect(e).not.toBeNull();
+    expect(e!.eventType).toBe('assistant_message');
+  });
+
+  it('skips `type: "attachment"` records silently', () => {
+    const attachLine = JSON.stringify({
+      type: 'attachment',
+      attachment: { kind: 'image' },
+      sessionId: 'sess-alpha',
+      timestamp: '2026-04-09T19:00:01.000Z',
+    });
+    expect(parseClaudeCodeLine(attachLine, 0)).toBeNull();
+  });
 });
 
 describe('extractClaudeCodeMetadata', () => {

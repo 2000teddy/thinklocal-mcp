@@ -109,9 +109,15 @@ function mapEventType(type: string, record: RawRecord): SessionEventType | null 
   switch (type) {
     case 'user':
       return 'user_message';
+    // Claude Code v2.1.92 emits assistant turns with `type: "assistant"`
+    // directly (not wrapped in a `message` envelope). We still support
+    // the legacy `message` + inner role shape for older / future variants.
+    // (Live-test 2026-04-09 revealed the real format — fixture tests
+    // only used the envelope shape, so this branch was unreachable
+    // against real data.)
+    case 'assistant':
+      return 'assistant_message';
     case 'message': {
-      // `message` wraps both assistant and tool payloads. The role
-      // lives one level deeper.
       const inner = record.message;
       if (inner && typeof inner === 'object' && 'role' in (inner as object)) {
         const role = (inner as { role?: unknown }).role;
@@ -119,8 +125,6 @@ function mapEventType(type: string, record: RawRecord): SessionEventType | null 
         if (role === 'user') return 'user_message';
         if (role === 'tool') return 'tool_result';
       }
-      // Fallback: treat untagged `message` as an assistant event
-      // so we don't lose context in recovery.
       return 'assistant_message';
     }
     case 'system':
@@ -130,12 +134,13 @@ function mapEventType(type: string, record: RawRecord): SessionEventType | null 
       return 'tool_call';
     case 'tool_result':
       return 'tool_result';
-    // Pure metadata/housekeeping records — skip.
+    // Pure metadata/housekeeping records — skip silently.
     case 'queue-operation':
     case 'last-prompt':
     case 'pr-link':
     case 'deferred_tools_delta':
     case 'mcp_instructions_delta':
+    case 'attachment':
       return null;
     default:
       return null;
