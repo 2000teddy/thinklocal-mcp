@@ -23,6 +23,7 @@ import { execSync, spawn, spawnSync } from 'node:child_process';
 import { getDefaultLocalDaemonUrl, requestDaemon, requestDaemonJson } from '../../daemon/src/local-daemon-client.js';
 import { resolveRuntimeSettings, parseRuntimeMode, type RuntimeMode } from '../../daemon/src/runtime-mode.js';
 import { runHeartbeatCommand } from './thinklocal-heartbeat.js';
+import type { SupportedTool } from '../../daemon/src/cli-adapters.js';
 
 const HOME = homedir();
 const PLATFORM = platform();
@@ -1250,7 +1251,13 @@ async function cmdDeploy(targetArg: string, flags: string[]): Promise<void> {
 // --- Setup CLI Adapters ---
 
 async function cmdSetup(tool?: string): Promise<void> {
-  const { setupAdapter, listSupportedTools, type SupportedTool } = await import(
+  // Runtime values only — `SupportedTool` is imported as a type at
+  // the top of this file. Mixing `type` keywords into a dynamic
+  // `import()` destructure is invalid esbuild/tsx syntax and used to
+  // block `thinklocal heartbeat show` and other subcommands.
+  // (Pre-existing bug from commit 12911f8 on 2026-04-05, surfaced
+  // by the ADR-004 Phase 1 live-test 2026-04-09.)
+  const { setupAdapter, listSupportedTools } = await import(
     '../../daemon/src/cli-adapters.js'
   );
 
