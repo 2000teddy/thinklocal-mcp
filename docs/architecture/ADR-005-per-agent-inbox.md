@@ -1,6 +1,6 @@
 # ADR-005: Per-Agent-Inbox (statt Per-Daemon)
 
-**Status:** Proposed
+**Status:** Accepted, Phase 1 Implemented (2026-04-09)
 **Datum:** 2026-04-08
 **Autor:** Claude Code (basierend auf Christians Peer-vs-Agent-Klarstellung)
 **Verwandt:** ADR-004 (Cron-Heartbeat), PR #79 (Messaging), PR #80 (Loopback), PR #83 (Loopback-Spoofing-Finding)
@@ -210,8 +210,16 @@ spiffe://thinklocal/host/<stableNodeId>/agent/<agentType>/instance/<instanceId>
 
 4. **Daemon rejectet Collisions** — selbst mit UUIDv4 als Belt-and-Suspenders: `POST /api/agent/register` prueft ob die instanceId schon aktiv ist und forciert Re-Roll wenn ja.
 
-### Noch offen fuer Implementation
+### Phase 1 Implementation (2026-04-09, PR #91)
 
-- CG (`clink gemini`) fuer Test-Skizzen der Migration
-- Implementation als Folge-PR nach ADR-004 Phase 2
-- SECURITY.md Update: Instance-Teil dokumentieren als Application-Layer-Routing, nicht cryptographisch attestiert
+- ✅ `packages/daemon/src/spiffe-uri.ts` — `parseSpiffeUri`, `normalizeAgentId`, `getAgentInstance`, `buildInstanceUri`, `hasInstance` helpers. Strikte Validation, akzeptiert 3- und 4-Komponenten-URIs. 18 Unit-Tests.
+- ✅ `packages/daemon/src/agent-inbox.ts` — **Schema-Migration v1 → v2** via `PRAGMA user_version`. Neue Spalte `to_agent_instance TEXT NULL` + `idx_messages_instance`. Idempotent (Fresh-DB und Re-Open laufen beide sauber). Legacy-Rows (NULL) bleiben erhalten. `store()` normalisiert `to` automatisch, extrahiert die Instance-ID, persistiert beides. `list()` und `unreadCount()` akzeptieren `forInstance` + `includeLegacy` Parameter. `unreadCount()` ist backwards-kompatibel (String-Argument wird als `fromAgent` interpretiert). 12 neue ADR-005-Tests (insgesamt 26 Inbox-Tests).
+- ✅ `packages/daemon/src/inbox-api.ts` — **Loopback-Fix:** Vergleich jetzt mit `normalizeAgentId(body.to) === ownAgentId` (GPT-5.4 Gotcha aus Konsensus 2026-04-08). **Peer-Lookup** nutzt ebenfalls die normalisierte 3-Komponenten-URI. **Store-Pfad:** `to_agent_instance` wird aus dem 4-Komponenten-Target extrahiert und mit der Nachricht persistiert. **Neue Query-Parameter:** `for_instance` + `include_legacy` in `GET /api/inbox` und `GET /api/inbox/unread`. Strict Regex-Validation `[A-Za-z0-9._-]+` fuer `for_instance` (SQL-Injection-Defense). Response enthaelt neuen `to_instance` Key pro Nachricht. 8 neue Fastify-Inject-Tests.
+- ✅ ADR-005 Status: `Proposed → Accepted, Phase 1 Implemented`.
+
+### Noch offen fuer Phase 2
+
+- **Auto-Filter bei registrierten Agents:** wenn ein Agent via ADR-004 `POST /api/agent/register` registriert ist, soll `read_inbox` ohne explizites `for_instance` automatisch auf seine Instance filtern (aktuell muss der Client den Parameter selbst setzen). Dafuer braucht es Identifikation des Callers ueber ein registriertes Session-Token oder caller-bound Header.
+- **Broadcast-Pattern** (`/instance/*`) fuer Systemnachrichten an alle Instances auf einem Host.
+- **NULL-Fallback-Deprecation nach 30 Tagen** via Retention-Job (aktuell ueber `includeLegacy` opt-in).
+- **SECURITY.md Update** — ist in dieser PR enthalten (Instance-Teil = Application-Layer-Routing, nicht cryptographisch attestiert).

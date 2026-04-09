@@ -205,6 +205,27 @@ ist aktuell "any paired peer can send" — per-Peer ACL ist Phase 2.
 im lokalen Inbox abgelegt statt ueber Netzwerk geroutet. Erlaubt mehreren
 Agenten (Claude Code, Codex) sich denselben Daemon zu teilen.
 
+### SPIFFE-URI 4-Komponenten-Form ist Application-Layer-Routing (ADR-005, 2026-04-09)
+
+ADR-005 (Per-Agent-Inbox) fuehrt eine erweiterte SPIFFE-URI-Shape ein:
+
+```
+spiffe://thinklocal/host/<stableNodeId>/agent/<agentType>/instance/<instanceId>
+                                                         ^^^^^^^^^^^^^^^^^^^^^^
+                                                         application-layer routing
+                                                         NICHT cert-attested
+```
+
+**Sicherheits-Eigenschaften:**
+
+- **Nur die 3-Komponenten-Form ist im TLS-Cert-SAN enthalten.** Der `/instance/<id>`-Teil wird **nicht** cryptographisch verifiziert — er ist ein logischer Routing-Key fuer die Per-Agent-Inbox und den Cron-Heartbeat.
+- **Cert-Validation, Peer-Lookup und Gossip** vergleichen Identitaeten ausschliesslich auf der 3-Komponenten-Form. Code, der diese Trust-Entscheidungen faellt, **MUSS** `normalizeAgentId(uri)` aus `packages/daemon/src/spiffe-uri.ts` benutzen, um den Instance-Tail vor dem Vergleich zu strippen.
+- **Ein feindlicher lokaler Agent** mit Zugriff auf den Daemon-Loopback-Port koennte eine Instance-ID faelschen und Nachrichten fuer eine andere Instance abrufen. Die `requireLocal()`-Gate (PR #83) verhindert Remote-Angriffe; eine kompromittierte lokale CLI bleibt aber vertrauenswuerdig per Definition. Wer das LAN-Zugriff hat, muss das `agent-api` `/api/agent/*` ebenfalls nur ueber die gleiche Loopback-Gate zugaenglich halten.
+- **`for_instance` Query-Parameter** werden gegen ein striktes Regex (`[A-Za-z0-9._-]+`) validiert, bevor sie den Prepared-Statement-Placeholder in SQLite erreichen. Das schuetzt gegen SQL-Injection-Versuche ueber den REST-Pfad.
+- **Legacy-Rows** (pre-Migration oder 3-Komponenten-Ziel) sind per Default unsichtbar, wenn ein `for_instance` gesetzt ist. Ein Aufrufer muss `include_legacy=true` explizit setzen, um sie zu sehen. Nach 30 Tagen werden sie per Retention-Job archiviert (offener Follow-up).
+
+**Konsensus-Grundlage:** GPT-5.4 und Gemini 2.5 Pro am 2026-04-08 21:30 — "pragmatische Aufloesung": SPIFFE-URI-Extension fuer logisches Routing, 3-Komponenten-Form bleibt cryptographisch attestiert.
+
 ### Bekannte Limitierungen (Stand v0.24)
 
 > Diese Items sind dokumentiert und werden in zukuenftigen Releases adressiert.

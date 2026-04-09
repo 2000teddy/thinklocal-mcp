@@ -30,6 +30,7 @@ import type { AgentInbox } from './agent-inbox.js';
 import type { MeshManager } from './mesh.js';
 import type { RateLimiter } from './ratelimit.js';
 import type { Logger } from 'pino';
+import { normalizeAgentId, SpiffeUriError, SPIFFE_COMPONENT_REGEX } from './spiffe-uri.js';
 
 export interface InboxApiDeps {
   inbox: AgentInbox;
@@ -79,6 +80,30 @@ function requireLocal(request: FastifyRequest, reply: FastifyReply): boolean {
   return true;
 }
 
+/**
+ * ADR-005: centralised validation for the `for_instance` query
+ * parameter. Both `GET /api/inbox` and `GET /api/inbox/unread`
+ * accept it, so the same regex gate lives here instead of being
+ * duplicated at each call site. (Gemini-Pro CR 2026-04-09, LOW.)
+ *
+ * Uses `SPIFFE_COMPONENT_REGEX` imported from `spiffe-uri.ts` so
+ * the API-layer validation stays in lock-step with the core URI
+ * parser. Any drift would create an asymmetric write/read hole
+ * (Gemini-Pro PC finding 2026-04-09, HIGH — caught mid-fix).
+ */
+function validateInstanceParam(
+  instance: string | undefined,
+  reply: FastifyReply,
+): boolean {
+  if (instance !== undefined && !SPIFFE_COMPONENT_REGEX.test(instance)) {
+    void reply.code(400).send({
+      error: `for_instance must match ${SPIFFE_COMPONENT_REGEX.source}`,
+    });
+    return false;
+  }
+  return true;
+}
+
 export function registerInboxApi(server: FastifyInstance, deps: InboxApiDeps): void {
   const { inbox, mesh, ownAgentId, ownPrivateKeyPem, tlsDispatcher, rateLimiter, log, onSent } = deps;
 
@@ -112,6 +137,23 @@ export function registerInboxApi(server: FastifyInstance, deps: InboxApiDeps): v
       return reply.code(400).send({ error: 'missing `body`' });
     }
 
+    // ADR-005: normalise the target so the loopback-check and peer
+    // lookup both work on the 3-component (cert-attested) form,
+    // independent of whether the caller passed an `/instance/<id>`
+    // tail. Without this, a send to
+    //     spiffe://thinklocal/host/X/agent/Y/instance/alpha
+    // against an own agent id of
+    //     spiffe://thinklocal/host/X/agent/Y
+    // would fall through to the remote peer path and fail with 404.
+    // (GPT-5.4 gotcha, consensus 2026-04-08.)
+    let normalizedTo: string;
+    try {
+      normalizedTo = normalizeAgentId(body.to);
+    } catch (err) {
+      const msg = err instanceof SpiffeUriError ? err.message : String(err);
+      return reply.code(400).send({ error: `invalid target SPIFFE-URI: ${msg}` });
+    }
+
     const bodyStr = typeof body.body === 'string' ? body.body : JSON.stringify(body.body);
     if (Buffer.byteLength(bodyStr, 'utf-8') > MAX_BODY_BYTES) {
       return reply.code(413).send({ error: `body exceeds ${MAX_BODY_BYTES} bytes` });
@@ -138,10 +180,20 @@ export function registerInboxApi(server: FastifyInstance, deps: InboxApiDeps): v
     // the network — there's no peer to talk to. We store the message directly
     // in the local inbox so the recipient (= a sibling agent on the same host)
     // can read it via read_inbox.
-    if (body.to === ownAgentId) {
+    //
+    // ADR-005: compare against the normalised 3-component URI so a
+    // 4-component target like `spiffe://…/agent/claude-code/instance/alpha`
+    // also resolves to loopback when alpha runs on this daemon.
+    if (normalizedTo === ownAgentId) {
       const result = inbox.store(ownAgentId, payload);
       log?.info(
-        { to: body.to, message_id: messageId, subject: body.subject ?? null, mode: 'loopback' },
+        {
+          to: body.to,
+          normalized_to: normalizedTo,
+          message_id: messageId,
+          subject: body.subject ?? null,
+          mode: 'loopback',
+        },
         'AGENT_MESSAGE loopback (sibling-agent on same daemon)',
       );
       onSent?.(messageId, body.to);
@@ -155,7 +207,9 @@ export function registerInboxApi(server: FastifyInstance, deps: InboxApiDeps): v
     }
 
     // ---- REMOTE PEER PATH ----
-    const peer = mesh.getPeer(body.to);
+    // Use the normalised URI for peer lookup — the mesh key is the
+    // 3-component daemon URI, not the 4-component instance URI.
+    const peer = mesh.getPeer(normalizedTo);
     if (!peer || !peer.endpoint) {
       return reply.code(404).send({
         error: 'peer not found in mesh',
@@ -215,6 +269,12 @@ export function registerInboxApi(server: FastifyInstance, deps: InboxApiDeps): v
   });
 
   // ---- GET /api/inbox ----
+  //
+  // ADR-005 query parameters:
+  //   for_instance    — limit results to messages addressed to this
+  //                     4th-component instance id. Omit to see all.
+  //   include_legacy  — include pre-migration (NULL) rows when
+  //                     for_instance is set. Default: false.
   server.get('/api/inbox', async (request: FastifyRequest, reply: FastifyReply) => {
     if (!requireLocal(request, reply)) return;
     if (!checkRate(request, reply, 'list')) return;
@@ -230,19 +290,33 @@ export function registerInboxApi(server: FastifyInstance, deps: InboxApiDeps): v
       limit = parsed;
     }
 
+    // ADR-005: validate for_instance to defend against SQL injection via
+    // query params. The instance id is stored as an opaque token in
+    // SQLite, but a hostile value would still poison the prepared-
+    // statement placeholder cache, so we reject anything not matching
+    // our canonical regex before reaching the store layer.
+    const forInstance = query['for_instance'];
+    if (!validateInstanceParam(forInstance, reply)) return;
+    const includeLegacy = query['include_legacy'] === 'true';
+
     const messages = inbox.list({
       unreadOnly: query['unread'] === 'true',
       fromAgent: query['from'] || undefined,
       limit,
       includeArchived: query['include_archived'] === 'true',
+      forInstance,
+      includeLegacy,
     });
     return {
       count: messages.length,
       unread_total: inbox.unreadCount(),
+      for_instance: forInstance ?? null,
+      include_legacy: includeLegacy,
       messages: messages.map((m) => ({
         message_id: m.message_id,
         from: m.from_agent,
         to: m.to_agent,
+        to_instance: m.to_agent_instance,
         subject: m.subject,
         body: tryParseJson(m.body),
         in_reply_to: m.in_reply_to,
@@ -279,11 +353,24 @@ export function registerInboxApi(server: FastifyInstance, deps: InboxApiDeps): v
   });
 
   // ---- GET /api/inbox/unread ----
+  //
+  // ADR-005: accepts `for_instance` + `include_legacy` query params,
+  // same semantics as GET /api/inbox. Back-compat: `from=<uri>` still
+  // filters by sender.
   server.get('/api/inbox/unread', async (request: FastifyRequest, reply: FastifyReply) => {
     if (!requireLocal(request, reply)) return;
     if (!checkRate(request, reply, 'unread')) return;
     const query = request.query as Record<string, string | undefined>;
-    return { unread_count: inbox.unreadCount(query['from'] || undefined) };
+    const forInstance = query['for_instance'];
+    if (!validateInstanceParam(forInstance, reply)) return;
+    const includeLegacy = query['include_legacy'] === 'true';
+    return {
+      unread_count: inbox.unreadCount({
+        fromAgent: query['from'] || undefined,
+        forInstance,
+        includeLegacy,
+      }),
+    };
   });
 }
 
