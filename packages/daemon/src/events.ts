@@ -32,7 +32,16 @@ export type MeshEventType =
   | 'skill:installed'
   | 'audit:new'
   | 'system:startup'
-  | 'system:shutdown';
+  | 'system:shutdown'
+  // ADR-007/008 Phase A+B: governance + capability lifecycle events
+  | 'inbox:new'
+  | 'approval:created'
+  | 'approval:decided'
+  | 'config:changed'
+  | 'capability:discovered'
+  | 'capability:activated'
+  | 'capability:suspended'
+  | 'capability:revoked';
 
 export interface MeshEvent {
   type: MeshEventType;
