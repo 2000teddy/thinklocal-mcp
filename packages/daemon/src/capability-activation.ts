@@ -132,12 +132,19 @@ export class CapabilityActivationStore {
    */
   suspend(capabilityId: string, originPeer: string, reason?: string): boolean {
     const now = new Date().toISOString();
-    const meta = reason ? JSON.stringify({ suspend_reason: reason }) : null;
+    // Merge reason into existing metadata instead of overwriting.
+    // (Gemini-Pro retroactive CR MEDIUM: metadata_json merge)
+    const current = this.get(capabilityId, originPeer);
+    if (!current || current.state !== 'active') {
+      return false;
+    }
+    const existingMeta = current.metadata_json ? JSON.parse(current.metadata_json) as Record<string, unknown> : {};
+    const merged = reason ? { ...existingMeta, suspend_reason: reason } : existingMeta;
     const info = this.db
       .prepare(
-        `UPDATE capability_activations SET state = 'suspended', suspended_at = ?, metadata_json = COALESCE(?, metadata_json), updated_at = ? WHERE capability_id = ? AND origin_peer = ? AND state = 'active'`,
+        `UPDATE capability_activations SET state = 'suspended', suspended_at = ?, metadata_json = ?, updated_at = ? WHERE id = ? AND state = 'active'`,
       )
-      .run(now, meta, now, capabilityId, originPeer);
+      .run(now, Object.keys(merged).length > 0 ? JSON.stringify(merged) : null, now, current.id);
     if (info.changes > 0) {
       this.log?.info({ capabilityId, originPeer, reason }, '[capability] suspended');
     }
@@ -150,12 +157,18 @@ export class CapabilityActivationStore {
    */
   revoke(capabilityId: string, originPeer: string, reason?: string): boolean {
     const now = new Date().toISOString();
-    const meta = reason ? JSON.stringify({ revoke_reason: reason }) : null;
+    // Merge reason into existing metadata (Gemini-Pro retroactive CR MEDIUM)
+    const current = this.get(capabilityId, originPeer);
+    if (!current || current.state === 'revoked') {
+      return false;
+    }
+    const existingMeta = current.metadata_json ? JSON.parse(current.metadata_json) as Record<string, unknown> : {};
+    const merged = reason ? { ...existingMeta, revoke_reason: reason } : existingMeta;
     const info = this.db
       .prepare(
-        `UPDATE capability_activations SET state = 'revoked', revoked_at = ?, metadata_json = COALESCE(?, metadata_json), updated_at = ? WHERE capability_id = ? AND origin_peer = ? AND state != 'revoked'`,
+        `UPDATE capability_activations SET state = 'revoked', revoked_at = ?, metadata_json = ?, updated_at = ? WHERE id = ? AND state != 'revoked'`,
       )
-      .run(now, meta, now, capabilityId, originPeer);
+      .run(now, Object.keys(merged).length > 0 ? JSON.stringify(merged) : null, now, current.id);
     if (info.changes > 0) {
       this.log?.warn({ capabilityId, originPeer, reason }, '[capability] REVOKED');
     }
