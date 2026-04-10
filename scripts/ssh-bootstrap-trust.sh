@@ -138,26 +138,37 @@ upsert_peer_local() {
 }
 
 # --- 3. Pro Peer: holen + lokal eintragen + remote eintragen ---
-for PEER in "${PEERS[@]}"; do
+for RAW_PEER in "${PEERS[@]}"; do
+  # Support both `host` and `user@host` argument forms. If the user
+  # passes `chris@10.10.25.18`, split off the user part and override
+  # SSH_USER for this peer so we don't end up with `chris@chris@host`.
+  # (Bug found during live-deploy 2026-04-10.)
+  PEER_SSH_USER="$SSH_USER"
+  PEER="$RAW_PEER"
+  if [[ "$RAW_PEER" == *@* ]]; then
+    PEER_SSH_USER="${RAW_PEER%%@*}"
+    PEER="${RAW_PEER#*@}"
+  fi
+
   log ""
-  log "═══ Peer: $PEER ═══"
+  log "═══ Peer: $PEER (user=$PEER_SSH_USER) ═══"
 
   # 3a. SSH-Reachability test
-  if ! ssh -o ConnectTimeout=5 -o BatchMode=yes "$SSH_USER@$PEER" 'true' 2>/dev/null; then
-    log "  ✗ SSH zu $SSH_USER@$PEER fehlgeschlagen — ueberspringe"
+  if ! ssh -o ConnectTimeout=5 -o BatchMode=yes "$PEER_SSH_USER@$PEER" 'true' 2>/dev/null; then
+    log "  ✗ SSH zu $PEER_SSH_USER@$PEER fehlgeschlagen — ueberspringe"
     had_errors=1
     continue
   fi
 
   # 3b. Peer-Identitaet abholen
   log "  Hole CA, Pub-Key und Node-ID..."
-  PEER_CA="$(ssh "$SSH_USER@$PEER" "cat \$HOME/$REMOTE_PATH/tls/ca.crt.pem 2>/dev/null")" \
+  PEER_CA="$(ssh "$PEER_SSH_USER@$PEER" "cat \$HOME/$REMOTE_PATH/tls/ca.crt.pem 2>/dev/null")" \
     || { log "  ✗ Peer-CA nicht gefunden — ueberspringe"; continue; }
-  PEER_PUB="$(ssh "$SSH_USER@$PEER" "cat \$HOME/$REMOTE_PATH/keys/agent.pub.pem 2>/dev/null")" \
+  PEER_PUB="$(ssh "$PEER_SSH_USER@$PEER" "cat \$HOME/$REMOTE_PATH/keys/agent.pub.pem 2>/dev/null")" \
     || { log "  ✗ Peer-Pub-Key nicht gefunden — ueberspringe"; continue; }
   # Versuch 1: stable node-id (PR #74+ Daemon)
-  PEER_NODE_ID="$(ssh "$SSH_USER@$PEER" "tr -d '[:space:]' < \$HOME/$REMOTE_PATH/keys/node-id.txt 2>/dev/null" || true)"
-  PEER_HOSTNAME="$(ssh "$SSH_USER@$PEER" 'hostname -s' 2>/dev/null)"
+  PEER_NODE_ID="$(ssh "$PEER_SSH_USER@$PEER" "tr -d '[:space:]' < \$HOME/$REMOTE_PATH/keys/node-id.txt 2>/dev/null" || true)"
+  PEER_HOSTNAME="$(ssh "$PEER_SSH_USER@$PEER" 'hostname -s' 2>/dev/null)"
   PEER_AGENT_TYPE="${TLMCP_PEER_AGENT_TYPE:-claude-code}"
 
   # SECURITY (PR #78 GPT-5.4 retro LOW): validate node-id format before using.
@@ -175,7 +186,7 @@ for PEER in "${PEERS[@]}"; do
     # Legacy-Daemon: SPIFFE aus Hostname (original-Schreibweise des Peers).
     # Wir nutzen `hostname` (nicht `hostname -s`), weil der alte Daemon
     # os.hostname() nutzte — das ist meist mit FQDN-Suffix wie ".local".
-    PEER_LEGACY_HOST="$(ssh "$SSH_USER@$PEER" 'hostname' 2>/dev/null)"
+    PEER_LEGACY_HOST="$(ssh "$PEER_SSH_USER@$PEER" 'hostname' 2>/dev/null)"
     PEER_SPIFFE="spiffe://thinklocal/host/${PEER_LEGACY_HOST}/agent/${PEER_AGENT_TYPE}"
     log "  → Modus: legacy hostname-SPIFFE ($PEER_LEGACY_HOST)"
     log "    HINWEIS: Peer laeuft mit altem Daemon. Bidirektionales Trust setzen,"
@@ -207,7 +218,7 @@ for PEER in "${PEERS[@]}"; do
     '{agentId: $id, publicKeyPem: $pub, caCertPem: $ca, fingerprint: $fp, pairedAt: $now, hostname: $host}' \
     | base64 | tr -d '\n')"
 
-  REMOTE_RESULT="$(ssh "$SSH_USER@$PEER" "PEER_B64='$OWN_PEER_JSON_B64' REMOTE_DIR='$REMOTE_PATH' bash -s" <<'REMOTE_EOF' 2>&1
+  REMOTE_RESULT="$(ssh "$PEER_SSH_USER@$PEER" "PEER_B64='$OWN_PEER_JSON_B64' REMOTE_DIR='$REMOTE_PATH' bash -s" <<'REMOTE_EOF' 2>&1
 set -e
 mkdir -p "$HOME/$REMOTE_DIR/pairing"
 PAIRED="$HOME/$REMOTE_DIR/pairing/paired-peers.json"
@@ -241,7 +252,7 @@ log "  1. Lokalen Daemon neu starten (laedt neue CAs in den Trust-Store):"
 log "     pkill -f 'tsx.*src/index.ts' && bash /tmp/start-tlmcp-lan.sh"
 log "  2. Daemons auf den Peers neu starten:"
 for PEER in "${PEERS[@]}"; do
-  log "     ssh $SSH_USER@$PEER 'launchctl kickstart -k gui/\$(id -u)/com.thinklocal.daemon || pkill -HUP -f thinklocal'"
+  log "     ssh $PEER_SSH_USER@$PEER 'launchctl kickstart -k gui/\$(id -u)/com.thinklocal.daemon || pkill -HUP -f thinklocal'"
 done
 log "  3. mesh_status pruefen — peers_online sollte > 0 sein"
 log ""
