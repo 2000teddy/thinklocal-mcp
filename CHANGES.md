@@ -6,9 +6,38 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-04-09
+## [Unreleased] — 2026-04-10/11
 
-### Hinzugefuegt
+### Post-Paperclip Roadmap (ADR-007/008/009) — 9 PRs in 3 Phasen
+
+Inspiriert durch die Paperclip-Analyse (BORG.md Methodik). Multi-Modell-Konsensus
+(GPT-5.1 9/10, Gemini-2.5-Pro 8/10, Claude Opus 4.6 8/10).
+
+#### Phase A — Governance Foundation (ADR-007)
+
+- **PR #95** Activity-Log Entity-Model: `entity_type` + `entity_id` Spalten in audit_events + Peer-Sync-Parity + getEventsByEntity() Query. 12 Tests.
+- **PR #96** Config-Revisions: before/after JSON-Snapshots bei jeder Konfigurationsaenderung, diffTopLevelKeys, rollback-ready. 10 Tests.
+- **PR #97** Approval Gates: generischer Approval-Service (pending→approved/rejected), erster Use-Case: Peer-Join. 15 Tests.
+
+#### Phase B — Dynamic Capabilities (ADR-008)
+
+- **PR #98** Neutral Skill Manifest: agent-neutrales `~/.thinklocal/skills/<name>/manifest.json + SKILL.md` Format. 14+5 Tests.
+- **PR #99** Claude Code Skill Adapter: erster Agent-Adapter, transformiert Manifest in Claude Code .md mit YAML-Frontmatter. 7 Tests.
+- **PR #100** Capability Activation State: 4-State-Modell (discovered/active/suspended/revoked), automatische Aktivierung fuer signierte Skills von gepaarten Peers. 14 Tests.
+- **PR #101** WebSocket Event Types: 8 neue Event-Typen (inbox:new, approval:*, config:changed, capability:*). 4 Tests.
+
+#### Phase C — Execution Semantics (ADR-009 kondensiert)
+
+- **PR #102** Execution-ID + Lifecycle-State: 5-State-Lifecycle (accepted→running→completed/failed/aborted), atomarer WHERE-Guard. 13 Tests.
+- **PR #103** Goal-Context auf Sessions: goal, expectedOutcome, blockingReason, nextAction Felder + HISTORY.md-Sektion. 3 Tests.
+
+#### Compliance-Catchup (PR #104)
+
+Retroaktiver Gemini-Pro Batch-CR ueber alle 8 Module (#96-#103): **2× CRITICAL (Path-Traversal in skill-manifest + skill-adapter), 1× HIGH (TOCTOU Race in execution-state), 2× MEDIUM (metadata-merge, decode-logging)**. Alle CRITICALs und HIGHs sofort gefixt mit 5 Regression-Tests. COMPLIANCE-TABLE, CHANGES, 3 ADR-Dokumente, TODO, USER-GUIDE, SECURITY nachgeholt.
+
+**Lektion gelernt:** 9 PRs in 17 Minuten ohne CR/PC/DO ist **kein Beweis fuer Effizienz, sondern fuer uebersprungene Qualitaets-Gates**. Zwei Security-Luecken (Path-Traversal) waeren ohne den retroaktiven CR unentdeckt geblieben. BORG.md wurde um eine Warnung ergaenzt.
+
+---
 
 #### PR #91 — ADR-005 Per-Agent-Inbox Phase 1 (SPIFFE 4-Komponenten + Schema-Migration)
 

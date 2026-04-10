@@ -25,10 +25,26 @@
  *
  * See: docs/ROADMAP-POST-PAPERCLIP.md Phase B PR B1
  */
-import { resolve } from 'node:path';
+import { resolve, basename } from 'node:path';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
+
+/**
+ * Validate and sanitize a skill name to prevent path-traversal attacks.
+ * Only allows kebab-case names with dots and underscores.
+ * (Gemini-Pro retroactive CR CRITICAL 2026-04-11)
+ */
+function sanitizeSkillName(name: string): string {
+  const clean = basename(name);
+  if (clean !== name || clean === '.' || clean === '..' || !clean) {
+    throw new Error(`Invalid skill name (path traversal attempt): ${name}`);
+  }
+  if (!/^[A-Za-z0-9._-]+$/.test(clean)) {
+    throw new Error(`Invalid skill name (forbidden characters): ${name}`);
+  }
+  return clean;
+}
 
 /** Current manifest schema version. Bump on breaking changes. */
 export const MANIFEST_FORMAT_VERSION = 1;
@@ -117,7 +133,8 @@ export function installSkill(
   prompt?: string,
   dataDir?: string,
 ): InstalledSkill {
-  const dir = resolve(defaultSkillsDir(dataDir), manifest.name);
+  const safeName = sanitizeSkillName(manifest.name);
+  const dir = resolve(defaultSkillsDir(dataDir), safeName);
   mkdirSync(dir, { recursive: true });
   const raw = JSON.stringify(manifest, null, 2);
   writeFileSync(resolve(dir, 'manifest.json'), raw);

@@ -149,4 +149,32 @@ describe('Skill Manifest', () => {
       expect((reread.manifest as Record<string, unknown>).anotherOne).toBe(42);
     });
   });
+
+  // Regression for Gemini-Pro retroactive CR CRITICAL (2026-04-11):
+  // Path-traversal via manifest.name was possible before sanitizeSkillName.
+  describe('security: path-traversal prevention', () => {
+    it('rejects ../../etc/passwd as skill name', () => {
+      expect(() => installSkill(makeManifest({ name: '../../etc/passwd' }), undefined, dir)).toThrow(
+        /path traversal/i,
+      );
+    });
+
+    it('rejects names with slashes', () => {
+      expect(() => installSkill(makeManifest({ name: 'a/b' }), undefined, dir)).toThrow();
+    });
+
+    it('rejects "." and ".." as names', () => {
+      expect(() => installSkill(makeManifest({ name: '.' }), undefined, dir)).toThrow();
+      expect(() => installSkill(makeManifest({ name: '..' }), undefined, dir)).toThrow();
+    });
+
+    it('rejects names with special characters', () => {
+      expect(() => installSkill(makeManifest({ name: 'skill;rm -rf /' }), undefined, dir)).toThrow();
+    });
+
+    it('accepts valid kebab-case names', () => {
+      expect(() => installSkill(makeManifest({ name: 'thinklocal-influxdb' }), undefined, dir)).not.toThrow();
+      expect(() => installSkill(makeManifest({ name: 'my_skill.v2' }), undefined, dir)).not.toThrow();
+    });
+  });
 });

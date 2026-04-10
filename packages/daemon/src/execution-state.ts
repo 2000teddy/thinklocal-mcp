@@ -121,13 +121,17 @@ export class ExecutionStateStore {
       newState === 'completed' || newState === 'failed' || newState === 'aborted'
         ? now
         : null;
-    this.db
+    // Atomic WHERE guard: include old state so concurrent transitions
+    // don't corrupt the state machine. (Gemini-Pro retroactive CR HIGH: TOCTOU)
+    const info = this.db
       .prepare(
-        `UPDATE execution_state SET lifecycle_state = ?, completed_at = COALESCE(?, completed_at), updated_at = ? WHERE execution_id = ?`,
+        `UPDATE execution_state SET lifecycle_state = ?, completed_at = COALESCE(?, completed_at), updated_at = ? WHERE execution_id = ? AND lifecycle_state = ?`,
       )
-      .run(newState, completedAt, now, executionId);
-    this.log?.debug({ executionId, from: current.lifecycle_state, to: newState }, '[execution] transitioned');
-    return true;
+      .run(newState, completedAt, now, executionId, current.lifecycle_state);
+    if (info.changes > 0) {
+      this.log?.debug({ executionId, from: current.lifecycle_state, to: newState }, '[execution] transitioned');
+    }
+    return info.changes > 0;
   }
 
   /** Get a single execution by id. */

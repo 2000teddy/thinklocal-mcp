@@ -16,7 +16,7 @@
  *
  * See: docs/ROADMAP-POST-PAPERCLIP.md Phase B PR B2
  */
-import { resolve } from 'node:path';
+import { resolve, basename } from 'node:path';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import type { SkillManifest, InstalledSkill } from './skill-manifest.js';
@@ -120,7 +120,12 @@ export function installClaudeSkill(
     : undefined;
 
   const content = renderClaudeSkillMarkdown(skill.manifest, prompt);
-  const outputPath = resolve(dir, `${skill.manifest.name}.md`);
+  // Sanitize to prevent path-traversal (Gemini-Pro retroactive CR CRITICAL)
+  const safeName = basename(skill.manifest.name);
+  if (safeName !== skill.manifest.name || !safeName || safeName === '.' || safeName === '..') {
+    throw new Error(`Invalid skill name for Claude adapter: ${skill.manifest.name}`);
+  }
+  const outputPath = resolve(dir, `${safeName}.md`);
 
   // Avoid unnecessary writes (preserves file mtime for watchers).
   if (existsSync(outputPath)) {
