@@ -176,4 +176,38 @@ describe('renderHistoryMarkdown', () => {
     expect(md).toMatch(/## Decisions\n\n_\(none\)_/);
     expect(md).toMatch(/## Files Touched\n\n_\(none\)_/);
   });
+
+  // ADR-009 Phase C PR C2: Goal-Context on sessions
+  describe('Goal & Status section', () => {
+    it('renders goal context when fields are set', () => {
+      const stateWithGoal: SessionState = {
+        ...STATE,
+        goal: 'Implement ADR-007 Phase A',
+        expectedOutcome: '3 PRs merged, tests green',
+        blockingReason: 'Waiting for CR result',
+        nextAction: 'Fix findings, then PC',
+      };
+      const md = renderHistoryMarkdown({ state: stateWithGoal, events: [], now: FIXED_NOW });
+      expect(md).toContain('## Goal & Status');
+      expect(md).toContain('**Goal:** Implement ADR-007 Phase A');
+      expect(md).toContain('**Expected outcome:** 3 PRs merged');
+      expect(md).toContain('**Blocked by:** Waiting for CR');
+      expect(md).toContain('**Next action:** Fix findings');
+    });
+
+    it('omits the section when no goal fields are set (back-compat)', () => {
+      const md = renderHistoryMarkdown({ state: STATE, events: [], now: FIXED_NOW });
+      expect(md).not.toContain('## Goal & Status');
+    });
+
+    it('renders partial goal context (only goal + nextAction)', () => {
+      const partial: SessionState = { ...STATE, goal: 'Build v2', nextAction: 'Write tests' };
+      const md = renderHistoryMarkdown({ state: partial, events: [], now: FIXED_NOW });
+      expect(md).toContain('## Goal & Status');
+      expect(md).toContain('**Goal:** Build v2');
+      expect(md).toContain('**Next action:** Write tests');
+      expect(md).not.toContain('**Blocked by:**');
+      expect(md).not.toContain('**Expected outcome:**');
+    });
+  });
 });

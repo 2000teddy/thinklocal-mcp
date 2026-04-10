@@ -50,6 +50,21 @@ export interface SessionState {
    * parsing the full file.
    */
   historyVersion: number;
+
+  // --- ADR-009 Phase C PR C2: Goal-Context ---
+  // These fields transport the "why" of a session, not just the "what".
+  // The recovery-generator uses them to build a ## Goal & Status section
+  // in HISTORY.md, so the next agent doesn't just see events but also
+  // understands the purpose and current blockers.
+
+  /** High-level goal of this session (e.g. "Implement ADR-007 Phase A"). */
+  goal?: string;
+  /** What success looks like (e.g. "3 PRs merged, tests green"). */
+  expectedOutcome?: string;
+  /** What is currently blocking progress (e.g. "Waiting for CR result"). */
+  blockingReason?: string;
+  /** Immediate next step (e.g. "Fix HIGH findings, then PC"). */
+  nextAction?: string;
 }
 
 export function defaultSessionsRoot(dataDir?: string): string {
