@@ -104,6 +104,24 @@ function looksLikeDecision(text: string): boolean {
   return /(ich werde|we will|entschieden|decision:|plan:|let's)/i.test(text);
 }
 
+/**
+ * ADR-009 Phase C PR C2: Render a Goal & Status section from the
+ * session-state's goal-context fields. Returns empty string if
+ * no goal is set (back-compat with pre-C2 sessions).
+ */
+function renderGoalContext(state: SessionState): string {
+  if (!state.goal && !state.expectedOutcome && !state.blockingReason && !state.nextAction) {
+    return '';
+  }
+  const lines = ['## Goal & Status', ''];
+  if (state.goal) lines.push(`- **Goal:** ${state.goal}`);
+  if (state.expectedOutcome) lines.push(`- **Expected outcome:** ${state.expectedOutcome}`);
+  if (state.blockingReason) lines.push(`- **Blocked by:** ${state.blockingReason}`);
+  if (state.nextAction) lines.push(`- **Next action:** ${state.nextAction}`);
+  lines.push('');
+  return lines.join('\n');
+}
+
 function renderHeader(state: SessionState, now: Date, eventCount: number): string {
   return [
     `# HISTORY — ${state.instanceUuid}`,
@@ -205,6 +223,8 @@ export function renderHistoryMarkdown(input: RecoveryGeneratorInput): string {
 
   return [
     renderHeader(state, now, events.length),
+    // ADR-009 C2: Goal & Status section (only rendered if goal is set)
+    renderGoalContext(state),
     renderSection('Goals', goals),
     renderSection('Decisions', decisions),
     renderSection('Files Touched', Array.from(filesTouched).sort()),
