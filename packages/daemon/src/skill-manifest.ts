@@ -1,169 +1,145 @@
 /**
- * skill-manifest.ts — Skill-Manifest-Schema und Validierung
+ * ADR-008 Phase B PR B1 — Skill Manifest (v2)
  *
- * Definiert das JSON-Schema fuer Skill-Pakete im thinklocal-mcp Mesh.
- * Jeder Skill muss ein gueltiges Manifest haben um installiert zu werden.
+ * Agent-neutral skill description format. A "skill" is a directory
+ * in `~/.thinklocal/skills/<name>/` containing:
+ *
+ *   manifest.json  — this schema (metadata, capabilities, origin)
+ *   SKILL.md       — human/agent-readable instruction prompt
+ *
+ * The manifest is the machine-readable part; the SKILL.md is what an
+ * LLM agent reads as instructions. Agent-specific adapters (Claude
+ * Code, Codex, Gemini) can transform both into their native format.
+ *
+ * Skills can be:
+ *   - Built-in: shipped with the daemon install
+ *   - Discovered: received from peers via Mesh transport
+ *   - User-created: manually added to the skills directory
+ *
+ * The manifest format is intentionally simple and forward-compatible:
+ * unknown fields are preserved, not rejected. This allows newer
+ * daemons to add fields without breaking older consumers.
+ *
+ * Replaces the previous skill-manifest.ts (Phase 3) with the
+ * Paperclip-inspired agent-neutral format from BORG.md.
+ *
+ * See: docs/ROADMAP-POST-PAPERCLIP.md Phase B PR B1
  */
+import { resolve } from 'node:path';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { createHash } from 'node:crypto';
 
-import { Validator } from '@cfworker/json-schema';
-import type { Logger } from 'pino';
-
-// --- Skill-Manifest TypeScript-Typen ---
-
-export type SkillRuntime = 'node' | 'wasm' | 'docker' | 'python' | 'binary' | 'deno';
+/** Current manifest schema version. Bump on breaking changes. */
+export const MANIFEST_FORMAT_VERSION = 1;
 
 export interface SkillManifest {
-  /** Eindeutige Skill-ID (z.B. "influxdb.query") */
-  id: string;
-  /** SemVer-Version */
+  /** Unique skill name (directory name, kebab-case). */
+  name: string;
+  /** SemVer version. */
   version: string;
-  /** Menschenlesbare Beschreibung */
+  /** One-line description for discovery UIs. */
   description: string;
-  /** SPIFFE-URI des Autors */
-  author_agent: string;
-  /** Kategorie (z.B. "database", "monitoring", "ai") */
-  category: string;
-  /** Runtime-Umgebung */
-  runtime: SkillRuntime;
-  /** Einstiegspunkt (relativ zum Skill-Verzeichnis) */
-  entrypoint: string;
-  /** Benoetigte Berechtigungen */
-  permissions: string[];
-  /** Abhaengigkeiten (andere Skill-IDs) */
-  dependencies: string[];
-  /** Input-Schema (JSON Schema draft-07) */
-  input_schema: Record<string, unknown>;
-  /** Output-Schema (JSON Schema draft-07) */
-  output_schema: Record<string, unknown>;
-  /** Minimale thinklocal-Version */
-  min_version?: string;
-  /** Tags fuer Discovery */
-  tags?: string[];
+  /** SPIFFE-URI of the peer that originally announced this skill. */
+  origin: string;
+  /** List of capability identifiers this skill provides. */
+  capabilities: string[];
+  /** Optional: MCP tools required to execute this skill. */
+  requires?: { mcp_tools?: string[] };
+  /** Ed25519 signature of the manifest JSON (minus the signature field). */
+  signature?: string;
+  /** Format version for forward compatibility. */
+  format_version: number;
+  /** Additional fields from newer versions are preserved. */
+  [key: string]: unknown;
 }
 
-// --- JSON Schema fuer das Manifest selbst ---
+export interface InstalledSkill {
+  manifest: SkillManifest;
+  /** Absolute path to the skill directory. */
+  dirPath: string;
+  /** Whether a SKILL.md prompt file exists. */
+  hasPrompt: boolean;
+  /** SHA-256 hash of manifest.json content (for activation-state dedup). */
+  manifestHash: string;
+}
 
-export const SKILL_MANIFEST_SCHEMA = {
-  $schema: 'http://json-schema.org/draft-07/schema#',
-  $id: 'https://thinklocal.dev/schemas/skill-manifest.json',
-  type: 'object',
-  required: ['id', 'version', 'description', 'author_agent', 'category', 'runtime', 'entrypoint', 'permissions', 'input_schema', 'output_schema'],
-  additionalProperties: false,
-  properties: {
-    id: {
-      type: 'string',
-      pattern: '^[a-z][a-z0-9._-]*$',
-      minLength: 2,
-      maxLength: 64,
-      description: 'Eindeutige Skill-ID (lowercase, dots/hyphens erlaubt)',
-    },
-    version: {
-      type: 'string',
-      pattern: '^\\d+\\.\\d+\\.\\d+',
-      description: 'SemVer-Version',
-    },
-    description: {
-      type: 'string',
-      minLength: 10,
-      maxLength: 500,
-      description: 'Menschenlesbare Beschreibung',
-    },
-    author_agent: {
-      type: 'string',
-      pattern: '^spiffe://',
-      description: 'SPIFFE-URI des Autors',
-    },
-    category: {
-      type: 'string',
-      enum: ['database', 'monitoring', 'ai', 'automation', 'networking', 'security', 'storage', 'messaging', 'custom'],
-    },
-    runtime: {
-      type: 'string',
-      enum: ['node', 'wasm', 'docker', 'python', 'binary', 'deno'],
-    },
-    entrypoint: {
-      type: 'string',
-      minLength: 1,
-      description: 'Relativer Pfad zum Einstiegspunkt',
-    },
-    permissions: {
-      type: 'array',
-      items: {
-        type: 'string',
-        enum: ['system.read', 'system.write', 'network.read', 'network.write', 'fs.read', 'fs.write', 'credential.read', 'credential.write', 'process.execute'],
-      },
-      description: 'Benoetigte Berechtigungen',
-    },
-    dependencies: {
-      type: 'array',
-      items: { type: 'string' },
-      default: [],
-      description: 'Abhaengige Skill-IDs',
-    },
-    input_schema: {
-      type: 'object',
-      description: 'JSON Schema fuer Skill-Input',
-    },
-    output_schema: {
-      type: 'object',
-      description: 'JSON Schema fuer Skill-Output',
-    },
-    min_version: {
-      type: 'string',
-      pattern: '^\\d+\\.\\d+\\.\\d+',
-      description: 'Minimale thinklocal-Version',
-    },
-    tags: {
-      type: 'array',
-      items: { type: 'string', maxLength: 32 },
-      maxItems: 10,
-      description: 'Tags fuer Discovery',
-    },
-  },
-};
-
-// --- Validierung ---
-
-const manifestValidator = new Validator(SKILL_MANIFEST_SCHEMA as Record<string, unknown>);
+/** Default skills directory. */
+export function defaultSkillsDir(dataDir?: string): string {
+  return resolve(dataDir ?? resolve(homedir(), '.thinklocal'), 'skills');
+}
 
 /**
- * Validiert ein Skill-Manifest gegen das Schema.
- * Gibt Fehlermeldungen zurueck wenn ungueltig.
+ * Read a single skill manifest from a directory.
+ * Returns null if the directory or manifest.json is missing/invalid.
  */
-export function validateManifest(manifest: unknown, log?: Logger): { valid: boolean; errors: string[] } {
-  const result = manifestValidator.validate(manifest);
-  if (!result.valid) {
-    const errors = result.errors.map((e) => `${e.instanceLocation}: ${e.error}`);
-    log?.warn({ errors }, 'Skill-Manifest ungueltig');
-    return { valid: false, errors };
+export function readSkillManifest(skillDir: string): InstalledSkill | null {
+  const manifestPath = resolve(skillDir, 'manifest.json');
+  if (!existsSync(manifestPath)) return null;
+  try {
+    const raw = readFileSync(manifestPath, 'utf8');
+    const parsed = JSON.parse(raw) as SkillManifest;
+    if (!parsed.name || !parsed.version || !parsed.capabilities) return null;
+    return {
+      manifest: parsed,
+      dirPath: skillDir,
+      hasPrompt: existsSync(resolve(skillDir, 'SKILL.md')),
+      manifestHash: createHash('sha256').update(raw).digest('hex'),
+    };
+  } catch {
+    return null;
   }
-  return { valid: true, errors: [] };
 }
 
 /**
- * Erstellt ein Beispiel-Manifest fuer einen neuen Skill.
+ * Scan the skills directory and return all valid installed skills.
  */
-export function createExampleManifest(skillId: string, authorAgent: string): SkillManifest {
+export function listInstalledSkills(dataDir?: string): InstalledSkill[] {
+  const dir = defaultSkillsDir(dataDir);
+  if (!existsSync(dir)) return [];
+  const entries = readdirSync(dir, { withFileTypes: true });
+  const skills: InstalledSkill[] = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const skill = readSkillManifest(resolve(dir, entry.name));
+    if (skill) skills.push(skill);
+  }
+  return skills;
+}
+
+/**
+ * Install a skill from its manifest + prompt content.
+ * Creates `~/.thinklocal/skills/<name>/manifest.json` + optional `SKILL.md`.
+ * Overwrites existing if present (idempotent, latest version wins).
+ */
+export function installSkill(
+  manifest: SkillManifest,
+  prompt?: string,
+  dataDir?: string,
+): InstalledSkill {
+  const dir = resolve(defaultSkillsDir(dataDir), manifest.name);
+  mkdirSync(dir, { recursive: true });
+  const raw = JSON.stringify(manifest, null, 2);
+  writeFileSync(resolve(dir, 'manifest.json'), raw);
+  if (prompt) {
+    writeFileSync(resolve(dir, 'SKILL.md'), prompt);
+  }
   return {
-    id: skillId,
-    version: '1.0.0',
-    description: `${skillId} — Beschreibung des Skills`,
-    author_agent: authorAgent,
-    category: 'custom',
-    runtime: 'node',
-    entrypoint: 'index.ts',
-    permissions: ['system.read'],
-    dependencies: [],
-    input_schema: {
-      type: 'object',
-      properties: {},
-    },
-    output_schema: {
-      type: 'object',
-      properties: {
-        success: { type: 'boolean' },
-      },
-    },
-    tags: [skillId],
+    manifest,
+    dirPath: dir,
+    hasPrompt: prompt !== undefined,
+    manifestHash: createHash('sha256').update(raw).digest('hex'),
   };
+}
+
+/**
+ * Build a manifest hash for comparison (activation-state dedup,
+ * drift detection). Excludes the signature field so the hash
+ * is stable across re-signing.
+ */
+export function computeManifestHash(manifest: SkillManifest): string {
+  const { signature: _sig, ...rest } = manifest;
+  return createHash('sha256')
+    .update(JSON.stringify(rest, Object.keys(rest).sort()))
+    .digest('hex');
 }

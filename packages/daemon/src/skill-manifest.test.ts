@@ -1,82 +1,152 @@
-import { describe, it, expect } from 'vitest';
-import { validateManifest, createExampleManifest } from './skill-manifest.js';
+/**
+ * ADR-008 Phase B PR B1 — Skill Manifest tests.
+ */
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import {
+  readSkillManifest,
+  listInstalledSkills,
+  installSkill,
+  computeManifestHash,
+  type SkillManifest,
+  MANIFEST_FORMAT_VERSION,
+} from './skill-manifest.js';
 
-describe('SkillManifest', () => {
-  const validManifest = {
-    id: 'influxdb.query',
+function makeManifest(overrides: Partial<SkillManifest> = {}): SkillManifest {
+  return {
+    name: 'thinklocal-influxdb',
     version: '1.0.0',
-    description: 'Queries InfluxDB 1.x databases via HTTP API',
-    author_agent: 'spiffe://thinklocal/host/influxdb/agent/claude-code',
-    category: 'database',
-    runtime: 'node',
-    entrypoint: 'influxdb.ts',
-    permissions: ['network.read'],
-    dependencies: [],
-    input_schema: {
-      type: 'object',
-      required: ['query'],
-      properties: { query: { type: 'string' } },
-    },
-    output_schema: {
-      type: 'object',
-      properties: { results: { type: 'array' } },
-    },
-    tags: ['influxdb', 'database', 'monitoring'],
+    description: 'Query and write InfluxDB time-series data',
+    origin: 'spiffe://thinklocal/host/68f7cd8e330acfe3/agent/claude-code',
+    capabilities: ['influxdb.query', 'influxdb.write'],
+    format_version: MANIFEST_FORMAT_VERSION,
+    ...overrides,
   };
+}
 
-  it('akzeptiert gueltiges Manifest', () => {
-    const result = validateManifest(validManifest);
-    expect(result.valid).toBe(true);
-    expect(result.errors).toHaveLength(0);
+describe('Skill Manifest', () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'tlmcp-skills-'));
   });
 
-  it('lehnt fehlende Pflichtfelder ab', () => {
-    const result = validateManifest({ id: 'test' });
-    expect(result.valid).toBe(false);
-    expect(result.errors.length).toBeGreaterThan(0);
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
   });
 
-  it('lehnt ungueltige Skill-ID ab (Grossbuchstaben)', () => {
-    const result = validateManifest({ ...validManifest, id: 'MySkill' });
-    expect(result.valid).toBe(false);
+  describe('installSkill()', () => {
+    it('creates the skill directory with manifest.json', () => {
+      const skill = installSkill(makeManifest(), undefined, dir);
+      expect(existsSync(join(skill.dirPath, 'manifest.json'))).toBe(true);
+      expect(skill.manifest.name).toBe('thinklocal-influxdb');
+      expect(skill.hasPrompt).toBe(false);
+      expect(skill.manifestHash).toMatch(/^[a-f0-9]{64}$/);
+    });
+
+    it('creates SKILL.md when prompt content is provided', () => {
+      const skill = installSkill(makeManifest(), '# InfluxDB Skill\n\nQuery time-series data.', dir);
+      expect(skill.hasPrompt).toBe(true);
+      expect(existsSync(join(skill.dirPath, 'SKILL.md'))).toBe(true);
+    });
+
+    it('overwrites existing skill (idempotent)', () => {
+      installSkill(makeManifest({ version: '1.0.0' }), 'v1', dir);
+      const v2 = installSkill(makeManifest({ version: '2.0.0' }), 'v2', dir);
+      expect(v2.manifest.version).toBe('2.0.0');
+      const reread = readSkillManifest(v2.dirPath)!;
+      expect(reread.manifest.version).toBe('2.0.0');
+    });
   });
 
-  it('lehnt ungueltige Version ab', () => {
-    const result = validateManifest({ ...validManifest, version: 'latest' });
-    expect(result.valid).toBe(false);
+  describe('readSkillManifest()', () => {
+    it('reads a valid manifest', () => {
+      const skillDir = join(dir, 'skills', 'test-skill');
+      mkdirSync(skillDir, { recursive: true });
+      writeFileSync(
+        join(skillDir, 'manifest.json'),
+        JSON.stringify(makeManifest({ name: 'test-skill' })),
+      );
+      const skill = readSkillManifest(skillDir);
+      expect(skill).not.toBeNull();
+      expect(skill!.manifest.name).toBe('test-skill');
+      expect(skill!.manifest.capabilities).toEqual(['influxdb.query', 'influxdb.write']);
+    });
+
+    it('returns null for missing directory', () => {
+      expect(readSkillManifest('/nonexistent')).toBeNull();
+    });
+
+    it('returns null for invalid JSON', () => {
+      const skillDir = join(dir, 'skills', 'bad');
+      mkdirSync(skillDir, { recursive: true });
+      writeFileSync(join(skillDir, 'manifest.json'), 'not json');
+      expect(readSkillManifest(skillDir)).toBeNull();
+    });
+
+    it('returns null for manifest missing required fields', () => {
+      const skillDir = join(dir, 'skills', 'incomplete');
+      mkdirSync(skillDir, { recursive: true });
+      writeFileSync(join(skillDir, 'manifest.json'), '{"name":"x"}');
+      expect(readSkillManifest(skillDir)).toBeNull();
+    });
+
+    it('detects whether SKILL.md exists', () => {
+      const skillDir = join(dir, 'skills', 'with-prompt');
+      mkdirSync(skillDir, { recursive: true });
+      writeFileSync(
+        join(skillDir, 'manifest.json'),
+        JSON.stringify(makeManifest({ name: 'with-prompt' })),
+      );
+      expect(readSkillManifest(skillDir)!.hasPrompt).toBe(false);
+      writeFileSync(join(skillDir, 'SKILL.md'), '# Prompt');
+      expect(readSkillManifest(skillDir)!.hasPrompt).toBe(true);
+    });
   });
 
-  it('lehnt unbekannte Kategorie ab', () => {
-    const result = validateManifest({ ...validManifest, category: 'unknown' });
-    expect(result.valid).toBe(false);
+  describe('listInstalledSkills()', () => {
+    it('returns [] for empty/missing skills dir', () => {
+      expect(listInstalledSkills(dir)).toEqual([]);
+    });
+
+    it('lists all valid skills in the directory', () => {
+      installSkill(makeManifest({ name: 'skill-a' }), 'prompt-a', dir);
+      installSkill(makeManifest({ name: 'skill-b' }), undefined, dir);
+      mkdirSync(join(dir, 'skills', 'empty-dir'), { recursive: true });
+      const list = listInstalledSkills(dir);
+      expect(list).toHaveLength(2);
+      expect(list.map((s) => s.manifest.name).sort()).toEqual(['skill-a', 'skill-b']);
+    });
   });
 
-  it('lehnt unbekannte Runtime ab', () => {
-    const result = validateManifest({ ...validManifest, runtime: 'lua' });
-    expect(result.valid).toBe(false);
+  describe('computeManifestHash()', () => {
+    it('produces a stable hash', () => {
+      const m = makeManifest();
+      expect(computeManifestHash(m)).toBe(computeManifestHash(m));
+    });
+
+    it('differs when any field changes', () => {
+      const a = makeManifest();
+      const b = makeManifest({ version: '2.0.0' });
+      expect(computeManifestHash(a)).not.toBe(computeManifestHash(b));
+    });
+
+    it('ignores the signature field', () => {
+      const a = makeManifest();
+      const b = { ...makeManifest(), signature: 'some-sig' };
+      expect(computeManifestHash(a)).toBe(computeManifestHash(b));
+    });
   });
 
-  it('lehnt ungueltige Permissions ab', () => {
-    const result = validateManifest({ ...validManifest, permissions: ['admin.root'] });
-    expect(result.valid).toBe(false);
-  });
-
-  it('lehnt zu kurze Beschreibung ab', () => {
-    const result = validateManifest({ ...validManifest, description: 'short' });
-    expect(result.valid).toBe(false);
-  });
-
-  it('lehnt zusaetzliche Properties ab', () => {
-    const result = validateManifest({ ...validManifest, evil: 'data' });
-    expect(result.valid).toBe(false);
-  });
-
-  it('createExampleManifest erstellt gueltiges Manifest', () => {
-    const manifest = createExampleManifest(
-      'my-skill',
-      'spiffe://thinklocal/host/test/agent/claude-code',
-    );
-    const result = validateManifest(manifest);
-    expect(result.valid).toBe(true);
+  describe('forward compatibility', () => {
+    it('preserves unknown fields in manifest', () => {
+      const manifest = { ...makeManifest(), futureField: 'hello', anotherOne: 42 };
+      const skill = installSkill(manifest, undefined, dir);
+      const reread = readSkillManifest(skill.dirPath)!;
+      expect((reread.manifest as Record<string, unknown>).futureField).toBe('hello');
+      expect((reread.manifest as Record<string, unknown>).anotherOne).toBe(42);
+    });
   });
 });
