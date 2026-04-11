@@ -172,7 +172,7 @@ export function registerComplianceApi(
       return reply.code(403).send({ error: 'compliance endpoint is loopback-only' });
     }
 
-    const report = checkCompliance(repoRoot);
+    const report = await checkCompliance(repoRoot);
     log?.info(
       { branch: report.branch, issues: report.issues.length, compliant: report.compliant },
       'Compliance check completed',
