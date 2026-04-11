@@ -4,14 +4,45 @@
 
 > *"Think local, act together"* — Ein Mesh-Netzwerk, in dem AI-Agenten ihre Fähigkeiten entdecken, teilen und gemeinsam wachsen.
 
-## Status (2026-04-08)
+## Status (2026-04-11)
 
-**v0.31** läuft live als 4-Node-Mesh: macOS (MacMini, MacBook Pro) + Linux (influxdb, ai-n8n-local).
-Voller mTLS-Cross-Node-Handshake nach Bugfixes in PR #75 (TrustStore) + #77 (CA-Subject-Disambiguation).
-**Agent-to-Agent Messaging** (PR #79/#80) erlaubt AI-Agenten direkt über das Mesh zu reden,
-ohne menschlichen Vermittler — siehe `CHANGES.md` und `SECURITY.md` für Details.
+**v0.32** laeuft live als 3-Node-Mesh: macOS (MacMini, MacBook Pro) + Linux (ai-n8n-local).
+108+ PRs gemerged, 260+ Tests, CI gruen, Branch Protection aktiv.
 
-Siehe `COMPLIANCE-TABLE.md` für den vollständigen Review-Status aller PRs.
+### Was seit v0.31 dazukam (2026-04-09 bis 2026-04-11)
+
+**ADR-004 Cron-Heartbeat** (PR #86, #88): Agents checken ihre Inbox automatisch per
+adaptivem Polling (5-30s) + Agent-Registry REST-API (`/api/agent/register|heartbeat|unregister|instances`).
+
+**ADR-005 Per-Agent-Inbox** (PR #91): Mehrere Agent-Instances (Claude + Codex + Gemini)
+teilen sich einen Daemon und behalten eigene Inboxen. SPIFFE-URI 4-Komponenten-Routing
+(`/instance/<id>`). Schema-Migration v1→v2.
+
+**ADR-006 Session Persistence** (PR #89): Crash-Recovery in unter 30s.
+7 Module: atomic-write, session-events (SQLite WAL), claude-code-adapter,
+recovery-generator (deterministisches HISTORY.md), session-watcher, session-binding.
+
+**Post-Paperclip Roadmap** (PR #95-#103, ADR-007/008/009):
+- **Governance** (ADR-007): Activity-Log Entity-Model, Config-Revisions, Approval-Gates
+- **Dynamic Capabilities** (ADR-008): Neutrales Skill-Manifest, Claude-Code-Adapter,
+  4-State Capability Activation (discovered/active/suspended/revoked), WebSocket-Events
+- **Execution Semantics** (ADR-009): Execution-ID + 5-State Lifecycle, Goal-Context auf Sessions
+
+**Compliance Enforcement** (PR #105, #108): GitHub Branch Protection (enforce_admins=true,
+CI required, 1 Review required), CODEOWNERS fuer Security-Pfade, Pre-Commit Hook,
+Bot-Approve Workflow.
+
+Siehe `CHANGES.md` fuer Details, `COMPLIANCE-TABLE.md` fuer den Review-Status aller PRs.
+
+### Architekturprinzipien (aus Multi-Modell-Konsensus ADR-009)
+
+1. Keine privilegierte verteilte Aktion ohne explizite Ausfuehrungssemantik
+2. Recovery ist eine Primaerfunktion, kein Komfort-Feature
+3. Capabilities sind dynamisch, aber nie implizit
+4. Governance passiert lokal vor der Ausfuehrung
+5. Kryptografische Wahrheit zuerst, menschenlesbare Sichten danach
+6. Session-State muss Zweck transportieren, nicht nur Verlauf
+7. Keine zentrale SaaS-Semantik in den Mesh-Kern importieren
 
 ---
 

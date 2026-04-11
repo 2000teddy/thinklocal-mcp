@@ -8,6 +8,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-04-11
 
+### Dokumentations-Update (PR #109)
+
+- **README.md** aktualisiert auf v0.32 (Feature-Stand 2026-04-11, Architekturprinzipien)
+- **docs/API-REFERENCE.md** neu erstellt (alle REST-Endpoints des Daemon)
+- **SECURITY.md** erweitert (Reviews #86-#104, Compliance-Enforcement-Architektur)
+- **TODO.md** aufgeraeumt (ADR-005 + Compliance-Check abgehakt)
+- 4 Zombie-Worktrees entfernt (agitated-leavitt, angry-goldstine, lucid-sinoussi, recursing-newton — alle safe, 0 unmerged commits)
+
 ### Compliance Enforcement Infrastructure
 
 - **PR #105** CI repariert: vitest-Pfad gefixt (packages/daemon statt root),
