@@ -8,6 +8,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-04-11
 
+### Skill Discovery Wire-Send (PR #112)
+
+- **`packages/daemon/src/index.ts`**: peer:join Handler sendet jetzt einen
+  echten SKILL_ANNOUNCE Envelope via mTLS an den neuen Peer (gleicher Pattern
+  wie gossip.ts syncWithPeer). Vorher war nur ein lokales Event emittiert
+  worden. Jetzt fliessen die Skills tatsaechlich ueber das Netzwerk.
+
 ### Skill Discovery Wiring (PR #111)
 
 - **`packages/daemon/src/index.ts`**: SkillDiscovery + CapabilityActivationStore
