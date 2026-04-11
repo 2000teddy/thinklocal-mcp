@@ -8,6 +8,22 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-04-11
 
+### Phase D: Resource Governance (PR #115)
+
+- **`packages/daemon/src/session-checkout.ts`** (neu): Atomic Branch-Locking.
+  SQLite-backed, auto-expiry nach 2h, idempotent re-checkout, force-release.
+  Verhindert dass zwei Agents am selben Branch kollidieren. 13 Tests.
+- **`packages/daemon/src/budget-guard.ts`** (neu): Token/Cost Budget Guard.
+  Per-Agent Tracking (prompt + completion tokens), soft limit (80%) + hard limit.
+  SQLite-backed, auto-prune nach 7 Tagen. 11 Tests.
+- **`packages/daemon/src/config-rollback.ts`** (neu): Config Rollback.
+  Erweitert ConfigRevisions (PR #96) um Rollback-Faehigkeit. Stellt den
+  "before"-Snapshot einer Revision wieder her. 7 Tests.
+- **`packages/daemon/src/circuit-breaker.ts`** (neu): Circuit Breaker fuer
+  Skill-Execution. 3-State-Pattern (closed/open/half_open), configurable
+  failure threshold + reset timeout. In-Memory, pro Skill. 17 Tests.
+- Full Suite: 621/621 Tests, 63 Test-Files, 0 Regressionen.
+
 ### ADR-004 Phase 3+4: WebSocket-Push + Compliance-Check (PR #114)
 
 - **`packages/daemon/src/websocket.ts`**: Erweitert von simplem Broadcast zu

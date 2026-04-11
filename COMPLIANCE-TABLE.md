@@ -237,6 +237,7 @@ Tests wurden bisher als "selbstverstaendlicher Bestandteil von Code" behandelt u
 | 128 | unstaged  | ADR-015 OTS Update-Distribution (Proposed)                      | 04-11 21:07 | —  | —  | —  | —  | —  | ✅ | Doc-only: ADR-015 als Proposed notiert. Kein Code. |
 | 129 | —         | **4-Node Full-Mesh Skill Exchange Live-Test** ✅                | 04-11 23:00 | —  | —  | ✅ | —  | —  | ✅ | Live-Test: MacMini, influxdb, ai-n8n, MacBook Pro tauschen Skills bidirektional ueber mTLS. SKILL_ANNOUNCE in alle Richtungen. Claude Code skill files auf allen Nodes materialisiert. ioBroker-Moment komplett. |
 | 130 | tbd       | ADR-004 Phase 3+4: WebSocket-Push + Compliance-Check           | 04-11 23:15 | —  | —  | ✅ | ✅ | ✅ | ✅ | websocket.ts: Subscription-Filter + Agent-Loopback-Guard. compliance-check.ts: async Git-basierte Checks. inbox:new emittiert. 24 neue Tests, 518/518 gruen. CR Gemini Pro: 2 HIGH gefixt (async exec + WS guard). |
+| 131 | tbd       | Phase D: Resource Governance (4 Module)                         | 04-11 23:30 | —  | —  | ✅ | ✅ | —  | ✅ | session-checkout.ts (13 Tests), budget-guard.ts (11), config-rollback.ts (7), circuit-breaker.ts (17). 621/621 gruen, +103 neue Tests. |
 
 ---
 
