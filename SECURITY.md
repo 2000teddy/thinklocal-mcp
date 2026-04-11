@@ -255,6 +255,25 @@ Hinweis zum ersten Punkt: Im Standard-Installationspfad reduziert `127.0.0.1` di
 | 2026-04-05 | Gemini 2.5 Pro | Deploy Command | 0 HIGH, 2 LOW | Alle gefixt |
 | 2026-04-06 | GPT-5.4 | **Batch-Review v0.30.0 (41 Dateien)** | **18 HIGH, 27 MEDIUM, 13 LOW (58 total)** | **13 HIGH gefixt #94, alle MEDIUM/LOW dokumentiert** |
 | 2026-04-08 | GPT-5.4 | **PR #77 retroaktiv: CA Subject DN Collision Fix** | **1 HIGH, 3 MEDIUM, 2 LOW** | **HIGH + 2 MEDIUM gefixt #103, Rest dokumentiert** |
+| 2026-04-09 | Gemini 2.5 Pro | ADR-004 Phase 1 Cron-Heartbeat | 0 HIGH, 2 MEDIUM, 1 LOW | Alle gefixt PR #86 |
+| 2026-04-09 | Gemini 2.5 Pro | ADR-006 Phase 1 Session Persistence (7 Module) | 2 HIGH, 2 MEDIUM, 2 LOW | Alle gefixt PR #89 |
+| 2026-04-09 | Gemini 2.5 Pro | ADR-005 Per-Agent-Inbox (security focus) | 0 HIGH, 2 MEDIUM, 1 LOW | Alle gefixt PR #91 |
+| 2026-04-11 | Gemini 2.5 Pro | **Post-Paperclip Batch-Review (8 Module, retroaktiv)** | **2 CRITICAL, 1 HIGH, 2 MEDIUM, 1 LOW** | **Path-Traversal + TOCTOU gefixt PR #104** |
+
+### Compliance-Enforcement-Architektur (2026-04-11)
+
+Nach dem Vorfall vom 2026-04-10 (9 PRs ohne CR → 2 CRITICAL Security-Luecken)
+wurde ein 3-Schichten-Enforcement-System implementiert:
+
+1. **GitHub Branch Protection** (serverseitig, nicht umgehbar): Required Status
+   Check `CI`, 1 Approving Review, enforce_admins=true, no force push.
+2. **CODEOWNERS** fuer Security-Pfade: vault, tls, identity, audit, pairing,
+   messages, SECURITY.md, CI-Workflows → erfordern @2000teddy Human Review.
+3. **Pre-Commit Hook** (lokal): blockiert Commits wenn CHANGES.md oder
+   COMPLIANCE-TABLE.md nicht mit Code-Aenderungen staged sind.
+
+Siehe `docs/analysis/COMPLIANCE-ENFORCEMENT-BERATUNG-2026-04-11.md` fuer die
+vollstaendige Multi-Modell-Beratung (GPT-5.1 + Gemini-2.5-Pro).
 
 ### Kryptografische Primitiven
 

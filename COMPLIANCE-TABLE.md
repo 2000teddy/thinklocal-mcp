@@ -229,7 +229,8 @@ Tests wurden bisher als "selbstverstaendlicher Bestandteil von Code" behandelt u
 | 120 | #103      | ADR-009 C2: Goal-Context on Sessions           | 04-10 23:57 | —  | —  | ✅ | ⚠️ | ❌ | ❌ | 3+back-compat Tests. CR retroaktiv → **MEDIUM: decode() error suppression** (dokumentiert, nicht gefixt — deferred). PC uebersprungen. |
 | 121 | #104      | Compliance-Catchup: retroaktiver CR + Fixes + Doku | 04-11 00:30 | —  | —  | ✅ | ✅ | ✅ | ✅ | Retroaktiver Gemini-Pro Batch-CR. 2× CRITICAL + 1× HIGH gefixt. 3 ADR-Dokumente. Beratung. |
 | 122 | #105      | CI Fix: vitest path + compliance gate + wrap-up     | 04-11 13:19 | —  | —  | —  | —  | —  | ✅ | CI-only-Aenderung (keine Code-Files). Erste gruene CI seit PR #80. Branch Protection aktiviert. |
-| 123 | #108      | Workflow-Hardening: CODEOWNERS + Pre-Commit Hook + Bot-Approve | 04-11 15:51 | —  | —  | —  | —  | —  | ✅ | **Dieser PR.** CODEOWNERS fuer Security-Pfade (@2000teddy Human Review), Pre-Commit Hook (CHANGES + COMPLIANCE Check), Bot-Approve Helper (scripts/bot-approve.sh). Branch Protection: require_code_owner_reviews=true. |
+| 123 | #108      | Workflow-Hardening: CODEOWNERS + Pre-Commit Hook + Bot-Approve | 04-11 15:51 | —  | —  | —  | —  | —  | ✅ | CODEOWNERS + Pre-Commit Hook + Bot-Approve. |
+| 124 | #109      | Docs-Update: README + API-REFERENCE + SECURITY + TODO           | 04-11 16:34 | —  | —  | —  | —  | —  | ✅ | **Dieser PR.** README.md v0.32, docs/API-REFERENCE.md (neu), SECURITY.md (Reviews + Enforcement-Architektur), TODO.md (Phase A-C abgehakt). Worktree-Cleanup (4 Zombies entfernt, 0 unmerged). |
 
 ---
 
