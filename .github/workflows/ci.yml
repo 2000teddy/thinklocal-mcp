@@ -28,7 +28,11 @@ jobs:
         working-directory: packages/daemon
         run: npx tsc --noEmit
 
+      # Run vitest from packages/daemon where it's installed.
+      # Previously ran from root which caused "Cannot find package vitest"
+      # on GitHub Runner (pre-existing bug since PR #80, fixed 2026-04-11).
       - name: Run tests
+        working-directory: packages/daemon
         run: npx vitest run
         env:
           NODE_ENV: test
@@ -57,3 +61,74 @@ jobs:
       - name: Production build
         working-directory: packages/dashboard-ui
         run: npx vite build
+
+  compliance:
+    name: Compliance Gate
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check CHANGES.md updated
+        run: |
+          # Get list of changed files in this PR
+          CHANGED=$(git diff --name-only origin/main...HEAD)
+          echo "Changed files:"
+          echo "$CHANGED"
+
+          # If any .ts files changed, CHANGES.md must be updated too
+          if echo "$CHANGED" | grep -qE '\.ts$'; then
+            if ! echo "$CHANGED" | grep -q 'CHANGES.md'; then
+              echo "::error::Code files changed but CHANGES.md was not updated."
+              echo "Please add a changelog entry for your changes."
+              exit 1
+            fi
+          fi
+          echo "CHANGES.md check passed."
+
+      - name: Check COMPLIANCE-TABLE.md updated
+        run: |
+          CHANGED=$(git diff --name-only origin/main...HEAD)
+          if echo "$CHANGED" | grep -qE 'packages/daemon/src/.*\.ts$'; then
+            if ! echo "$CHANGED" | grep -q 'COMPLIANCE-TABLE.md'; then
+              echo "::error::Daemon code changed but COMPLIANCE-TABLE.md was not updated."
+              echo "Please add a compliance row for your PR."
+              exit 1
+            fi
+          fi
+          echo "COMPLIANCE-TABLE.md check passed."
+
+  # Final gate job that Branch Protection requires.
+  # All upstream jobs must pass for this to run.
+  CI:
+    name: CI
+    runs-on: ubuntu-latest
+    needs: [daemon, dashboard, compliance]
+    if: always()
+    steps:
+      - name: Check upstream results
+        run: |
+          echo "Daemon: ${{ needs.daemon.result }}"
+          echo "Dashboard: ${{ needs.dashboard.result }}"
+          echo "Compliance: ${{ needs.compliance.result }}"
+
+          # Daemon and Dashboard must succeed
+          if [ "${{ needs.daemon.result }}" != "success" ]; then
+            echo "::error::Daemon job failed"
+            exit 1
+          fi
+          if [ "${{ needs.dashboard.result }}" != "success" ]; then
+            echo "::error::Dashboard job failed"
+            exit 1
+          fi
+
+          # Compliance is only required for PRs (skipped on push to main)
+          if [ "${{ needs.compliance.result }}" != "success" ] && [ "${{ needs.compliance.result }}" != "skipped" ]; then
+            echo "::error::Compliance gate failed"
+            exit 1
+          fi
+
+          echo "All checks passed!"
