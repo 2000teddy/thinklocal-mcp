@@ -8,6 +8,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-04-11
 
+### Skill Discovery — Der ioBroker-Moment (PR #110)
+
+- **`packages/daemon/src/skill-discovery.ts`** (neu): Automatisiert den Flow
+  Peer-Announcement → Neutrales Manifest installieren → Capability auto-activate
+  → Claude-Code-Adapter triggern. Brücke zwischen dem alten SkillManager (Phase 3)
+  und dem neuen agent-neutralen Format (PR #98). Trust-Model dokumentiert:
+  Auto-Activate fuer gepaarte Peers, Approval-Gate fuer untrusted.
+- 13 Tests (inkl. Path-Traversal-Regression + Re-Announcement-Idempotenz).
+- CR Gemini Pro: 0 CRITICAL, 1x HIGH (Counter-Fix) + 2x MEDIUM (Path-Test,
+  Trust-Model-Doku) + 1x LOW (Prompt bei Re-Announcement) — alle gefixt.
+
 ### Dokumentations-Update (PR #109)
 
 - **README.md** aktualisiert auf v0.32 (Feature-Stand 2026-04-11, Architekturprinzipien)
