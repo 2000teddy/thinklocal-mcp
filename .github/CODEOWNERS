@@ -1,0 +1,29 @@
+# CODEOWNERS — Require human review for security-critical paths.
+#
+# GitHub uses this file to auto-assign reviewers. Combined with
+# Branch Protection "Require review from Code Owners", changes to
+# these paths MUST be approved by @2000teddy (human) — the bot
+# account cannot approve them.
+#
+# See: docs/analysis/COMPLIANCE-ENFORCEMENT-BERATUNG-2026-04-11.md
+# Level 3 (High-Risk) paths.
+
+# --- Security-critical modules ---
+packages/daemon/src/vault.ts              @2000teddy
+packages/daemon/src/vault-passphrase.ts   @2000teddy
+packages/daemon/src/tls.ts                @2000teddy
+packages/daemon/src/identity.ts           @2000teddy
+packages/daemon/src/trust-store.ts        @2000teddy
+packages/daemon/src/pairing.ts            @2000teddy
+packages/daemon/src/pairing-handler.ts    @2000teddy
+packages/daemon/src/approvals.ts          @2000teddy
+
+# --- Crypto and signing ---
+packages/daemon/src/messages.ts           @2000teddy
+packages/daemon/src/audit.ts              @2000teddy
+
+# --- Infrastructure that affects all agents ---
+.github/workflows/                        @2000teddy
+.github/CODEOWNERS                        @2000teddy
+SECURITY.md                               @2000teddy
+scripts/ssh-bootstrap-trust.sh            @2000teddy

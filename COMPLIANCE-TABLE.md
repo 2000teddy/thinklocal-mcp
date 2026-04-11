@@ -227,7 +227,9 @@ Tests wurden bisher als "selbstverstaendlicher Bestandteil von Code" behandelt u
 | 118 | #101      | ADR-008 B4: WebSocket Event Types              | 04-10 23:54 | —  | —  | ✅ | ⚠️ | ❌ | ❌ | 4 Tests. CR retroaktiv. Keine Findings fuer events.ts. PC uebersprungen. |
 | 119 | #102      | ADR-009 C1: Execution Lifecycle State           | 04-10 23:56 | —  | —  | ✅ | ⚠️ | ❌ | ❌ | 13 Tests. CR retroaktiv → **HIGH: TOCTOU Race in transition()** (gefixt PR #104, atomarer WHERE-Guard). PC uebersprungen. |
 | 120 | #103      | ADR-009 C2: Goal-Context on Sessions           | 04-10 23:57 | —  | —  | ✅ | ⚠️ | ❌ | ❌ | 3+back-compat Tests. CR retroaktiv → **MEDIUM: decode() error suppression** (dokumentiert, nicht gefixt — deferred). PC uebersprungen. |
-| 121 | #104      | Compliance-Catchup: retroaktiver CR + Fixes + Doku | 04-11 00:30 | —  | —  | ✅ | ✅ | ✅ | ✅ | **Dieser PR.** Retroaktiver Gemini-Pro Batch-CR ueber 8 Module: 2× CRITICAL + 1× HIGH + 2× MEDIUM + 1× LOW. Alle CRITICALs/HIGHs gefixt mit 5 Regression-Tests. Doku nachgeholt: COMPLIANCE-TABLE, CHANGES, ADR-007/008/009 formell, TODO, USER-GUIDE, SECURITY. Multi-Modell-Beratung zu "Wie Regelverstoesse verhindern" inkludiert. |
+| 121 | #104      | Compliance-Catchup: retroaktiver CR + Fixes + Doku | 04-11 00:30 | —  | —  | ✅ | ✅ | ✅ | ✅ | Retroaktiver Gemini-Pro Batch-CR. 2× CRITICAL + 1× HIGH gefixt. 3 ADR-Dokumente. Beratung. |
+| 122 | #105      | CI Fix: vitest path + compliance gate + wrap-up     | 04-11 13:19 | —  | —  | —  | —  | —  | ✅ | CI-only-Aenderung (keine Code-Files). Erste gruene CI seit PR #80. Branch Protection aktiviert. |
+| 123 | #108      | Workflow-Hardening: CODEOWNERS + Pre-Commit Hook + Bot-Approve | 04-11 15:51 | —  | —  | —  | —  | —  | ✅ | **Dieser PR.** CODEOWNERS fuer Security-Pfade (@2000teddy Human Review), Pre-Commit Hook (CHANGES + COMPLIANCE Check), Bot-Approve Helper (scripts/bot-approve.sh). Branch Protection: require_code_owner_reviews=true. |
 
 ---
 

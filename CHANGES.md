@@ -6,7 +6,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-04-10/11
+## [Unreleased] — 2026-04-11
+
+### Compliance Enforcement Infrastructure
+
+- **PR #105** CI repariert: vitest-Pfad gefixt (packages/daemon statt root),
+  Compliance-Gate-Job (prueft CHANGES.md + COMPLIANCE-TABLE.md), CI wrap-up
+  Job als Required Status Check fuer Branch Protection.
+- **PR #108** Workflow-Hardening: CODEOWNERS fuer Security-Pfade (vault, tls,
+  identity, audit, pairing → @2000teddy Human Review), Pre-Commit Hook
+  (scripts/install-hooks.sh), Bot-Approve Helper (scripts/bot-approve.sh).
+- GitHub Branch Protection aktiviert: enforce_admins=true, Required Check CI,
+  Required Review 1, CODEOWNERS Review required, no force push.
+
+---
 
 ### Post-Paperclip Roadmap (ADR-007/008/009) — 9 PRs in 3 Phasen
 
