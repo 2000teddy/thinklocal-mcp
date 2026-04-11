@@ -1,4 +1,4 @@
-import { resolve } from 'node:path';
+import { resolve, join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { Agent as UndiciAgent, fetch } from 'undici';
 import { loadConfig } from './config.js';
@@ -26,6 +26,7 @@ import { registerPairingRoutes } from './pairing-handler.js';
 import { TrustStoreNotifier } from './trust-store.js';
 import { MeshEventBus } from './events.js';
 import { registerWebSocket } from './websocket.js';
+import { registerComplianceApi } from './compliance-check.js';
 import { CredentialVault } from './vault.js';
 import { loadOrCreateVaultPassphrase } from './vault-passphrase.js';
 import { isLoopbackHost } from './runtime-mode.js';
@@ -356,6 +357,13 @@ async function main(): Promise<void> {
                   message_id: msg.message_id,
                   subject: msg.subject ?? null,
                 });
+                // ADR-004 Phase 3: Push-Notification an WebSocket-Clients
+                eventBus.emit('inbox:new', {
+                  from: envelope.sender,
+                  message_id: msg.message_id,
+                  subject: msg.subject ?? null,
+                  to: identity.spiffeUri,
+                });
               }
             }
           }
@@ -408,6 +416,7 @@ async function main(): Promise<void> {
     tlsDispatcher,
     rateLimiter,
     log,
+    eventBus,
     onSent: (messageId, to) => {
       audit.append('AGENT_MESSAGE_TX', to, messageId);
       eventBus.emit('audit:new', {
@@ -544,6 +553,12 @@ async function main(): Promise<void> {
 
   // 8d. WebSocket fuer Echtzeit-Events
   await registerWebSocket(cardServer.getServer(), eventBus, log);
+
+  // 8d2. ADR-004 Phase 4: Compliance-Check API (loopback-only)
+  // Agents poll this endpoint periodically to check if they have open
+  // compliance issues (uncommitted changes, missing docs, etc.)
+  const repoRoot = process.env['TLMCP_REPO_ROOT'] ?? join(config.daemon.data_dir, '..', '..');
+  registerComplianceApi(cardServer.getServer(), repoRoot, log);
 
   // 8e. Dashboard-API-Routen registrieren
   registerDashboardApi(cardServer.getServer(), {

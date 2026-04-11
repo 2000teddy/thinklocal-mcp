@@ -8,6 +8,25 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-04-11
 
+### ADR-004 Phase 3+4: WebSocket-Push + Compliance-Check (PR #114)
+
+- **`packages/daemon/src/websocket.ts`**: Erweitert von simplem Broadcast zu
+  Subscription-basiertem Filtering. Clients koennen per Query-String oder
+  JSON-Message fuer bestimmte Event-Typen und Agent-IDs subscriben.
+  Agent-Filter sind loopback-only (CR Gemini Pro: Snooping-Schutz).
+- **`packages/daemon/src/compliance-check.ts`** (neu): Async Compliance-Check
+  Endpunkt `GET /api/compliance/status`. Prueft: dirty working tree,
+  CHANGES.md, COMPLIANCE-TABLE.md, unpushed commits, TODO.md open items.
+  Loopback-only. CR-Fix: execSync → async exec (Event-Loop-Blocking).
+- **`packages/daemon/src/index.ts`**: `inbox:new` Event emittiert bei
+  AGENT_MESSAGE Delivery (remote + loopback). eventBus an InboxApiDeps.
+  registerComplianceApi verdrahtet.
+- **`packages/daemon/src/inbox-api.ts`**: eventBus optional in InboxApiDeps,
+  `inbox:new` bei loopback-Zustellung emittiert.
+- 24 neue Tests (16 WebSocket + 8 Compliance). Full Suite 518/518 gruen.
+- CR Gemini Pro: 0 CRITICAL, 0 HIGH (2 gefixt → async exec + WS loopback),
+  1 MEDIUM (Event-Type-Validation → WONTFIX v1), 1 LOW (Rate-Limiting).
+
 ### ADR-015: Mesh-basierte Update-Distribution (Proposed)
 
 - **`docs/architecture/ADR-015-mesh-update-distribution.md`** (neu): Design-Dokument

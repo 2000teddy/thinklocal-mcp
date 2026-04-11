@@ -31,6 +31,7 @@ import type { MeshManager } from './mesh.js';
 import type { RateLimiter } from './ratelimit.js';
 import type { Logger } from 'pino';
 import { normalizeAgentId, SpiffeUriError, SPIFFE_COMPONENT_REGEX } from './spiffe-uri.js';
+import type { MeshEventBus } from './events.js';
 
 export interface InboxApiDeps {
   inbox: AgentInbox;
@@ -41,6 +42,8 @@ export interface InboxApiDeps {
   tlsDispatcher?: UndiciAgent;
   rateLimiter?: RateLimiter;
   log?: Logger;
+  /** ADR-004 Phase 3: EventBus fuer inbox:new Push-Notifications */
+  eventBus?: MeshEventBus;
   /**
    * Audit-Hook (optional). Wird mit dem outbound message_id aufgerufen,
    * damit AGENT_MESSAGE_TX in das audit-log laeuft.
@@ -105,7 +108,7 @@ function validateInstanceParam(
 }
 
 export function registerInboxApi(server: FastifyInstance, deps: InboxApiDeps): void {
-  const { inbox, mesh, ownAgentId, ownPrivateKeyPem, tlsDispatcher, rateLimiter, log, onSent } = deps;
+  const { inbox, mesh, ownAgentId, ownPrivateKeyPem, tlsDispatcher, rateLimiter, log, eventBus, onSent } = deps;
 
   /**
    * Rate-Limiting Gate. Nutzt den vorhandenen RateLimiter aus dem Daemon
@@ -197,6 +200,15 @@ export function registerInboxApi(server: FastifyInstance, deps: InboxApiDeps): v
         'AGENT_MESSAGE loopback (sibling-agent on same daemon)',
       );
       onSent?.(messageId, body.to);
+      // ADR-004 Phase 3: Push-Notification fuer loopback-Zustellung
+      if (result.status === 'delivered') {
+        eventBus?.emit('inbox:new', {
+          from: ownAgentId,
+          message_id: messageId,
+          subject: body.subject ?? null,
+          to: body.to,
+        });
+      }
       return {
         status: 'sent',
         delivery: 'loopback',

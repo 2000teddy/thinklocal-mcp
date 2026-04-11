@@ -1,6 +1,6 @@
 # ADR-004: Cron-Heartbeat fuer Agent-Inbox-Polling
 
-**Status:** Accepted, Phase 1 + Phase 2 Implemented (2026-04-09)
+**Status:** Accepted, Phase 1–4 Implemented (Phase 1+2: 2026-04-09, Phase 3+4: 2026-04-11)
 **Datum:** 2026-04-08
 **Autor:** Claude Code (basierend auf Christians Kernanalyse)
 **Verwandt:** ADR-005 (Per-Agent-Inbox), PR #79 (Messaging), PR #80 (Loopback)
