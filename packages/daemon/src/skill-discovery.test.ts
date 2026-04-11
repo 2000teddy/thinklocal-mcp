@@ -109,14 +109,17 @@ describe('SkillDiscovery', () => {
       expect(activation.listActive()).toHaveLength(2); // 2 capabilities, not 4
     });
 
-    // Gemini-Pro CR MEDIUM: explicit path traversal regression test
+    // Gemini-Pro CR MEDIUM: explicit path traversal regression test.
+    // installSkill throws on malicious names → handlePeerAnnouncement
+    // propagates the error and the skill is NOT installed.
     it('rejects malicious skill names via installSkill sanitization', () => {
       const malicious = makeAnnouncement({ name: '../../etc/passwd', capabilities: ['evil.do'] });
-      // installSkill throws on path traversal — handlePeerAnnouncement should
-      // not crash but also should not install.
-      expect(() => discovery.handlePeerAnnouncement(PEER_ID, [malicious])).toThrow();
-      const badPath = join(dataDir, '..', '..', 'etc', 'passwd');
-      expect(existsSync(badPath)).toBe(false);
+      expect(() => discovery.handlePeerAnnouncement(PEER_ID, [malicious])).toThrow(/path traversal/i);
+      // The skill should NOT be installed under the safe skills dir
+      const safePath = join(dataDir, 'skills', 'passwd', 'manifest.json');
+      expect(existsSync(safePath)).toBe(false);
+      // No capabilities should be activated
+      expect(activation.isActive('evil.do', PEER_ID)).toBe(false);
     });
 
     // Gemini-Pro CR HIGH: counter should only count genuinely new skills
