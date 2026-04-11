@@ -231,7 +231,8 @@ Tests wurden bisher als "selbstverstaendlicher Bestandteil von Code" behandelt u
 | 122 | #105      | CI Fix: vitest path + compliance gate + wrap-up     | 04-11 13:19 | —  | —  | —  | —  | —  | ✅ | CI-only-Aenderung (keine Code-Files). Erste gruene CI seit PR #80. Branch Protection aktiviert. |
 | 123 | #108      | Workflow-Hardening: CODEOWNERS + Pre-Commit Hook + Bot-Approve | 04-11 15:51 | —  | —  | —  | —  | —  | ✅ | CODEOWNERS + Pre-Commit Hook + Bot-Approve. |
 | 124 | #109      | Docs-Update: README + API-REFERENCE + SECURITY + TODO           | 04-11 16:34 | —  | —  | —  | —  | —  | ✅ | README v0.32, API-REFERENCE (neu), SECURITY (Reviews + Enforcement), TODO (Phase A-C). |
-| 125 | #110      | Skill Discovery — ioBroker-Moment                               | 04-11 16:50 | —  | —  | ✅ | ✅ | —  | ✅ | **Dieser PR.** `skill-discovery.ts`: Peer-Announcement → Manifest install → Capability auto-activate → Claude-Adapter. 13 Tests. CR Gemini Pro: 0 CRITICAL, 1× HIGH (Counter) + 2× MEDIUM (Path-Test, Trust-Model) + 1× LOW (Prompt-Hop) alle gefixt. |
+| 125 | #110      | Skill Discovery — ioBroker-Moment                               | 04-11 16:50 | —  | —  | ✅ | ✅ | —  | ✅ | `skill-discovery.ts`. 13 Tests. CR 0 CRITICAL, 1× HIGH + 2× MEDIUM + 1× LOW alle gefixt. |
+| 126 | #111      | Skill Discovery Wiring in Daemon                                | 04-11 18:22 | —  | —  | ✅ | —  | —  | ✅ | **Dieser PR.** Wiring in index.ts: SkillDiscovery + CapabilityActivation instanziiert, peer:join → announce, SKILL_ANNOUNCE → handlePeerAnnouncement, shutdown cleanup. 46 related Tests gruen. |
 
 ---
 
