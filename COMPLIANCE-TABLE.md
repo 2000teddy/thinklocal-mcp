@@ -230,7 +230,8 @@ Tests wurden bisher als "selbstverstaendlicher Bestandteil von Code" behandelt u
 | 121 | #104      | Compliance-Catchup: retroaktiver CR + Fixes + Doku | 04-11 00:30 | —  | —  | ✅ | ✅ | ✅ | ✅ | Retroaktiver Gemini-Pro Batch-CR. 2× CRITICAL + 1× HIGH gefixt. 3 ADR-Dokumente. Beratung. |
 | 122 | #105      | CI Fix: vitest path + compliance gate + wrap-up     | 04-11 13:19 | —  | —  | —  | —  | —  | ✅ | CI-only-Aenderung (keine Code-Files). Erste gruene CI seit PR #80. Branch Protection aktiviert. |
 | 123 | #108      | Workflow-Hardening: CODEOWNERS + Pre-Commit Hook + Bot-Approve | 04-11 15:51 | —  | —  | —  | —  | —  | ✅ | CODEOWNERS + Pre-Commit Hook + Bot-Approve. |
-| 124 | #109      | Docs-Update: README + API-REFERENCE + SECURITY + TODO           | 04-11 16:34 | —  | —  | —  | —  | —  | ✅ | **Dieser PR.** README.md v0.32, docs/API-REFERENCE.md (neu), SECURITY.md (Reviews + Enforcement-Architektur), TODO.md (Phase A-C abgehakt). Worktree-Cleanup (4 Zombies entfernt, 0 unmerged). |
+| 124 | #109      | Docs-Update: README + API-REFERENCE + SECURITY + TODO           | 04-11 16:34 | —  | —  | —  | —  | —  | ✅ | README v0.32, API-REFERENCE (neu), SECURITY (Reviews + Enforcement), TODO (Phase A-C). |
+| 125 | #110      | Skill Discovery — ioBroker-Moment                               | 04-11 16:50 | —  | —  | ✅ | ✅ | —  | ✅ | **Dieser PR.** `skill-discovery.ts`: Peer-Announcement → Manifest install → Capability auto-activate → Claude-Adapter. 13 Tests. CR Gemini Pro: 0 CRITICAL, 1× HIGH (Counter) + 2× MEDIUM (Path-Test, Trust-Model) + 1× LOW (Prompt-Hop) alle gefixt. |
 
 ---
 
