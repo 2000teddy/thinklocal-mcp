@@ -206,7 +206,38 @@ Tests wurden bisher als "selbstverstaendlicher Bestandteil von Code" behandelt u
 | #   | GitHub PR | Beschreibung                                  | Datum       | CO | CG | TS | CR | PC | DO | Findings                                |
 |-----|-----------|-----------------------------------------------|-------------|----|----|----|----|----|----|-----------------------------------------|
 | 106 | #84       | Cron-Heartbeat + Per-Agent Inbox (Design-only) + TS-Spalte retro | 04-08 21:30 | ✅ | —  | —  | —  | —  | ✅ | ADR-004 + ADR-005 + COMPLIANCE neue DO+TS-Spalten + CLAUDE.md Rules. CO-Konsensus GPT-5.4 (8/10) + Gemini Pro (9/10). CG/TS/CR/PC nicht anwendbar fuer Doc-only PR. |
-| 107 | #85       | ADR-006 Agent Session Persistence & Crash Recovery (Design-only) | 04-08 22:55 | ✅ | —  | —  | —  | —  | ✅ | **Dieser PR** — ADR-006 Design-Doku, TODO.md 4.4.2, CHANGES.md 0.32.0. CO-Konsensus GPT-5.4 (8/10) + Gemini 2.5 Pro (8/10), einstimmig auf allen 5 Design-Fragen. CG/TS/CR/PC nicht anwendbar fuer Doc-only PR. |
+| 107 | tbd       | ADR-004 Phase 1 Cron-Heartbeat (Code + Tests + Docs)             | 04-09 14:10 | —  | ✅ | ✅ | ✅ | ✅ | ✅ | **Dieser PR.** CO entfaellt (Konsensus liegt aus PR #106 vor). CG via `clink gemini` (Test-Skizzen). TS: 20/20 neue Tests gruen, 0 Regressionen. CR via `pal:codereview` (Gemini Pro): 0 HIGH/CRITICAL, 2× MEDIUM + 1× LOW alle gefixt + Regression-Tests. PC via `pal:precommit`. DO: USER-GUIDE Sec 8a, ADR-004 Status-Update, CHANGES.md, TODO.md, agents/{inbox,compliance}-heartbeat.md. |
+| 108 | #87       | Socket-Pool-Fix fuer MCP-Stdio (Bug-Fix aus PR #86 Live-Test)    | 04-09 17:46 | —  | —  | ✅ | ✅ | ✅ | ✅ | Root-Cause aus PR #86 Live-Test: pro Call neuer HttpsAgent ohne keepAlive → Socket-Pool-Exhaustion → `socket hang up`. Globaler Agent-Cache + mtime-Fingerprint + graceful shutdown handlers + 128+signal Exit-Codes. 5 neue Regression-Tests. CR (0 HIGH/CRITICAL, 1× MEDIUM + 3× LOW gefixt). PC (1× CRITICAL via `pal:challenge` als False-Positive bestaetigt, 1× HIGH Exit-Code gefixt). |
+| 109 | #88       | ADR-004 Phase 2 — Agent Registry REST API                        | 04-09 18:14 | —  | —  | ✅ | ✅ | ✅ | ✅ | `agent-registry.ts` + `agent-api.ts` + 4 Audit-Types + Wire-up. 34/34 Tests gruen. CR 0 HIGH, 1× MEDIUM + 2× LOW gefixt mit Regression-Tests. PC 1× MEDIUM unregister-race gefixt. |
+| 110 | #89       | ADR-006 Phase 1 — Agent Session Persistence & Crash Recovery MVP | 04-09 18:51 | —  | —  | ✅ | ✅ | ✅ | ✅ | Supersedes #85. 7 Module + E2E Integration-Test, 53/53 Tests. CR 0 CRITICAL, 2× HIGH + 2× MEDIUM + 2× LOW alle gefixt. PC 1× MEDIUM State-Mutation entfernt. |
+| 111 | #91       | ADR-005 Per-Agent-Inbox Phase 1 (SPIFFE 4-Komponenten + Schema-Migration) | 04-09 21:30 | —  | —  | ✅ | ✅ | ✅ | ✅ | `spiffe-uri.ts` (27 Tests) + `agent-inbox.ts` Schema-Migration v1→v2 + `inbox-api.ts` Loopback-Fix. CR Gemini Pro: 0 HIGH/CRITICAL, 2× MEDIUM + 1× LOW alle gefixt. PC Gemini Pro: 1× HIGH mid-fix gefixt. |
+
+## Post-Paperclip Roadmap (2026-04-10) — ADR-007/008/009
+
+> **ACHTUNG:** PRs #95-#103 wurden im Nachtschicht-Schnellmodus ohne volle Compliance-Pipeline gemerged. CR wurde RETROAKTIV am 2026-04-11 nachgeholt (Gemini Pro Batch-Review ueber alle 8 Module). Dabei wurden **2× CRITICAL (Path-Traversal), 1× HIGH (TOCTOU Race), 2× MEDIUM** gefunden und sofort gefixt (PR #104 Compliance-Catchup).
+
+| #   | GitHub PR | Beschreibung                                  | Datum       | CO | CG | TS | CR | PC | DO | Findings                                |
+|-----|-----------|-----------------------------------------------|-------------|----|----|----|----|----|----|-----------------------------------------|
+| 112 | #95       | ADR-007 A1: Activity-Log Entity-Model          | 04-10 23:42 | —  | —  | ✅ | ✅ | ❌ | ⚠️ | 12 Tests gruen. CR bei Einreichung durchgelaufen (Gemini Pro: 1× CRITICAL peer-sync + 3× MEDIUM + 1× LOW, alle gefixt). PC uebersprungen. DO nur CHANGES-Eintrag im Commit-Body. |
+| 113 | #96       | ADR-007 A2: Config-Revisions                   | 04-10 23:44 | —  | —  | ✅ | ⚠️ | ❌ | ❌ | 10 Tests gruen. CR **retroaktiv** am 04-11 (Batch). Keine Findings fuer dieses Modul. PC uebersprungen. DO nachgeholt in PR #104. |
+| 114 | #97       | ADR-007 A3: Approval Gates                     | 04-10 23:45 | —  | —  | ✅ | ⚠️ | ❌ | ❌ | 15 Tests gruen. CR retroaktiv. Keine Findings. PC uebersprungen. DO nachgeholt. |
+| 115 | #98       | ADR-008 B1: Neutral Skill Manifest             | 04-10 23:48 | —  | —  | ✅ | ⚠️ | ❌ | ❌ | 14 Tests. CR retroaktiv → **CRITICAL: Path-Traversal via manifest.name** (gefixt PR #104 + 5 Regression-Tests). PC uebersprungen. |
+| 116 | #99       | ADR-008 B2: Claude Code Skill Adapter          | 04-10 23:51 | —  | —  | ✅ | ⚠️ | ❌ | ❌ | 7 Tests. CR retroaktiv → **CRITICAL: Path-Traversal via skill name** (gefixt PR #104). PC uebersprungen. |
+| 117 | #100      | ADR-008 B3: Capability Activation State        | 04-10 23:53 | ✅ | —  | ✅ | ⚠️ | ❌ | ❌ | 14 Tests. CO durch Multi-Modell-Konsensus (4-State-Entscheidung). CR retroaktiv → **MEDIUM: metadata_json merge** (gefixt PR #104). PC uebersprungen. |
+| 118 | #101      | ADR-008 B4: WebSocket Event Types              | 04-10 23:54 | —  | —  | ✅ | ⚠️ | ❌ | ❌ | 4 Tests. CR retroaktiv. Keine Findings fuer events.ts. PC uebersprungen. |
+| 119 | #102      | ADR-009 C1: Execution Lifecycle State           | 04-10 23:56 | —  | —  | ✅ | ⚠️ | ❌ | ❌ | 13 Tests. CR retroaktiv → **HIGH: TOCTOU Race in transition()** (gefixt PR #104, atomarer WHERE-Guard). PC uebersprungen. |
+| 120 | #103      | ADR-009 C2: Goal-Context on Sessions           | 04-10 23:57 | —  | —  | ✅ | ⚠️ | ❌ | ❌ | 3+back-compat Tests. CR retroaktiv → **MEDIUM: decode() error suppression** (dokumentiert, nicht gefixt — deferred). PC uebersprungen. |
+| 121 | #104      | Compliance-Catchup: retroaktiver CR + Fixes + Doku | 04-11 00:30 | —  | —  | ✅ | ✅ | ✅ | ✅ | Retroaktiver Gemini-Pro Batch-CR. 2× CRITICAL + 1× HIGH gefixt. 3 ADR-Dokumente. Beratung. |
+| 122 | #105      | CI Fix: vitest path + compliance gate + wrap-up     | 04-11 13:19 | —  | —  | —  | —  | —  | ✅ | CI-only-Aenderung (keine Code-Files). Erste gruene CI seit PR #80. Branch Protection aktiviert. |
+| 123 | #108      | Workflow-Hardening: CODEOWNERS + Pre-Commit Hook + Bot-Approve | 04-11 15:51 | —  | —  | —  | —  | —  | ✅ | CODEOWNERS + Pre-Commit Hook + Bot-Approve. |
+| 124 | #109      | Docs-Update: README + API-REFERENCE + SECURITY + TODO           | 04-11 16:34 | —  | —  | —  | —  | —  | ✅ | README v0.32, API-REFERENCE (neu), SECURITY (Reviews + Enforcement), TODO (Phase A-C). |
+| 125 | #110      | Skill Discovery — ioBroker-Moment                               | 04-11 16:50 | —  | —  | ✅ | ✅ | —  | ✅ | `skill-discovery.ts`. 13 Tests. CR 0 CRITICAL, 1× HIGH + 2× MEDIUM + 1× LOW alle gefixt. |
+| 126 | #111      | Skill Discovery Wiring in Daemon                                | 04-11 18:22 | —  | —  | ✅ | —  | —  | ✅ | Wiring: SkillDiscovery + CapabilityActivation instanziiert, peer:join → announce, SKILL_ANNOUNCE → handlePeerAnnouncement. |
+| 127 | #112      | Skill Discovery Wire-Send (mTLS)                                | 04-11 20:00 | —  | —  | ✅ | —  | —  | ✅ | **Dieser PR.** peer:join sendet echten SKILL_ANNOUNCE Envelope via mTLS an den Peer (nicht nur lokales Event). Same Pattern wie gossip.ts. |
+| 128 | unstaged  | ADR-015 OTS Update-Distribution (Proposed)                      | 04-11 21:07 | —  | —  | —  | —  | —  | ✅ | Doc-only: ADR-015 als Proposed notiert. Kein Code. |
+| 129 | —         | **4-Node Full-Mesh Skill Exchange Live-Test** ✅                | 04-11 23:00 | —  | —  | ✅ | —  | —  | ✅ | Live-Test: MacMini, influxdb, ai-n8n, MacBook Pro tauschen Skills bidirektional ueber mTLS. SKILL_ANNOUNCE in alle Richtungen. Claude Code skill files auf allen Nodes materialisiert. ioBroker-Moment komplett. |
+| 130 | tbd       | ADR-004 Phase 3+4: WebSocket-Push + Compliance-Check           | 04-11 23:15 | —  | —  | ✅ | ✅ | ✅ | ✅ | websocket.ts: Subscription-Filter + Agent-Loopback-Guard. compliance-check.ts: async Git-basierte Checks. inbox:new emittiert. 24 neue Tests, 518/518 gruen. CR Gemini Pro: 2 HIGH gefixt (async exec + WS guard). |
+| 131 | tbd       | Phase D: Resource Governance (4 Module)                         | 04-11 23:30 | —  | —  | ✅ | ✅ | —  | ✅ | session-checkout.ts (13 Tests), budget-guard.ts (11), config-rollback.ts (7), circuit-breaker.ts (17). 621/621 gruen, +103 neue Tests. |
 
 ---
 
@@ -328,4 +359,4 @@ Shell-Injection die in Produktion ein Sicherheitsrisiko waere.
 
 ---
 
-*Letzte Aktualisierung: 2026-04-08 14:50 — Batch-Review Fixes PR #105 (GitHub #83): 3 retroaktive GPT-5.4 Reviews + sofortige Fixes fuer 1 CRITICAL, 4 HIGH, 9 MEDIUM, 6 LOW*
+*Letzte Aktualisierung: 2026-04-11 23:07 — 4-Node Full-Mesh Skill Exchange Live-Test bestanden. ADR-015 OTS proposed. PRs #110-#112 Skill Discovery komplett.*
