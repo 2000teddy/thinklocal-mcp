@@ -234,6 +234,8 @@ Tests wurden bisher als "selbstverstaendlicher Bestandteil von Code" behandelt u
 | 125 | #110      | Skill Discovery — ioBroker-Moment                               | 04-11 16:50 | —  | —  | ✅ | ✅ | —  | ✅ | `skill-discovery.ts`. 13 Tests. CR 0 CRITICAL, 1× HIGH + 2× MEDIUM + 1× LOW alle gefixt. |
 | 126 | #111      | Skill Discovery Wiring in Daemon                                | 04-11 18:22 | —  | —  | ✅ | —  | —  | ✅ | Wiring: SkillDiscovery + CapabilityActivation instanziiert, peer:join → announce, SKILL_ANNOUNCE → handlePeerAnnouncement. |
 | 127 | #112      | Skill Discovery Wire-Send (mTLS)                                | 04-11 20:00 | —  | —  | ✅ | —  | —  | ✅ | **Dieser PR.** peer:join sendet echten SKILL_ANNOUNCE Envelope via mTLS an den Peer (nicht nur lokales Event). Same Pattern wie gossip.ts. |
+| 128 | unstaged  | ADR-015 OTS Update-Distribution (Proposed)                      | 04-11 21:07 | —  | —  | —  | —  | —  | ✅ | Doc-only: ADR-015 als Proposed notiert. Kein Code. |
+| 129 | —         | **4-Node Full-Mesh Skill Exchange Live-Test** ✅                | 04-11 23:00 | —  | —  | ✅ | —  | —  | ✅ | Live-Test: MacMini, influxdb, ai-n8n, MacBook Pro tauschen Skills bidirektional ueber mTLS. SKILL_ANNOUNCE in alle Richtungen. Claude Code skill files auf allen Nodes materialisiert. ioBroker-Moment komplett. |
 
 ---
 
@@ -355,4 +357,4 @@ Shell-Injection die in Produktion ein Sicherheitsrisiko waere.
 
 ---
 
-*Letzte Aktualisierung: 2026-04-08 14:50 — Batch-Review Fixes PR #105 (GitHub #83): 3 retroaktive GPT-5.4 Reviews + sofortige Fixes fuer 1 CRITICAL, 4 HIGH, 9 MEDIUM, 6 LOW*
+*Letzte Aktualisierung: 2026-04-11 23:07 — 4-Node Full-Mesh Skill Exchange Live-Test bestanden. ADR-015 OTS proposed. PRs #110-#112 Skill Discovery komplett.*

@@ -8,6 +8,22 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-04-11
 
+### ADR-015: Mesh-basierte Update-Distribution (Proposed)
+
+- **`docs/architecture/ADR-015-mesh-update-distribution.md`** (neu): Design-Dokument
+  fuer Over-The-SPIFFE (OTS) Update-Distribution. Idee: ein Node mit neuerer
+  Daemon-Version kann Updates signiert via mTLS an andere Peers verteilen.
+  Status: Proposed, Prioritaet: Deferred.
+
+### 4-Node Full-Mesh Skill Exchange — Live-Test bestanden ✅
+
+- **MacMini** (10.10.10.94), **influxdb** (10.10.10.56), **ai-n8n** (10.10.10.222),
+  **MacBook Pro** (10.10.25.103) — alle 4 Nodes tauschen Skills bidirektional
+  ueber mTLS aus. SKILL_ANNOUNCE Envelopes fliessen in alle Richtungen.
+  Claude Code Skill-Files (`~/.claude/skills/*.md`) auf allen Nodes materialisiert.
+  Der "ioBroker-Moment" ist Realitaet: Peers entdecken sich, announzen Skills,
+  und Agenten wissen automatisch was sie koennen.
+
 ### Skill Discovery Wire-Send (PR #112)
 
 - **`packages/daemon/src/index.ts`**: peer:join Handler sendet jetzt einen
