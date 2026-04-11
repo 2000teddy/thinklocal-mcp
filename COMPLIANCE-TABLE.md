@@ -232,7 +232,8 @@ Tests wurden bisher als "selbstverstaendlicher Bestandteil von Code" behandelt u
 | 123 | #108      | Workflow-Hardening: CODEOWNERS + Pre-Commit Hook + Bot-Approve | 04-11 15:51 | —  | —  | —  | —  | —  | ✅ | CODEOWNERS + Pre-Commit Hook + Bot-Approve. |
 | 124 | #109      | Docs-Update: README + API-REFERENCE + SECURITY + TODO           | 04-11 16:34 | —  | —  | —  | —  | —  | ✅ | README v0.32, API-REFERENCE (neu), SECURITY (Reviews + Enforcement), TODO (Phase A-C). |
 | 125 | #110      | Skill Discovery — ioBroker-Moment                               | 04-11 16:50 | —  | —  | ✅ | ✅ | —  | ✅ | `skill-discovery.ts`. 13 Tests. CR 0 CRITICAL, 1× HIGH + 2× MEDIUM + 1× LOW alle gefixt. |
-| 126 | #111      | Skill Discovery Wiring in Daemon                                | 04-11 18:22 | —  | —  | ✅ | —  | —  | ✅ | **Dieser PR.** Wiring in index.ts: SkillDiscovery + CapabilityActivation instanziiert, peer:join → announce, SKILL_ANNOUNCE → handlePeerAnnouncement, shutdown cleanup. 46 related Tests gruen. |
+| 126 | #111      | Skill Discovery Wiring in Daemon                                | 04-11 18:22 | —  | —  | ✅ | —  | —  | ✅ | Wiring: SkillDiscovery + CapabilityActivation instanziiert, peer:join → announce, SKILL_ANNOUNCE → handlePeerAnnouncement. |
+| 127 | #112      | Skill Discovery Wire-Send (mTLS)                                | 04-11 20:00 | —  | —  | ✅ | —  | —  | ✅ | **Dieser PR.** peer:join sendet echten SKILL_ANNOUNCE Envelope via mTLS an den Peer (nicht nur lokales Event). Same Pattern wie gossip.ts. |
 
 ---
 

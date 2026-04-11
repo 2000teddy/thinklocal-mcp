@@ -12,7 +12,7 @@ import { MeshManager, type MeshPeer } from './mesh.js';
 import { CapabilityRegistry } from './registry.js';
 import { GossipSync } from './gossip.js';
 import { RateLimiter } from './ratelimit.js';
-import { MessageType, encodeAndSign, createEnvelope, type MessageEnvelope } from './messages.js';
+import { MessageType, encodeAndSign, createEnvelope, serializeSignedMessage, type MessageEnvelope } from './messages.js';
 import { TaskManager } from './tasks.js';
 import { SkillManager, type SkillAnnouncePayload } from './skills.js';
 import { registerDashboardApi } from './dashboard-api.js';
@@ -450,21 +450,92 @@ async function main(): Promise<void> {
 
   // Announce local skills to every new peer that joins.
   // This is the "push" side of the ioBroker-Moment: when a peer appears,
-  // we tell it what we can do so its agents immediately know.
+  // we send a signed SKILL_ANNOUNCE message via mTLS so its daemon
+  // can install the skills and trigger the Claude Code adapter.
   eventBus.on('peer:join', (event) => {
     const peerAgentId = event.data.agentId as string | undefined;
     if (!peerAgentId) return;
     const localSkills = skillDiscovery.getLocalAnnouncements();
-    if (localSkills.length > 0) {
-      log.info(
-        { peer: peerAgentId, skillCount: localSkills.length },
-        '[skill-discovery] announcing local skills to new peer',
-      );
-      eventBus.emit('skill:announced', {
-        peer: peerAgentId,
-        skills: localSkills.map((s) => s.name),
-      });
+    if (localSkills.length === 0) return;
+
+    log.info(
+      { peer: peerAgentId, skillCount: localSkills.length },
+      '[skill-discovery] announcing local skills to new peer via wire',
+    );
+
+    // Build the Phase-3 SkillAnnouncePayload for wire compat
+    // Build a wire-compatible SKILL_ANNOUNCE payload. We prefer existing
+    // Phase-3 manifests from the SkillManager (type-safe), falling back to
+    // a minimal shape for skills that only exist in the neutral format.
+    // The receiving daemon's SKILL_ANNOUNCE handler accepts both shapes.
+    const wireSkills = localSkills.map((s) => {
+      const existing = skillManager.getSkill(s.name.replace('thinklocal-', ''));
+      if (existing) return existing;
+      return {
+        id: s.name,
+        version: s.version,
+        description: s.description,
+        author: identity.spiffeUri,
+        integrity: '',
+        runtime: 'node',
+        entrypoint: '',
+        dependencies: [],
+        tools: s.capabilities,
+        resources: [],
+        permissions: [],
+        requirements: {},
+        category: 'mesh-discovered',
+        createdAt: new Date().toISOString(),
+      };
+    });
+    const wirePayload = { skills: wireSkills };
+
+    // Send via mTLS to the peer (same pattern as gossip.ts)
+    const peer = mesh.getPeer(peerAgentId);
+    if (!peer?.endpoint) {
+      log.debug({ peerAgentId }, '[skill-discovery] peer has no endpoint yet, skipping wire send');
+      return;
     }
+
+    const envelope = createEnvelope(
+      MessageType.SKILL_ANNOUNCE,
+      identity.spiffeUri,
+      wirePayload as unknown as Record<string, unknown>,
+      { ttl_ms: 60_000 },
+    );
+    const signed = encodeAndSign(envelope, identity.privateKeyPem);
+    const body = serializeSignedMessage(signed);
+
+    fetch(`${peer.endpoint}/message`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/cbor' },
+      body: Buffer.from(body),
+      signal: AbortSignal.timeout(10_000),
+      dispatcher: tlsDispatcher,
+    })
+      .then((res) => {
+        if (res.ok) {
+          log.info(
+            { peer: peerAgentId, skills: localSkills.map((s) => s.name) },
+            '[skill-discovery] SKILL_ANNOUNCE sent successfully',
+          );
+          eventBus.emit('skill:announced', {
+            peer: peerAgentId,
+            skills: localSkills.map((s) => s.name),
+          });
+        } else {
+          log.warn(
+            { peer: peerAgentId, status: res.status },
+            '[skill-discovery] SKILL_ANNOUNCE send failed',
+          );
+        }
+      })
+      .catch((err) => {
+        log.warn(
+          { peer: peerAgentId, err: err instanceof Error ? err.message : String(err) },
+          '[skill-discovery] SKILL_ANNOUNCE send error (non-fatal)',
+        );
+      });
   });
 
   // Log discovery summary at startup
