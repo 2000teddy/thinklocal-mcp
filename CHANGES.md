@@ -8,6 +8,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-04-11
 
+### Skill Discovery Wiring (PR #111)
+
+- **`packages/daemon/src/index.ts`**: SkillDiscovery + CapabilityActivationStore
+  im Daemon-Lifecycle verdrahtet. peer:join Event → announced lokale Skills.
+  SKILL_ANNOUNCE Handler → leitet an SkillDiscovery.handlePeerAnnouncement()
+  weiter (zusaetzlich zum alten SkillManager). capActivation.close() im
+  graceful shutdown. Discovery-Summary beim Startup geloggt.
+
 ### Skill Discovery — Der ioBroker-Moment (PR #110)
 
 - **`packages/daemon/src/skill-discovery.ts`** (neu): Automatisiert den Flow

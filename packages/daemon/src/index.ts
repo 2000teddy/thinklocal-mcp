@@ -19,6 +19,8 @@ import { registerDashboardApi } from './dashboard-api.js';
 import { registerInboxApi } from './inbox-api.js';
 import { AgentRegistry } from './agent-registry.js';
 import { registerAgentApi } from './agent-api.js';
+import { SkillDiscovery, type AnnouncedSkill } from './skill-discovery.js';
+import { CapabilityActivationStore } from './capability-activation.js';
 import { PairingStore } from './pairing.js';
 import { registerPairingRoutes } from './pairing-handler.js';
 import { TrustStoreNotifier } from './trust-store.js';
@@ -255,8 +257,23 @@ async function main(): Promise<void> {
         }
         case MessageType.SKILL_ANNOUNCE: {
           const announcePayload = envelope.payload as SkillAnnouncePayload;
+          // Phase 3 SkillManager: registers in CRDT capability registry
           skillManager.handleAnnounce(envelope.sender, announcePayload);
-          return null; // Kein Response nötig
+          // Post-Paperclip SkillDiscovery (PR #110): installs neutral manifests,
+          // auto-activates capabilities, triggers Claude Code adapter.
+          try {
+            const announced: AnnouncedSkill[] = announcePayload.skills.map((s) => ({
+              name: s.id,
+              version: s.version,
+              description: s.description,
+              origin: envelope.sender,
+              capabilities: [s.id], // Phase 3 skills use id as capability
+            }));
+            skillDiscovery.handlePeerAnnouncement(envelope.sender, announced);
+          } catch (err) {
+            log.warn({ from: envelope.sender, err }, '[skill-discovery] announcement handling failed (non-fatal)');
+          }
+          return null;
         }
         case MessageType.SECRET_REQUEST: {
           const secretReq = envelope.payload as SecretRequestPayload;
@@ -419,6 +436,41 @@ async function main(): Promise<void> {
     log,
   });
 
+  // 8c4. Skill Discovery + Capability Activation (ioBroker-Moment, PR #110)
+  // Auto-discovers skills from peers, installs as neutral manifests,
+  // activates capabilities, triggers Claude Code adapter.
+  const capActivation = new CapabilityActivationStore(config.daemon.data_dir, log);
+  const skillDiscovery = new SkillDiscovery({
+    dataDir: config.daemon.data_dir,
+    ownAgentId: identity.spiffeUri,
+    activation: capActivation,
+    eventBus,
+    log,
+  });
+
+  // Announce local skills to every new peer that joins.
+  // This is the "push" side of the ioBroker-Moment: when a peer appears,
+  // we tell it what we can do so its agents immediately know.
+  eventBus.on('peer:join', (event) => {
+    const peerAgentId = event.data.agentId as string | undefined;
+    if (!peerAgentId) return;
+    const localSkills = skillDiscovery.getLocalAnnouncements();
+    if (localSkills.length > 0) {
+      log.info(
+        { peer: peerAgentId, skillCount: localSkills.length },
+        '[skill-discovery] announcing local skills to new peer',
+      );
+      eventBus.emit('skill:announced', {
+        peer: peerAgentId,
+        skills: localSkills.map((s) => s.name),
+      });
+    }
+  });
+
+  // Log discovery summary at startup
+  const summary = skillDiscovery.getDiscoverySummary();
+  log.info({ summary }, '[skill-discovery] startup summary');
+
   // 8d. WebSocket fuer Echtzeit-Events
   await registerWebSocket(cardServer.getServer(), eventBus, log);
 
@@ -574,6 +626,7 @@ async function main(): Promise<void> {
     mesh.stopHeartbeatLoop();
     taskManager.stop();
     agentRegistry.stop();
+    capActivation.close();
     vault.close();
     agentInbox.close();
     rateLimiter.stop();
