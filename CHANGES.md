@@ -8,7 +8,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-04-13
 
-### Nachtschicht Inbox-Fixes (PR tbd)
+### Nachtschicht Inbox-Fixes (PR #122)
 
 - **`packages/daemon/src/index.ts`**: AgentRegistry Initialisierung VOR
   registerInboxApi() verschoben. Broadcast-Pattern (`to=…/instance/*`) war
