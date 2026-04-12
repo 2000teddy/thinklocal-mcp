@@ -16,13 +16,21 @@ import { registerInboxApi } from './inbox-api.js';
 const OWN_ID = 'spiffe://thinklocal/host/deadbeefcafe0001/agent/claude-code';
 const OWN_INSTANCE_ALPHA = `${OWN_ID}/instance/alpha`;
 const OWN_INSTANCE_BETA = `${OWN_ID}/instance/beta`;
+const REMOTE_PEER_ID = 'spiffe://thinklocal/host/aabbccddee001122/agent/gemini-cli';
 
-async function buildServer() {
+interface BuildOpts {
+  /** Stub PairingStore — defaults to undefined (no ACL enforcement) */
+  pairingStore?: Parameters<typeof registerInboxApi>[1]['pairingStore'];
+  /** Stub mesh.getPeer — defaults to returning undefined */
+  getPeer?: (id: string) => unknown;
+}
+
+async function buildServer(opts: BuildOpts = {}) {
   const tmp = mkdtempSync(join(tmpdir(), 'tlmcp-inbox-api-'));
   const inbox = new AgentInbox(tmp);
   // Minimal MeshManager stub — only the properties the API actually reads.
   const mesh = {
-    getPeer: () => undefined,
+    getPeer: opts.getPeer ?? (() => undefined),
   } as unknown as Parameters<typeof registerInboxApi>[1]['mesh'];
   const server: FastifyInstance = Fastify({ logger: false });
   registerInboxApi(server, {
@@ -31,6 +39,7 @@ async function buildServer() {
     ownAgentId: OWN_ID,
     ownPublicKeyPem: '-----dummy-----',
     ownPrivateKeyPem: '-----dummy-----',
+    pairingStore: opts.pairingStore,
   });
   await server.ready();
   return {
@@ -188,6 +197,68 @@ describe('inbox-api — ADR-005 per-agent-instance routing', () => {
         remoteAddress: '127.0.0.1',
       });
       expect(res.statusCode).toBe(400);
+    });
+  });
+
+  describe('POST /api/inbox/send — per-peer ACL (pairingStore)', () => {
+    let aclCtx: Awaited<ReturnType<typeof buildServer>>;
+
+    afterEach(async () => {
+      await aclCtx?.cleanup();
+    });
+
+    it('blocks outbound send to a discovered-but-unpaired peer with 403', async () => {
+      const pairingStub = {
+        isPaired: (_id: string) => false,
+      } as unknown as Parameters<typeof registerInboxApi>[1]['pairingStore'];
+      aclCtx = await buildServer({
+        pairingStore: pairingStub,
+        getPeer: (id: string) =>
+          id === REMOTE_PEER_ID ? { agentId: REMOTE_PEER_ID, endpoint: 'https://10.10.10.99:9440' } : undefined,
+      });
+      const res = await aclCtx.server.inject({
+        method: 'POST',
+        url: '/api/inbox/send',
+        payload: { to: REMOTE_PEER_ID, body: 'should be blocked' },
+        remoteAddress: '127.0.0.1',
+      });
+      expect(res.statusCode).toBe(403);
+      expect(res.json()).toMatchObject({ error: 'peer not paired' });
+    });
+
+    it('allows outbound send when peer is paired (reaches sign step)', async () => {
+      const pairingStub = {
+        isPaired: (id: string) => id === REMOTE_PEER_ID,
+      } as unknown as Parameters<typeof registerInboxApi>[1]['pairingStore'];
+      aclCtx = await buildServer({
+        pairingStore: pairingStub,
+        getPeer: (id: string) =>
+          id === REMOTE_PEER_ID ? { agentId: REMOTE_PEER_ID, endpoint: 'https://10.10.10.99:9440' } : undefined,
+      });
+      const res = await aclCtx.server.inject({
+        method: 'POST',
+        url: '/api/inbox/send',
+        payload: { to: REMOTE_PEER_ID, body: 'should pass ACL' },
+        remoteAddress: '127.0.0.1',
+      });
+      // Will fail at sign step (dummy key) — 500 (internal) or 502 (fetch fail).
+      // The important thing: it passed the 403 ACL gate.
+      expect(res.statusCode).not.toBe(403);
+    });
+
+    it('skips ACL check when no pairingStore is provided (backwards compat)', async () => {
+      aclCtx = await buildServer({
+        getPeer: (id: string) =>
+          id === REMOTE_PEER_ID ? { agentId: REMOTE_PEER_ID, endpoint: 'https://10.10.10.99:9440' } : undefined,
+      });
+      const res = await aclCtx.server.inject({
+        method: 'POST',
+        url: '/api/inbox/send',
+        payload: { to: REMOTE_PEER_ID, body: 'no ACL' },
+        remoteAddress: '127.0.0.1',
+      });
+      // Without pairingStore, ACL is not enforced, reaches sign step → 500/502
+      expect(res.statusCode).not.toBe(403);
     });
   });
 });
