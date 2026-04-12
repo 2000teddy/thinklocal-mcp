@@ -407,31 +407,9 @@ async function main(): Promise<void> {
     trustStoreNotifier,
   });
 
-  // 8c2. Agent-to-Agent Messaging API
-  registerInboxApi(cardServer.getServer(), {
-    inbox: agentInbox,
-    mesh,
-    ownAgentId: identity.spiffeUri,
-    ownPublicKeyPem: identity.publicKeyPem,
-    ownPrivateKeyPem: identity.privateKeyPem,
-    tlsDispatcher,
-    rateLimiter,
-    log,
-    eventBus,
-    onSent: (messageId, to) => {
-      audit.append('AGENT_MESSAGE_TX', to, messageId);
-      eventBus.emit('audit:new', {
-        type: 'AGENT_MESSAGE_TX',
-        to,
-        message_id: messageId,
-      });
-    },
-  });
-
-  // 8c3. Agent Registry REST API (ADR-004 Phase 2)
-  // Loopback-only endpoints for each local agent-instance (Claude Code,
-  // Codex, Gemini CLI, …) to register itself + send heartbeats. Stale
-  // entries are auto-evicted after 3 * heartbeat interval.
+  // 8c2. Agent Registry (ADR-004 Phase 2)
+  // MUST be created BEFORE registerInboxApi so the broadcast fanout
+  // (POST /api/inbox/send with to=…/instance/*) can enumerate instances.
   const agentRegistry = new AgentRegistry({
     heartbeatIntervalMs: 5_000,
     staleFactor: 3,
@@ -444,6 +422,29 @@ async function main(): Promise<void> {
     daemonSpiffeUri: identity.spiffeUri,
     inboxSchemaVersion: 1,
     log,
+  });
+
+  // 8c3. Agent-to-Agent Messaging API
+  registerInboxApi(cardServer.getServer(), {
+    inbox: agentInbox,
+    mesh,
+    ownAgentId: identity.spiffeUri,
+    ownPublicKeyPem: identity.publicKeyPem,
+    ownPrivateKeyPem: identity.privateKeyPem,
+    tlsDispatcher,
+    rateLimiter,
+    log,
+    eventBus,
+    agentRegistry,
+    pairingStore,
+    onSent: (messageId, to) => {
+      audit.append('AGENT_MESSAGE_TX', to, messageId);
+      eventBus.emit('audit:new', {
+        type: 'AGENT_MESSAGE_TX',
+        to,
+        message_id: messageId,
+      });
+    },
   });
 
   // 8c4. Skill Discovery + Capability Activation (ioBroker-Moment, PR #110)

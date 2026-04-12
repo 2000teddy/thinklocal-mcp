@@ -36,6 +36,7 @@ import type { Logger } from 'pino';
 import { normalizeAgentId, SpiffeUriError, SPIFFE_COMPONENT_REGEX } from './spiffe-uri.js';
 import type { MeshEventBus } from './events.js';
 import type { AgentRegistry } from './agent-registry.js';
+import type { PairingStore } from './pairing.js';
 
 export interface InboxApiDeps {
   inbox: AgentInbox;
@@ -50,6 +51,8 @@ export interface InboxApiDeps {
   eventBus?: MeshEventBus;
   /** Broadcast-Pattern: Agent-Registry fuer instance/* fanout */
   agentRegistry?: AgentRegistry;
+  /** Per-peer ACL: only paired peers may receive outbound messages */
+  pairingStore?: PairingStore;
   /**
    * Audit-Hook (optional). Wird mit dem outbound message_id aufgerufen,
    * damit AGENT_MESSAGE_TX in das audit-log laeuft.
@@ -114,7 +117,7 @@ function validateInstanceParam(
 }
 
 export function registerInboxApi(server: FastifyInstance, deps: InboxApiDeps): void {
-  const { inbox, mesh, ownAgentId, ownPrivateKeyPem, tlsDispatcher, rateLimiter, log, eventBus, agentRegistry, onSent } = deps;
+  const { inbox, mesh, ownAgentId, ownPrivateKeyPem, tlsDispatcher, rateLimiter, log, eventBus, agentRegistry, pairingStore, onSent } = deps;
 
   /**
    * Rate-Limiting Gate. Nutzt den vorhandenen RateLimiter aus dem Daemon
@@ -251,6 +254,19 @@ export function registerInboxApi(server: FastifyInstance, deps: InboxApiDeps): v
         error: 'peer not found in mesh',
         target: body.to,
         hint: 'Use discover_peers to see known agents',
+      });
+    }
+
+    // SECURITY: Per-peer ACL — only send messages to paired peers.
+    // The incoming path (onMessage in index.ts) already checks isPaired(),
+    // but the outbound path must also gate on pairing status to prevent a
+    // local MCP client from sending messages to discovered-but-unpaired nodes.
+    if (pairingStore && !pairingStore.isPaired(normalizedTo)) {
+      log?.warn({ to: body.to, normalizedTo }, 'outbound AGENT_MESSAGE blocked: peer not paired');
+      return reply.code(403).send({
+        error: 'peer not paired',
+        target: body.to,
+        hint: 'Use start_pairing to establish trust with this peer first',
       });
     }
 

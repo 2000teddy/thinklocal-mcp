@@ -6,7 +6,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-04-11
+## [Unreleased] — 2026-04-13
+
+### Nachtschicht Inbox-Fixes (PR tbd)
+
+- **`packages/daemon/src/index.ts`**: AgentRegistry Initialisierung VOR
+  registerInboxApi() verschoben. Broadcast-Pattern (`to=…/instance/*`) war
+  ohne agentRegistry Dependency nicht funktional.
+- **`packages/daemon/src/inbox-api.ts`**: Neues `pairingStore` Dependency-Feld
+  in InboxApiDeps. Outbound Remote-Path prueft jetzt `pairingStore.isPaired()`
+  vor dem Senden — unpaired Peers bekommen 403 (SECURITY: verhindert dass
+  lokale MCP-Clients Messages an entdeckte-aber-ungepairte Nodes schicken).
+- 3 neue Tests in `inbox-api-adr005.test.ts`: ACL blocked (403), ACL passed,
+  backwards-compat ohne pairingStore. Full Suite 577/577 gruen.
 
 ### TLS Hot-Reload + Graceful Unregister (PR #116)
 
