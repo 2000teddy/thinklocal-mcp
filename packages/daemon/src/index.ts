@@ -404,6 +404,7 @@ async function main(): Promise<void> {
     caCertPem: tlsBundle?.caCertPem ?? '',
     fingerprint: identity.fingerprint,
     log,
+    trustStoreNotifier,
   });
 
   // 8c2. Agent-to-Agent Messaging API
@@ -574,6 +575,23 @@ async function main(): Promise<void> {
   });
 
   await cardServer.start();
+
+  // Hot-Reload TrustStore: nach einem erfolgreichen Pairing wird der
+  // TLS-Context des Servers UND des Undici-Dispatchers aktualisiert,
+  // ohne dass der Daemon neu gestartet werden muss.
+  if (trustStoreNotifier) {
+    trustStoreNotifier.onChange((newBundle) => {
+      // 1. Server-side: neue Peer-CAs fuer eingehende mTLS-Verbindungen
+      cardServer.reloadTlsContext(newBundle);
+
+      // 2. Client-side: neuer Undici-Dispatcher fuer ausgehende Verbindungen
+      // Undici Agent kann nicht in-place aktualisiert werden, aber der
+      // getCachedHttpsAgent() in local-daemon-client.ts nutzt mtime-basierte
+      // Invalidierung — nach einem Pairing aendert sich die trust-bundle-Datei
+      // und der naechste Request erstellt automatisch einen neuen Agent.
+      log.info({ caCount: newBundle.length }, 'TrustStore hot-reload: neue Peer-CAs aktiv');
+    });
+  }
 
   const proto = cardServer.protocol;
 
