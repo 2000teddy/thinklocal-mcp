@@ -24,7 +24,10 @@ import {
   createEnvelope,
   encodeAndSign,
   serializeSignedMessage,
+  deserializeSignedMessage,
+  decodeAndVerify,
   type AgentMessagePayload,
+  type AgentMessageAckPayload,
 } from './messages.js';
 import type { AgentInbox } from './agent-inbox.js';
 import type { MeshManager } from './mesh.js';
@@ -32,6 +35,7 @@ import type { RateLimiter } from './ratelimit.js';
 import type { Logger } from 'pino';
 import { normalizeAgentId, SpiffeUriError, SPIFFE_COMPONENT_REGEX } from './spiffe-uri.js';
 import type { MeshEventBus } from './events.js';
+import type { AgentRegistry } from './agent-registry.js';
 
 export interface InboxApiDeps {
   inbox: AgentInbox;
@@ -44,6 +48,8 @@ export interface InboxApiDeps {
   log?: Logger;
   /** ADR-004 Phase 3: EventBus fuer inbox:new Push-Notifications */
   eventBus?: MeshEventBus;
+  /** Broadcast-Pattern: Agent-Registry fuer instance/* fanout */
+  agentRegistry?: AgentRegistry;
   /**
    * Audit-Hook (optional). Wird mit dem outbound message_id aufgerufen,
    * damit AGENT_MESSAGE_TX in das audit-log laeuft.
@@ -108,7 +114,7 @@ function validateInstanceParam(
 }
 
 export function registerInboxApi(server: FastifyInstance, deps: InboxApiDeps): void {
-  const { inbox, mesh, ownAgentId, ownPrivateKeyPem, tlsDispatcher, rateLimiter, log, eventBus, onSent } = deps;
+  const { inbox, mesh, ownAgentId, ownPrivateKeyPem, tlsDispatcher, rateLimiter, log, eventBus, agentRegistry, onSent } = deps;
 
   /**
    * Rate-Limiting Gate. Nutzt den vorhandenen RateLimiter aus dem Daemon
@@ -175,6 +181,30 @@ export function registerInboxApi(server: FastifyInstance, deps: InboxApiDeps): v
       in_reply_to: body.in_reply_to,
       sent_at: new Date().toISOString(),
     };
+
+    // ---- BROADCAST PATH ----
+    if (body.to.endsWith('/instance/*') && agentRegistry) {
+      const instances = agentRegistry.list();
+      const results: Array<{ instance_id: string; status: string }> = [];
+      for (const inst of instances) {
+        const targetPayload: AgentMessagePayload = {
+          ...payload,
+          message_id: randomUUID(),
+          to: `${normalizedTo}/instance/${inst.instanceId}`,
+        };
+        inbox.store(ownAgentId, targetPayload);
+        results.push({ instance_id: inst.instanceId, status: 'delivered' });
+      }
+      log?.info(
+        { to: body.to, fanout: results.length, subject: body.subject ?? null },
+        'AGENT_MESSAGE broadcast to all instances',
+      );
+      eventBus?.emit('inbox:new', {
+        from: ownAgentId, message_id: messageId, subject: body.subject ?? null,
+        to: body.to, broadcast: true, fanout: results.length,
+      });
+      return { status: 'sent', delivery: 'broadcast', message_id: messageId, sent_at: payload.sent_at, fanout: results };
+    }
 
     // ---- LOOPBACK PATH ----
     // Multiple agents (Claude Code, Codex, Gemini CLI, ...) can share one
@@ -255,21 +285,29 @@ export function registerInboxApi(server: FastifyInstance, deps: InboxApiDeps): v
         });
       }
 
-      // ACK kommt als CBOR-Envelope zurueck, aber wir werten hier nur HTTP 2xx aus.
-      // Volle Signaturpruefung des ACK ist Phase 2 (braucht Peer-PublicKey-Lookup).
-      log?.info(
-        { to: body.to, message_id: messageId, subject: body.subject ?? null },
-        'AGENT_MESSAGE gesendet',
-      );
+      // ACK-Signaturpruefung: Peer-PublicKey aus AgentCard + Envelope decode.
+      let ackVerified = false;
+      let ackStatus: string | undefined;
+      try {
+        const ackBody = new Uint8Array(await res.arrayBuffer());
+        const peerInfo = mesh.getPeer(normalizedTo);
+        const peerPublicKey = peerInfo?.agentCard?.publicKey;
+        if (peerPublicKey && ackBody.length > 0) {
+          const signed = deserializeSignedMessage(ackBody);
+          const ackEnvelope = decodeAndVerify(signed, peerPublicKey);
+          if (!ackEnvelope) throw new Error('ACK signature verification failed');
+          const ackPayload = ackEnvelope.payload as AgentMessageAckPayload;
+          ackVerified = true;
+          ackStatus = ackPayload.status;
+          log?.info({ to: body.to, message_id: messageId, ack_status: ackPayload.status, ack_verified: true }, 'AGENT_MESSAGE gesendet + ACK verifiziert');
+        } else {
+          log?.info({ to: body.to, message_id: messageId }, 'AGENT_MESSAGE gesendet (ACK nicht verifiziert)');
+        }
+      } catch (ackErr) {
+        log?.warn({ to: body.to, message_id: messageId, err: ackErr instanceof Error ? ackErr.message : String(ackErr) }, 'ACK-Signatur ungueltig');
+      }
       onSent?.(messageId, body.to);
-
-      return {
-        status: 'sent',
-        delivery: 'remote',
-        message_id: messageId,
-        sent_at: payload.sent_at,
-        peer_status: res.status,
-      };
+      return { status: 'sent', delivery: 'remote', message_id: messageId, sent_at: payload.sent_at, peer_status: res.status, ack_verified: ackVerified, ack_status: ackStatus };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       log?.warn({ to: body.to, err: msg }, 'AGENT_MESSAGE konnte nicht zugestellt werden');
