@@ -8,6 +8,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-04-11
 
+### TLS Hot-Reload + Graceful Unregister (PR #116)
+
+- **`packages/daemon/src/agent-card.ts`**: Neue `reloadTlsContext()` Methode.
+  Nutzt `httpsServer.setSecureContext()` fuer Hot-Swap des CA-Bundles
+  ohne Daemon-Restart. Nur neue Verbindungen nutzen den neuen Context.
+- **`packages/daemon/src/pairing-handler.ts`**: `trustStoreNotifier.rebuild()`
+  nach `store.addPeer()` — triggert den Hot-Reload nach erfolgreichem Pairing.
+- **`packages/daemon/src/index.ts`**: `onChange` Listener verdrahtet:
+  TrustStoreNotifier → cardServer.reloadTlsContext().
+- **`packages/daemon/src/mcp-stdio.ts`**: Agent-Registry Register beim Start,
+  Unregister beim Shutdown (fire-and-forget, 200ms Grace-Period).
+  Instance-ID: `mcp-stdio-{pid}`.
+- 8 neue Tests (TrustStoreNotifier callbacks). Full Suite 574/574 gruen.
+- CR Gemini Pro: 0 HIGH, 1 MEDIUM (Exit-Timeout 50→200ms), 2 LOW (beide gefixt).
+
 ### Phase D: Resource Governance (PR #115)
 
 - **`packages/daemon/src/session-checkout.ts`** (neu): Atomic Branch-Locking.

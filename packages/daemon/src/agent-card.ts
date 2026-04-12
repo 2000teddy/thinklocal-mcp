@@ -1,4 +1,5 @@
 import Fastify, { type FastifyInstance, type FastifyRequest, type FastifyReply } from 'fastify';
+import type { Server as HttpsServer } from 'node:https';
 import * as si from 'systeminformation';
 import type { AgentIdentity } from './identity.js';
 import type { DaemonConfig } from './config.js';
@@ -247,6 +248,47 @@ export class AgentCardServer {
       { port: this.opts.config.daemon.port, bindHost: this.opts.config.daemon.bind_host, proto },
       'Agent Card Server gestartet',
     );
+  }
+
+  /**
+   * Hot-reload TLS trust bundle without restarting the server.
+   * Called by TrustStoreNotifier.onChange() after a new peer is paired.
+   * Uses Node.js tls.createSecureContext() + server.setSecureContext().
+   */
+  reloadTlsContext(newCaBundle: string[]): boolean {
+    if (!this.useTls || !this.opts.tls) {
+      this.opts.log?.warn('reloadTlsContext called but TLS is not active');
+      return false;
+    }
+
+    try {
+      // Fastify's underlying server is a Node.js https.Server
+      // CR Gemini Pro: removed redundant createSecureContext() — setSecureContext
+      // handles context creation internally.
+      const httpsServer = this.server.server as HttpsServer;
+      if (typeof httpsServer.setSecureContext === 'function') {
+        httpsServer.setSecureContext({
+          key: this.opts.tls.keyPem,
+          cert: this.opts.tls.certPem,
+          ca: newCaBundle,
+        });
+        this.opts.log?.info(
+          { caCount: newCaBundle.length },
+          'TLS context hot-reloaded (new peer CAs active without restart)',
+        );
+        return true;
+      }
+
+      // Fallback: setSecureContext not available (e.g. HTTP mode in tests)
+      this.opts.log?.warn('setSecureContext not available on server — restart needed');
+      return false;
+    } catch (err) {
+      this.opts.log?.error(
+        { err: err instanceof Error ? err.message : String(err) },
+        'TLS context reload failed',
+      );
+      return false;
+    }
   }
 
   async stop(): Promise<void> {

@@ -23,6 +23,7 @@ import {
 } from './pairing.js';
 import { createHash } from 'node:crypto';
 import type { Logger } from 'pino';
+import type { TrustStoreNotifier } from './trust-store.js';
 
 export interface PairingHandlerDeps {
   store: PairingStore;
@@ -32,6 +33,8 @@ export interface PairingHandlerDeps {
   caCertPem: string;
   fingerprint: string;
   log?: Logger;
+  /** Optional: triggers TLS hot-reload after successful pairing */
+  trustStoreNotifier?: TrustStoreNotifier;
 }
 
 interface PairingSession {
@@ -272,7 +275,11 @@ export function registerPairingRoutes(server: FastifyInstance, deps: PairingHand
       store.addPeer(pairedPeer);
       activeSession.state = 'completed';
 
-      log?.info({ peer: peerData.agentId }, '✅ Pairing erfolgreich abgeschlossen');
+      // Hot-Reload: TLS-Context sofort aktualisieren, damit der neue Peer
+      // ohne Daemon-Restart per mTLS kommunizieren kann.
+      deps.trustStoreNotifier?.rebuild();
+
+      log?.info({ peer: peerData.agentId }, '✅ Pairing erfolgreich abgeschlossen (TLS hot-reloaded)');
 
       return { status: 'paired', peer_agent_id: peerData.agentId };
     } catch (err) {

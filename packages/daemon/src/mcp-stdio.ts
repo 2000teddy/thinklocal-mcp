@@ -32,6 +32,10 @@ const RUNTIME_MODE = parseRuntimeMode(process.env['TLMCP_RUNTIME_MODE'] ?? 'loca
 const DAEMON_URL = process.env['TLMCP_DAEMON_URL']
   ?? (RUNTIME_MODE === 'lan' ? `https://localhost:${DAEMON_PORT}` : `http://localhost:${DAEMON_PORT}`);
 
+// Agent instance ID for register/unregister lifecycle
+const AGENT_TYPE = process.env['TLMCP_AGENT_TYPE'] ?? 'claude-code';
+const INSTANCE_ID = `mcp-stdio-${process.pid}`;
+
 async function fetchDaemon(path: string): Promise<unknown> {
   return requestDaemonJson(path, { baseUrl: DAEMON_URL, dataDir: DATA_DIR });
 }
@@ -365,19 +369,65 @@ server.tool(
  * than 19h (see PR #86 live-test follow-up). Destroying the cached
  * HTTPS agent also releases any lingering sockets cleanly.
  */
+/**
+ * Register this MCP-Stdio instance with the daemon's agent registry.
+ * Best-effort: if the daemon is unreachable, we continue anyway.
+ */
+async function registerWithDaemon(): Promise<void> {
+  try {
+    await requestDaemonJson(`${DAEMON_URL}/api/agent/register`, {
+      method: 'POST',
+      body: {
+        agent_type: AGENT_TYPE,
+        instance_id: INSTANCE_ID,
+        metadata: { pid: process.pid, started_at: new Date().toISOString() },
+      },
+    });
+    process.stderr.write(`[mcp-stdio] registered as ${INSTANCE_ID}\n`);
+  } catch {
+    // Daemon may not be running yet — that's OK
+    process.stderr.write(`[mcp-stdio] registration skipped (daemon unreachable)\n`);
+  }
+}
+
+/**
+ * Unregister this MCP-Stdio instance from the daemon's agent registry.
+ * Best-effort: fire-and-forget with short timeout.
+ */
+function unregisterFromDaemon(): void {
+  try {
+    // Synchronous-ish: we use a fire-and-forget fetch.
+    // Can't await in 'exit' handler, so we use the sync pattern.
+    requestDaemonJson(`${DAEMON_URL}/api/agent/unregister`, {
+      method: 'POST',
+      body: {
+        agent_type: AGENT_TYPE,
+        instance_id: INSTANCE_ID,
+      },
+    }).catch(() => {
+      // Best-effort — don't block shutdown
+    });
+    process.stderr.write(`[mcp-stdio] unregister sent for ${INSTANCE_ID}\n`);
+  } catch {
+    // Ignore — we're shutting down
+  }
+}
+
 function installShutdownHandlers(): void {
   let shuttingDown = false;
   const handle = (signal: NodeJS.Signals | 'exit'): void => {
     if (shuttingDown) return;
     shuttingDown = true;
     try {
+      // Unregister from agent registry (best-effort, fire-and-forget)
+      unregisterFromDaemon();
       __resetDaemonClientCache();
     } catch (err) {
       // Best-effort — don't block exit on cleanup errors, but surface
       // the reason on stderr so it shows up in the logs.
       // (Gemini-Pro CR finding 2026-04-09, LOW)
       process.stderr.write(
-        `[mcp-stdio] shutdown cache-reset failed: ${err instanceof Error ? err.message : String(err)}\n`,
+        `[mcp-stdio] shutdown cleanup failed: ${err instanceof Error ? err.message : String(err)}\n`,
       );
     }
     if (signal !== 'exit') {
@@ -387,7 +437,9 @@ function installShutdownHandlers(): void {
       // (Gemini-Pro pre-commit finding 2026-04-09, HIGH)
       const signalCode: Record<string, number> = { SIGINT: 130, SIGTERM: 143, SIGHUP: 129 };
       const code = signalCode[signal] ?? 1;
-      setTimeout(() => process.exit(code), 50).unref();
+      // CR Gemini Pro: 50ms too short for unregister HTTPS+mTLS call.
+      // 200ms gives the localhost fire-and-forget request a reasonable window.
+      setTimeout(() => process.exit(code), 200).unref();
     }
   };
   process.on('SIGTERM', () => handle('SIGTERM'));
@@ -398,6 +450,8 @@ function installShutdownHandlers(): void {
 
 async function main(): Promise<void> {
   installShutdownHandlers();
+  // Register with daemon agent-registry (best-effort, non-blocking)
+  await registerWithDaemon();
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
