@@ -8,7 +8,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-04-11
 
-### TLS Hot-Reload + Graceful Unregister (PR #116)
+### ACK-Signaturpruefung beim Sender (PR #118)
+
+- **`packages/daemon/src/inbox-api.ts`**: ACK-Response wird jetzt als CBOR
+  deserialisiert, SignedMessage dekodiert und Signatur gegen den Peer-PublicKey
+  (aus AgentCard via MeshManager) verifiziert. Fallback: HTTP 2xx wenn kein
+  PublicKey verfuegbar. Antwort enthaelt `ack_verified` + `ack_status`.
+
+### TLS Hot-Reload + Graceful Unregister (PR #117)
 
 - **`packages/daemon/src/agent-card.ts`**: Neue `reloadTlsContext()` Methode.
   Nutzt `httpsServer.setSecureContext()` fuer Hot-Swap des CA-Bundles

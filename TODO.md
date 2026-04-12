@@ -34,7 +34,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [x] 🔴 **Stabile Node-Identitaet** — `loadOrCreateStableNodeId()` aus Hardware-Fingerprint statt OS-Hostname, persistiert in `~/.thinklocal/keys/node-id.txt` (PR #74, 2026-04-07)
 - [x] 🔴 **CA-Subject-Disambiguation** — `createMeshCA(meshName, nodeId)` baut nodeId in CN ein, sonst koennen Peer-CAs mit gleichem Subject einander beim mTLS-Handshake ueberschreiben (PR #77, 2026-04-07)
 - [x] 🟠 **SSH-Bootstrap-Trust** — `scripts/ssh-bootstrap-trust.sh` nutzt bestehenden SSH-Trust-Anchor zwischen Operator-eigenen Nodes statt PIN-Zeremonie. ssh-Reachability + base64-encoded JSON via stdin, idempotent. Fuer Single-Operator-Mesh praktischer als manuelle PINs. (PR #78, 2026-04-07)
-- [ ] 🟠 **Hot-Reload TrustStore** — Aktuell muss Daemon nach neuem Pairing neu gestartet werden. Fastify `tls.createSecureContext().setSecureContext()` als Folge-Aufgabe (Phase 2)
+- [x] 🟠 **Hot-Reload TrustStore** — IMPLEMENTIERT 2026-04-12 (PR #117). `agent-card.ts` `reloadTlsContext()` via `httpsServer.setSecureContext()`, `pairing-handler.ts` `trustStoreNotifier.rebuild()` nach `addPeer()`. Kein Daemon-Restart mehr noetig nach Pairing.
 - [ ] 🟡 **Token-basiertes Onboarding (`tlmcp init` / `tlmcp join`)** — Single-Owner-Mesh-Modus via Bearer-Token + Browser-Approval (analog Claude Code `/login`), CA-Schluessel bleibt nur auf Admin-Node (Konsensus 04-07: GPT-5.4 + Gemini Pro, beide 9/10). Geplant fuer PR #82+
 
 ### 1.3 Mesh-Networking
@@ -174,9 +174,9 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [x] 🔴 **ADR-005 Per-Agent-Inbox** — IMPLEMENTIERT 2026-04-09 (PR #91). `to_agent_instance` Spalte + Schema-Migration v1→v2 + `spiffe-uri.ts` Helpers + `for_instance` Query-Parameter in Inbox-API + Loopback-Fix (normalizeAgentId). 61 Tests.
 - [x] 🟠 **Adaptive Cron-Intervall** — IMPLEMENTIERT 2026-04-09 in `packages/daemon/src/heartbeat/interval.ts`. Exponential backoff bei leerer Inbox, ±20 % Jitter, alle 4 Mesh-Modi (local/lan/federated/adhoc).
 - [x] 🟠 **Compliance-Regel-Check** — IMPLEMENTIERT 2026-04-11 als GitHub Actions Compliance Gate (PR #105) + Pre-Commit Hook (PR #108). Nicht als Heartbeat-Cron, sondern als CI-Status-Check und lokaler Git-Hook — technisch robuster weil nicht umgehbar.
-- [ ] 🟡 **Broadcast-Pattern** — `send_message_to_peer(to="spiffe://.../instance/*")` fanout an alle aktiven Instances auf einem Host. Fuer Announcements und System-Events.
-- [ ] 🟡 **WebSocket-Push als Komplement** — `inbox:new` EventBus + WebSocket-Broadcast, MCP-Stdio-Subprocess haelt optional Subscription, schreibt in Memory-Buffer der beim naechsten Cron-Pull ausgewertet wird.
-- [ ] 🟡 **`unregister` on graceful shutdown** — MCP-Stdio verwendet `process.on('exit', ...)` um sich beim Daemon abzumelden. Mitigation gegen "stale agent instances" die nie aufraeumen.
+- [x] 🟡 **Broadcast-Pattern** — IMPLEMENTIERT 2026-04-12 (PR #118). `inbox-api.ts` erkennt `/instance/*` Wildcard, fanout an alle aktiven Instances via AgentRegistry. Jede Instance bekommt eigene message_id. `inbox:new` Event mit `broadcast: true`.
+- [x] 🟡 **WebSocket-Push als Komplement** — IMPLEMENTIERT 2026-04-11 (PR #114). `websocket.ts` Subscription-Filter + Agent-Loopback-Guard. `inbox:new` Event emittiert bei remote + loopback Delivery. Clients subscriben via `?subscribe=inbox:new&agent=spiffe://...` oder JSON-Message.
+- [x] 🟡 **`unregister` on graceful shutdown** — IMPLEMENTIERT 2026-04-12 (PR #117). `mcp-stdio.ts` POST `/api/agent/register` beim Start, POST `/api/agent/unregister` im Shutdown-Handler (fire-and-forget, 200ms Grace-Period). Instance-ID: `mcp-stdio-{pid}`.
 
 ### 4.4 Agent-zu-Agent Messaging (Inbox)
 - [x] 🔴 **Persistente Inbox pro Daemon** — `agent-inbox.ts` SQLite WAL, 64KB Body-Limit, Dedupe via UUID, soft read/archive (PR #79, 2026-04-08)
@@ -184,8 +184,8 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [x] 🔴 **Inbox-API REST-Endpoints** — `inbox-api.ts` POST /api/inbox/send, GET /api/inbox, mark-read, archive, unread (PR #79, 2026-04-08)
 - [x] 🔴 **MCP-Tools** — send_message_to_peer, read_inbox, mark_message_read, archive_message, unread_messages_count in `mcp-stdio.ts` (PR #79, 2026-04-08)
 - [x] 🟠 **Loopback fuer Sibling-Agents** — Wenn `to === ownAgentId` (mehrere Agenten teilen einen Daemon), wird die Nachricht direkt im lokalen Inbox abgelegt statt ueber Netzwerk geroutet (PR #80, 2026-04-08)
-- [ ] 🟠 **ACK-Signaturpruefung beim Sender** — aktuell wird nur HTTP 2xx ausgewertet. Phase 2: Peer-PublicKey-Lookup + decode AGENT_MESSAGE_ACK Envelope
-- [ ] 🟠 **WebSocket-Push** fuer Inbox-Events statt Polling — `websocket.ts` existiert bereits, einfacher Anschluss
+- [x] 🟠 **ACK-Signaturpruefung beim Sender** — IMPLEMENTIERT 2026-04-12. `inbox-api.ts` liest ACK-Response als CBOR, deserialisiert SignedMessage, verifiziert Signatur gegen Peer-PublicKey aus AgentCard. Fallback: akzeptiert HTTP 2xx wenn kein PublicKey verfuegbar.
+- [x] 🟠 **WebSocket-Push** fuer Inbox-Events statt Polling — IMPLEMENTIERT 2026-04-11 (PR #114). `inbox:new` Event + Subscription-basiertes Filtering.
 - [ ] 🟡 **Per-Peer ACL** beim Senden — aktuell darf jeder paired peer schreiben
 - [ ] 🟡 **Rate-Limiting** auf `/api/inbox/send` — global existiert auf `/message`, fehlt fuer outbound
 - [ ] 💡 **Threading** ueber `in_reply_to` hinaus — Conversation-View, mehrere Teilnehmer

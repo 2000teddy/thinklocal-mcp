@@ -407,6 +407,14 @@ async function main(): Promise<void> {
     trustStoreNotifier,
   });
 
+  // 8c3. Agent Registry (moved before InboxApi for broadcast-pattern dependency)
+  const agentRegistry = new AgentRegistry({
+    heartbeatIntervalMs: 5_000,
+    staleFactor: 3,
+    log,
+  });
+  agentRegistry.start();
+
   // 8c2. Agent-to-Agent Messaging API
   registerInboxApi(cardServer.getServer(), {
     inbox: agentInbox,
@@ -418,6 +426,7 @@ async function main(): Promise<void> {
     rateLimiter,
     log,
     eventBus,
+    agentRegistry,
     onSent: (messageId, to) => {
       audit.append('AGENT_MESSAGE_TX', to, messageId);
       eventBus.emit('audit:new', {
@@ -429,15 +438,6 @@ async function main(): Promise<void> {
   });
 
   // 8c3. Agent Registry REST API (ADR-004 Phase 2)
-  // Loopback-only endpoints for each local agent-instance (Claude Code,
-  // Codex, Gemini CLI, …) to register itself + send heartbeats. Stale
-  // entries are auto-evicted after 3 * heartbeat interval.
-  const agentRegistry = new AgentRegistry({
-    heartbeatIntervalMs: 5_000,
-    staleFactor: 3,
-    log,
-  });
-  agentRegistry.start();
   registerAgentApi(cardServer.getServer(), {
     registry: agentRegistry,
     audit,
