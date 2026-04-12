@@ -240,6 +240,7 @@ Tests wurden bisher als "selbstverstaendlicher Bestandteil von Code" behandelt u
 | 131 | tbd       | Phase D: Resource Governance (4 Module)                         | 04-11 23:30 | —  | —  | ✅ | ✅ | —  | ✅ | session-checkout.ts (13 Tests), budget-guard.ts (11), config-rollback.ts (7), circuit-breaker.ts (17). 621/621 gruen, +103 neue Tests. |
 | 132 | #117      | TLS Hot-Reload + Graceful Agent Unregister                      | 04-12 16:30 | —  | —  | ✅ | ✅ | —  | ✅ | agent-card.ts reloadTlsContext(), pairing-handler trustStoreNotifier.rebuild(), mcp-stdio register/unregister. 8 neue Tests, 574/574 gruen. CR Gemini Pro: 1 MEDIUM + 2 LOW gefixt. |
 | 133 | #122      | Nachtschicht: Inbox-Fixes (Init-Order, ACL, Tests)              | 04-13 00:15 | —  | —  | ✅ | —  | —  | ✅ | index.ts: AgentRegistry vor registerInboxApi (Broadcast-Bug). inbox-api.ts: pairingStore ACL auf outbound send (403 fuer unpaired). 3 neue Tests, 577/577 gruen. Bug-Fix-PR: CO+CG optional. |
+| 134 | tbd       | ADR-016 Token-Onboarding Phase 1 (token-store.ts)               | 04-12 00:15 | —  | —  | ✅ | ✅ | ✅ | ✅ | `token-store.ts` SQLite-backed Token-Store. ADR-016 Architektur-Dokument. 41 neue Tests, 618/618 gruen. CO: Konsensus vom 04-07 (GPT-5.4+Gemini Pro 9/10). CG: n/a. |
 
 ---
 

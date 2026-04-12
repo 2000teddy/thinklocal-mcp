@@ -8,6 +8,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-04-13
 
+### ADR-016 Token-Onboarding Phase 1 (PR #TBD)
+
+- **`docs/architecture/ADR-016-token-onboarding.md`**: Neues ADR fuer Bearer-Token-
+  basiertes Onboarding als Alternative zur SPAKE2-PIN-Zeremonie. Single-Owner-Meshes
+  koennen Nodes per `thinklocal token create` + `thinklocal join --token` hinzufuegen,
+  ohne physischen Terminal-Zugang auf beiden Nodes.
+- **`packages/daemon/src/token-store.ts`**: SQLite-backed Token-Store mit SHA-256
+  Hash-Speicherung, single-use Semantik, TTL-Validierung (5min–7d), Revokation und
+  Audit-Callback-Integration. 256 Bit Entropie (crypto.randomBytes), base64url-Format
+  mit `tlmcp_` Prefix.
+- **`packages/daemon/src/token-store.test.ts`**: 41 Unit-Tests covering creation,
+  validation, single-use enforcement, expiration, revocation, listing, pruning,
+  persistence, hash verification, format validation und edge cases.
+
 ### Nachtschicht Inbox-Fixes (PR #122)
 
 - **`packages/daemon/src/index.ts`**: AgentRegistry Initialisierung VOR
