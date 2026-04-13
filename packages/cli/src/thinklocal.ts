@@ -1700,6 +1700,269 @@ async function cmdRemove(targetArg: string, flags: string[]): Promise<void> {
   console.log();
 }
 
+// --- Update ---
+
+const GITHUB_OWNER = '2000teddy';
+const GITHUB_REPO = 'thinklocal-mcp';
+
+interface GitHubRelease {
+  tag_name: string;
+  name: string;
+  published_at: string;
+  html_url: string;
+  tarball_url: string;
+  body: string;
+  assets: Array<{
+    name: string;
+    browser_download_url: string;
+    size: number;
+  }>;
+}
+
+function getCurrentVersion(): string {
+  const pkgPath = resolve(INSTALL_DIR, 'package.json');
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { version: string };
+    return pkg.version;
+  } catch {
+    return '0.0.0';
+  }
+}
+
+async function fetchLatestRelease(): Promise<GitHubRelease | null> {
+  const { default: https } = await import('node:https');
+  return new Promise((resolveP, rejectP) => {
+    const options = {
+      hostname: 'api.github.com',
+      path: `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`,
+      method: 'GET',
+      headers: {
+        'User-Agent': `thinklocal-mcp/${getCurrentVersion()}`,
+        'Accept': 'application/vnd.github.v3+json',
+      },
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk: Buffer) => { data += chunk.toString(); });
+      res.on('end', () => {
+        if (res.statusCode === 404) {
+          resolveP(null);
+          return;
+        }
+        if (res.statusCode === 403) {
+          // Rate-limited
+          resolveP(null);
+          return;
+        }
+        if (res.statusCode !== 200) {
+          rejectP(new Error(`GitHub API returned ${res.statusCode}: ${data.slice(0, 200)}`));
+          return;
+        }
+        try {
+          resolveP(JSON.parse(data) as GitHubRelease);
+        } catch (e) {
+          rejectP(new Error(`Failed to parse GitHub API response: ${(e as Error).message}`));
+        }
+      });
+    });
+
+    req.on('error', (e) => rejectP(e));
+    req.setTimeout(10_000, () => {
+      req.destroy();
+      rejectP(new Error('GitHub API request timed out'));
+    });
+    req.end();
+  });
+}
+
+function parseVersion(tag: string): string {
+  return tag.replace(/^v/, '');
+}
+
+function compareVersions(a: string, b: string): number {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    const diff = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+async function cmdUpdate(flags: string[]): Promise<void> {
+  const checkOnly = flags.includes('--check');
+  const autoMode = flags.includes('--auto');
+
+  header('thinklocal update');
+
+  // 1. Aktuelle Version lesen
+  const currentVersion = getCurrentVersion();
+  info(`Aktuelle Version: ${C.bold}v${currentVersion}${C.reset}`);
+
+  // 2. Neueste Version via GitHub API abfragen
+  info('Pruefe GitHub Releases...');
+  let release: GitHubRelease | null;
+  try {
+    release = await fetchLatestRelease();
+  } catch (e) {
+    fail(`GitHub API Fehler: ${(e as Error).message}`);
+    info('Pruefe Internetverbindung oder versuche es spaeter erneut.');
+    info(`Rate-Limit: 60 Anfragen/Stunde ohne Token.`);
+    process.exitCode = 1;
+    return;
+  }
+
+  if (!release) {
+    warn('Kein Release auf GitHub gefunden.');
+    info(`Repository: https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases`);
+    info('Erstelle ein Release auf GitHub um Auto-Updates zu ermoeglichen.');
+    process.exitCode = 1;
+    return;
+  }
+
+  const latestVersion = parseVersion(release.tag_name);
+  const cmp = compareVersions(latestVersion, currentVersion);
+
+  if (cmp <= 0) {
+    ok(`Bereits auf dem neuesten Stand: v${currentVersion}`);
+    process.exitCode = 0;
+    return;
+  }
+
+  // 3. Update verfuegbar — Details anzeigen
+  console.log();
+  console.log(`  ${C.green}${C.bold}Update verfuegbar!${C.reset}`);
+  console.log(`    Aktuell:  v${currentVersion}`);
+  console.log(`    Neueste:  v${latestVersion}`);
+  console.log(`    Release:  ${release.name || release.tag_name}`);
+  console.log(`    Datum:    ${release.published_at?.slice(0, 10) ?? 'unbekannt'}`);
+  console.log(`    URL:      ${release.html_url}`);
+
+  // Release-Notes anzeigen (gekuerzt)
+  if (release.body) {
+    console.log();
+    console.log(`  ${C.bold}Release-Notes:${C.reset}`);
+    const lines = release.body.split('\n').slice(0, 15);
+    for (const line of lines) {
+      console.log(`    ${C.dim}${line}${C.reset}`);
+    }
+    if (release.body.split('\n').length > 15) {
+      console.log(`    ${C.dim}... (weitere Details auf GitHub)${C.reset}`);
+    }
+  }
+  console.log();
+
+  // 4. Nur pruefen?
+  if (checkOnly) {
+    info('Zum Installieren: thinklocal update');
+    process.exitCode = 1; // Exit 1 = update available
+    return;
+  }
+
+  // 5. Bestaetigung (ausser --auto)
+  if (!autoMode) {
+    const readline = await import('node:readline');
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const answer = await new Promise<string>((resolveP) => {
+      rl.question(`  Update auf v${latestVersion} installieren? [j/N] `, (ans) => {
+        rl.close();
+        resolveP(ans.trim().toLowerCase());
+      });
+    });
+
+    if (answer !== 'j' && answer !== 'ja' && answer !== 'y' && answer !== 'yes') {
+      info('Update abgebrochen.');
+      return;
+    }
+  }
+
+  // 6. Update durchfuehren via git pull + npm install
+  info('Starte Update...');
+
+  // Backup-Marker
+  const backupMarker = resolve(DATA_DIR, '.update-backup-version');
+  try {
+    mkdirSync(DATA_DIR, { recursive: true });
+    atomicWrite(backupMarker, currentVersion);
+  } catch { /* best-effort */ }
+
+  // git pull
+  info('git pull...');
+  try {
+    const pullResult = spawnSync('git', ['pull', '--ff-only'], {
+      cwd: INSTALL_DIR,
+      encoding: 'utf-8',
+      timeout: 60_000,
+    });
+    if (pullResult.status !== 0) {
+      fail(`git pull fehlgeschlagen: ${pullResult.stderr?.trim() || 'unbekannter Fehler'}`);
+      info('Manuelle Loesung: cd ' + INSTALL_DIR + ' && git pull');
+      process.exitCode = 1;
+      return;
+    }
+    ok('git pull erfolgreich');
+  } catch (e) {
+    fail(`git pull Fehler: ${(e as Error).message}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  // npm install
+  info('npm install...');
+  try {
+    const npmResult = spawnSync('npm', ['install'], {
+      cwd: INSTALL_DIR,
+      encoding: 'utf-8',
+      timeout: 120_000,
+      env: { ...process.env, NODE_ENV: 'production' },
+    });
+    if (npmResult.status !== 0) {
+      fail(`npm install fehlgeschlagen: ${npmResult.stderr?.slice(0, 500) || 'unbekannter Fehler'}`);
+      warn('Rollback: git checkout v' + currentVersion);
+      process.exitCode = 1;
+      return;
+    }
+    ok('npm install erfolgreich');
+  } catch (e) {
+    fail(`npm install Fehler: ${(e as Error).message}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  // Neue Version verifizieren
+  const newVersion = getCurrentVersion();
+  if (compareVersions(newVersion, currentVersion) <= 0) {
+    warn(`Version nach Update unveraendert (v${newVersion}). Moeglicherweise kein neues Release-Tag.`);
+  } else {
+    ok(`Version aktualisiert: v${currentVersion} -> v${newVersion}`);
+  }
+
+  // Daemon restart
+  info('Daemon wird neu gestartet...');
+  try {
+    const running = await isDaemonRunning();
+    if (running) {
+      await cmdRestart();
+      ok('Daemon neu gestartet');
+    } else {
+      info('Daemon war nicht aktiv — kein Restart noetig');
+      info('Starte mit: thinklocal start');
+    }
+  } catch (e) {
+    warn(`Daemon-Restart fehlgeschlagen: ${(e as Error).message}`);
+    info('Manuell starten: thinklocal restart');
+  }
+
+  // Cleanup backup marker
+  try {
+    const { unlinkSync } = await import('node:fs');
+    unlinkSync(backupMarker);
+  } catch { /* best-effort */ }
+
+  console.log(`\n  ${C.green}${C.bold}Update auf v${newVersion} abgeschlossen!${C.reset}\n`);
+}
+
 // --- Main ---
 
 async function main(): Promise<void> {
@@ -1716,6 +1979,7 @@ async function main(): Promise<void> {
     case 'bootstrap': return cmdBootstrap(args.slice(1));
     case 'peers': return cmdPeers();
     case 'uninstall': return cmdUninstall();
+    case 'update': return cmdUpdate(args.slice(1));
     case 'check':
       if (args[1]) return cmdCheck(args[1]);
       console.log('  Nutzung: thinklocal check <host> oder thinklocal check <host>:<port>');
@@ -1768,6 +2032,7 @@ async function main(): Promise<void> {
     mcp            MCP-Config-Snippet anzeigen
     mcp install    MCP in Claude Desktop + Code eintragen
     config show    Konfiguration anzeigen
+    update         Software aktualisieren [--check|--auto]
     heartbeat      Cron-Heartbeat-Prompts (ADR-004 Phase 1) anzeigen / status
     uninstall      Service + Config entfernen
 
