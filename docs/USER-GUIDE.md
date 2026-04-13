@@ -155,7 +155,78 @@ Dark/Light Mode: Toggle unten in der Sidebar.
 
 ---
 
-## 7. Peer-Discovery
+## 7. Token-basiertes Onboarding
+
+Seit ADR-016 koennen neue Nodes per Bearer-Token dem Mesh beitreten — ohne
+die SPAKE2-PIN-Zeremonie. Ideal fuer Single-Owner-Setups bei denen derselbe
+Admin alle Nodes kontrolliert.
+
+### Schritt-fuer-Schritt
+
+**1. Token auf dem Admin-Node erstellen (Port 9440, loopback)**
+
+```bash
+thinklocal token create --name influxdb-server --ttl 24
+# Ausgabe: Token: tlmcp_AbCdEf...  (einmalig verwendbar, 24h gueltig)
+```
+
+Alternativ via MCP-Tool `token_create` aus Claude Code heraus.
+
+**2. Token an den neuen Node uebermitteln**
+
+Per SSH, Messenger, oder sicheren Kanal — der Token ist Single-Use und
+zeitlich begrenzt. Nach einmaliger Verwendung ist er verbraucht.
+
+**3. Auf dem neuen Node dem Mesh beitreten (Port 9441, kein mTLS)**
+
+```bash
+thinklocal join --token tlmcp_AbCdEf... --admin-url https://10.10.10.55:9441
+```
+
+> **WICHTIG:** Der Join-Endpoint laeuft auf **Port 9441** (nicht 9440).
+> Port 9441 ist der oeffentliche HTTPS-Port fuer Onboarding und Mesh-Kommunikation.
+> Port 9440 ist ausschliesslich fuer loopback-APIs (Token-Management, Inbox, etc.).
+
+Der Join-Flow:
+1. Bearer-Token wird an den Admin-Node gesendet
+2. Admin validiert Token (SHA-256 Hash, Single-Use, TTL)
+3. Admin signiert das Node-Zertifikat mit der Mesh-CA
+4. Zertifikate werden zurueckgegeben und in `~/.thinklocal/tls/` gespeichert
+5. TrustStore wird hot-reloaded — der neue Peer ist sofort im Mesh sichtbar
+
+**4. Tokens verwalten**
+
+```bash
+thinklocal token list     # Alle Tokens anzeigen (Status, Ablauf)
+thinklocal token revoke <id>  # Token widerrufen
+```
+
+### 5-Node Mesh Beispiel
+
+| Node | IP | Agent-Typ | Onboarding |
+|------|-----|-----------|------------|
+| MacMini (Admin) | 10.10.10.55 | claude-code | Bootstrap (CA) |
+| influxdb | 10.10.10.56 | influxdb | `thinklocal join --token ... --admin-url https://10.10.10.55:9441` |
+| ai-n8n | 10.10.10.57 | ai-n8n | `thinklocal join --token ... --admin-url https://10.10.10.55:9441` |
+| MacBook Pro | 10.10.10.58 | claude-code | `thinklocal join --token ... --admin-url https://10.10.10.55:9441` |
+| ioBroker | 10.10.10.59 | iobroker | `thinklocal join --token ... --admin-url https://10.10.10.55:9441` |
+
+Ablauf: Auf dem MacMini je einen Token pro Node erstellen (`thinklocal token create --name <name>`),
+dann auf jedem Ziel-Node `thinklocal join` ausfuehren.
+
+### Troubleshooting Token-Onboarding
+
+| Fehlermeldung | Ursache | Loesung |
+|---------------|---------|---------|
+| `self-signed certificate` | Falscher Port (9440 statt 9441) | `--admin-url` muss Port **9441** verwenden |
+| `fetch failed` / `UNABLE_TO_VERIFY_LEAF_SIGNATURE` | Node.js < 22 oder fehlende TLS-Unterstuetzung | Node.js 22+ installieren (`nvm install 22`) |
+| `401 Unauthorized` | Token ungueltig, abgelaufen oder bereits verwendet | Neuen Token erstellen (`thinklocal token create`) |
+| `403 Forbidden` | Nicht vom Admin-Node aufgerufen | Token-Management nur auf dem Admin-Node moeglich |
+| `Connection refused` | Daemon laeuft nicht | `thinklocal start` auf dem Admin-Node |
+
+---
+
+## 8. Peer-Discovery (mDNS + Statisch)
 
 ### Automatisch (mDNS)
 
@@ -182,7 +253,7 @@ TLMCP_STATIC_PEERS="10.10.10.56:9440,192.168.1.100:9440"
 
 ---
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
 ### Daemon startet nicht
 
@@ -218,7 +289,7 @@ cd ~/Entwicklung_local/thinklocal-mcp && npx tsx packages/cli/src/thinklocal.ts 
 
 ---
 
-## 8a. Cron-Heartbeat aktivieren (ADR-004 Phase 1)
+## 9a. Cron-Heartbeat aktivieren (ADR-004 Phase 1)
 
 Damit Agenten ihre Inbox automatisch checken (statt zu vergessen): jeder Agent
 registriert in seiner Harness zwei wiederkehrende Cron-Jobs.
@@ -253,7 +324,7 @@ Siehe `docs/architecture/ADR-004-cron-heartbeat.md` und
 
 ---
 
-## 9. Claude Code Integration
+## 10. Claude Code Integration
 
 Nach `thinklocal bootstrap` sind die MCP-Tools automatisch verfuegbar.
 
@@ -267,7 +338,7 @@ Teste in Claude Code:
 
 ---
 
-## 10. Sicherheit
+## 11. Sicherheit
 
 - **mTLS**: Verschluesselte Kommunikation zwischen allen Peers
 - **SPAKE2 Pairing**: PIN-basierte Trust-Etablierung

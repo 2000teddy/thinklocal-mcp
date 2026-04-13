@@ -8,6 +8,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-04-13
 
+### Dokumentation: Token-Onboarding User-Guide + API-Reference
+
+- **`docs/USER-GUIDE.md`**: Neuer Abschnitt 7 "Token-basiertes Onboarding":
+  Schritt-fuer-Schritt-Anleitung (token create, Token uebermitteln, join --token
+  --admin-url https://IP:9441), 5-Node Mesh Beispiel (MacMini, influxdb, ai-n8n,
+  MacBook Pro, ioBroker), Troubleshooting-Tabelle (self-signed cert = falscher Port,
+  fetch failed = Node.js 22+ noetig). Sektionsnummern 8-10 entsprechend verschoben.
+- **`docs/API-REFERENCE.md`**: 4 neue Endpoints dokumentiert:
+  `POST /api/token/create` (loopback, Port 9440),
+  `GET /api/token/list` (loopback, Port 9440),
+  `POST /api/token/revoke` (loopback, Port 9440),
+  `POST /onboarding/join` (remote, Port 9441, Bearer Token, kein mTLS).
+  Sicherheits-Sektion um Token-Speicherung (SHA-256 Hashes) erweitert.
+
 ### ADR-016 Token-Onboarding Phase 3: CLI + MCP Tools
 
 - **`packages/cli/src/thinklocal.ts`**: 4 neue CLI-Kommandos:
