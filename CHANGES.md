@@ -8,19 +8,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-04-13
 
-### Dokumentation: Token-Onboarding User-Guide + API-Reference
+### ADR-017 Auto-Update CLI-Befehl (Phase 1)
 
-- **`docs/USER-GUIDE.md`**: Neuer Abschnitt 7 "Token-basiertes Onboarding":
-  Schritt-fuer-Schritt-Anleitung (token create, Token uebermitteln, join --token
-  --admin-url https://IP:9441), 5-Node Mesh Beispiel (MacMini, influxdb, ai-n8n,
-  MacBook Pro, ioBroker), Troubleshooting-Tabelle (self-signed cert = falscher Port,
-  fetch failed = Node.js 22+ noetig). Sektionsnummern 8-10 entsprechend verschoben.
-- **`docs/API-REFERENCE.md`**: 4 neue Endpoints dokumentiert:
-  `POST /api/token/create` (loopback, Port 9440),
-  `GET /api/token/list` (loopback, Port 9440),
-  `POST /api/token/revoke` (loopback, Port 9440),
-  `POST /onboarding/join` (remote, Port 9441, Bearer Token, kein mTLS).
-  Sicherheits-Sektion um Token-Speicherung (SHA-256 Hashes) erweitert.
+- **`docs/architecture/ADR-017-auto-update.md`** (neu): ADR fuer zweistufigen
+  Auto-Update-Mechanismus. Phase 1: lokaler `thinklocal update` CLI-Befehl
+  (GitHub Releases, SHA256-Verifikation, Admin-Approval). Phase 2 (Zukunft):
+  Mesh-propagierte Updates ueber ADR-015 OTS-Mechanismus.
+- **`packages/cli/src/thinklocal.ts`**: Neuer `thinklocal update` Befehl mit
+  drei Modi: interaktiv (zeigt Version-Diff, fragt nach), `--check` (nur pruefen,
+  Exit-Code 0/1), `--auto` (automatisch fuer Cron/CI). Liest aktuelle Version
+  aus package.json, fragt GitHub API ab, zeigt Release-Notes, fuehrt bei
+  Bestaetigung `git pull --ff-only` + `npm install` + Daemon-Restart durch.
+  Hilfetext aktualisiert.
 
 ### ADR-016 Token-Onboarding Phase 3: CLI + MCP Tools
 
