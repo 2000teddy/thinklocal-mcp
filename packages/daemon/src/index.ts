@@ -27,6 +27,9 @@ import { TrustStoreNotifier } from './trust-store.js';
 import { MeshEventBus } from './events.js';
 import { registerWebSocket } from './websocket.js';
 import { registerComplianceApi } from './compliance-check.js';
+import { TokenStore } from './token-store.js';
+import { registerTokenApi } from './token-api.js';
+import { readFileSync } from 'node:fs';
 import { CredentialVault } from './vault.js';
 import { loadOrCreateVaultPassphrase } from './vault-passphrase.js';
 import { isLoopbackHost } from './runtime-mode.js';
@@ -405,6 +408,30 @@ async function main(): Promise<void> {
     fingerprint: identity.fingerprint,
     log,
     trustStoreNotifier,
+  });
+
+  // 8c1b. Token-Onboarding API (ADR-016)
+  // Load CA key for cert-signing (only admin nodes have this)
+  const caKeyPath = join(config.daemon.data_dir, 'tls', 'ca.key.pem');
+  let caBundle: import('./tls.js').CaBundle | undefined;
+  try {
+    const caKeyPem = readFileSync(caKeyPath, 'utf-8');
+    caBundle = { caCertPem: tlsBundle?.caCertPem ?? '', caKeyPem: caKeyPem };
+    log.info('CA-Key geladen — Token-Onboarding aktiv (Admin-Node)');
+  } catch {
+    log.info('Kein CA-Key gefunden — Token-Onboarding nicht verfuegbar (kein Admin-Node)');
+  }
+
+  const tokenStore = new TokenStore(config.daemon.data_dir, log);
+  registerTokenApi(cardServer.getServer(), {
+    tokenStore,
+    pairingStore,
+    trustStoreNotifier,
+    audit,
+    caBundle,
+    ownAgentId: identity.spiffeUri,
+    log,
+    rateLimiter,
   });
 
   // 8c2. Agent Registry (ADR-004 Phase 2)

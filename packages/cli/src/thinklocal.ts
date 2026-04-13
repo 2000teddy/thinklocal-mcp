@@ -735,23 +735,39 @@ async function cmdJoin(flags: string[]): Promise<void> {
 
   try {
     // POST /onboarding/join to the admin node
-    const result = await requestDaemonJson<{
+    // SECURITY: The new node does NOT have a cert yet, so we MUST skip TLS
+    // verification for this initial request. The Bearer token authenticates
+    // the request instead. After join, all further communication uses mTLS.
+    const { Agent } = await import('undici');
+    const insecureAgent = new Agent({
+      connect: { rejectUnauthorized: false },
+    });
+    const joinUrl = `${adminUrl}/onboarding/join`;
+    const joinRes = await fetch(joinUrl, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        hostname: localHostname,
+        agent_id: agentId,
+      }),
+      dispatcher: insecureAgent,
+      signal: AbortSignal.timeout(15_000),
+    } as RequestInit);
+    if (!joinRes.ok) {
+      const errText = await joinRes.text().catch(() => '');
+      throw new Error(`HTTP ${joinRes.status}: ${errText.slice(0, 200)}`);
+    }
+    const result = await joinRes.json() as {
       signed_cert_pem: string;
       key_pem: string;
       ca_cert_pem: string;
       admin_agent_id: string;
       mesh_name: string;
       message: string;
-    }>('/onboarding/join', {
-      baseUrl: adminUrl,
-      body: {
-        hostname: localHostname,
-        agent_id: agentId,
-      },
-      method: 'POST',
-      dataDir: DATA_DIR,
-      timeoutMs: 15_000,
-    });
+    };
 
     ok(`Mesh beigetreten! Admin: ${result.admin_agent_id}`);
 
