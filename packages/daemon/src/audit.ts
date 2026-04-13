@@ -25,7 +25,12 @@ export type AuditEventType =
   | 'APPROVAL_DECIDED'
   | 'CAPABILITY_ACTIVATED'
   | 'CAPABILITY_SUSPENDED'
-  | 'CAPABILITY_REVOKED';
+  | 'CAPABILITY_REVOKED'
+  // ADR-016: Token-Onboarding lifecycle
+  | 'TOKEN_CREATE'
+  | 'TOKEN_REVOKE'
+  | 'TOKEN_JOIN_REJECTED'
+  | 'TOKEN_JOIN_SUCCESS';
 
 /**
  * ADR-007 Phase A: Entity types for structured audit querying.
@@ -41,7 +46,8 @@ export type AuditEntityType =
   | 'skill'
   | 'capability'
   | 'config'
-  | 'approval';
+  | 'approval'
+  | 'token';
 
 export interface AuditEvent {
   id: number;
