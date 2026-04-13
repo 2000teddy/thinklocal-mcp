@@ -738,24 +738,29 @@ async function cmdJoin(flags: string[]): Promise<void> {
     // SECURITY: The new node does NOT have a cert yet, so we MUST skip TLS
     // verification for this initial request. The Bearer token authenticates
     // the request instead. After join, all further communication uses mTLS.
-    const { Agent } = await import('undici');
-    const insecureAgent = new Agent({
-      connect: { rejectUnauthorized: false },
-    });
+    // We temporarily set NODE_TLS_REJECT_UNAUTHORIZED=0 for this one call.
+    const origTls = process.env['NODE_TLS_REJECT_UNAUTHORIZED'];
+    process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0';
     const joinUrl = `${adminUrl}/onboarding/join`;
-    const joinRes = await fetch(joinUrl, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        hostname: localHostname,
-        agent_id: agentId,
-      }),
-      dispatcher: insecureAgent,
-      signal: AbortSignal.timeout(15_000),
-    } as RequestInit);
+    let joinRes: Response;
+    try {
+      joinRes = await fetch(joinUrl, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          hostname: localHostname,
+          agent_id: agentId,
+        }),
+        signal: AbortSignal.timeout(15_000),
+      });
+    } finally {
+      // Restore TLS verification immediately
+      if (origTls === undefined) delete process.env['NODE_TLS_REJECT_UNAUTHORIZED'];
+      else process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = origTls;
+    }
     if (!joinRes.ok) {
       const errText = await joinRes.text().catch(() => '');
       throw new Error(`HTTP ${joinRes.status}: ${errText.slice(0, 200)}`);
