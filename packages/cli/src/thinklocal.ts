@@ -780,9 +780,10 @@ async function cmdJoin(flags: string[]): Promise<void> {
     const tlsDir = resolve(DATA_DIR, 'tls');
     mkdirSync(tlsDir, { recursive: true });
 
-    const certPath = resolve(tlsDir, 'node.crt');
-    const keyPath = resolve(tlsDir, 'node.key');
-    const caPath = resolve(tlsDir, 'ca.crt');
+    // Use .pem suffix to match what loadOrCreateTlsBundle expects
+    const certPath = resolve(tlsDir, 'node.crt.pem');
+    const keyPath = resolve(tlsDir, 'node.key.pem');
+    const caPath = resolve(tlsDir, 'ca.crt.pem');
 
     atomicWrite(certPath, result.signed_cert_pem, 0o644);
     atomicWrite(keyPath, result.key_pem, 0o600);

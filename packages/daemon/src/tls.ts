@@ -237,6 +237,15 @@ export function loadOrCreateTlsBundle(
       log?.warn({ err }, 'Konnte vorhandene CA nicht parsen — generiere neu');
       needsCaReissue = true;
     }
+  } else if (existsSync(caCertPath) && !existsSync(caKeyPath) && existsSync(nodeCertPath) && existsSync(nodeKeyPath)) {
+    // Token-onboarded node: has CA cert + node cert from admin, but no CA key.
+    // This is correct — the CA key stays on the admin node. We use the
+    // existing certs directly without generating anything new.
+    log?.info('Token-onboarded Node erkannt (CA-Cert ohne CA-Key) — verwende vorhandene Zertifikate');
+    const certPem = readFileSync(nodeCertPath, 'utf-8');
+    const keyPem = readFileSync(nodeKeyPath, 'utf-8');
+    const caCertPem = readFileSync(caCertPath, 'utf-8');
+    return { certPem, keyPem, caCertPem };
   } else {
     needsCaReissue = true;
   }
