@@ -769,6 +769,8 @@ async function cmdJoin(flags: string[]): Promise<void> {
       signed_cert_pem: string;
       key_pem: string;
       ca_cert_pem: string;
+      trusted_ca_bundle?: string[];
+      peers?: Array<{ agentId: string; caCertPem: string; hostname: string }>;
       admin_agent_id: string;
       mesh_name: string;
       message: string;
@@ -780,7 +782,6 @@ async function cmdJoin(flags: string[]): Promise<void> {
     const tlsDir = resolve(DATA_DIR, 'tls');
     mkdirSync(tlsDir, { recursive: true });
 
-    // Use .pem suffix to match what loadOrCreateTlsBundle expects
     const certPath = resolve(tlsDir, 'node.crt.pem');
     const keyPath = resolve(tlsDir, 'node.key.pem');
     const caPath = resolve(tlsDir, 'ca.crt.pem');
@@ -792,6 +793,36 @@ async function cmdJoin(flags: string[]): Promise<void> {
     ok(`Zertifikat gespeichert:  ${certPath}`);
     ok(`Private Key gespeichert: ${keyPath}`);
     ok(`CA-Cert gespeichert:     ${caPath}`);
+
+    // Save peers from the admin's pairing store so we trust their CAs
+    if (result.peers && result.peers.length > 0) {
+      const pairingDir = resolve(DATA_DIR, 'pairing');
+      mkdirSync(pairingDir, { recursive: true });
+      const pairingFile = resolve(pairingDir, 'paired-peers.json');
+
+      // Build peer list: admin + all existing peers
+      const allPeers = [
+        {
+          agentId: result.admin_agent_id,
+          publicKeyPem: '',
+          caCertPem: result.ca_cert_pem,
+          fingerprint: '',
+          pairedAt: new Date().toISOString(),
+          hostname: 'admin',
+        },
+        ...result.peers.map(p => ({
+          agentId: p.agentId,
+          publicKeyPem: '',
+          caCertPem: p.caCertPem,
+          fingerprint: '',
+          pairedAt: new Date().toISOString(),
+          hostname: p.hostname,
+        })),
+      ];
+
+      atomicWrite(pairingFile, JSON.stringify(allPeers, null, 2), 0o644);
+      ok(`${allPeers.length} Peer(s) importiert (Trust-Bundle)`);
+    }
 
     console.log();
     info(`${result.message}`);

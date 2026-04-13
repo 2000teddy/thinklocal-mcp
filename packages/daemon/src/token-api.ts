@@ -237,13 +237,29 @@ export function registerTokenApi(server: FastifyInstance, deps: TokenApiDeps): v
         'Neuer Node via Token-Onboarding gejoined',
       );
 
+      // Collect ALL trusted CAs (own + all paired peers) so the new node
+      // can communicate with the entire mesh, not just the admin.
+      const allCAs = trustStoreNotifier?.current() ?? [caBundle.caCertPem];
+
+      // Also pass the list of paired peers so the new node can add them
+      // to its PairingStore for bidirectional trust.
+      const existingPeers = pairingStore.getAllPeers()
+        .filter(p => p.agentId !== newNodeSpiffeUri) // don't include self
+        .map(p => ({
+          agentId: p.agentId,
+          caCertPem: p.caCertPem,
+          hostname: p.hostname,
+        }));
+
       return {
         signed_cert_pem: nodeCert.certPem,
         key_pem: nodeCert.keyPem,
         ca_cert_pem: caBundle.caCertPem,
+        trusted_ca_bundle: allCAs,
+        peers: existingPeers,
         admin_agent_id: ownAgentId,
         mesh_name: 'thinklocal',
-        message: `Willkommen im Mesh! Zertifikat fuer ${body.hostname} ausgestellt (90 Tage gueltig).`,
+        message: `Willkommen im Mesh! Zertifikat fuer ${body.hostname} ausgestellt (90 Tage gueltig). ${allCAs.length} CA(s), ${existingPeers.length} Peer(s) uebertragen.`,
       };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
