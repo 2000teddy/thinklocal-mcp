@@ -41,6 +41,7 @@ import { SYSTEM_MONITOR_MANIFEST } from './builtin-skills/system-monitor.js';
 import { INFLUXDB_MANIFEST, influxdbHealthCheck } from './builtin-skills/influxdb.js';
 import { TelegramGateway } from './telegram-gateway.js';
 import type { AgentCard } from './agent-card.js';
+import { seedBuiltinSkills } from './builtin-skill-seed.js';
 
 async function main(): Promise<void> {
   // Config-Pfad
@@ -177,6 +178,18 @@ async function main(): Promise<void> {
     log.info('InfluxDB Skill registriert — Datenbank erreichbar');
   } else {
     log.info('InfluxDB nicht erreichbar — Skill nicht registriert');
+  }
+
+  // Neutral builtin skills aus skills/builtin/ in das Runtime-Verzeichnis
+  // seeden (Codex Ollama-Skill Pattern). Die Skills werden beim nächsten
+  // SkillDiscovery-Startup automatisch entdeckt und registriert.
+  const seededSkills = seedBuiltinSkills({
+    dataDir: config.daemon.data_dir,
+    ownAgentId: identity.spiffeUri,
+    log,
+  });
+  if (seededSkills.installed.length > 0) {
+    log.info({ skills: seededSkills.installed }, 'Builtin-Skills geseeded');
   }
 
   const libp2pRuntime = await createLibp2pRuntime({
