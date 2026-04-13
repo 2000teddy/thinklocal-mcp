@@ -192,6 +192,31 @@ server.tool('start_pairing', 'Startet Peer-Pairing und generiert eine PIN', {}, 
   return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
 });
 
+// --- Token Onboarding (ADR-016 Phase 3) ---
+
+server.tool(
+  'token_create',
+  'Erstellt ein Onboarding-Token fuer neue Nodes. Der Token ist einmal verwendbar und zeitlich begrenzt.',
+  {
+    name: z.string().describe('Menschenlesbarer Name (z.B. "influxdb-node", max 64 Zeichen)'),
+    ttl_hours: z.number().min(0.083).max(168).optional().describe('Gueltigkeitsdauer in Stunden (default: 24, max: 168 = 7 Tage)'),
+  },
+  async ({ name, ttl_hours }) => {
+    const data = await postDaemon('/api/token/create', { name, ttl_hours });
+    return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool(
+  'token_list',
+  'Listet alle Onboarding-Tokens auf (ohne Klartext-Token). Zeigt ID, Name, Status, Erstellungs- und Ablaufdatum.',
+  {},
+  async () => {
+    const data = await fetchDaemon('/api/token/list');
+    return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
 // --- Cross-Machine Skill Execution ---
 
 server.tool(

@@ -535,6 +535,286 @@ async function cmdBootstrap(flags: string[] = []): Promise<void> {
   console.log();
 }
 
+// --- Token-Onboarding CLI (ADR-016 Phase 3) ---
+
+async function postLocalDaemonJson<T>(path: string, body: unknown, timeoutMs = 5_000): Promise<T> {
+  const modes = [DEFAULT_RUNTIME_MODE, DEFAULT_RUNTIME_MODE === 'local' ? 'lan' : 'local'] as const;
+  let lastError: unknown;
+  for (const mode of modes) {
+    try {
+      return await requestDaemonJson<T>(path, {
+        baseUrl: getDefaultLocalDaemonUrl(DAEMON_PORT, mode),
+        dataDir: DATA_DIR,
+        body,
+        method: 'POST',
+        timeoutMs,
+      });
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(`Daemon API nicht erreichbar: ${path}`);
+}
+
+async function cmdTokenCreate(flags: string[]): Promise<void> {
+  header('Token erstellen');
+
+  if (!(await isDaemonRunning())) {
+    fail('Daemon laeuft nicht — starte ihn zuerst mit: thinklocal start');
+    return;
+  }
+
+  // Parse --name <name> [--ttl <hours>]
+  let name: string | undefined;
+  let ttlHours: number | undefined;
+  for (let i = 0; i < flags.length; i++) {
+    if (flags[i] === '--name' && flags[i + 1]) {
+      name = flags[++i];
+    } else if (flags[i] === '--ttl' && flags[i + 1]) {
+      ttlHours = Number(flags[++i]);
+    }
+  }
+
+  if (!name) {
+    fail('--name ist erforderlich');
+    console.log(`\n  Nutzung: thinklocal token create --name <name> [--ttl <hours>]`);
+    console.log(`  Beispiel: thinklocal token create --name "influxdb-node" --ttl 48\n`);
+    return;
+  }
+
+  try {
+    const result = await postLocalDaemonJson<{
+      token: string;
+      id: string;
+      name: string;
+      expires_at: string;
+      message: string;
+    }>('/api/token/create', { name, ttl_hours: ttlHours });
+
+    ok(`Token erstellt: ${C.bold}${result.name}${C.reset}`);
+    console.log();
+    console.log(`  ${C.bold}${C.yellow}Token:${C.reset}  ${result.token}`);
+    console.log(`  ${C.dim}ID:       ${result.id}${C.reset}`);
+    console.log(`  ${C.dim}Gueltig:  bis ${result.expires_at}${C.reset}`);
+    console.log();
+    warn('Token wird nur einmal angezeigt — jetzt kopieren!');
+    console.log();
+    info(`Neuer Node joint mit:`);
+    console.log(`    ${C.bold}thinklocal join --token ${result.token} --admin-url https://<admin-ip>:${DAEMON_PORT}${C.reset}`);
+    console.log();
+  } catch (err) {
+    fail(`Token-Erstellung fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+async function cmdTokenList(): Promise<void> {
+  header('Onboarding-Tokens');
+
+  if (!(await isDaemonRunning())) {
+    fail('Daemon laeuft nicht');
+    return;
+  }
+
+  try {
+    const result = await fetchLocalDaemonJson<{
+      tokens: Array<{
+        id: string;
+        name: string;
+        createdAt: string;
+        expiresAt: string;
+        usedAt: string | null;
+        usedBy: string | null;
+        revokedAt: string | null;
+      }>;
+      count: number;
+    }>('/api/token/list');
+
+    if (result.count === 0) {
+      info('Keine Tokens vorhanden');
+      console.log(`  Erstelle einen mit: ${C.bold}thinklocal token create --name <name>${C.reset}\n`);
+      return;
+    }
+
+    // Table header
+    const nameW = 20;
+    const idW = 12;
+    const createdW = 20;
+    const expiresW = 20;
+    const statusW = 12;
+
+    console.log(
+      `  ${C.bold}${'NAME'.padEnd(nameW)} ${'ID'.padEnd(idW)} ${'CREATED'.padEnd(createdW)} ${'EXPIRES'.padEnd(expiresW)} ${'STATUS'.padEnd(statusW)}${C.reset}`,
+    );
+    console.log(`  ${'-'.repeat(nameW + idW + createdW + expiresW + statusW + 4)}`);
+
+    for (const t of result.tokens) {
+      let status: string;
+      if (t.revokedAt) {
+        status = `${C.red}revoked${C.reset}`;
+      } else if (t.usedAt) {
+        status = `${C.yellow}used${C.reset}`;
+      } else if (new Date(t.expiresAt) < new Date()) {
+        status = `${C.dim}expired${C.reset}`;
+      } else {
+        status = `${C.green}active${C.reset}`;
+      }
+
+      const created = t.createdAt.replace('T', ' ').slice(0, 19);
+      const expires = t.expiresAt.replace('T', ' ').slice(0, 19);
+
+      console.log(
+        `  ${t.name.padEnd(nameW)} ${t.id.slice(0, 10).padEnd(idW)} ${created.padEnd(createdW)} ${expires.padEnd(expiresW)} ${status}`,
+      );
+    }
+    console.log(`\n  ${result.count} Token(s) gesamt\n`);
+  } catch (err) {
+    fail(`Token-Liste nicht abrufbar: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+async function cmdTokenRevoke(tokenId: string | undefined): Promise<void> {
+  header('Token widerrufen');
+
+  if (!tokenId) {
+    fail('Token-ID erforderlich');
+    console.log(`\n  Nutzung: thinklocal token revoke <id>`);
+    console.log(`  IDs findest du mit: ${C.bold}thinklocal token list${C.reset}\n`);
+    return;
+  }
+
+  if (!(await isDaemonRunning())) {
+    fail('Daemon laeuft nicht');
+    return;
+  }
+
+  try {
+    const result = await postLocalDaemonJson<{ status: string; id: string }>('/api/token/revoke', { id: tokenId });
+    ok(`Token ${C.bold}${result.id}${C.reset} widerrufen`);
+    console.log();
+  } catch (err) {
+    fail(`Widerruf fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+async function cmdJoin(flags: string[]): Promise<void> {
+  header('Mesh beitreten (Token-Onboarding)');
+
+  let token: string | undefined;
+  let adminUrl: string | undefined;
+  for (let i = 0; i < flags.length; i++) {
+    if (flags[i] === '--token' && flags[i + 1]) {
+      token = flags[++i];
+    } else if (flags[i] === '--admin-url' && flags[i + 1]) {
+      adminUrl = flags[++i];
+    }
+  }
+
+  if (!token || !adminUrl) {
+    fail('--token und --admin-url sind erforderlich');
+    console.log(`\n  Nutzung: thinklocal join --token <token> --admin-url <url>`);
+    console.log(`  Beispiel: thinklocal join --token tlmcp_abc123... --admin-url https://10.10.10.55:9440\n`);
+    return;
+  }
+
+  // Validate admin URL format
+  if (!adminUrl.startsWith('http://') && !adminUrl.startsWith('https://')) {
+    fail('admin-url muss mit http:// oder https:// beginnen');
+    return;
+  }
+
+  // Determine local identity
+  const { hostname } = await import('node:os');
+  const localHostname = hostname();
+  const agentType = process.env['TLMCP_AGENT_TYPE'] ?? 'claude-code';
+  const agentId = `spiffe://thinklocal/host/${localHostname}/agent/${agentType}`;
+
+  info(`Hostname:  ${localHostname}`);
+  info(`Agent-ID:  ${agentId}`);
+  info(`Admin-URL: ${adminUrl}`);
+  console.log();
+
+  try {
+    // POST /onboarding/join to the admin node
+    const result = await requestDaemonJson<{
+      signed_cert_pem: string;
+      key_pem: string;
+      ca_cert_pem: string;
+      admin_agent_id: string;
+      mesh_name: string;
+      message: string;
+    }>('/onboarding/join', {
+      baseUrl: adminUrl,
+      body: {
+        hostname: localHostname,
+        agent_id: agentId,
+      },
+      method: 'POST',
+      dataDir: DATA_DIR,
+      timeoutMs: 15_000,
+    });
+
+    ok(`Mesh beigetreten! Admin: ${result.admin_agent_id}`);
+
+    // Save certificates to ~/.thinklocal/tls/
+    const tlsDir = resolve(DATA_DIR, 'tls');
+    mkdirSync(tlsDir, { recursive: true });
+
+    const certPath = resolve(tlsDir, 'node.crt');
+    const keyPath = resolve(tlsDir, 'node.key');
+    const caPath = resolve(tlsDir, 'ca.crt');
+
+    atomicWrite(certPath, result.signed_cert_pem, 0o644);
+    atomicWrite(keyPath, result.key_pem, 0o600);
+    atomicWrite(caPath, result.ca_cert_pem, 0o644);
+
+    ok(`Zertifikat gespeichert:  ${certPath}`);
+    ok(`Private Key gespeichert: ${keyPath}`);
+    ok(`CA-Cert gespeichert:     ${caPath}`);
+
+    console.log();
+    info(`${result.message}`);
+    console.log();
+    info(`Naechster Schritt: Daemon (neu)starten mit LAN-Modus:`);
+    console.log(`    ${C.bold}thinklocal restart --lan${C.reset}`);
+    console.log();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    fail(`Join fehlgeschlagen: ${msg}`);
+
+    if (msg.includes('Token rejected')) {
+      info('Pruefe ob der Token gueltig, nicht abgelaufen und nicht bereits verwendet ist.');
+      info(`Neuen Token erstellen: ${C.bold}thinklocal token create --name <name>${C.reset} (auf dem Admin-Node)`);
+    }
+    console.log();
+  }
+}
+
+async function cmdToken(subCmd: string | undefined, args: string[]): Promise<void> {
+  switch (subCmd) {
+    case 'create':
+      return cmdTokenCreate(args);
+    case 'list':
+    case 'ls':
+      return cmdTokenList();
+    case 'revoke':
+      return cmdTokenRevoke(args[0]);
+    default:
+      console.log(`
+  ${C.bold}thinklocal token${C.reset} — Onboarding-Token-Verwaltung (ADR-016)
+
+  ${C.bold}Befehle:${C.reset}
+    token create --name <name> [--ttl <hours>]   Token erstellen (default: 24h)
+    token list                                    Alle Tokens anzeigen
+    token revoke <id>                             Token widerrufen
+
+  ${C.bold}Beispiel:${C.reset}
+    thinklocal token create --name "influxdb-node" --ttl 48
+    thinklocal token list
+    thinklocal token revoke a1b2c3d4e5f6
+`);
+  }
+}
+
 async function cmdPeers(): Promise<void> {
   header('Verbundene Peers');
   if (!(await isDaemonRunning())) {
@@ -1395,6 +1675,10 @@ async function main(): Promise<void> {
       return cmdDeploy(args[1], args.slice(2));
     case 'setup':
       return cmdSetup(args[1]);
+    case 'token':
+      return cmdToken(args[1], args.slice(2));
+    case 'join':
+      return cmdJoin(args.slice(1));
     case 'config':
       if (args[1] === 'show' || !args[1]) return cmdConfigShow();
       break;
@@ -1420,6 +1704,10 @@ async function main(): Promise<void> {
     logs           Live-Logs anzeigen
     peers          Verbundene Peers mit Health-Daten
     check <host>   Remote-Daemon pruefen (host oder host:port)
+    token create  Onboarding-Token erstellen --name <n> [--ttl <h>]
+    token list    Alle Tokens anzeigen
+    token revoke  Token widerrufen <id>
+    join           Mesh beitreten --token <t> --admin-url <url>
     deploy <u@h>   Remote-Deployment via SSH (Linux)
     remove <u@h>   Remote-Deinstallation via SSH [--purge]
     setup <tool>   MCP-Server in AI-Tool konfigurieren
