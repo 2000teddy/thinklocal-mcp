@@ -423,6 +423,8 @@ async function main(): Promise<void> {
   }
 
   const tokenStore = new TokenStore(config.daemon.data_dir, log);
+
+  // Admin-only token endpoints on the main mTLS server (loopback)
   registerTokenApi(cardServer.getServer(), {
     tokenStore,
     pairingStore,
@@ -433,6 +435,38 @@ async function main(): Promise<void> {
     log,
     rateLimiter,
   });
+
+  // Onboarding server: separate HTTPS port WITHOUT client-cert requirement.
+  // New nodes don't have a cert yet, so /onboarding/join must be reachable
+  // without mTLS. Only the Bearer token authenticates the request.
+  if (caBundle && tlsBundle) {
+    const Fastify = (await import('fastify')).default;
+    const onboardingServer = Fastify({
+      logger: false,
+      https: {
+        key: tlsBundle.keyPem,
+        cert: tlsBundle.certPem,
+        // NO requestCert, NO rejectUnauthorized — this is intentional!
+        // The Bearer token in the Authorization header authenticates instead.
+      },
+    });
+
+    // Register only the join endpoint on the onboarding server
+    registerTokenApi(onboardingServer, {
+      tokenStore,
+      pairingStore,
+      trustStoreNotifier,
+      audit,
+      caBundle,
+      ownAgentId: identity.spiffeUri,
+      log,
+      rateLimiter,
+    });
+
+    const onboardingPort = config.daemon.port + 1; // 9441
+    await onboardingServer.listen({ port: onboardingPort, host: '0.0.0.0' });
+    log.info({ port: onboardingPort }, 'Onboarding-Server gestartet (HTTPS ohne mTLS-Pflicht)');
+  }
 
   // 8c2. Agent Registry (ADR-004 Phase 2)
   // MUST be created BEFORE registerInboxApi so the broadcast fanout
