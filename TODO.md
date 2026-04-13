@@ -35,7 +35,8 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [x] 🔴 **CA-Subject-Disambiguation** — `createMeshCA(meshName, nodeId)` baut nodeId in CN ein, sonst koennen Peer-CAs mit gleichem Subject einander beim mTLS-Handshake ueberschreiben (PR #77, 2026-04-07)
 - [x] 🟠 **SSH-Bootstrap-Trust** — `scripts/ssh-bootstrap-trust.sh` nutzt bestehenden SSH-Trust-Anchor zwischen Operator-eigenen Nodes statt PIN-Zeremonie. ssh-Reachability + base64-encoded JSON via stdin, idempotent. Fuer Single-Operator-Mesh praktischer als manuelle PINs. (PR #78, 2026-04-07)
 - [x] 🟠 **Hot-Reload TrustStore** — IMPLEMENTIERT 2026-04-12 (PR #117). agent-card.ts reloadTlsContext() + pairing-handler trustStoreNotifier.rebuild()
-- [ ] 🟡 **Token-basiertes Onboarding (`tlmcp init` / `tlmcp join`)** — Single-Owner-Mesh-Modus via Bearer-Token + Browser-Approval (analog Claude Code `/login`), CA-Schluessel bleibt nur auf Admin-Node (Konsensus 04-07: GPT-5.4 + Gemini Pro, beide 9/10). Geplant fuer PR #82+
+- [x] 🟡 **Token-basiertes Onboarding (`tlmcp init` / `tlmcp join`)** — IMPLEMENTIERT 2026-04-13 (PRs #124-#126 + direct pushes). token-store.ts + token-api.ts + CLI + Trust-Bundle-Propagation. Live-Test: 5-Node Mesh mit ioBroker per Token gejoined.
+- [x] 🟠 **Trust-Bundle-Propagation** — IMPLEMENTIERT 2026-04-13. Admin-Node übergibt beim Token-Join alle Peer-CAs + Peer-Liste. Neuer Node kann sofort mit dem gesamten Mesh kommunizieren.
 
 ### 1.3 Mesh-Networking
 - [x] 🔴 libp2p Node.js/TypeScript Integration — `libp2p-runtime.ts` + Config/Agent-Card/Discovery-Integration, dual-stack neben HTTP(S) (2026-04-05)
