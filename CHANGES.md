@@ -8,6 +8,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-04-13
 
+### ADR-016 Token-Onboarding Phase 3: CLI + MCP Tools
+
+- **`packages/cli/src/thinklocal.ts`**: 4 neue CLI-Kommandos:
+  `thinklocal token create --name <name> [--ttl <hours>]` (Token erstellen),
+  `thinklocal token list` (Tokens auflisten mit farbiger Status-Tabelle),
+  `thinklocal token revoke <id>` (Token widerrufen),
+  `thinklocal join --token <token> --admin-url <url>` (Mesh beitreten,
+  speichert Certs in `~/.thinklocal/tls/`).
+- **`packages/daemon/src/mcp-stdio.ts`**: 2 neue MCP-Tools:
+  `token_create` (Token erstellen via MCP), `token_list` (Tokens auflisten via MCP).
+- Hilfetext aktualisiert mit Token- und Join-Befehlen.
+
 ### ADR-016 Token-Onboarding Phase 2: REST API (PR #125)
 
 - **`packages/daemon/src/token-api.ts`** (neu): 4 REST-Endpoints:
