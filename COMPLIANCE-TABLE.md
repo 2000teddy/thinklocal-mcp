@@ -241,6 +241,7 @@ Tests wurden bisher als "selbstverstaendlicher Bestandteil von Code" behandelt u
 | 132 | #117      | TLS Hot-Reload + Graceful Agent Unregister                      | 04-12 16:30 | —  | —  | ✅ | ✅ | —  | ✅ | agent-card.ts reloadTlsContext(), pairing-handler trustStoreNotifier.rebuild(), mcp-stdio register/unregister. 8 neue Tests, 574/574 gruen. CR Gemini Pro: 1 MEDIUM + 2 LOW gefixt. |
 | 133 | #122      | Nachtschicht: Inbox-Fixes (Init-Order, ACL, Tests)              | 04-13 00:15 | —  | —  | ✅ | —  | —  | ✅ | index.ts: AgentRegistry vor registerInboxApi (Broadcast-Bug). inbox-api.ts: pairingStore ACL auf outbound send (403 fuer unpaired). 3 neue Tests, 577/577 gruen. Bug-Fix-PR: CO+CG optional. |
 | 134 | tbd       | ADR-016 Token-Onboarding Phase 1 (token-store.ts)               | 04-12 00:15 | —  | —  | ✅ | ✅ | ✅ | ✅ | `token-store.ts` SQLite-backed Token-Store. ADR-016 Architektur-Dokument. 41 neue Tests, 618/618 gruen. CO: Konsensus vom 04-07 (GPT-5.4+Gemini Pro 9/10). CG: n/a. |
+| 135 | #125      | ADR-016 Token-Onboarding Phase 2 — REST API                    | 04-13 10:50 | —  | —  | ✅ | ✅ | —  | ✅ | token-api.ts: 4 Endpoints (create/list/revoke/join). CR Gemini Pro: 1 CRITICAL (TOCTOU gefixt), 1 HIGH (Rate-Limiting added), 2 MEDIUM (Input-Validation gefixt, Key-over-wire akzeptiert), 1 LOW. 15 Tests, 633/633 gruen. |
 
 ---
 
@@ -362,4 +363,4 @@ Shell-Injection die in Produktion ein Sicherheitsrisiko waere.
 
 ---
 
-*Letzte Aktualisierung: 2026-04-13 00:15 — Nachtschicht Inbox-Fixes: Init-Order + per-peer ACL. PR #122.*
+*Letzte Aktualisierung: 2026-04-13 10:57 — Token-Onboarding Phase 2 REST API. PR #125.*

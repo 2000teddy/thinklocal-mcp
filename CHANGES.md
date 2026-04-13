@@ -8,7 +8,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-04-13
 
-### ADR-016 Token-Onboarding Phase 1 (PR #TBD)
+### ADR-016 Token-Onboarding Phase 2: REST API (PR #125)
+
+- **`packages/daemon/src/token-api.ts`** (neu): 4 REST-Endpoints:
+  `POST /api/token/create` (loopback), `GET /api/token/list` (loopback),
+  `POST /api/token/revoke` (loopback), `POST /onboarding/join` (remote).
+  Join-Flow: Bearer-Token validieren → Node-Cert signieren mit CA →
+  Peer registrieren → TrustStore hot-reloaden.
+- **`packages/daemon/src/audit.ts`**: 4 neue Event-Types (TOKEN_CREATE,
+  TOKEN_REVOKE, TOKEN_JOIN_REJECTED, TOKEN_JOIN_SUCCESS) + EntityType `token`.
+- 15 neue Tests. Full Suite 633/633 gruen.
+
+### ADR-016 Token-Onboarding Phase 1 (PR #124)
 
 - **`docs/architecture/ADR-016-token-onboarding.md`**: Neues ADR fuer Bearer-Token-
   basiertes Onboarding als Alternative zur SPAKE2-PIN-Zeremonie. Single-Owner-Meshes
