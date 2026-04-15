@@ -24,17 +24,26 @@ export interface OllamaChatResponse {
 export interface OllamaClientOptions {
   /** Base URL, default: http://localhost:11434 */
   baseUrl?: string;
-  /** Default request timeout in ms. Default: 120_000 (2 min) */
+  /** Default request timeout in ms. Default: 300_000 (5 min — Cold-Load kann 20s+ brauchen) */
   timeoutMs?: number;
+  /**
+   * Keep-alive Dauer fuer das Modell im VRAM.
+   * Default Observer: '1h' (statt Ollama-Default 5m).
+   * Verhindert Cold-Load bei haeufigen Anfragen.
+   * Siehe: https://github.com/ollama/ollama/blob/main/docs/api.md#parameters
+   */
+  keepAlive?: string;
 }
 
 export class OllamaClient {
   private baseUrl: string;
   private timeoutMs: number;
+  private keepAlive: string;
 
   constructor(opts: OllamaClientOptions = {}) {
     this.baseUrl = opts.baseUrl ?? process.env['OLLAMA_HOST'] ?? 'http://localhost:11434';
-    this.timeoutMs = opts.timeoutMs ?? 120_000;
+    this.timeoutMs = opts.timeoutMs ?? 300_000;
+    this.keepAlive = opts.keepAlive ?? process.env['TLMCP_OBSERVER_KEEP_ALIVE'] ?? '1h';
   }
 
   /**
@@ -72,6 +81,7 @@ export class OllamaClient {
         model,
         messages,
         stream: false,
+        keep_alive: this.keepAlive,
         options: {
           temperature: options.temperature ?? 0.2,
           num_predict: options.num_predict ?? 2048,

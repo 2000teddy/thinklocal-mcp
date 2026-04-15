@@ -134,5 +134,55 @@ describe('OllamaClient', () => {
       expect(body.options.temperature).toBe(0.9);
       expect(body.options.num_predict).toBe(500);
     });
+
+    it('sends keep_alive parameter (default 1h)', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ model: 'x', message: { role: 'assistant', content: 'y' }, done: true }),
+      } as Response);
+      global.fetch = mockFetch;
+
+      const c = new OllamaClient();
+      await c.chat('x', [{ role: 'user', content: 'hi' }]);
+      const body = JSON.parse((mockFetch.mock.calls[0]![1] as RequestInit).body as string);
+      expect(body.keep_alive).toBe('1h');
+    });
+
+    it('respects custom keepAlive', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ model: 'x', message: { role: 'assistant', content: 'y' }, done: true }),
+      } as Response);
+      global.fetch = mockFetch;
+
+      const c = new OllamaClient({ keepAlive: '24h' });
+      await c.chat('x', [{ role: 'user', content: 'hi' }]);
+      const body = JSON.parse((mockFetch.mock.calls[0]![1] as RequestInit).body as string);
+      expect(body.keep_alive).toBe('24h');
+    });
+
+    it('respects TLMCP_OBSERVER_KEEP_ALIVE env var', async () => {
+      const orig = process.env['TLMCP_OBSERVER_KEEP_ALIVE'];
+      process.env['TLMCP_OBSERVER_KEEP_ALIVE'] = '30m';
+
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ model: 'x', message: { role: 'assistant', content: 'y' }, done: true }),
+      } as Response);
+      global.fetch = mockFetch;
+
+      try {
+        const c = new OllamaClient();
+        await c.chat('x', [{ role: 'user', content: 'hi' }]);
+        const body = JSON.parse((mockFetch.mock.calls[0]![1] as RequestInit).body as string);
+        expect(body.keep_alive).toBe('30m');
+      } finally {
+        if (orig !== undefined) {
+          process.env['TLMCP_OBSERVER_KEEP_ALIVE'] = orig;
+        } else {
+          delete process.env['TLMCP_OBSERVER_KEEP_ALIVE'];
+        }
+      }
+    });
   });
 });
