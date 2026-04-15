@@ -6,6 +6,24 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
+## [Unreleased] — 2026-04-14
+
+### ADR-018 Observer Agent Phase 1 — lokale Intelligenz fuer headless Nodes
+
+- **`docs/architecture/ADR-018-observer-agent.md`** (neu): Architektur fuer
+  einen separaten Observer-Prozess der proaktiv read-only System-Checks
+  ausfuehrt und Auffaelligkeiten ueber das lokale Modell analysiert.
+- **`packages/observer/`** (neues Paket): 4 Module + CLI-Einstiegspunkt:
+  - `model-selector.ts` — RAM-basierte Auswahl (qwen3.5:0.6b bis gemma4:26b)
+  - `system-probes.ts` — Whitelist sicherer Befehle (df, free, journalctl, crontab -l, apt list, …)
+  - `ollama-client.ts` — Minimalclient ohne externe Dependencies
+  - `analyzer.ts` — Prompt-Building + JSON-Parsing der Modell-Antwort
+  - `observer-agent.ts` — Hauptprozess mit `--send --admin=<uri>` Flags
+- **Sicherheit**: Read-only by default, keine rohen Logs in Prompts,
+  strikte Befehls-Whitelist, keine automatischen Schreib-Aktionen.
+- **Tests**: 44 Unit-Tests (model-selector 10, analyzer 14, system-probes 6, ollama-client 14).
+- **Daemon-Tests**: 636/636 unveraendert, 0 Regressionen.
+
 ## [Unreleased] — 2026-04-13
 
 ### ADR-017 Auto-Update CLI-Befehl (Phase 1)

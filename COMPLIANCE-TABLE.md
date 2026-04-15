@@ -244,6 +244,7 @@ Tests wurden bisher als "selbstverstaendlicher Bestandteil von Code" behandelt u
 | 135 | #125      | ADR-016 Token-Onboarding Phase 2 — REST API                    | 04-13 10:50 | —  | —  | ✅ | ✅ | —  | ✅ | token-api.ts: 4 Endpoints (create/list/revoke/join). CR Gemini Pro: 1 CRITICAL (TOCTOU gefixt), 1 HIGH (Rate-Limiting added), 2 MEDIUM (Input-Validation gefixt, Key-over-wire akzeptiert), 1 LOW. 15 Tests, 633/633 gruen. |
 | 136 | tbd       | ADR-016 Token-Onboarding Phase 3 — CLI + MCP Tools             | 04-13 00:42 | —  | —  | ✅ | ✅ | —  | ✅ | thinklocal.ts: 4 CLI-Befehle (token create/list/revoke, join). mcp-stdio.ts: 2 MCP-Tools (token_create, token_list). tsc + 633/633 Tests gruen. |
 | 137 | tbd       | ADR-017 Auto-Update CLI-Befehl (Phase 1)                       | 04-13 14:44 | —  | —  | —  | —  | —  | ✅ | ADR-017 Architektur-Dokument + `thinklocal update` CLI (--check/--auto). GitHub Releases API, Version-Diff, git pull + npm install + Restart. Hilfetext aktualisiert. Doc-only ADR + Feature-Code ohne externe Abhaengigkeiten. |
+| 138 | tbd       | ADR-018 Observer Agent Phase 1 — lokale Intelligenz            | 04-14 23:45 | ✅ | —  | ✅ | —  | —  | ✅ | ADR-018 + PRO_CON_THINKBIG.md. Neues Paket `packages/observer/` mit 4 Modulen: model-selector, system-probes, ollama-client, analyzer + observer-agent CLI. 44 Tests gruen. CO: Multi-Modell-Analyse (Gemini Pro + Claude Sonnet + Devil's Advocate). |
 
 ---
 
@@ -365,4 +366,4 @@ Shell-Injection die in Produktion ein Sicherheitsrisiko waere.
 
 ---
 
-*Letzte Aktualisierung: 2026-04-13 14:44 — ADR-017 Auto-Update CLI-Befehl.*
+*Letzte Aktualisierung: 2026-04-14 23:45 — ADR-018 Observer Agent Phase 1.*
