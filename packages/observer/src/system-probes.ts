@@ -56,8 +56,16 @@ const SAFE_PROBES: Array<{
   },
   // Cron-Jobs des aktuellen Users
   { id: 'user-cron', category: 'cron', command: 'crontab -l' },
-  // Apt-Updates (nur LESEN, nicht installieren)
-  { id: 'apt-upgradable', category: 'updates', command: 'apt list --upgradable 2>/dev/null' },
+  // Apt-Updates: nur ZAEHLEN und Top-20 zeigen (sonst wird der Prompt zu gross).
+  // `apt list --upgradable` kann auf ungepflegten Systemen mehrere hundert Pakete
+  // listen. Fuer den Observer reicht die Anzahl + Beispiele — das LLM braucht
+  // nicht die vollstaendige Liste um eine Empfehlung zu geben.
+  {
+    id: 'apt-upgradable',
+    category: 'updates',
+    command: 'bash -c \'LIST=$(apt list --upgradable 2>/dev/null | tail -n +2); COUNT=$(echo "$LIST" | grep -c "." || echo 0); echo "Upgradable packages: $COUNT"; echo "---"; echo "$LIST" | head -20\'',
+    maxBytes: 5000,
+  },
   // Top-Memory-Prozesse
   { id: 'top-mem', category: 'processes', command: 'ps aux --sort=-%mem | head -20' },
 ];
