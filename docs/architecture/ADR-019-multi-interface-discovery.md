@@ -23,9 +23,29 @@ Hosts haben oft **mehrere Netzwerk-Interfaces**:
 - Apple-Geraete (iPad, Apple Watch) sind nur ueber WLAN erreichbar — der User
   braucht beide Interfaces aktiv
 
-**Symptom:** MacBook hat Default-Route ueber DMZ-Interface, published mDNS
-dort, sieht 0 Peers im Mesh, ist effektiv isoliert. `mesh_status` zeigt
-`peers_online: 0` obwohl alle anderen Peers laufen.
+**Symptom (zwei Auspraegungen, beide live beobachtet 2026-05-17):**
+
+1. **MacBook initial isoliert:** Vor dem Reconnect zeigte der Daemon
+   `peers_online: 0` — das mDNS-Discovery hatte noch keine Peers gefunden,
+   vermutlich weil mDNS-Multicast auf einem Interface ohne Mesh-Reachability
+   loslief.
+
+2. **Falscher Host im Agent Card / mDNS-TXT (Live-Beweis):** MacBook hat
+   drei aktive Interfaces — en10 (10.10.10.55 = Mesh, mit Default-Route),
+   en8 (10.0.0.20 = DMZ), en0 (10.10.100.150). Der Daemon-Socket bindet
+   korrekt auf `*:9440` und etabliert mTLS-Verbindungen aus dem Mesh-Interface
+   heraus. ABER: `discover_peers` listet den MacBook als
+   `host: "10.0.0.20"` (DMZ-IP), `agent_card: null`. Andere Peers koennen ihn
+   ueber diese IP nicht erreichen, weil 10.0.0.20 aus dem 10.10.10.0/24-Mesh
+   nicht routbar ist und die Mesh-CA nicht fuer die DMZ-IP gilt.
+
+   **Ursache:** `bonjour-service` ohne Interface-Pinning ermittelt alle lokalen
+   IPs und nimmt die erste — das ist nicht garantiert die Mesh-IP. Der published
+   mDNS-A-Record zeigt damit ins falsche Subnet, selbst wenn der TCP-Socket auf
+   allen Interfaces lauscht.
+
+Beide Auspraegungen haben dieselbe Wurzel: die Discovery-Schicht waehlt
+Interfaces nicht policy-gesteuert.
 
 ### Warum Workarounds nicht akzeptabel sind
 
