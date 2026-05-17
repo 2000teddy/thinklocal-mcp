@@ -39,6 +39,42 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
   Zustand gebracht" — der Bug war von Anfang an im Code, fiel nur jetzt
   durch den 5-Node-Test auf.
 
+### ADR-019 Multi-Interface mDNS Discovery (Phase 1)
+
+Bei Hosts mit mehreren Netzwerk-Interfaces (z.B. MacBook mit Ethernet im LAN
++ WLAN + DMZ-Verbindung) wurden Peers ueber falsche IPs entdeckt — der Daemon
+verbendete sich gegen DMZ-IPs (10.0.0.20) statt Mesh-IPs (10.10.10.55) und
+mTLS-Handshakes scheiterten. Multi-Modell-Konsensus (GPT-5.4 + Gemini 3 Pro):
+CIDR-basierte Interface-Selektion + Bonjour mit explizitem Pinning + empfangs-
+seitige CIDR-Validierung gegen Reflector-Leakage.
+
+- **PoC via tcpdump bewiesen:** `bonjour-service`'s `{ interface }` Option
+  steuert nur den Multicast-Socket, NICHT die A-Records. Selbst mit Pinning
+  werden alle lokalen IPs in den A-Records published. Loesung: zusaetzlich
+  `Service.records()` monkey-patchen.
+- **`packages/daemon/src/discovery-policy.ts`** (neu): CIDR-Match (`ipInCidr`),
+  Interface-Inventarisierung mit Dependency-Injection (testbar), Default-Excludes
+  fuer 15 virtuelle Interface-Typen (docker/tailscale/utun/veth/bridge/...).
+- **`packages/daemon/src/discovery.ts`** (erweitert): Konstruktor pinned auf
+  `getMeshIp(policy)`, publish() ruft `restrictServiceToIp()` auf, browse()
+  filtert empfangene Peer-IPs via `isPeerIpAllowed()`.
+- **`packages/daemon/src/config.ts`** (erweitert): `allowed_mesh_cidrs` und
+  `exclude_interface_patterns` in `[discovery]`, fail-fast bei ungueltigen CIDRs.
+- **Env-Vars**: `TLMCP_ALLOWED_MESH_CIDRS`, `TLMCP_EXCLUDE_INTERFACE_PATTERNS`.
+- **`docs/architecture/ADR-019-multi-interface-discovery.md`**: Vollstaendige
+  Konsensus-Doku mit Phase-2-Limitationen (kein Reconcile-Loop, IPv6 spaeter).
+- **`docs/USER-GUIDE.md`**: Neuer Troubleshooting-Eintrag "Mesh nicht gefunden
+  trotz aktivem Daemon".
+- **Code-Review (GPT-5.4)**: 1 HIGH + 2 MEDIUM + 4 LOW Findings — alle vor
+  Merge gefixt mit Regression-Tests (parseInt-Spoofing, leere Excludes,
+  Idempotenz, CIDR-Validation, Hostname-Fallback, leere A-Records).
+- **Precommit-Review (GPT-5.4)**: weitere 1 HIGH + 1 MEDIUM + 1 LOW gefunden:
+  - HIGH: `allowed_mesh_cidrs` ohne Match = silent fallback → jetzt fail-closed
+  - MEDIUM: User-Excludes ersetzten Defaults → jetzt gemerged
+  - LOW: Tests prueften nur Helper → 3 echte MdnsDiscovery-Wiring-Tests ergaenzt
+- **Tests**: 37 Unit-Tests + 12 Integration-Tests, Gesamt **685/685 gruen**
+  (vorher 672), 0 Regressionen.
+
 ## [Unreleased] — 2026-05-16
 
 ### macOS-Deployment als LaunchDaemon dokumentiert
@@ -61,6 +97,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 - Relevant fuer den **Installer/Distribution**: alle hartkodierten Pfade
   (`/Users/chris/...`, Node-Version, `UserName`) muessen per Template ersetzt
   werden.
+
+---
 
 ## [Unreleased] — 2026-04-14
 

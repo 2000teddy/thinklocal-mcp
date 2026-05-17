@@ -5,6 +5,23 @@ import TOML from '@iarna/toml';
 import { resolveRuntimeSettings, type RuntimeMode } from './runtime-mode.js';
 import { resolveLibp2pEnabled, resolveLibp2pListenPort } from './libp2p-runtime.js';
 
+/** Strikte CIDR-Validierung (ADR-019). Akzeptiert nur IPv4 a.b.c.d/n mit n in 0..32. */
+function isValidCidr(s: string): boolean {
+  const [base, prefix] = s.split('/');
+  if (!base || !prefix) return false;
+  if (!/^\d{1,2}$/.test(prefix)) return false;
+  const p = Number(prefix);
+  if (p < 0 || p > 32) return false;
+  const parts = base.split('.');
+  if (parts.length !== 4) return false;
+  for (const part of parts) {
+    if (!/^\d{1,3}$/.test(part)) return false;
+    const n = Number(part);
+    if (n < 0 || n > 255) return false;
+  }
+  return true;
+}
+
 export interface StaticPeer {
   host: string;
   port?: number;
@@ -28,6 +45,17 @@ export interface DaemonConfig {
   discovery: {
     mdns_service_type: string;
     static_peers: StaticPeer[];
+    /**
+     * ADR-019: Erlaubte Mesh-CIDRs. Wenn gesetzt, werden nur Interfaces
+     * verwendet deren IP in einem dieser CIDRs liegt. Empfangene Peer-IPs
+     * werden ebenfalls gegen diese Liste validiert. Leer = auto-detect.
+     */
+    allowed_mesh_cidrs: string[];
+    /**
+     * ADR-019: Glob-Patterns fuer Interface-Namen die ausgeschlossen werden.
+     * Default deckt typische virtuelle Interfaces ab (Docker, VPN, Bridges).
+     */
+    exclude_interface_patterns: string[];
   };
   libp2p: {
     enabled: boolean;
@@ -60,6 +88,8 @@ const DEFAULTS: DaemonConfig = {
   discovery: {
     mdns_service_type: '_thinklocal._tcp',
     static_peers: [],
+    allowed_mesh_cidrs: [],
+    exclude_interface_patterns: [],
   },
   libp2p: {
     enabled: true,
@@ -127,6 +157,31 @@ export function loadConfig(configPath?: string): DaemonConfig {
         const [host, portStr] = entry.split(':');
         return { host, port: portStr ? Number.parseInt(portStr, 10) : undefined };
       });
+  }
+
+  // 2c. ADR-019: Mesh-CIDRs und Interface-Excludes
+  if (env['TLMCP_ALLOWED_MESH_CIDRS']) {
+    cfg.discovery.allowed_mesh_cidrs = env['TLMCP_ALLOWED_MESH_CIDRS']
+      .split(',')
+      .map((c) => c.trim())
+      .filter(Boolean);
+  }
+  if (env['TLMCP_EXCLUDE_INTERFACE_PATTERNS']) {
+    cfg.discovery.exclude_interface_patterns = env['TLMCP_EXCLUDE_INTERFACE_PATTERNS']
+      .split(',')
+      .map((p) => p.trim())
+      .filter(Boolean);
+  }
+
+  // LOW-FIX (CR-Review): CIDRs validieren — fail fast statt silent.
+  // Typos wie "10.10.10.0/33" oder "10.10.10.0/24foo" muessen sofort
+  // sichtbar sein, sonst publish/browse-Verhalten ist stillschweigend kaputt.
+  const invalidCidrs = cfg.discovery.allowed_mesh_cidrs.filter((c) => !isValidCidr(c));
+  if (invalidCidrs.length > 0) {
+    throw new Error(
+      `Ungueltige CIDRs in discovery.allowed_mesh_cidrs: ${JSON.stringify(invalidCidrs)}. ` +
+        `Erwartet: IPv4 a.b.c.d/n mit n in 0..32.`,
+    );
   }
 
   // 3. Hostname auffüllen und Pfad expandieren

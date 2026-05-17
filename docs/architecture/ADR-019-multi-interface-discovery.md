@@ -1,9 +1,10 @@
 # ADR-019: Multi-Interface mDNS Discovery — Robuste Peer-Discovery auf Multi-Homed Hosts
 
-**Status:** Proposed
-**Datum:** 2026-05-17
-**Autor:** Christian (Problem-Aufdeckung), Claude Opus 4.7 (Konsensus-Moderation)
+**Status:** Accepted (Phase 1)
+**Datum:** 2026-05-17 (Proposed) / 2026-05-18 (Phase 1 Implementiert)
+**Autor:** Christian (Problem-Aufdeckung), Claude Opus 4.7 (Konsensus-Moderation, Implementierung)
 **Konsensus:** GPT-5.4 (8/10), Gemini 3 Pro (9/10), Minimax übersprungen (PAL-Config veraltet), Grok übersprungen (OpenRouter-Stau)
+**Code-Review:** GPT-5.4 — 1 HIGH + 2 MEDIUM + 4 LOW gefunden und alle gefixt mit Regression-Tests
 **Verwandt:** ADR-001 (Mesh-Architektur), TODO Phase 1 Discovery
 
 ## Kontext
@@ -165,6 +166,45 @@ ipv6_enabled = false  # Phase 1: nur IPv4 — IPv6 Link-Local Scope-Handling spa
 5. **Empfangsseitige CIDR-Validierung** ergaenzen
 6. **Default-aktivieren** nach 2 Wochen Stabilitaet
 7. **Spaeter (separates ADR):** libp2p-Routing als zusaetzliche Schicht (Option E)
+
+## Phase 1 Implementierung (2026-05-18)
+
+**Was eingebaut wurde:**
+- `discovery-policy.ts` — CIDR-Filter, Interface-Selektion, `restrictServiceToIp()`
+- `discovery.ts` erweitert: Konstruktor pinned auf Mesh-IP, publish() patcht
+  `Service.records()`, browse() filtert empfangene Peers via CIDR
+- `config.ts` erweitert: `allowed_mesh_cidrs`, `exclude_interface_patterns` + Env-Vars
+- 37 Unit-Tests + 9 Integration-Tests (alle gruen, keine Regression)
+
+**WICHTIGE Erkenntnis aus PoC (per tcpdump bewiesen):**
+`{ interface }` Option von `bonjour-service` steuert nur den Multicast-Socket,
+nicht die A-Records — die werden weiterhin aus ALLEN `os.networkInterfaces()`
+generiert. Loesung: zusaetzlich `Service.records()` monkey-patchen.
+
+**Phase-2-Limitationen (bewusst verschoben):**
+- **Kein Reconcile-Loop:** `meshIp` wird nur beim Daemon-Start berechnet. Wenn
+  das Mesh-Interface zur Laufzeit verschwindet (Kabel raus, Sleep-Wake), zeigt
+  der Service weiter auf die tote IP. Erst Daemon-Restart heilt das.
+- **Kein Multi-Instance:** Bei mehreren erlaubten Mesh-CIDRs wird nur das
+  alphabetisch erste Interface gewaehlt. Multi-Subnet-Publishing folgt spaeter.
+- **IPv6:** Komplett deaktiviert (`disableIPv6: true` im publish). Phase 2.
+
+**Code-Review-Findings (alle gefixt vor Merge):**
+- HIGH (CR-1): `exclude_interface_patterns: []` aktivierte die Defaults nicht
+  (gefixt: leeres Array faellt auf `DEFAULT_EXCLUDE_PATTERNS` zurueck)
+- HIGH (CR-2, Precommit): `allowed_mesh_cidrs` set + kein Match = silent
+  fallback zu unrestricted Publishing (gefixt: fail-closed, Konstruktor wirft)
+- MEDIUM (CR-1): `parseInt('10abc.10.10.55')` akzeptierte gespoofte IPs
+  (gefixt: strikte Regex-Validierung in `ipInCidr` und `ipv4ToNum`)
+- MEDIUM (CR-2, Precommit): User-Excludes ersetzten Defaults statt zu mergen
+  (gefixt: `Set([...DEFAULTS, ...userExcludes])`)
+- MEDIUM: Reconcile-Loop fehlt (dokumentiert als Phase-2-Limitation)
+- LOW: `restrictServiceToIp` nicht idempotent (gefixt: Marker-Variable)
+- LOW: Stiller Fehler wenn Mesh-IP nicht in records (gefixt: Return-Wert + warn)
+- LOW: CIDR-Validierung in `loadConfig` (gefixt: fail-fast bei Typos)
+- LOW: IPv6-only Peer + CIDR-Policy = Hostname-Fallback (gefixt: rejecten)
+- LOW (Precommit): discovery.test.ts testete nur Helper (gefixt: 3 echte
+  MdnsDiscovery-Wiring-Tests inkl. fail-closed Regression)
 
 ## PoC-Pflicht vor Implementierung
 
