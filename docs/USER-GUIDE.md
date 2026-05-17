@@ -268,6 +268,85 @@ thinklocal logs      # Live-Logs anzeigen
 2. Netzwerk pruefen: `thinklocal check 10.10.10.56:9440`
 3. Firewall: Port 9440 muss offen sein
 4. mDNS: avahi-daemon auf Linux installiert?
+5. TLS-Mismatch pruefen — siehe "Peer ohne TLS ignoriert" weiter unten
+
+### Peer ohne TLS ignoriert (requireTls)
+
+Im LAN-Modus lehnt der Daemon Peers ab, die kein TLS sprechen.
+Log-Meldung: `"Peer ohne TLS ignoriert (requireTls aktiv)"`
+
+**Ursache:** Der Peer-Daemon laeuft mit `TLMCP_NO_TLS=1` (reines HTTP),
+waehrend alle anderen Nodes mTLS erwarten.
+
+**Fix auf dem betroffenen Peer:**
+
+```bash
+# Linux (systemd)
+vi ~/.config/systemd/user/thinklocal-daemon.service
+# Zeile "Environment=TLMCP_NO_TLS=1" entfernen
+systemctl --user daemon-reload
+systemctl --user restart thinklocal-daemon
+
+# macOS (launchd)
+# TLMCP_NO_TLS Key aus ~/Library/LaunchAgents/com.thinklocal.daemon.plist entfernen
+launchctl kickstart -k gui/$(id -u)/com.thinklocal.daemon
+```
+
+**Voraussetzung:** TLS-Zertifikate muessen existieren (`~/.thinklocal/tls/ca.crt.pem`,
+`node.crt.pem`, `node.key.pem`). Falls nicht: `thinklocal bootstrap` oder
+`ssh-bootstrap-trust.sh` ausfuehren.
+
+**Wichtig:** `TLMCP_NO_TLS=1` ist nur fuer lokale Entwicklung gedacht —
+niemals auf Nodes setzen, die am LAN-Mesh teilnehmen sollen.
+
+### MCP-Tools funktionieren nicht (socket hang up)
+
+Das MCP-stdio-Subprocess verbindet sich zum lokalen Daemon. Wenn der
+Daemon mTLS spricht, muss die URL in der MCP-Config auf `https://` stehen.
+
+**Symptom:** Alle `mcp__thinklocal__*` Tools liefern "socket hang up".
+
+**Fix — `~/.mcp.json` pruefen:**
+
+```json
+{
+  "mcpServers": {
+    "thinklocal": {
+      "env": {
+        "TLMCP_DAEMON_URL": "https://localhost:9440"
+      }
+    }
+  }
+}
+```
+
+Falsch: `http://localhost:9440` (wenn Daemon mit TLS laeuft)
+Richtig: `https://localhost:9440`
+
+**Nach der Aenderung:** Claude Code (CLI oder Desktop) **neu starten** —
+der MCP-Subprocess liest die Config nur beim Start.
+
+### Nach Daemon-Neustart: Claude Code neu starten
+
+Der MCP-Subprocess (`mcp-stdio.ts`) haelt eine persistente Verbindung
+zum Daemon. Nach einem Daemon-Neustart (Service-Restart, Reboot, Crash)
+muss Claude Code neu gestartet werden, damit sich der MCP-Subprocess
+neu verbindet. Ohne Neustart liefern alle MCP-Tools "socket hang up".
+
+```bash
+# macOS: Daemon-Status pruefen (unabhaengig von Claude Code)
+scripts/service.sh status
+
+# Linux: Daemon-Status pruefen
+systemctl --user status thinklocal-daemon
+
+# Direkt testen (mTLS curl):
+curl --insecure \
+  --cert ~/.thinklocal/tls/node.crt.pem \
+  --key ~/.thinklocal/tls/node.key.pem \
+  --cacert ~/.thinklocal/tls/ca.crt.pem \
+  https://localhost:9440/api/status
+```
 
 ### Hostname aendert sich staendig
 
