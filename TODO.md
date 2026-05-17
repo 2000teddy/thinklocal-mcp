@@ -13,6 +13,24 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [x] 🟠 **Linux-Claude-Desktop-Pfad inkonsistent** — behoben: Linux nutzt jetzt konsistent `~/.config/Claude/claude_desktop_config.json`.
 - [x] 🟡 **Dokumentiertes Sicherheitsniveau und Runtime-Verhalten driften auseinander** — fuer den lokalen Default behoben: Runtime, Installer und Doku beschreiben jetzt ein einheitliches localhost-only Modell. Offen bleibt die spaetere saubere mTLS-Standardisierung fuer echten Mesh-Betrieb.
 
+## Skill Health & Lifecycle (entdeckt 2026-05-17)
+
+- [x] 🔴 **Boot-Race InfluxDB-Skill (Symptom-Fix)** — Lokal auf `influxdb`-Host: `~/.config/systemd/user/thinklocal-daemon.service` ergaenzt um `After=influxdb.service` + `Wants=influxdb.service`. Daemon startet jetzt erst nach InfluxDB, der einmalige HealthCheck beim Boot trifft auf einen ready Service. (2026-05-17, **noch nicht im Repo gespiegelt** — Installer/Service-Template muss nachgezogen werden, ggf. mit konditionaler `After=`-Zeile abhaengig vom Agent-Typ.)
+
+- [ ] 🔴 **Generisches Skill-Health-Monitoring** — **BENOETIGT KONSENS** (`pal:consensus`, 2-3 Modelle). Aktuell prueft `index.ts` Skill-Requirements (z.B. `services: ["influxdb"]`) genau einmal beim Daemon-Start (siehe `influxdbHealthCheck()` in `builtin-skills/influxdb.ts`). Faellt der Service spaeter aus oder kommt er erst nach dem Daemon hoch, wird der Skill nie de- oder re-registriert. Das ist ein generelles Pattern-Problem fuer ALLE Skills auf ALLEN Daemons mit externer Abhaengigkeit (InfluxDB, Telegram, Ollama, kuenftige). Diskussionspunkte fuer den Konsens:
+  - **Wo:** Skill-Manifest mit standardisiertem `healthcheck`-Feld (URL/Command/Funktion) vs. Skill-Adapter mit Plugin-Interface?
+  - **Wie oft:** Festes Intervall, exponentielles Backoff bei Down, oder Event-getrieben (z.B. systemd-Notify)?
+  - **State-Machine:** wie unterscheiden wir "transient unhealthy" (Flap, ignorieren) von "really gone" (de-register)? Schwellwert? Hysterese?
+  - **Gossip-Impact:** Capability-Hash aendert sich bei jedem Flap → Sync-Sturm im Mesh. Damping noetig?
+  - **Re-Registration:** Hot-Reload des Skills im laufenden Daemon, oder erfordert es einen Subprocess-Restart?
+  - **Audit:** Jeder Health-Flip als Event ins SQLite-Log? (Volumen vs. Forensik-Wert)
+  - **Dashboard:** Wie visualisieren wir "degraded" Skills — eigene Farbe, separate Spalte, Health-History?
+  - **Tests:** Wie testen wir intermittent service availability ohne Flaky-Tests? (Mock-Server mit kontrollierten Ausfaellen?)
+  - **Beziehung zu ADR-004 Heartbeat:** Bauen wir auf dem bestehenden Cron-Heartbeat-System auf oder eigenes Subsystem?
+  - **Mesh-Sicht:** Was passiert wenn Peer X den Skill als healthy meldet, ich aber als degraded? Wer gewinnt?
+
+  **Triggered by:** InfluxDB Boot-Race 2026-05-17 (Daemon startete 15:55:36, HealthCheck 15:55:37, InfluxDB ready erst 15:56:12 — Skill war 70 Minuten lang fuer das Mesh unsichtbar bis manueller Daemon-Restart). systemd-Fix loest das lokale Symptom, nicht das Pattern. Folge-PR sollte als ADR-NNN-skill-health-lifecycle.md beginnen.
+
 ## Phase 1 — Fundament: Identität, Verschlüsselung, Discovery (Wochen 1-3)
 
 ### 1.1 Agent-Identität & Kryptografie
