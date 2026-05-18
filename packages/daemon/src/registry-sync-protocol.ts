@@ -6,6 +6,14 @@
  * Sync-Message wird mit einem 4-Byte uint32-LE Length-Prefix versehen.
  * Frame-Limit verhindert Memory-Exhaustion bei malformed Input.
  *
+ * Protocol-Konvention v1: **Ein Frame pro Stream**. Der Sender oeffnet pro
+ * Sync-Message einen frischen libp2p-Stream, sendet genau ein Frame und
+ * schliesst. Empfangsseite liest genau ein Frame und beendet den Stream.
+ * Trailing Bytes nach dem Frame → Fehler.
+ *
+ * Authentizitaet/Integritaet kommen vom darunterliegenden libp2p-Noise-Layer
+ * (mTLS-aequivalent). Der Frame-Layer hat keine eigene Crypto.
+ *
  * Referenz: ADR-020 v1.2.
  */
 
@@ -35,10 +43,16 @@ export function encodeFrame(payload: Uint8Array): Uint8Array {
 /**
  * Liest ein length-prefixed Frame aus einem AsyncIterable<Uint8Array> Stream
  * (libp2p-Source). Gibt `null` zurueck, wenn der Stream sauber zuende geht,
- * bevor ein vollstaendiges Frame verfuegbar war (EOF).
+ * bevor ein vollstaendiges Frame verfuegbar war (EOF vor Header).
  *
- * Wirft RegistrySyncFrameError bei Frame-Size-Verletzung oder mittendrin
- * abgebrochenem Frame.
+ * Wirft RegistrySyncFrameError bei:
+ * - Frame-Size-Verletzung
+ * - Mittendrin abgebrochenem Frame (Header oder Payload incomplete)
+ * - Abort via signal
+ * - Trailing-Bytes nach dem Frame (1-Frame-per-Stream-Konvention)
+ *
+ * Bei jedem Fehlerpfad wird `iterator.return()` aufgerufen, damit
+ * libp2p/Yamux den Stream sauber freigibt.
  */
 export async function readFrame(
   source: AsyncIterable<Uint8Array> | AsyncIterator<Uint8Array>,
@@ -49,52 +63,122 @@ export async function readFrame(
       ? (source as AsyncIterable<Uint8Array>)[Symbol.asyncIterator]()
       : (source as AsyncIterator<Uint8Array>);
 
-  let buffer: Uint8Array | null = null;
-  let needed = 4; // erst Header lesen
-  let payloadLength = -1;
+  const closeIterator = async (): Promise<void> => {
+    try {
+      await iterator.return?.();
+    } catch {
+      // ignore — best-effort cleanup
+    }
+  };
 
-  while (true) {
+  // Race iterator.next() gegen abort signal, damit ein hangender Read auch
+  // abgebrochen werden kann (libp2p-Streams haengen sonst potenziell).
+  const nextWithAbort = async (): Promise<IteratorResult<Uint8Array>> => {
     if (signal?.aborted) {
       throw new RegistrySyncFrameError('aborted while reading frame');
     }
+    if (!signal) return iterator.next();
+    return await new Promise<IteratorResult<Uint8Array>>((resolve, reject) => {
+      const onAbort = () => {
+        reject(new RegistrySyncFrameError('aborted while reading frame'));
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+      iterator.next().then(
+        (val) => {
+          signal.removeEventListener('abort', onAbort);
+          resolve(val);
+        },
+        (err) => {
+          signal.removeEventListener('abort', onAbort);
+          reject(err);
+        },
+      );
+    });
+  };
 
-    if (buffer && buffer.byteLength >= needed) {
-      if (payloadLength < 0) {
-        // Header vollstaendig
-        const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  let headerBuf: Uint8Array | null = null;
+  let payloadBuf: Uint8Array | null = null;
+  let payloadFilled = 0;
+  let payloadLength = -1;
+
+  try {
+    // Phase 1: 4-Byte Header lesen
+    while (payloadLength < 0) {
+      const next = await nextWithAbort();
+      if (next.done) {
+        if (headerBuf === null || headerBuf.byteLength === 0) {
+          // Sauberer EOF zwischen Frames
+          await closeIterator();
+          return null;
+        }
+        throw new RegistrySyncFrameError(
+          `stream ended mid-header (have ${headerBuf.byteLength} of 4 bytes)`,
+        );
+      }
+      const chunk = next.value;
+      if (!chunk || chunk.byteLength === 0) continue;
+
+      headerBuf = headerBuf ? concat(headerBuf, chunk) : chunk;
+      if (headerBuf.byteLength >= 4) {
+        const view = new DataView(
+          headerBuf.buffer,
+          headerBuf.byteOffset,
+          headerBuf.byteLength,
+        );
         payloadLength = view.getUint32(0, true);
         if (payloadLength > REGISTRY_SYNC_MAX_FRAME_BYTES) {
           throw new RegistrySyncFrameError(
             `incoming frame size ${payloadLength} exceeds limit`,
           );
         }
-        needed = 4 + payloadLength;
-        if (buffer.byteLength >= needed) {
-          const payload = buffer.slice(4, needed);
-          return payload;
+        // Allokiere Payload-Buffer einmalig (verhindert O(n^2) concat)
+        payloadBuf = new Uint8Array(payloadLength);
+        // Falls Header chunk schon Payload-Bytes enthielt
+        if (headerBuf.byteLength > 4) {
+          const overflow = headerBuf.subarray(4);
+          if (overflow.byteLength > payloadLength) {
+            throw new RegistrySyncFrameError(
+              'unexpected trailing bytes after registry sync frame',
+            );
+          }
+          payloadBuf.set(overflow, 0);
+          payloadFilled = overflow.byteLength;
         }
-      } else {
-        // Payload vollstaendig
-        const payload = buffer.slice(4, needed);
-        return payload;
       }
     }
 
-    const next = await iterator.next();
-    if (next.done) {
-      if (buffer === null && payloadLength < 0) {
-        // sauberer EOF zwischen Frames
-        return null;
+    // Phase 2: Payload-Bytes auffuellen
+    while (payloadFilled < payloadLength) {
+      const next = await nextWithAbort();
+      if (next.done) {
+        throw new RegistrySyncFrameError(
+          `stream ended mid-payload (have ${payloadFilled} of ${payloadLength} bytes)`,
+        );
       }
+      const chunk = next.value;
+      if (!chunk || chunk.byteLength === 0) continue;
+      if (payloadFilled + chunk.byteLength > payloadLength) {
+        throw new RegistrySyncFrameError(
+          'unexpected trailing bytes after registry sync frame',
+        );
+      }
+      payloadBuf!.set(chunk, payloadFilled);
+      payloadFilled += chunk.byteLength;
+    }
+
+    // Phase 3: Erwarte sauberen EOF nach dem einen Frame
+    const trail = await nextWithAbort();
+    if (!trail.done && trail.value && trail.value.byteLength > 0) {
       throw new RegistrySyncFrameError(
-        `stream ended mid-frame (have ${buffer?.byteLength ?? 0} of ${needed} bytes)`,
+        'unexpected trailing bytes after registry sync frame',
       );
     }
 
-    const chunk = next.value;
-    if (!chunk || chunk.byteLength === 0) continue;
-
-    buffer = buffer ? concat(buffer, chunk) : chunk;
+    await closeIterator();
+    return payloadBuf!;
+  } catch (err) {
+    await closeIterator();
+    throw err;
   }
 }
 

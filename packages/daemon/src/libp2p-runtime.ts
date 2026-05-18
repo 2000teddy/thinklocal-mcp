@@ -50,10 +50,54 @@ export interface Libp2pRuntimeState {
   reason: string | null;
 }
 
+/**
+ * Stream-Handler fuer eingehende libp2p-Streams. Erhalten den rohen Stream
+ * sowie die Remote-Peer-ID. Implementierungen sind verantwortlich fuer das
+ * Lesen aus stream.source, Schreiben in stream.sink und das saubere
+ * Schliessen (z.B. via stream.close()). Nicht resolvende Promises blockieren
+ * den Stream — Timeout/Abort liegt beim Handler.
+ */
+export type Libp2pProtocolHandler = (
+  stream: Libp2pStreamLike,
+  peerId: string,
+) => Promise<void>;
+
+/**
+ * Minimaler libp2p-Stream-Contract. Vermeidet harte Typabhaengigkeit auf
+ * @libp2p/interface, was Tests vereinfacht und Versionsupgrades entkoppelt.
+ */
+export interface Libp2pStreamLike {
+  source: AsyncIterable<Uint8Array>;
+  sink: (source: AsyncIterable<Uint8Array> | Iterable<Uint8Array>) => Promise<void>;
+  close?: () => Promise<void> | void;
+  abort?: (err: Error) => void;
+}
+
+export interface Libp2pPeerEvents {
+  onPeerConnect?: (peerId: string) => void;
+  onPeerDisconnect?: (peerId: string) => void;
+}
+
+export interface Libp2pRuntimeHooks {
+  /** Map: protocol-id → Handler. Wenn ein Protokoll nicht gemapt ist, gilt der Placeholder-Default. */
+  protocolHandlers?: Record<string, Libp2pProtocolHandler>;
+  peerEvents?: Libp2pPeerEvents;
+}
+
 export interface Libp2pRuntime {
   start(): Promise<void>;
   stop(): Promise<void>;
   getState(): Libp2pRuntimeState;
+  /**
+   * Oeffnet einen neuen Stream zu peerId mit dem angegebenen Protokoll.
+   * Wird vom RegistrySyncCoordinator als Transport genutzt. Wirft, wenn
+   * peer nicht erreichbar oder Protokoll nicht unterstuetzt.
+   */
+  dialProtocol?(peerId: string, protocol: string): Promise<Libp2pStreamLike>;
+  /** Trennt die libp2p-Connection zu peerId. */
+  hangUpPeer?(peerId: string): Promise<void>;
+  /** Liste der aktuell verbundenen Peer-IDs (als string). */
+  getConnectedPeerIds?(): string[];
 }
 
 type DynamicImport = (specifier: string) => Promise<unknown>;
@@ -234,6 +278,7 @@ class NoopLibp2pRuntime implements Libp2pRuntime {
 class ActiveLibp2pRuntime implements Libp2pRuntime {
   private node: any;
   private state: Libp2pRuntimeState;
+  private readonly hooks: Libp2pRuntimeHooks;
 
   constructor(
     initialState: Libp2pRuntimeState,
@@ -251,8 +296,10 @@ class ActiveLibp2pRuntime implements Libp2pRuntime {
       yamux: () => unknown;
     },
     private readonly log?: Logger,
+    hooks?: Libp2pRuntimeHooks,
   ) {
     this.state = initialState;
+    this.hooks = hooks ?? {};
   }
 
   async start(): Promise<void> {
@@ -332,19 +379,135 @@ class ActiveLibp2pRuntime implements Libp2pRuntime {
     };
   }
 
+  async dialProtocol(peerId: string, protocol: string): Promise<Libp2pStreamLike> {
+    if (!this.node) throw new Error('libp2p node not started');
+    if (typeof this.node.dialProtocol !== 'function') {
+      throw new Error('libp2p node does not support dialProtocol');
+    }
+    const stream = await this.node.dialProtocol(peerId, protocol);
+    this.onStreamOpened(protocol);
+    return this.wrapStream(stream, protocol);
+  }
+
+  async hangUpPeer(peerId: string): Promise<void> {
+    if (!this.node) return;
+    if (typeof this.node.hangUp === 'function') {
+      await this.node.hangUp(peerId);
+    }
+  }
+
+  getConnectedPeerIds(): string[] {
+    const connections = this.node?.getConnections?.();
+    if (!Array.isArray(connections)) return [];
+    const ids = new Set<string>();
+    for (const conn of connections) {
+      const id = conn?.remotePeer?.toString?.();
+      if (id) ids.add(id);
+    }
+    return Array.from(ids);
+  }
+
+  /**
+   * Wickelt einen libp2p-Stream in den minimalen Libp2pStreamLike-Contract
+   * + Stream-Counter-Cleanup. Idempotent: close()/abort() decrementen den
+   * Counter genau einmal.
+   */
+  private wrapStream(stream: any, protocol: string): Libp2pStreamLike {
+    let closed = false;
+    const decrement = () => {
+      if (!closed) {
+        closed = true;
+        this.onStreamClosed(protocol);
+      }
+    };
+    return {
+      source: stream.source ?? stream,
+      sink: async (source) => {
+        await stream.sink(source);
+      },
+      close: async () => {
+        try {
+          await stream.close?.();
+        } finally {
+          decrement();
+        }
+      },
+      abort: (err: Error) => {
+        try {
+          stream.abort?.(err);
+        } finally {
+          decrement();
+        }
+      },
+    };
+  }
+
   private registerProtocolHandlers(): void {
     for (const protocol of this.state.multiplexer.protocols) {
+      const injected = this.hooks.protocolHandlers?.[protocol];
+
       const handler = async (evt: any) => {
         this.onStreamOpened(protocol);
+        let streamClosed = false;
+        const stream = evt?.stream ?? evt;
+        const remotePeer =
+          evt?.connection?.remotePeer?.toString?.() ??
+          stream?.connection?.remotePeer?.toString?.() ??
+          'unknown';
+
+        const ensureClosed = async () => {
+          if (streamClosed) return;
+          streamClosed = true;
+          try {
+            if (typeof stream?.close === 'function') {
+              await stream.close();
+            } else if (typeof stream?.abort === 'function') {
+              stream.abort(new Error('handler finished'));
+            }
+          } catch {
+            // ignore — best-effort
+          }
+          this.onStreamClosed(protocol);
+        };
+
         try {
-          const stream = evt?.stream ?? evt;
-          if (typeof stream?.close === 'function') {
-            await stream.close();
-          } else if (typeof stream?.abort === 'function') {
-            stream.abort(new Error('thinklocal placeholder protocol handler'));
+          if (injected) {
+            const wrapped: Libp2pStreamLike = {
+              source: stream?.source ?? stream,
+              sink: async (source) => {
+                await stream.sink(source);
+              },
+              close: async () => {
+                if (typeof stream?.close === 'function') await stream.close();
+              },
+              abort: (err: Error) => {
+                if (typeof stream?.abort === 'function') stream.abort(err);
+              },
+            };
+            await injected(wrapped, remotePeer);
+          } else {
+            // Placeholder-Verhalten fuer Protokolle ohne Handler:
+            // Stream sofort schliessen.
+            if (typeof stream?.close === 'function') {
+              await stream.close();
+            } else if (typeof stream?.abort === 'function') {
+              stream.abort(new Error('thinklocal placeholder protocol handler'));
+            }
+          }
+        } catch (err) {
+          this.log?.warn(
+            { protocol, peer: remotePeer, err: (err as Error)?.message },
+            'libp2p protocol handler threw',
+          );
+          if (typeof stream?.abort === 'function') {
+            try {
+              stream.abort(err as Error);
+            } catch {
+              // ignore
+            }
           }
         } finally {
-          this.onStreamClosed(protocol);
+          await ensureClosed();
         }
       };
 
@@ -357,20 +520,48 @@ class ActiveLibp2pRuntime implements Libp2pRuntime {
   }
 
   private attachEventListeners(): void {
-    const handler = () => {
+    const stateRefresh = () => {
       this.state.connectedPeers = this.readConnectedPeers();
       this.refreshNatState();
     };
+    const onConnect = (evt: any) => {
+      stateRefresh();
+      const peerId =
+        evt?.detail?.toString?.() ??
+        evt?.detail?.remotePeer?.toString?.() ??
+        null;
+      if (peerId && this.hooks.peerEvents?.onPeerConnect) {
+        try {
+          this.hooks.peerEvents.onPeerConnect(peerId);
+        } catch (err) {
+          this.log?.warn({ err: (err as Error)?.message }, 'peer:connect hook threw');
+        }
+      }
+    };
+    const onDisconnect = (evt: any) => {
+      stateRefresh();
+      const peerId =
+        evt?.detail?.toString?.() ??
+        evt?.detail?.remotePeer?.toString?.() ??
+        null;
+      if (peerId && this.hooks.peerEvents?.onPeerDisconnect) {
+        try {
+          this.hooks.peerEvents.onPeerDisconnect(peerId);
+        } catch (err) {
+          this.log?.warn({ err: (err as Error)?.message }, 'peer:disconnect hook threw');
+        }
+      }
+    };
 
     if (typeof this.node?.addEventListener === 'function') {
-      this.node.addEventListener('peer:connect', handler);
-      this.node.addEventListener('peer:disconnect', handler);
+      this.node.addEventListener('peer:connect', onConnect);
+      this.node.addEventListener('peer:disconnect', onDisconnect);
       return;
     }
 
     if (typeof this.node?.on === 'function') {
-      this.node.on('peer:connect', handler);
-      this.node.on('peer:disconnect', handler);
+      this.node.on('peer:connect', onConnect);
+      this.node.on('peer:disconnect', onDisconnect);
     }
   }
 
@@ -435,6 +626,7 @@ class ActiveLibp2pRuntime implements Libp2pRuntime {
 export async function createLibp2pRuntime(
   config: Libp2pRuntimeConfig,
   log?: Logger,
+  hooks?: Libp2pRuntimeHooks,
 ): Promise<Libp2pRuntime> {
   const initialState = createInitialLibp2pState(config);
   if (!config.enabled) {
@@ -480,7 +672,7 @@ export async function createLibp2pRuntime(
       ping,
       tcp,
       yamux,
-    }, log);
+    }, log, hooks);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const degradedState: Libp2pRuntimeState = {

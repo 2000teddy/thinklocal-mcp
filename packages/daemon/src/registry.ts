@@ -69,11 +69,17 @@ function loadGenesisDoc(): Automerge.Doc<RegistryDoc> {
     return Automerge.clone(cachedGenesis);
   }
   if (REGISTRY_GENESIS_BLOB_BASE64 === '__GENESIS_PLACEHOLDER__') {
+    if (process.env.NODE_ENV === 'production' && !process.env.TLMCP_ALLOW_BOOTSTRAP_GENESIS) {
+      throw new Error(
+        'REGISTRY_GENESIS_BLOB_BASE64 must be replaced with a real genesis blob ' +
+          'before production deploy. Set TLMCP_ALLOW_BOOTSTRAP_GENESIS=1 to override.',
+      );
+    }
     // Bootstrap-Modus: produziere Genesis on-the-fly. ACHTUNG: Bei dieser
     // Variante muss ein Peer zuerst seinen save() per anderem Kanal an
     // alle anderen verteilen, sonst klappt Sync nicht. Geeignet fuer
     // Single-Node-Test und initialen Bootstrap.
-    let doc = Automerge.from<RegistryDoc>({ capabilities: {}, last_sync: {} });
+    const doc = Automerge.from({ capabilities: {}, last_sync: {} }) as Automerge.Doc<RegistryDoc>;
     cachedGenesis = doc;
     return Automerge.clone(doc);
   }

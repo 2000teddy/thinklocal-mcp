@@ -52,9 +52,22 @@ export interface RegistrySyncCoordinatorOptions {
   log?: Logger;
 }
 
+/** Max gepufferte Inbound-Messages pro Peer (Memory-DoS-Schutz). */
+const MAX_BUFFERED_MESSAGES = 16;
+/** Max gepufferte Bytes pro Peer. */
+const MAX_BUFFERED_BYTES = 16 * 1024 * 1024;
+
 interface PeerSyncEntry {
   state: Automerge.SyncState;
   inflight: Promise<void> | null;
+  /** AbortController fuer aktiv laufende Round — wird bei reconnect/disconnect/stop abgebrochen. */
+  abortController: AbortController | null;
+  /**
+   * Monoton wachsende Generation pro Peer. Bei reconnect (onPeerConnect ueber
+   * vorhandenen entry) wird inkrementiert. Finally-Block der alten Round
+   * darf den NEUEN entry nicht mehr manipulieren — vergleich auf Generation.
+   */
+  generation: number;
   /**
    * Buffer fuer Inbound-Messages, die waehrend einer laufenden Round
    * ankommen. Wuerden wir sie sofort via receiveSyncMessage auf entry.state
@@ -62,8 +75,12 @@ interface PeerSyncEntry {
    * demselben SyncState. Stattdessen: bufferen und im finally-Block der
    * Round drain + neue Round triggern. Das ist der mehrstufige
    * Bloom-Filter-Austausch des Automerge-Sync-Protokolls.
+   *
+   * Limitiert via MAX_BUFFERED_MESSAGES und MAX_BUFFERED_BYTES gegen
+   * Memory-DoS durch malicious peer.
    */
   inboundBuffer: Uint8Array[];
+  inboundBufferBytes: number;
   consecutiveTimeouts: number;
   lastRoundAt: string | null;
   lastError: string | null;
@@ -96,26 +113,35 @@ export class RegistrySyncCoordinator {
     this.log = opts.log;
   }
 
-  /** Startet den periodischen Sync-Loop. */
+  /** Startet den periodischen Sync-Loop. Idempotent. */
   start(): void {
     if (this.stopped) {
       throw new Error('RegistrySyncCoordinator already stopped');
     }
+    if (this.tickTimer !== null) {
+      return; // bereits gestartet
+    }
     this.scheduleNextTick();
   }
 
-  /** Stoppt alle Timer + cancel laufende Rounds. Idempotent. */
+  /**
+   * Stoppt alle Timer, bricht laufende Rounds aktiv ab und raeumt
+   * Peer-State auf. Idempotent.
+   */
   async stop(): Promise<void> {
     this.stopped = true;
     if (this.tickTimer !== null) {
       clearTimeout(this.tickTimer);
       this.tickTimer = null;
     }
-    // Warte auf laufende Rounds, ignoriere Fehler beim Shutdown
-    const inflight = Array.from(this.peers.values())
-      .map((entry) => entry.inflight)
-      .filter((p): p is Promise<void> => p !== null);
+    // Aktiver Abort aller laufenden Rounds, dann warten + clear
+    const inflight: Array<Promise<void>> = [];
+    for (const entry of this.peers.values()) {
+      entry.abortController?.abort(new Error('coordinator stopped'));
+      if (entry.inflight) inflight.push(entry.inflight);
+    }
     await Promise.allSettled(inflight);
+    this.peers.clear();
   }
 
   /**
@@ -127,21 +153,25 @@ export class RegistrySyncCoordinator {
    */
   onPeerConnect(peerId: string): void {
     if (this.stopped) return;
-    this.peers.set(peerId, {
-      state: this.registry.initSyncState(),
-      inflight: null,
-      inboundBuffer: [],
-      consecutiveTimeouts: 0,
-      lastRoundAt: null,
-      lastError: null,
-      rounds: 0,
-      converged: false,
-    });
+    const previous = this.peers.get(peerId);
+    if (previous) {
+      // Reconnect-flap: alte Round muss aktiv abgebrochen werden,
+      // sonst leakt die Promise und der finally-Block der alten Round
+      // koennte Singleflight des neuen entries aushebeln (Generation-Check
+      // schuetzt zusaetzlich).
+      previous.abortController?.abort(new Error('peer state replaced by reconnect'));
+    }
+    this.peers.set(peerId, this.createPeerEntry(previous));
     void this.runRound(peerId, 'connect');
   }
 
-  /** Event: Peer disconnected. SyncState verwerfen. */
+  /**
+   * Event: Peer disconnected. Bricht laufende Round ab und verwirft state.
+   */
   onPeerDisconnect(peerId: string): void {
+    const entry = this.peers.get(peerId);
+    if (!entry) return;
+    entry.abortController?.abort(new Error('peer disconnected'));
     this.peers.delete(peerId);
   }
 
@@ -155,22 +185,34 @@ export class RegistrySyncCoordinator {
     let entry = this.peers.get(peerId);
     if (!entry) {
       // Nachricht von unbekanntem Peer → frischer SyncState, danach Reply
-      entry = {
-        state: this.registry.initSyncState(),
-        inflight: null,
-        inboundBuffer: [],
-        consecutiveTimeouts: 0,
-        lastRoundAt: null,
-        lastError: null,
-        rounds: 0,
-        converged: false,
-      };
+      entry = this.createPeerEntry();
       this.peers.set(peerId, entry);
     }
 
     if (entry.inflight !== null) {
       // Round laeuft → buffern, im finally-Block drainen.
+      // Begrenzung gegen Memory-DoS via malicious peer (siehe code review).
+      const nextBytes = entry.inboundBufferBytes + message.byteLength;
+      if (
+        entry.inboundBuffer.length >= MAX_BUFFERED_MESSAGES ||
+        nextBytes > MAX_BUFFERED_BYTES
+      ) {
+        entry.lastError = 'inbound sync buffer overflow';
+        this.log?.warn(
+          {
+            peerId,
+            queued: entry.inboundBuffer.length,
+            queuedBytes: entry.inboundBufferBytes,
+          },
+          'registry sync inbound buffer overflow, hanging up peer',
+        );
+        entry.abortController?.abort(new Error('inbound buffer overflow'));
+        await this.transport.hangUp(peerId).catch(() => undefined);
+        this.peers.delete(peerId);
+        return;
+      }
       entry.inboundBuffer.push(message);
+      entry.inboundBufferBytes = nextBytes;
       return;
     }
 
@@ -181,8 +223,25 @@ export class RegistrySyncCoordinator {
 
   /** Safety Valve: erzwingt sofortige Sync-Round pro Peer. */
   async republish(): Promise<void> {
+    if (this.stopped) return;
     const peerIds = Array.from(this.peers.keys());
     await Promise.all(peerIds.map((peerId) => this.runRound(peerId, 'republish')));
+  }
+
+  private createPeerEntry(previous?: PeerSyncEntry): PeerSyncEntry {
+    return {
+      state: this.registry.initSyncState(),
+      inflight: null,
+      abortController: null,
+      generation: (previous?.generation ?? 0) + 1,
+      inboundBuffer: [],
+      inboundBufferBytes: 0,
+      consecutiveTimeouts: 0,
+      lastRoundAt: null,
+      lastError: null,
+      rounds: 0,
+      converged: false,
+    };
   }
 
   /** Beobachtbarer Status fuer /api/status. */
@@ -238,6 +297,11 @@ export class RegistrySyncCoordinator {
   /**
    * Fuehrt eine Sync-Round fuer einen Peer aus. Singleflight: wenn schon
    * eine Round laeuft, return ohne neue zu starten.
+   *
+   * Cleanup-Disziplin (siehe Review HIGH-Findings):
+   * - AbortController pro Round, beim peer:disconnect/reconnect/stop abgebrochen
+   * - Generation-Token verhindert, dass die finally-Phase der alten Round den
+   *   NEUEN entry nach reconnect manipuliert
    */
   private async runRound(peerId: string, _trigger: 'connect' | 'tick' | 'inbound' | 'republish'): Promise<void> {
     if (this.stopped) return;
@@ -245,9 +309,12 @@ export class RegistrySyncCoordinator {
     if (!entry) return;
     if (entry.inflight) return;
 
+    const generation = entry.generation;
+    const ac = new AbortController();
+    entry.abortController = ac;
+    const timer = setTimeout(() => ac.abort(new Error('round timeout')), this.roundTimeoutMs);
+
     const promise = (async () => {
-      const ac = new AbortController();
-      const timer = setTimeout(() => ac.abort(new Error('round timeout')), this.roundTimeoutMs);
       try {
         const [nextState, message] = this.registry.generateSyncMessage(entry.state);
         entry.state = nextState;
@@ -257,6 +324,7 @@ export class RegistrySyncCoordinator {
           // Diff". Nicht consecutiveTimeouts zuruecksetzen, sonst werden
           // tote Peers nie ge-hangUp-ed (siehe ADR-020 v1.5).
           entry.converged = true;
+          entry.lastError = null;
           entry.lastRoundAt = new Date().toISOString();
           entry.rounds += 1;
           return;
@@ -270,7 +338,13 @@ export class RegistrySyncCoordinator {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         entry.lastError = msg;
-        if (msg.includes('timeout') || msg.includes('aborted')) {
+        const isAbortLike =
+          ac.signal.aborted ||
+          (err instanceof Error &&
+            (err.name === 'AbortError' ||
+              err.message.toLowerCase().includes('timeout') ||
+              err.message.toLowerCase().includes('abort')));
+        if (isAbortLike) {
           entry.consecutiveTimeouts += 1;
           if (entry.consecutiveTimeouts >= this.hangUpThreshold) {
             this.log?.warn(
@@ -278,15 +352,23 @@ export class RegistrySyncCoordinator {
               'registry sync timeout threshold reached, hanging up peer',
             );
             await this.transport.hangUp(peerId).catch(() => undefined);
-            this.peers.delete(peerId);
+            // Generation-Check: nur loeschen wenn der entry noch dieser ist
+            const stillCurrent = this.peers.get(peerId);
+            if (stillCurrent && stillCurrent.generation === generation) {
+              this.peers.delete(peerId);
+            }
             return;
           }
         }
         this.log?.debug({ peerId, err: msg }, 'registry sync round failed');
       } finally {
         clearTimeout(timer);
+        // Generation-Check: nur den eigenen entry aufraeumen
         const current = this.peers.get(peerId);
-        if (current) current.inflight = null;
+        if (current && current.generation === generation) {
+          current.inflight = null;
+          current.abortController = null;
+        }
       }
     })();
 
@@ -295,9 +377,15 @@ export class RegistrySyncCoordinator {
       await promise;
     } finally {
       const current = this.peers.get(peerId);
-      if (current && current.inboundBuffer.length > 0 && !this.stopped) {
+      if (
+        current &&
+        current.generation === generation &&
+        current.inboundBuffer.length > 0 &&
+        !this.stopped
+      ) {
         // Buffered messages auf state anwenden, dann nachgelagerte Round.
         const messages = current.inboundBuffer.splice(0);
+        current.inboundBufferBytes = 0;
         for (const msg of messages) {
           const [nextState] = this.registry.receiveSyncMessage(current.state, msg);
           current.state = nextState;

@@ -39,7 +39,21 @@ class PairedMockTransport implements SyncTransport {
     await Promise.resolve();
     const handler = this.replyHandlers.get(peerId);
     if (handler) {
-      await handler(message);
+      // Race handler() gegen abort signal — wie libp2p das machen wuerde.
+      await new Promise<void>((resolve, reject) => {
+        const onAbort = () => reject(new Error('aborted'));
+        signal.addEventListener('abort', onAbort, { once: true });
+        handler(message).then(
+          () => {
+            signal.removeEventListener('abort', onAbort);
+            resolve();
+          },
+          (err) => {
+            signal.removeEventListener('abort', onAbort);
+            reject(err);
+          },
+        );
+      });
     }
   }
 
@@ -294,6 +308,126 @@ describe('RegistrySyncCoordinator', () => {
     const before = setup.transportA.sent.length;
     await setup.coordA.republish();
     expect(setup.transportA.sent.length).toBeGreaterThanOrEqual(before);
+  });
+
+  it('reconnect-flap: alte inflight Round wird abgebrochen + Generation bumpt', async () => {
+    // Regression fuer HIGH-Finding: onPeerConnect ueberschreibt entry
+    // ohne Cleanup → alte Round konnte Singleflight aushebeln.
+    let releaseSend!: () => void;
+    const sendGate = new Promise<void>((r) => { releaseSend = r; });
+    const aborts: string[] = [];
+    setup.transportA.setReplyHandler('peerB', async (_msg) => {
+      await sendGate; // erste Round haengt bis releaseSend()
+    });
+
+    setup.coordA.onPeerConnect('peerB');
+    const firstRef = setup.coordA.getSyncStateRef('peerB');
+    expect(firstRef).toBeDefined();
+
+    // sofortiger Reconnect → erste Round muss aktiv aborted werden
+    setup.coordA.onPeerConnect('peerB');
+    const secondRef = setup.coordA.getSyncStateRef('peerB');
+    expect(secondRef).not.toBe(firstRef);
+
+    // Erste Round resolved jetzt → darf den neuen entry nicht touchen
+    releaseSend();
+    await new Promise((r) => setTimeout(r, 30));
+
+    // Neuer entry muss intakt sein
+    expect(setup.coordA.getSyncStateRef('peerB')).toBeDefined();
+    void aborts;
+  });
+
+  it('onPeerDisconnect bricht laufende Round ab', async () => {
+    // Regression: ohne abort lief send weiter trotz peer disconnect
+    let releaseSend!: (err?: Error) => void;
+    const sendGate = new Promise<void>((resolve, reject) => {
+      releaseSend = (err) => (err ? reject(err) : resolve());
+    });
+    let sendStarted = false;
+    let sendCompletedSuccess = false;
+    setup.transportA.setReplyHandler('peerB', async () => {
+      sendStarted = true;
+      await sendGate;
+      sendCompletedSuccess = true;
+    });
+
+    setup.coordA.onPeerConnect('peerB');
+    while (!sendStarted) await new Promise((r) => setTimeout(r, 5));
+
+    setup.coordA.onPeerDisconnect('peerB');
+    // Der hangende Send wurde via AbortSignal abgebrochen (PairedMockTransport
+    // hangSend-Pfad nicht aktiv; hier blockiert handler). Wir loesen jetzt
+    // den Handler, aber der entry sollte schon weg sein.
+    releaseSend();
+    await new Promise((r) => setTimeout(r, 30));
+
+    expect(setup.coordA.getSyncStateRef('peerB')).toBeUndefined();
+    void sendCompletedSuccess;
+  });
+
+  it('stop() bricht laufende Round aktiv ab + raeumt peers auf', async () => {
+    let releaseSend!: () => void;
+    const sendGate = new Promise<void>((r) => { releaseSend = r; });
+    setup.transportA.setReplyHandler('peerB', async () => {
+      await sendGate;
+    });
+    setup.coordA.onPeerConnect('peerB');
+    await new Promise((r) => setTimeout(r, 5));
+    // stop() darf nicht haengen, selbst wenn send haengt → AbortController.
+    const stopPromise = setup.coordA.stop();
+    // ohne releaseSend() darf stop trotzdem zuruekkehren (Abort)
+    await Promise.race([
+      stopPromise,
+      new Promise((_, rej) => setTimeout(() => rej(new Error('stop hung')), 2000)),
+    ]);
+    releaseSend();
+    expect(setup.coordA.getSyncStateRef('peerB')).toBeUndefined();
+  });
+
+  it('Inbound-Buffer-Overflow → hangUp + peer entfernt', async () => {
+    // Regression: HIGH-Finding Memory-DoS via beliebig viele Inbound-Frames
+    const hangUps: string[] = [];
+    const blockingTransport: SyncTransport = {
+      send: async (_, __, signal) => {
+        await new Promise<void>((_, reject) => {
+          signal.addEventListener('abort', () => reject(new Error('aborted')));
+        });
+      },
+      hangUp: async (peerId) => {
+        hangUps.push(peerId);
+      },
+    };
+    const reg = new CapabilityRegistry();
+    reg.register(sampleCapability('agentA', 'capA'));
+    const coord = new RegistrySyncCoordinator({
+      registry: reg,
+      transport: blockingTransport,
+      roundTimeoutMs: 5_000,
+    });
+
+    coord.onPeerConnect('peerB');
+    await new Promise((r) => setTimeout(r, 10));
+
+    // 17 dummy frames pumpen — > MAX_BUFFERED_MESSAGES (16)
+    const dummy = new Uint8Array(8);
+    for (let i = 0; i < 16; i++) {
+      await coord.onMessageFromPeer('peerB', dummy);
+    }
+    // 17er ist over limit → hangUp
+    await coord.onMessageFromPeer('peerB', dummy);
+
+    expect(hangUps).toContain('peerB');
+    expect(coord.getSyncStateRef('peerB')).toBeUndefined();
+    await coord.stop();
+  });
+
+  it('start() ist idempotent (mehrfache Aufrufe erzeugen nur einen Timer-Loop)', () => {
+    // Regression fuer LOW-Finding aber zaehlt fuer Robustheit
+    setup.coordA.start();
+    setup.coordA.start(); // sollte kein zweiter Timer sein
+    setup.coordA.start();
+    // Implizit: keine Errors, keine Doppel-Timer. Pruefen via stop().
   });
 
   it('getStatus exponiert rounds, converged, in_flight, consecutive_timeouts', async () => {

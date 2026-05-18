@@ -35,6 +35,7 @@ import { loadOrCreateVaultPassphrase } from './vault-passphrase.js';
 import { isLoopbackHost } from './runtime-mode.js';
 import { TaskExecutor } from './task-executor.js';
 import { createLibp2pRuntime } from './libp2p-runtime.js';
+import { wireRegistrySync } from './registry-sync-libp2p-adapter.js';
 import type { SecretRequestPayload, SecretResponsePayload, AgentMessagePayload, AgentMessageAckPayload } from './messages.js';
 import { AgentInbox } from './agent-inbox.js';
 import { SYSTEM_MONITOR_MANIFEST } from './builtin-skills/system-monitor.js';
@@ -192,6 +193,11 @@ async function main(): Promise<void> {
     log.info({ skills: seededSkills.installed }, 'Builtin-Skills geseeded');
   }
 
+  // Registry-Sync (ADR-020 v1): Coordinator + Adapter zwischen Automerge
+  // und libp2p. Hooks werden vor runtime.start() registriert, damit die
+  // ersten peer:connect-Events bereits am Coordinator landen.
+  const registrySync = wireRegistrySync({ registry, log });
+
   const libp2pRuntime = await createLibp2pRuntime({
     enabled: config.libp2p.enabled,
     bindHost: config.daemon.bind_host,
@@ -201,8 +207,16 @@ async function main(): Promise<void> {
     relayTransportEnabled: config.libp2p.relay_transport_enabled,
     relayServiceEnabled: config.libp2p.relay_service_enabled,
     announceMultiaddrs: config.libp2p.announce_multiaddrs,
-  }, log);
+  }, log, {
+    protocolHandlers: registrySync.protocolHandlers,
+    peerEvents: registrySync.peerEvents,
+  });
+  registrySync.setRuntime(libp2pRuntime);
   await libp2pRuntime.start();
+  if (config.libp2p.enabled) {
+    registrySync.coordinator.start();
+    log.info('RegistrySyncCoordinator gestartet (ADR-020 v1)');
+  }
 
   // 6. Mesh-Manager starten
   const mesh = new MeshManager(
@@ -398,6 +412,7 @@ async function main(): Promise<void> {
       }
     },
     getLibp2pState: () => libp2pRuntime.getState(),
+    getRegistrySyncStatus: () => registrySync.coordinator.getStatus(),
   });
   // 8b. Task-Manager + Executor initialisieren
   const taskManager = new TaskManager(log);
@@ -647,6 +662,8 @@ async function main(): Promise<void> {
     rateLimiter,
     vault,
     executor: taskExecutor,
+    registrySyncRepublish: () => registrySync.coordinator.republish(),
+    getRegistrySyncStatus: () => registrySync.coordinator.getStatus(),
   });
 
   await cardServer.start();
@@ -810,6 +827,7 @@ async function main(): Promise<void> {
     agentInbox.close();
     rateLimiter.stop();
     discovery.stop();
+    await registrySync.coordinator.stop();
     await libp2pRuntime.stop();
     await cardServer.stop();
     audit.append('PEER_LEAVE', identity.spiffeUri, 'graceful shutdown');

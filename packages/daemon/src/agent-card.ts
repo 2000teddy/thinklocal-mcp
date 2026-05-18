@@ -59,6 +59,14 @@ export interface AgentCard {
         open_streams: number;
         streams_by_protocol: Record<string, number>;
       };
+      registry_sync?: Record<string, {
+        rounds: number;
+        converged: boolean;
+        last_round_at: string | null;
+        consecutive_timeouts: number;
+        last_error: string | null;
+        in_flight: boolean;
+      }>;
       nat: {
         enabled: boolean;
         reachability: 'unknown' | 'private' | 'public' | 'relay';
@@ -103,6 +111,18 @@ export interface AgentCardServerOptions {
   /** Rate-Limiter für alle Endpoints */
   rateLimiter?: RateLimiter;
   getLibp2pState?: () => Libp2pRuntimeState;
+  /**
+   * Liefert Per-Peer Registry-Sync-Status (ADR-020 v1). Wird in
+   * /api/status unter `libp2p.registry_sync` ausgegeben.
+   */
+  getRegistrySyncStatus?: () => Record<string, {
+    rounds: number;
+    converged: boolean;
+    last_round_at: string | null;
+    consecutive_timeouts: number;
+    last_error: string | null;
+    in_flight: boolean;
+  }>;
 }
 
 export class AgentCardServer {
@@ -377,6 +397,7 @@ export class AgentCardServer {
             open_streams: libp2p.multiplexer.openStreams,
             streams_by_protocol: { ...libp2p.multiplexer.streamsByProtocol },
           },
+          registry_sync: this.opts.getRegistrySyncStatus?.() ?? {},
           nat: {
             enabled: libp2p.nat.enabled,
             reachability: libp2p.nat.reachability,
