@@ -75,7 +75,33 @@ Wenn er es nur **theoretisch wackelig** macht → v2.
 
 ### v1 — MVP (Mesh entfrieren)
 
-Fuenf Bausteine, die zwingend zusammen ausgerollt werden:
+Sechs Bausteine, die zwingend zusammen ausgerollt werden:
+
+#### v1.0 Shared Genesis-Doc
+
+**Bei der Implementierung 2026-05-18 entdeckt:** Jeder Daemon ruft im
+`CapabilityRegistry`-Constructor `Automerge.init()` separat auf. Das erzeugt
+**disjoint history-trees** — Automerge `receiveSyncMessage` zwischen Docs
+ohne gemeinsame Genesis kann ihre Changes nicht mergen. Konsequenz im
+Debug-Test:
+
+```
+Round 2: A=agentA::capA  B=agentA::capA  (B verliert sein eigenes capB)
+Direct merge result: agentB::capB         (auch Automerge.merge funktioniert nicht)
+```
+
+Mit `Automerge.clone(genesis)` als Konstruktor-Pfad: sofortige Konvergenz
+nach 2 Round-Trips, beide Caps auf beiden Seiten.
+
+Fix: `registry.ts` exportiert `REGISTRY_GENESIS_BLOB_BASE64`, alle Daemons
+laden im Konstruktor `Automerge.load(decode(GENESIS_BLOB))`. Der Blob wird
+einmalig produziert und ist Teil der Code-Base.
+
+**Production-TODO**: Bevor v1 deployed wird, muss der echte
+`REGISTRY_GENESIS_BLOB_BASE64` produziert und der Placeholder ersetzt werden.
+Aktuell ist Bootstrap-Modus aktiv (on-the-fly Genesis pro Prozess), was fuer
+Tests funktioniert, aber **nicht** fuer Mesh-Deployments mit getrennten
+Prozessen.
 
 #### v1.1 Echte libp2p-Handler statt Placeholder
 

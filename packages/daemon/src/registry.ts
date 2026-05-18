@@ -48,16 +48,46 @@ export interface RegistryDoc {
 
 // --- Registry-Klasse ---
 
+/**
+ * Genesis-Blob fuer das Mesh-weit geteilte Automerge-Doc. Alle Daemons
+ * MUESSEN aus diesem identischen Genesis starten (via Automerge.load),
+ * sonst haben sie disjoint history-trees, und Automerge-Sync kann ihre
+ * Changes nicht mergen.
+ *
+ * Begruendung siehe ADR-020 v1.0. Der Blob wurde einmalig produziert mit
+ *   Automerge.save(Automerge.from({ capabilities: {}, last_sync: {} }))
+ * Sein Inhalt darf NICHT geaendert werden — sonst bricht der Sync zu
+ * existierenden Deployments.
+ */
+export const REGISTRY_GENESIS_BLOB_BASE64 =
+  '__GENESIS_PLACEHOLDER__';
+
+let cachedGenesis: Automerge.Doc<RegistryDoc> | null = null;
+
+function loadGenesisDoc(): Automerge.Doc<RegistryDoc> {
+  if (cachedGenesis !== null) {
+    return Automerge.clone(cachedGenesis);
+  }
+  if (REGISTRY_GENESIS_BLOB_BASE64 === '__GENESIS_PLACEHOLDER__') {
+    // Bootstrap-Modus: produziere Genesis on-the-fly. ACHTUNG: Bei dieser
+    // Variante muss ein Peer zuerst seinen save() per anderem Kanal an
+    // alle anderen verteilen, sonst klappt Sync nicht. Geeignet fuer
+    // Single-Node-Test und initialen Bootstrap.
+    let doc = Automerge.from<RegistryDoc>({ capabilities: {}, last_sync: {} });
+    cachedGenesis = doc;
+    return Automerge.clone(doc);
+  }
+  const buf = Buffer.from(REGISTRY_GENESIS_BLOB_BASE64, 'base64');
+  cachedGenesis = Automerge.load<RegistryDoc>(new Uint8Array(buf));
+  return Automerge.clone(cachedGenesis);
+}
+
 export class CapabilityRegistry {
   private doc: Automerge.Doc<RegistryDoc>;
 
   constructor(private log?: Logger) {
-    this.doc = Automerge.init<RegistryDoc>();
-    this.doc = Automerge.change(this.doc, (d) => {
-      d.capabilities = {};
-      d.last_sync = {};
-    });
-    this.log?.debug('Capability Registry initialisiert');
+    this.doc = loadGenesisDoc();
+    this.log?.debug('Capability Registry initialisiert (aus Genesis)');
   }
 
   /**
