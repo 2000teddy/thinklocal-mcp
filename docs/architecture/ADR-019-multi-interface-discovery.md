@@ -1,7 +1,7 @@
 # ADR-019: Multi-Interface mDNS Discovery — Robuste Peer-Discovery auf Multi-Homed Hosts
 
-**Status:** Accepted (Phase 1)
-**Datum:** 2026-05-17 (Proposed) / 2026-05-18 (Phase 1 Implementiert)
+**Status:** Accepted (Phase 1.1 — Bind-Regression-Hotfix)
+**Datum:** 2026-05-17 (Proposed) / 2026-05-18 (Phase 1 Implementiert + Phase 1.1 Hotfix)
 **Autor:** Christian (Problem-Aufdeckung), Claude Opus 4.7 (Konsensus-Moderation, Implementierung)
 **Konsensus:** GPT-5.4 (8/10), Gemini 3 Pro (9/10), Minimax übersprungen (PAL-Config veraltet), Grok übersprungen (OpenRouter-Stau)
 **Code-Review:** GPT-5.4 — 1 HIGH + 2 MEDIUM + 4 LOW gefunden und alle gefixt mit Regression-Tests
@@ -242,3 +242,77 @@ Backend-API mit nativer DNS-SD/Avahi-Bridge als zweite Implementierung
 - bonjour-service Docs: https://github.com/onlxltd/bonjour-service
 - Syncthing Discovery (Vorbild): https://docs.syncthing.net/specs/localdisc-v4.html
 - Live-Beispiel: MacBook 10.10.10.55 mit 3 Interfaces, `peers_online: 0`
+
+---
+
+## Phase 1.1 Hotfix — Bind-Regression (2026-05-18)
+
+### Symptom
+
+Nach Deployment des ADR-019 Phase-1-Codes auf dem Mac mini (`10.10.10.94`, zwei
+NICs: `en0=10.10.10.94`, `en1=10.10.25.115`) zeigte sich asymmetrische Sicht:
+
+- **Andere Peers** sahen den Mac mini im `dns-sd`-Browse normal (Outbound ok).
+- **Mac mini selbst** hatte `peers_online: 0` und 0 "Peer entdeckt"-Eintraege
+  im Log seit Restart — obwohl OS-`dns-sd -B _thinklocal._tcp local.` alle
+  vier LAN-Peers sah.
+- Reproduzierbar mit und ohne `TLMCP_ALLOWED_MESH_CIDRS`.
+
+### Root Cause
+
+`new Bonjour({ interface: meshIp })` reicht `opts.interface` an `multicast-dns`
+weiter, das in `node_modules/multicast-dns/index.js` Zeile 65 macht:
+
+```js
+socket.bind(port, opts.bind || opts.interface, function () { ... })
+```
+
+Mit `opts.bind` undefiniert wird der UDP-Socket auf die **unicast-IP**
+`10.10.10.94:5353` gebunden — statt auf `0.0.0.0:5353`. Der Kernel liefert
+an einen so gebundenen Socket nur Unicast-Pakete; **Multicast-Datagramme
+an `224.0.0.251:5353` werden verworfen**. Outbound funktioniert weiter, weil
+`socket.send()` direkt eine Multicast-Adresse adressiert. Receive ist tot.
+
+### Multi-Modell-Konsens (2026-05-18)
+
+Befragt: GPT-5.4 (8/10), GPT-5.1-Codex (8/10), Gemini-3-Pro (9/10).
+**Einstimmiger Befund:** Diagnose korrekt. Einstimmige Empfehlung: **Option 3**.
+
+- Option 1 (conditional pinning) — **abgelehnt**: hebt ADR-019 fuer
+  Auto-Pick-Hosts auf; auf explicit-CIDR-Hosts bleibt der Bug.
+- Option 2 (`socket.setMulticastInterface()` via private internals) —
+  **abgelehnt**: fragil bei Library-Upgrades.
+- **Option 3 (gewaehlt):** `new Bonjour({ interface: meshIp, bind: '0.0.0.0' })`.
+
+### Fix
+
+`bonjour-service/dist/lib/mdns-server.js` Zeile 13: `this.mdns = multicast_dns(opts)`
+— die Optionen werden 1:1 weitergereicht. Damit:
+
+- `bind: '0.0.0.0'` → Receive auf Wildcard, Multicast wird wieder empfangen.
+- `interface: meshIp` → `multicast-dns` Zeile 153
+  `socket.setMulticastInterface(opts.interface)` — Outbound bleibt auf
+  Mesh-NIC gepinnt.
+- `restrictServiceToIp()`-Patch bleibt unveraendert — A-Records sauber.
+
+Code: `packages/daemon/src/discovery.ts` Konstruktor. Eine Zeile geaendert.
+
+### Regression-Tests (Vitest)
+
+`packages/daemon/src/discovery.test.ts` "ADR-019 Hotfix: Bind-Regression"
+(5 deterministische Tests via gestubbtem `networkInterfacesSource`):
+
+1. `bind:"0.0.0.0"` + `interface:"10.10.10.94"` werden zusammen uebergeben
+2. **Positiver CIDR-Policy-Pfad**: matching Interface → beide Optionen gesetzt
+3. Ohne Mesh-IP wird Bonjour mit `{}` aufgerufen (Backward-Compat)
+4. **Regression-Invariante:** `bind !== interface` (das war der Bug)
+5. **Shutdown-Ordering:** `stop()` ruft `browser.stop` + `unpublishAll` + `destroy`
+
+Code-Review (GPT-5.4): 0 HIGH/CRITICAL, 1 MEDIUM (conditional guard) + 2 LOW —
+alle gefixt mit Regression-Tests vor dem Commit. Suite: **690/690 gruen**, 0 Regressionen.
+
+### Verbleibend (Phase 2)
+
+- Reconcile-Loop (Hot-Plug NIC handling) — bereits in Phase 1 als TODO markiert
+- IPv6 support — `disableIPv6: true` aktiv, AAAA bleibt gefiltert
+- Pluggable Native-Backend (Avahi/DNS-SD) — Option F aus Konsens-2026-05-17

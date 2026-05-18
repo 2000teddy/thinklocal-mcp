@@ -9,13 +9,41 @@
  *
  * Echte Multicast-Tests stehen im PoC-Script (scripts/discovery-poc.ts).
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MdnsDiscovery } from './discovery.js';
 import {
   ipInCidr,
   isPeerIpAllowed,
   restrictServiceToIp,
 } from './discovery-policy.js';
+
+// Spy auf den Bonjour-Konstruktor + Lifecycle-Spies fuer Shutdown-Ordering-Tests.
+// Wir mocken bonjour-service so, dass der echte mDNS-Stack nicht startet, wir
+// aber die Aufrufe sehen koennen (Bind-Regression-Test + Shutdown-Ordering).
+const bonjourCtorSpy = vi.fn();
+const browserStopSpy = vi.fn();
+const unpublishAllSpy = vi.fn();
+const destroySpy = vi.fn();
+vi.mock('bonjour-service', () => {
+  class FakeBonjour {
+    constructor(opts: object) {
+      bonjourCtorSpy(opts);
+    }
+    publish() {
+      return { records: () => [] };
+    }
+    find() {
+      return { stop: browserStopSpy };
+    }
+    unpublishAll() {
+      unpublishAllSpy();
+    }
+    destroy() {
+      destroySpy();
+    }
+  }
+  return { Bonjour: FakeBonjour };
+});
 
 describe('Discovery-Policy-Integration', () => {
   describe('Anti-Leakage-Filter (browse path)', () => {
@@ -119,6 +147,130 @@ describe('Discovery-Policy-Integration', () => {
         discovery = new MdnsDiscovery('_thinklocal._tcp', undefined, true);
       }).not.toThrow();
       discovery?.stop();
+    });
+  });
+
+  describe('ADR-019 Hotfix: Bind-Regression (Multi-Modell-Konsens)', () => {
+    // Deterministischer Network-Interface-Stub fuer reproduzierbare Tests
+    // unabhaengig vom CI-Host. Pflicht laut Code-Review GPT-5.4 (MEDIUM-Fix).
+    const fakeMeshInterface = () => ({
+      en0: [
+        {
+          address: '10.10.10.94',
+          netmask: '255.255.255.0',
+          family: 'IPv4' as const,
+          mac: '00:00:00:00:00:00',
+          internal: false,
+          cidr: '10.10.10.94/24',
+          scopeid: 0,
+        },
+      ],
+    });
+
+    beforeEach(() => {
+      bonjourCtorSpy.mockClear();
+      browserStopSpy.mockClear();
+      unpublishAllSpy.mockClear();
+      destroySpy.mockClear();
+    });
+
+    afterEach(() => {
+      bonjourCtorSpy.mockClear();
+    });
+
+    it('uebergibt bind:"0.0.0.0" UND interface:meshIp deterministisch (Stub)', () => {
+      // Network-Stub injiziert → meshIp ist garantiert "10.10.10.94".
+      // Damit deckt der Test den Pinned-Pfad immer ab, auch auf CI ohne Netz.
+      const discovery = new MdnsDiscovery(
+        '_thinklocal._tcp',
+        undefined,
+        true,
+        {},
+        fakeMeshInterface,
+      );
+
+      expect(bonjourCtorSpy).toHaveBeenCalledTimes(1);
+      expect(bonjourCtorSpy).toHaveBeenCalledWith({
+        interface: '10.10.10.94',
+        bind: '0.0.0.0',
+      });
+      discovery.stop();
+    });
+
+    it('positive CIDR-Policy-Pfad: matching Interface → Bonjour mit beiden Opts', () => {
+      // LOW-FIX (CR): expliziter CIDR-Policy-Test mit deterministischem Stub.
+      const discovery = new MdnsDiscovery(
+        '_thinklocal._tcp',
+        undefined,
+        true,
+        { allowed_mesh_cidrs: ['10.10.10.0/24'] },
+        fakeMeshInterface,
+      );
+
+      expect(bonjourCtorSpy).toHaveBeenCalledWith({
+        interface: '10.10.10.94',
+        bind: '0.0.0.0',
+      });
+      discovery.stop();
+    });
+
+    it('uebergibt KEINE Optionen wenn keine Mesh-IP existiert (Backward-Compat)', () => {
+      // Network-Stub liefert leeres Interface-Set → meshIp undefined.
+      const noInterfaces = () => ({});
+      const discovery = new MdnsDiscovery(
+        '_thinklocal._tcp',
+        undefined,
+        true,
+        {},
+        noInterfaces,
+      );
+
+      expect(bonjourCtorSpy).toHaveBeenCalledTimes(1);
+      expect(bonjourCtorSpy).toHaveBeenCalledWith({});
+      discovery.stop();
+    });
+
+    it('Regression-Invariante: bind:"0.0.0.0" ist NIEMALS gleich interface', () => {
+      // Die kritische Invariante: Wenn ein Interface gepinnt wird, MUSS der
+      // bind auf '0.0.0.0' sein. Andernfalls killt der unicast-bind den
+      // Multicast-Receive (siehe multicast-dns Zeile 65, ADR-019 Phase-1.1).
+      const discovery = new MdnsDiscovery(
+        '_thinklocal._tcp',
+        undefined,
+        true,
+        {},
+        fakeMeshInterface,
+      );
+      const opts = bonjourCtorSpy.mock.calls[0]?.[0] as {
+        interface?: string;
+        bind?: string;
+      };
+      expect(opts.interface).toBe('10.10.10.94');
+      expect(opts.bind).toBe('0.0.0.0');
+      expect(opts.bind).not.toBe(opts.interface);
+      discovery.stop();
+    });
+
+    it('Shutdown-Ordering: stop() ruft browser.stop, unpublishAll, destroy', () => {
+      // LOW-FIX (CR): verifiziere Lifecycle-Order beim Shutdown.
+      const discovery = new MdnsDiscovery(
+        '_thinklocal._tcp',
+        undefined,
+        true,
+        {},
+        fakeMeshInterface,
+      );
+      discovery.browse({ onPeerFound: vi.fn(), onPeerLeft: vi.fn() });
+
+      expect(browserStopSpy).not.toHaveBeenCalled();
+      expect(unpublishAllSpy).not.toHaveBeenCalled();
+      expect(destroySpy).not.toHaveBeenCalled();
+
+      discovery.stop();
+
+      expect(browserStopSpy).toHaveBeenCalledTimes(1);
+      expect(unpublishAllSpy).toHaveBeenCalledTimes(1);
+      expect(destroySpy).toHaveBeenCalledTimes(1);
     });
   });
 

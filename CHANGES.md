@@ -8,6 +8,37 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-05-18
 
+### ADR-019 Phase 1.1 — Bind-Regression-Hotfix
+
+Phase-1-Code hatte `new Bonjour({ interface: meshIp })` ohne `bind`-Option. Das
+fuehrt in `multicast-dns/index.js` Zeile 65 dazu, dass der UDP-Socket auf die
+**unicast**-IP `meshIp:5353` gebunden wird statt auf `0.0.0.0:5353`. Folge: der
+Kernel verwirft Multicast-Pakete an 224.0.0.251 — Receive ist tot, Outbound
+funktioniert weiter. Live beobachtet auf Mac mini `10.10.10.94`: 0 Peers im
+mesh_status trotz vollstaendiger Sichtbarkeit im OS-`dns-sd`.
+
+- **Multi-Modell-Konsens** (GPT-5.4 8/10, GPT-5.1-Codex 8/10, Gemini-3-Pro 9/10):
+  einstimmig **Option 3** statt Option 1 (Rollback) oder Option 2 (private
+  internals). `new Bonjour({ interface: meshIp, bind: '0.0.0.0' })` nutzt das
+  natuerliche multicast-dns API: `bind` gewinnt fuer Receive (Zeile 65),
+  `interface` bleibt fuer outbound `setMulticastInterface()` (Zeile 153).
+- **`packages/daemon/src/discovery.ts`**: Konstruktor um `bind: '0.0.0.0'`
+  erweitert. Log-Message angepasst.
+- **`packages/daemon/src/discovery.ts`**: Konstruktor um optionalen
+  `networkInterfacesSource`-Parameter erweitert (Test-Hook, MEDIUM-Fix
+  Code-Review GPT-5.4 — deterministische Tests statt CI-Host-Abhaengigkeit).
+- **`packages/daemon/src/discovery.test.ts`** (5 neue Tests):
+  - `bind:"0.0.0.0"` + `interface:meshIp` deterministisch via Stub
+  - Positiver CIDR-Policy-Pfad mit matching Interface (LOW-FIX CR)
+  - Ohne Mesh-IP: Bonjour mit `{}` (Backward-Compat)
+  - Regression-Invariante: `bind !== interface`
+  - Shutdown-Ordering: `stop()` ruft `browser.stop` + `unpublishAll` + `destroy` (LOW-FIX CR)
+- **`docs/architecture/ADR-019-multi-interface-discovery.md`**: Status auf
+  Phase 1.1, neuer Hotfix-Block mit Symptom/Root-Cause/Konsens/Fix/Tests.
+- **Code-Review (GPT-5.4)**: 0 HIGH/CRITICAL, 1 MEDIUM + 2 LOW gefunden, alle
+  vor Commit gefixt mit Regression-Tests.
+- **Tests**: 690/690 gruen (vorher 685), 0 Regressionen.
+
 ### ADR-020 + ADR-021: CRDT-Replikation und Skill-Health (Proposed)
 
 - **`docs/architecture/ADR-020-registry-replication-recovery.md`** (neu):

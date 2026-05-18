@@ -1,3 +1,4 @@
+import { networkInterfaces } from 'node:os';
 import { Bonjour, type Service, type Browser } from 'bonjour-service';
 import type { Logger } from 'pino';
 import {
@@ -6,6 +7,10 @@ import {
   isPeerIpAllowed,
   restrictServiceToIp,
 } from './discovery-policy.js';
+
+// Test-Hook: erlaubt Stubbing von os.networkInterfaces() ohne globalen vi.spyOn.
+// In Production undefined → discovery-policy.ts nimmt den Default (os).
+type NetworkInterfacesSource = () => ReturnType<typeof networkInterfaces>;
 
 export interface DiscoveredPeer {
   name: string;
@@ -33,6 +38,7 @@ export class MdnsDiscovery {
     private log?: Logger,
     private requireTls = false,
     private policy: DiscoveryPolicyConfig = {},
+    networkInterfacesSource?: NetworkInterfacesSource,
   ) {
     // ADR-019: explizites Interface-Pinning fuer den mDNS-Socket
     // (steuert auf welchem Interface Multicast versendet wird).
@@ -42,7 +48,7 @@ export class MdnsDiscovery {
     // (Kabel raus, WLAN aus, Sleep-Wake), zeigt der gepatchte Service
     // weiter auf die tote IP. Der in ADR-019 spezifizierte Reconcile-Loop
     // alle 5s ist hier noch NICHT implementiert — siehe Phase 2 ADR-019.
-    this.meshIp = getMeshIp(policy);
+    this.meshIp = getMeshIp(policy, networkInterfacesSource);
 
     // HIGH-FIX (Precommit-Review): Fail-closed wenn allowed_mesh_cidrs
     // explizit gesetzt ist aber kein Interface dazu passt. Silent fallback
@@ -57,13 +63,24 @@ export class MdnsDiscovery {
       );
     }
 
-    const bonjourOpts = this.meshIp ? { interface: this.meshIp } : {};
+    // ADR-019 Hotfix (Konsens GPT-5.4 + GPT-5.1-Codex + Gemini-3-Pro):
+    // {interface} ohne {bind} laesst multicast-dns den UDP-Socket auf die
+    // unicast-IP binden (`socket.bind(5353, '10.10.10.94', ...)`). Damit
+    // werden Multicast-Pakete an 224.0.0.251 vom Kernel nicht mehr an den
+    // Socket geliefert — wir senden raus, empfangen aber nichts.
+    // Gegenmittel: bind: '0.0.0.0' fuer Receive (multicast-dns Zeile 65),
+    // interface: meshIp bleibt fuer setMulticastInterface() (Zeile 153)
+    // = Outbound auf das richtige NIC. Plus Service.records()-Patch fuer
+    // die A-Record-Hygiene bleibt unangetastet.
+    const bonjourOpts = this.meshIp
+      ? { interface: this.meshIp, bind: '0.0.0.0' }
+      : {};
     this.bonjour = new Bonjour(bonjourOpts as object);
 
     if (this.meshIp) {
       this.log?.info(
-        { meshIp: this.meshIp, allowedCidrs: policy.allowed_mesh_cidrs },
-        '[discovery] Interface-Pinning aktiv',
+        { meshIp: this.meshIp, bind: '0.0.0.0', allowedCidrs: policy.allowed_mesh_cidrs },
+        '[discovery] Interface-Pinning aktiv (outbound), receive auf 0.0.0.0',
       );
     }
   }
