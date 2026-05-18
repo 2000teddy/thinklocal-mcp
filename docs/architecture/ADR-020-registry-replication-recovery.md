@@ -238,15 +238,33 @@ Bloom-Filter-Wiederholung.
 
 Zu testen:
 - Initialer `peer:connect` triggert genau einen Push
-- Konvergenz nach Round-Trip (Hash-Equality via `getHeads`)
+- Konvergenz nach Round-Trip — **Wichtig in v1:** Hash-Equality via
+  `exportCapabilities()`-Hash (extrahierte Caps-Liste), **nicht** via
+  `getHeads()`. Solange `last_sync` im CRDT-Doc steht (Entfernung ist v2.1),
+  mutiert jeder Sync-Versuch das Doc und erzeugt neue Heads — `getHeads()`
+  wuerde dann nie Equality erreichen. Ab v2.1 darf wieder auf `getHeads()`
+  umgestellt werden.
 - `peer:disconnect` + `peer:connect` ergibt frischen SyncState (Reset-Garantie)
-- Timer-Tick triggert Sync-Push fuer connected peers (Fake-Timers via
-  `vi.useFakeTimers()` + `vi.advanceTimersByTimeAsync()`)
-- Jitter-Bandbreite (Tick-Intervall in [40 s, 50 s])
+- Timer-Tick triggert Sync-Push fuer connected peers via Fake-Timers:
+  `vi.useFakeTimers({ shouldAdvanceTime: false })` + manuelles
+  `await vi.advanceTimersByTimeAsync(...)`. Auto-Advance maskiert
+  Race-Conditions.
+- Jitter-Bandbreite: kein statistischer n=100-Test (zu langsam, in CI flaky),
+  stattdessen **Boundary-Test mit gemocktem RNG**:
+  - `vi.spyOn(Math, 'random').mockReturnValue(0)` → Tick bei unterer Grenze
+  - `vi.spyOn(Math, 'random').mockReturnValue(0.999)` → Tick bei oberer Grenze
 - Per-Peer Singleflight: paralleler Init-Push und Timer-Tick fuehren zu nur
   einer Sync-Round pro Peer
+- AbortController-Timeout deterministisch via Fake-Timers: Sync triggern,
+  `advanceTimersByTimeAsync(timeoutMs)`, assert dass Promise mit
+  `AbortError` rejected und SyncState aufgeraeumt
+- 3-Strike-HangUp: drei aufeinanderfolgende Sync-Rounds ins Timeout laufen
+  lassen → Coordinator ruft `hangUp(peerId)` auf, SyncState verworfen
 - Safety Valve: `republish()` triggert sofortigen Round-Trip
 - Cleanup: `stop()` raeumt alle Timer + Event-Listener weg
+
+Mock-Transport: **zwingend asynchron via Promise-Queue**. Ein synchroner Mock
+maskiert Race-Conditions und Deadlocks in der Singleflight-Logik.
 
 ### Integration (3 Nodes, korrekte Partition)
 
@@ -275,6 +293,13 @@ Erwartung nach Reconnect: Alle drei gleich nach ≤ 2 Sync-Intervallen.
 
 Cleanup im `finally`-Block, damit Test-Aborts keine Zombie-Daemons
 hinterlassen.
+
+**Bewusste Entscheidung gegen "nackte libp2p-Nodes ohne Daemon":** Der
+ursprueliche Bug lag im **Wiring** des Daemons (`libp2p-runtime.ts:342`),
+nicht im libp2p selbst. Mit nackten Nodes wuerde genau die Integrationsschicht
+weggemockt, in der der Bug passiert ist. `spawnDaemonInProcess` mit
+deaktivierten Sub-Systemen (HTTP-Server, Background-Tasks via Config-Flag) ist
+der richtige Trade-off zwischen Realismus und Isolation.
 
 ### Property (In-Memory, kein Daemon-Spawn)
 
