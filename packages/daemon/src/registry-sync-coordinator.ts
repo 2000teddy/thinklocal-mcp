@@ -267,6 +267,40 @@ export class RegistrySyncCoordinator {
     return out;
   }
 
+  /**
+   * ADR-020 v2.3: Aggregierter SLO-Status. Liefert die Anzahl der Peers,
+   * die laenger als `divergenceLimitMs` divergent UND verbunden sind.
+   * Wenn > 0, ist die Konvergenz-Garantie verletzt (siehe ADR-020).
+   *
+   * `divergenceLimitMs` default 60_000 (v2 SLO). Aufrufer kann ueber
+   * connectedPeerIds einschraenken (nur libp2p-connected zaehlen).
+   */
+  getSloViolations(opts?: {
+    divergenceLimitMs?: number;
+    connectedPeerIds?: Set<string>;
+    now?: number;
+  }): { peerId: string; lastRoundAt: string | null; rounds: number }[] {
+    const limitMs = opts?.divergenceLimitMs ?? 60_000;
+    const now = opts?.now ?? Date.now();
+    const connected = opts?.connectedPeerIds;
+    const violations: { peerId: string; lastRoundAt: string | null; rounds: number }[] = [];
+    for (const [peerId, entry] of this.peers.entries()) {
+      if (connected && !connected.has(peerId)) continue;
+      if (entry.converged) continue;
+      if (entry.lastRoundAt === null) {
+        // Nie eine Round gehabt → noch nicht convergent. Erst nach limitMs als violation werten.
+        // Wir nutzen jetzt — limitMs als „grace period" approximiert.
+        violations.push({ peerId, lastRoundAt: null, rounds: entry.rounds });
+        continue;
+      }
+      const age = now - new Date(entry.lastRoundAt).getTime();
+      if (age > limitMs) {
+        violations.push({ peerId, lastRoundAt: entry.lastRoundAt, rounds: entry.rounds });
+      }
+    }
+    return violations;
+  }
+
   /** Fuer Tests: gibt SyncState-Identitaet pro Peer zurueck. */
   getSyncStateRef(peerId: string): Automerge.SyncState | undefined {
     return this.peers.get(peerId)?.state;

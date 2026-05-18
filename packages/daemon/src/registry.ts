@@ -42,7 +42,12 @@ export interface Capability {
 export interface RegistryDoc {
   /** Map: skill_key → Capability (key = `${agent_id}::${skill_id}`) */
   capabilities: Record<string, Capability>;
-  /** Letzte Sync-Zeit pro Peer */
+  /**
+   * @deprecated Wird seit ADR-020 v2.1 nicht mehr beschrieben — Status-
+   * Metadaten gehoeren ausserhalb des CRDT (siehe RegistrySyncCoordinator).
+   * Feld bleibt im Schema, damit Genesis-Doc-Kompatibilitaet erhalten ist;
+   * neue Eintraege werden NICHT mehr hinzugefuegt.
+   */
   last_sync: Record<string, string>;
 }
 
@@ -172,6 +177,16 @@ export class CapabilityRegistry {
    */
   getCapabilityHash(): string {
     return this.hashCapabilities(Object.values(this.doc.capabilities));
+  }
+
+  /**
+   * ADR-020 v2.4: Automerge-Heads als Konvergenz-Identifier. Bei Sync-
+   * Konvergenz haben beide Peers identische Heads — verlaesslicher als
+   * der capability-feld-spezifische getCapabilityHash() (der z.B.
+   * description-Aenderungen unsichtbar macht).
+   */
+  getHeads(): string[] {
+    return Automerge.getHeads(this.doc);
   }
 
   /**

@@ -187,6 +187,8 @@ describe('RegistrySync Integration (Coordinator + Adapter + Mock-libp2p)', () =>
       converged = hashA === hashB && lenA === 2 && lenB === 2;
     }
     expect(converged, `A=${regA.getAllCapabilities().map(c => c.skill_id).join(',')} B=${regB.getAllCapabilities().map(c => c.skill_id).join(',')}`).toBe(true);
+    // ADR-020 v2.4: zusaetzliche Konvergenz-Pruefung via Automerge-Heads
+    expect(regA.getHeads().sort()).toEqual(regB.getHeads().sort());
   });
 
   it('3-Node Partition A vs {B,C}: B und C konvergieren, A nicht', async () => {

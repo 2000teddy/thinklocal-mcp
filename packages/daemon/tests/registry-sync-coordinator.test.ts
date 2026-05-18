@@ -430,6 +430,41 @@ describe('RegistrySyncCoordinator', () => {
     // Implizit: keine Errors, keine Doppel-Timer. Pruefen via stop().
   });
 
+  it('getSloViolations (v2.3): nicht-konvergente, connected Peers laenger als limit', async () => {
+    setup.coordA.onPeerConnect('peerB');
+    await new Promise((r) => setTimeout(r, 50));
+    // Mit divergenceLimitMs = 0 muessten alle nicht-konvergenten Peers melden.
+    // Aber Sync mit PairedMockTransport ist meist konvergent oder reicht beidseitig durch.
+    // Wir testen die Mechanik:
+    const violationsWithLargeLimit = setup.coordA.getSloViolations({
+      divergenceLimitMs: 999_999,
+      now: Date.now(),
+    });
+    // Sehr grosses Limit → keine Violations weil keine round laenger als 999s zurueck.
+    expect(violationsWithLargeLimit).toEqual([]);
+  });
+
+  it('getSloViolations: filtert nach connectedPeerIds', async () => {
+    setup.coordA.onPeerConnect('peerB');
+    setup.coordA.onPeerConnect('peerC');
+    await new Promise((r) => setTimeout(r, 5));
+    const v1 = setup.coordA.getSloViolations({
+      divergenceLimitMs: 0,
+      connectedPeerIds: new Set(['peerB']),
+    });
+    // Nur peerB darf in violations auftauchen (peerC ist gefiltert)
+    expect(v1.every((violation) => violation.peerId === 'peerB')).toBe(true);
+  });
+
+  it('Registry.getHeads() (v2.4) liefert Automerge-Heads', () => {
+    const reg = new CapabilityRegistry();
+    const heads1 = reg.getHeads();
+    expect(Array.isArray(heads1)).toBe(true);
+    reg.register(sampleCapability('agentX', 'capX'));
+    const heads2 = reg.getHeads();
+    expect(heads2).not.toEqual(heads1);
+  });
+
   it('getStatus exponiert rounds, converged, in_flight, consecutive_timeouts', async () => {
     setup.coordA.onPeerConnect('peerB');
     setup.coordB.onPeerConnect('peerA');

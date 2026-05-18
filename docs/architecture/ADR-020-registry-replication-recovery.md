@@ -146,11 +146,13 @@ triggern **nicht zuverlaessig** `peer:disconnect`. Zusaetzlich zum Event-Hook:
 - Nach 3 fehlgeschlagenen Rounds in Folge → SyncState verwerfen + Connection
   forcen zu schliessen (libp2p `hangUp(peerId)`)
 
-### v2 — Robustheit & Architektur-Reinheit (Folge-PR)
+### v2 — Robustheit & Architektur-Reinheit
 
-Optional ausrollbar, **nachdem** v1 in Production stabil laeuft:
+**Status 2026-05-18:** v2.1, v2.3 und v2.4 sind in diesem PR implementiert.
+v2.2 (Owner-wins) und v2.5 (Backpressure/Chunking) bleiben als separate
+Folge-ADRs — beide sind Architektur-Schritte mit eigenem Scope.
 
-#### v2.1 `last_sync` aus dem CRDT-Doc entfernen
+#### v2.1 `last_sync` aus dem CRDT-Doc entfernen ✅
 
 In `registry.ts:45-47` existiert `last_sync: Record<string, string>` als Feld
 im Automerge-RegistryDoc. Wenn der Coordinator das pro Sync-Runde
@@ -158,7 +160,13 @@ aktualisiert, erzeugt **jede** Round neue Divergenz → die Konvergenz-Garantie
 ist mathematisch unmoeglich zu erfuellen. Status-Metadaten gehoeren
 ausserhalb des CRDT (lokales Memory + `/api/status`).
 
-#### v2.2 Owner-wins-Semantik erzwingen
+**Umsetzung 2026-05-18:** Schema-Feld bleibt mit `@deprecated`-Marker
+erhalten (Genesis-Kompatibilitaet), wird aber von keinem Code-Pfad mehr
+beschrieben. Status-Metadaten liefert der `RegistrySyncCoordinator` ueber
+seinen internen state — exponiert via `getStatus()` und
+`getSloViolations()`.
+
+#### v2.2 Owner-wins-Semantik erzwingen — **Verschoben in eigene ADR-022**
 
 `markAgentOffline()` (Z. 91-99) und `removePeerCapabilities()` (Z. 223-237)
 mutieren fremde Agent-Namespaces im CRDT. Das ist semantisch falsch:
@@ -166,27 +174,50 @@ Resurrection durch konkurrente Syncs, false deletions, Last-Writer-Wins-
 Konflikte. Umbau auf strikt: **nur Owner schreibt eigene Caps**, Fremdstatus
 landet im separaten Observation-Layer.
 
-#### v2.3 Konvergenz-Garantie an libp2p-connected koppeln
+**Verschoben in ADR-022:** Owner-wins ist ein architektonischer Schritt mit
+weitreichenden Folgen (Refactor von `mesh.ts`, `agent-card.ts`, Capability-
+Routing-Filter, Migration der bestehenden CRDT-Inhalte). Das verdient eine
+eigene ADR mit klarer Migrationsstrategie und Test-Plan.
+
+#### v2.3 Konvergenz-Garantie an libp2p-connected koppeln ✅
 
 `peers_online` aus `mesh.ts` misst HTTPS-Heartbeat-Liveness, nicht libp2p-
 Reachability. Half-open libp2p-Connection bei online HTTPS = Garantie nicht
 erfuellbar. SLO sollte auf `libp2p.connected[P] && last_sync_round[P]
 successful` basieren.
 
-#### v2.4 Hash-Metrik auf Automerge-Heads umstellen
+**Umsetzung 2026-05-18:** Neue Methode
+`RegistrySyncCoordinator.getSloViolations({ divergenceLimitMs, connectedPeerIds, now })`
+liefert Peers, die divergent + connected laenger als das Limit sind. Default
+`divergenceLimitMs = 60_000` entspricht der v2-SLO. Aufrufer (z.B.
+Dashboard-API) reicht die libp2p-connected Peer-IDs als Filter rein.
+
+#### v2.4 Hash-Metrik auf Automerge-Heads umstellen ✅
 
 `getCapabilityHash()` (Z. 145-149) hasht nur `agent_id::skill_id:version:
 health`. Aenderungen an description, permissions, trust_level, updated_at
 oder CRDT-Heads bleiben unsichtbar — Regressions-Tests koennen unbemerkt
 gruenen. Konvergenz-Pruefung sollte Automerge `getHeads()` vergleichen,
-nicht den Capability-Hash. (v1 darf zur Not beides loggen.)
+nicht den Capability-Hash.
 
-#### v2.5 Backpressure/Chunking fuer grosse Doc-Payloads
+**Umsetzung 2026-05-18:** Neue Methode `CapabilityRegistry.getHeads()` (siehe
+registry.ts). Integrations-Test fuer 2-Node-Convergence prueft jetzt
+zusaetzlich `regA.getHeads().sort() === regB.getHeads().sort()`.
+`getCapabilityHash()` bleibt fuer Backwards-Compat erhalten, ist aber nicht
+mehr autoritativ.
+
+#### v2.5 Backpressure/Chunking fuer grosse Doc-Payloads — **Verschoben in eigene ADR-023**
 
 `Automerge.save()` bei 10.000+ Capabilities = mehrere MB. Yamux-Pull-Stream
 kann abbrechen, wenn Reader langsamer als Writer. Bei 5 Nodes × ~10 Caps
 nicht akut — wird bei 100+ Caps oder mehr Nodes relevant. Loesung:
 Chunking + ACK-basiertes Stream-Handshake.
+
+**Verschoben in ADR-023:** Aktuell bleibt die 8 MiB Single-Frame-
+Beschraenkung (siehe registry-sync-protocol.ts). Erst wenn das real
+beisst, lohnt sich der Chunking-Aufwand. Bis dahin schuetzt das
+Frame-Limit + der Inbound-Buffer-Cap (16 Messages / 16 MiB) gegen
+Memory-Exhaustion.
 
 ### Erhaltene Bausteine (v1, unabhaengig von obiger Aufteilung)
 
