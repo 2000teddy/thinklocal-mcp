@@ -6,6 +6,62 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
+## [Unreleased] — 2026-05-18
+
+### ADR-020 + ADR-021: CRDT-Replikation und Skill-Health (Proposed)
+
+- **`docs/architecture/ADR-020-registry-replication-recovery.md`** (neu):
+  Root-Cause-Analyse + Fix-Plan fuer den eingefrorenen CRDT-Registry-Sync
+  im 5-Node-Mesh. Smoking Gun: `packages/daemon/src/libp2p-runtime.ts:335-356`
+  registriert fuer **alle** Mesh-Protokolle Placeholder-Handler, die
+  eingehende Streams sofort schliessen — Sync ueber libp2p hat nie
+  funktioniert, Heartbeats laufen nur deshalb, weil sie HTTPS-basiert sind.
+- **4-Modell-Konsens** (`gpt-5.2` 9/10, `gemini-3-pro-preview` 9/10,
+  `gpt-5.5` 8/10, `MiniMax-M2.7` 7/10): Confidence sinkt mit jedem Reviewer,
+  weil neue Edge-Cases sichtbar wurden. Loesung: **v1** (5 Blocker:
+  echte Handler, Length-Prefix-Framing, RegistrySyncCoordinator mit
+  Per-Peer-Singleflight, bidirektionaler Sync, Timeout-basiertes
+  SyncState-Cleanup) und **v2** (5 Robustheits-Punkte: `last_sync` aus
+  CRDT-Doc raus, Owner-wins erzwingen, libp2p-connected-SLO statt
+  HTTPS-online, Heads-Hash statt Capability-Hash, Backpressure/Chunking).
+- **Konvergenz-Garantie**: divergent + connected nicht laenger als 120 s
+  (v1) bzw. 60 s (v2). Verletzung = Regression.
+- **`docs/architecture/ADR-021-skill-health-lifecycle.md`** (neu):
+  Generisches Skill-Health-Monitoring als Antwort auf den InfluxDB-Boot-Race
+  (2026-05-17, Skill war 70 Min unsichtbar bis manueller Daemon-Restart).
+  Zentraler `SkillHealthMonitor` statt Plugin-Pattern, State-Machine binaer
+  (HEALTHY/UNHEALTHY, **kein** DEGRADED), Hysterese 2-up/3-down. Backoff
+  **linear** (30 s healthy / 60 s unhealthy, gegen GPTs Position), Registry-
+  Update via `availability`-Attribut (gegen Geminis Position, weil
+  k8s/Consul-Standard, weniger Hash-Churn, Debug-Sicht bleibt). Voraussetzung
+  ADR-020 v2.2 (Owner-wins).
+- **Verworfene Hypothese**: „Crash-Loops haben libp2p-Streams in Half-Open-
+  Zustand gebracht" — der Bug war von Anfang an im Code, fiel nur jetzt
+  durch den 5-Node-Test auf.
+
+## [Unreleased] — 2026-05-16
+
+### macOS-Deployment als LaunchDaemon dokumentiert
+
+- **`docs/MACOS-DEPLOYMENT.md`** (neu): Empfohlener Setup-Pfad fuer macOS-Hosts,
+  speziell fuer headless / SSH-only / FileVault-Setups.
+- **Architekturentscheidung**: LaunchDaemon statt LaunchAgent, weil
+  LaunchAgents eine aktive Aqua-User-Session voraussetzen — bei FileVault
+  ohne Auto-Login (typisches Mac-mini-Setup) startet niemand automatisch
+  eine Session. LaunchDaemon laeuft ab Boot, KeepAlive aktiv, als
+  unprivilegierter User via `UserName=chris`.
+- **Wrapper `~/.thinklocal/bin/daemon-launchagent.sh`** wartet auf
+  Multicast-Route und IPv4-Adresse, verhindert `EHOSTUNREACH 224.0.0.251:5353`-
+  Crash bei zu fruehem Start.
+- **Stolperfallen dokumentiert**: Hostname-Hochzaehlen, `backgroundtaskmanagementd`-
+  TCC-Block fuer LaunchAgents seit Ventura, `launchctl bootstrap gui/<uid>`-
+  Fehler 125 ohne Aqua-Session, `better-sqlite3` ABI-Mismatch nach Node-Upgrade.
+- **Node-Empfehlung**: nvm-Node 22 LTS, nicht Homebrew (das aktuell 25/26
+  ausliefert, womit `better-sqlite3 11.x` nicht baut).
+- Relevant fuer den **Installer/Distribution**: alle hartkodierten Pfade
+  (`/Users/chris/...`, Node-Version, `UserName`) muessen per Template ersetzt
+  werden.
+
 ## [Unreleased] — 2026-04-14
 
 ### ADR-018 Observer Agent Phase 1 — lokale Intelligenz fuer headless Nodes

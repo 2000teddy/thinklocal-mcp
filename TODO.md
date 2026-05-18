@@ -15,9 +15,44 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 
 ## Skill Health & Lifecycle (entdeckt 2026-05-17)
 
+- [ ] 🔴 **CRDT-Registry repliziert nicht — eingefrorene Inkonsistenz im Mesh** (entdeckt 2026-05-17, ca. 21:45)
+  Mesh aktuell mit 5 Nodes: `MacBook-Pro` (10.10.10.55), `ai-n8n-local` (.222), `iobroker` (.52), `influxdb` (.56), `minimac-60` (.94). Heartbeats laufen sauber (`mesh_status.peers_online = 4` auf allen Seiten), aber `/api/capabilities` liefert auf jedem Peer eine **andere** Sicht mit **anderem Hash**:
+  - ai-n8n-local: 7 caps, hash `cdc348dec...`
+  - iobroker: 9 caps, hash `dea131900...`
+  - influxdb: 10 caps, hash `2eb192295...`
+  - minimac-60: 8 caps, hash `de784c02a...`
+  - MacBook (lokal, frisch nach Reboot): 1 cap (nur self), hash `f4431d978...`
+
+  **Symptome:**
+  - Mein MacBook-Daemon `pushed` seine eigene Capability **nicht** ins Mesh — kein Peer sieht ihn unter Host-ID `813bdd161fea12ab`, obwohl er sie alle als Peer sieht und `peers_online = 4` meldet.
+  - Inkonsistenz auch zwischen Peers untereinander: ai-n8n-local sieht **sich selbst** nur mit `system-monitor`, andere Peers sehen ai-n8n-local zusaetzlich mit `thinklocal-ollama-agents` → eigene Self-Sicht weicht von Mesh-Sicht ueber sich ab.
+  - Zustand persistiert ueber Minuten (kein Konvergenz-Fortschritt nach 6 min Daemon-Uptime). Das ist nicht „Sync braucht Zeit", das ist tot.
+
+  **Heisse Verdachts-Punkte:**
+  - libp2p-Stream `/thinklocal/mesh/registry/1.0.0` ist offenbar in mindestens eine Richtung kaputt — pro Peer-Paar unterschiedlich
+  - Heartbeat-Stream (`/thinklocal/mesh/heartbeat/1.0.0`) laeuft → libp2p-Multiplexing per se geht
+  - Registry-Push triggert nur bei lokalem Capability-Change, nicht periodisch? → Bei kurzer Daemon-Uptime kein Push und keiner fragt aktiv ab
+  - Reverse-Connectivity-Check fehlt: Peer sieht mich, aber kann er mich auch erreichen?
+
+  **Naechste Schritte:**
+  - `audit_events`-Delta pro Daemon pruefen: laufen REGISTRY_PUSH/REGISTRY_PULL events?
+  - libp2p `/api/status` connected_peers anschauen (vorhin bei influxdb war das 0 trotz peers_online=3)
+  - Periodischen Registry-Resync einbauen (z.B. alle 60 s, idempotent)
+  - Force-Push-Endpoint `/api/registry/republish` zum manuellen Anstoss
+  - ADR-NNN-registry-replication-recovery.md
+
+  **Beleg:** Section dieses TODO-Eintrags + Audit-Events des heutigen 21:35-Reboot-Tests. Nicht reproduzierbar bevor 2026-05-17 — Hypothese: getriggert durch die Crash-Loops im Daemon-Start vor dem Reboot, die libp2p-Streams zwischen Peers in einen schraegen Half-Open-Zustand gebracht haben.
+
+  **Update 2026-05-18 — Root Cause gefunden + 4-Modell-Konsens:** `pal:consensus` mit `gpt-5.2` (9/10), `gemini-3-pro-preview` (9/10), `gpt-5.5` (8/10), `MiniMax-M2.7` (7/10) plus direkte Code-Verifikation:
+  - **Smoking Gun:** `packages/daemon/src/libp2p-runtime.ts:335-356` registriert fuer **alle** Mesh-Protokolle (heartbeat, registry, tasks, audit) Placeholder-Handler, die eingehende Streams sofort `close()`/`abort()`. Sync ueber libp2p hat nie funktioniert — Heartbeats laufen nur deshalb, weil sie HTTPS-basiert in `mesh.ts` implementiert sind, nicht libp2p.
+  - **Zweite Schicht:** Kein periodischer Anti-Entropy-Timer, kein `Automerge.initSyncState()` auf `peer:connect`. Selbst nach Handler-Fix wuerde Konvergenz nicht garantiert.
+  - **Erweiterte Findings (gpt-5.5 + MiniMax-M2.7):** Message-Framing fehlt, Per-Peer-Singleflight fehlt, Bidirektionaler Sync fehlt, Half-open Connections leakt SyncState, `last_sync` im CRDT-Doc verhindert Konvergenz mathematisch, Owner-wins wird durch `markAgentOffline`/`removePeerCapabilities` verletzt. Automerge-Sync ist strikt bilateral — transitive Konvergenz erst ueber mehrere Rounds.
+  - **Hypothese „Crash-Loop-Folge" ist falsch** — der Bug war von Anfang an im Code, fiel nur jetzt durch den 5-Node-Test auf.
+  - **Fix:** siehe `docs/architecture/ADR-020-registry-replication-recovery.md` — aufgeteilt in **v1** (5 Blocker: echte Handler, Framing, Coordinator + Singleflight, bidirektionaler Sync, Timeout-Cleanup) und **v2** (5 Robustheits-Punkte: `last_sync` raus, Owner-wins, libp2p-connected-SLO, Heads-Hash, Backpressure). v1-Konvergenz-Garantie: 120 s; v2: 60 s.
+
 - [x] 🔴 **Boot-Race InfluxDB-Skill (Symptom-Fix)** — Lokal auf `influxdb`-Host: `~/.config/systemd/user/thinklocal-daemon.service` ergaenzt um `After=influxdb.service` + `Wants=influxdb.service`. Daemon startet jetzt erst nach InfluxDB, der einmalige HealthCheck beim Boot trifft auf einen ready Service. (2026-05-17, **noch nicht im Repo gespiegelt** — Installer/Service-Template muss nachgezogen werden, ggf. mit konditionaler `After=`-Zeile abhaengig vom Agent-Typ.)
 
-- [ ] 🔴 **Generisches Skill-Health-Monitoring** — **BENOETIGT KONSENS** (`pal:consensus`, 2-3 Modelle). Aktuell prueft `index.ts` Skill-Requirements (z.B. `services: ["influxdb"]`) genau einmal beim Daemon-Start (siehe `influxdbHealthCheck()` in `builtin-skills/influxdb.ts`). Faellt der Service spaeter aus oder kommt er erst nach dem Daemon hoch, wird der Skill nie de- oder re-registriert. Das ist ein generelles Pattern-Problem fuer ALLE Skills auf ALLEN Daemons mit externer Abhaengigkeit (InfluxDB, Telegram, Ollama, kuenftige). Diskussionspunkte fuer den Konsens:
+- [ ] 🔴 **Generisches Skill-Health-Monitoring** — **Konsens 2026-05-18 abgeschlossen** (`gpt-5.2` + `gemini-3-pro-preview`), ADR siehe `docs/architecture/ADR-021-skill-health-lifecycle.md`. Aktuell prueft `index.ts` Skill-Requirements (z.B. `services: ["influxdb"]`) genau einmal beim Daemon-Start (siehe `influxdbHealthCheck()` in `builtin-skills/influxdb.ts`). Faellt der Service spaeter aus oder kommt er erst nach dem Daemon hoch, wird der Skill nie de- oder re-registriert. Das ist ein generelles Pattern-Problem fuer ALLE Skills auf ALLEN Daemons mit externer Abhaengigkeit (InfluxDB, Telegram, Ollama, kuenftige). Diskussionspunkte fuer den Konsens:
   - **Wo:** Skill-Manifest mit standardisiertem `healthcheck`-Feld (URL/Command/Funktion) vs. Skill-Adapter mit Plugin-Interface?
   - **Wie oft:** Festes Intervall, exponentielles Backoff bei Down, oder Event-getrieben (z.B. systemd-Notify)?
   - **State-Machine:** wie unterscheiden wir "transient unhealthy" (Flap, ignorieren) von "really gone" (de-register)? Schwellwert? Hysterese?
@@ -29,7 +64,16 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
   - **Beziehung zu ADR-004 Heartbeat:** Bauen wir auf dem bestehenden Cron-Heartbeat-System auf oder eigenes Subsystem?
   - **Mesh-Sicht:** Was passiert wenn Peer X den Skill als healthy meldet, ich aber als degraded? Wer gewinnt?
 
-  **Triggered by:** InfluxDB Boot-Race 2026-05-17 (Daemon startete 15:55:36, HealthCheck 15:55:37, InfluxDB ready erst 15:56:12 — Skill war 70 Minuten lang fuer das Mesh unsichtbar bis manueller Daemon-Restart). systemd-Fix loest das lokale Symptom, nicht das Pattern. Folge-PR sollte als ADR-NNN-skill-health-lifecycle.md beginnen.
+  **Triggered by:** InfluxDB Boot-Race 2026-05-17 (Daemon startete 15:55:36, HealthCheck 15:55:37, InfluxDB ready erst 15:56:12 — Skill war 70 Minuten lang fuer das Mesh unsichtbar bis manueller Daemon-Restart). systemd-Fix loest das lokale Symptom, nicht das Pattern.
+
+  **Konsens-Entscheidungen (siehe ADR-021):**
+  - Zentraler `SkillHealthMonitor` (kein Plugin-Pattern in Skills)
+  - State-Machine binaer (HEALTHY/UNHEALTHY), DEGRADED nur UI-derived
+  - Hysterese 2-up / 3-down, Flap-Damping im Monitor, nicht im CRDT
+  - Backoff linear: 30 s healthy / 60 s unhealthy (NICHT exponentiell)
+  - Registry: `availability`-Attribut, NICHT entfernen (Industrie-Standard, weniger CRDT-Churn, Debug-Sicht bleibt)
+  - Owner-wins erzwingen (Voraussetzung: ADR-020 v2.2)
+  - Skill bleibt geladen, nur Routing toggelt — kein Hot-Reload
 
 ## Phase 1 — Fundament: Identität, Verschlüsselung, Discovery (Wochen 1-3)
 
@@ -239,6 +283,23 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [x] 🟠 Uninstaller: `thinklocal uninstall` — Service entfernen, Config behalten (2026-04-04)
 - [x] 🟠 Sensible Defaults: mDNS auto-discovery, Keys auto-generieren, MCP auto-konfigurieren (2026-04-04)
 - [x] 🟠 Homebrew-Formel (macOS) — `Formula/thinklocal.rb` mit launchd-Service, 3 Binaries (2026-04-05)
+- [ ] 🔴 **Intelligente Netzwerk-Interface-Auswahl fuer mDNS-Discovery** — Daemon muss auf Multi-Homed-Hosts (Mac mit WLAN + LAN + USB-Ethernet gleichzeitig) selbst entscheiden, ueber welches Interface er Bonjour-Browse und -Publish macht. Aktuell: `discovery.ts:29` ruft `new Bonjour()` ohne Interface-Param → Lib raet, faellt im worst case auf WLAN, sieht 0 Peers im Wired-Subnetz. Beobachtet 2026-05-17 auf MacBook mit en0/en8/en10. Anforderungen:
+  - [ ] ADR-019 schreiben: Auswahllogik dokumentieren (wired > wireless, link-up, „Mesh-Subnetz"-Erkennung 10.10.X.0/24, multi-interface vs single-binding).
+  - [ ] Neue Config-Section `[discovery]` in `daemon.toml` mit Keys `interface = "auto" | "<name>" | "<ip>"`, `prefer_wired = true`, `subnet_hint = "10.10.0.0/16"` (optional, fuer Heim-LAN-Erkennung).
+  - [ ] Env-Override `TLMCP_BIND_INTERFACE`.
+  - [ ] `new Bonjour({ interface: selectedIp, multicast: true })` mit der gewaehlten IP.
+  - [ ] Stretch: Multi-Interface-Modus — eine Bonjour-Instanz pro relevantem Interface; vereinigte Peer-Liste in `MeshManager`.
+  - [ ] Tests: Auswahllogik mit gefakten `os.networkInterfaces()`-Outputs (3-Interface-Mac, Pi mit einem Interface, Linux-Server mit Tailscale + eth0).
+  - [ ] Regression: nach Sleep/Wake auf macOS muessen die Sockets neu gebunden werden (`pmset`-Sleep-Wakeup-Hook oder periodischer Health-Check der Browse-Antworten).
+- [ ] 🟠 **macOS-Installer auf LaunchDaemon umstellen** (statt LaunchAgent) — fuer headless/SSH-only/FileVault-Setups noetig. Details: `docs/MACOS-DEPLOYMENT.md` (Stand 2026-05-16). Konkret abzuarbeiten:
+  - [ ] `scripts/service/com.thinklocal.daemon.plist` zur Template-Datei (`*.plist.template`) machen mit Platzhaltern `{{USER}}`, `{{GROUP}}`, `{{HOME}}`, `{{NODE_BIN}}`, `{{REPO}}`. **Keine** hartkodierten `chris`/`staff`/`/Users/chris`-Pfade.
+  - [ ] `scripts/install.sh` (macOS-Zweig, aktuell ab Zeile ~280): Template per `sed` mit `$SUDO_USER`/`id -gn`/`eval echo ~$USER`/`which node`-Werten befuellen, Output nach `/Library/LaunchDaemons/`. Dateirechte: `chown root:wheel`, `chmod 644`.
+  - [ ] Installer-Sub-Task: Wrapper-Skript `~/<user>/.thinklocal/bin/daemon-launchagent.sh` aus Template generieren (analog), `chmod +x`. Wrapper enthaelt Netzwartungs-Loop gegen `EHOSTUNREACH 224.0.0.251:5353`-Race.
+  - [ ] Installer prueft: User existiert, `$SUDO_USER` ist gesetzt (sonst Abbruch mit klarer Fehlermeldung), Node 22+ verfuegbar, kein bestehender LaunchAgent unter selbem Label (vorher `bootout` + `mv` zu `.disabled.<datum>`).
+  - [ ] `bootstrap`-Schritt: `sudo launchctl bootstrap system /Library/LaunchDaemons/com.thinklocal.daemon.plist`.
+  - [ ] Uninstaller-Pendant in `install.sh --uninstall`: `bootout system`, plist + Wrapper loeschen.
+  - [ ] Homebrew-Formel (`Formula/thinklocal.rb`) konsistent anpassen — derzeit installiert sie ebenfalls einen LaunchAgent.
+  - [ ] README/INSTALL.md / USER-GUIDE: macOS-Abschnitt auf LaunchDaemon umstellen, Wrapper-Sinn kurz erklaeren, FileVault-Hinweis aufnehmen.
 
 ### 5.3 Claude Desktop MCP Integration
 - [x] 🔴 `thinklocal mcp config --claude-desktop` — generiert JSON-Block (2026-04-04)
