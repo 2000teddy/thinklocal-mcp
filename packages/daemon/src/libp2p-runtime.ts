@@ -347,7 +347,16 @@ export class ActiveLibp2pRuntime implements Libp2pRuntime {
         this.deps.tcp(),
         ...(this.config.relayTransportEnabled && this.deps.circuitRelayTransport ? [this.deps.circuitRelayTransport()] : []),
       ],
-      connectionEncryption: [this.deps.noise()],
+      // ADR-020 Phase 1.1 Bug-Report #3 (Live-Live-Befund 2026-05-19):
+      // libp2p v2+ benutzt `connectionEncrypters` (mit -ers, Plural),
+      // NICHT `connectionEncryption`. Der alte Key wurde silent ignoriert
+      // → kein Noise im Config → jede ausgehende Verbindung schlug mit
+      // `EncryptionFailedError: At least one protocol must be specified`
+      // fehl. Das erklaert die "All multiaddr dials failed"-Welle, die
+      // nach PR #135 (auto-dial) sichtbar wurde — der Auto-Dial-Code war
+      // korrekt, aber die libp2p-Konfig konnte keine Encryption aushandeln.
+      // Verifiziert via libp2p-Probe-Skript gegen iobroker.
+      connectionEncrypters: [this.deps.noise()],
       streamMuxers: [this.deps.yamux()],
       services: {
         identify: this.deps.identify(),

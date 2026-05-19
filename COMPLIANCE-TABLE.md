@@ -417,6 +417,18 @@ Gesamtsuite 682/682 (vorher 672), 0 Regressionen.
 
 ---
 
+## Session 2026-05-19 spaet — Bug #3 libp2p connectionEncrypters Config-Key
+
+| #   | PR                                      | Datum       | CO | CG | TS | CR | PC | DO | Findings                           |
+|-----|-----------------------------------------|-------------|----|----|----|----|----|----|----|
+| 144 | Bug #3 libp2p connectionEncrypters Key  | 2026-05-19  | —  | —  | ✅ | ✅ | ✅ | ✅ | 0 — via libp2p-Probe live verifiziert |
+
+**Problem (Live-Befund):** Auto-Dial aus PR #135 fired korrekt, aber jeder Dial scheiterte mit `EncryptionFailedError`. Root Cause: libp2p v2+ benutzt `connectionEncrypters` (Plural), nicht `connectionEncryption`. Alter Key silent ignoriert → Noise nie konfiguriert.
+
+**CO/CG:** uebersprungen (One-line Config-Fix). Diagnose via direkter libp2p-Probe + node_modules/libp2p source review.
+**TS:** 4 Regression-Tests in libp2p-runtime-config.test.ts (Source-Text-Check + Runtime-Optionen-Check). 25 libp2p-Tests gruen.
+**CR:** internal validation, gpt-5.5.
+**PC:** clean.
 ## Session 2026-05-19 spaet — Bug #2 `execute_remote_skill` Port-Mix Hotfix
 
 | #   | PR                                      | Datum       | CO | CG | TS | CR | PC | DO | Findings                           |
@@ -433,4 +445,5 @@ Gesamtsuite 682/682 (vorher 672), 0 Regressionen.
 
 ---
 
+*Letzte Aktualisierung: 2026-05-19 23:05 — Bug #3 libp2p connectionEncrypters Config-Key.*
 *Letzte Aktualisierung: 2026-05-19 22:50 — Bug #2 execute_remote_skill Port-Mix Hotfix.*
