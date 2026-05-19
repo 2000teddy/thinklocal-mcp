@@ -6,7 +6,45 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-05-18
+## [Unreleased] — 2026-05-19
+
+### ADR-020 v1.0 Production-Genesis-Blob — Bake-In (PR #134, Mac mini)
+
+Setzt den `REGISTRY_GENESIS_BLOB_BASE64` in `packages/daemon/src/registry.ts`
+durch einen echten Automerge-Blob (192 Bytes Base64) statt dem
+`__GENESIS_PLACEHOLDER__`. Damit greift der Production-Guard und der
+v1-Branch ist live-deploy-faehig.
+
+- **`packages/daemon/scripts/produce-genesis-blob.mjs`** (neu, 49 LoC):
+  reproduzierbares Skript fuer Audit-Trail. Erzeugt
+  `Automerge.from({capabilities:{}, last_sync:{}}, {actor: all-zero})`.
+  **Wichtige Erkenntnis verifiziert:** Automerge 2.x ist zwischen
+  Process-Runs nicht bit-deterministisch — Save() enthaelt eine variable
+  Komponente. Konsequenz: der eingebettete Blob in registry.ts ist die
+  verbindliche Quelle (Code-as-Truth), das Skript produziert nur
+  semantisch aequivalente Blobs.
+- **`packages/daemon/src/registry.ts`** (geaendert):
+  - Real-Blob statt Placeholder
+  - Typisierung der Konstante auf `string` (verhindert TS-Literal-Narrowing,
+    damit der Production-Guard nicht eliminiert wird)
+  - `GENESIS_PLACEHOLDER` als benannte Konstante statt Inline-String
+  - Fail-fast Schema-Check nach `Automerge.load`: capabilities + last_sync
+    muessen leere Maps sein
+  - Dev-Bootstrap-Fallback bleibt erhalten (Backward-Compat)
+- **`packages/daemon/tests/registry-genesis.test.ts`** (neu, 5 Tests):
+  - Blob ist nicht mehr Placeholder
+  - Blob laesst sich als Automerge-Doc mit kanonischer Empty-Schema laden
+  - Zwei Registries aus demselben Genesis koennen Caps mergen
+  - Blob hat genau einen Single-Root-Head (`/^[0-9a-f]{64}$/`)
+  - Skript-Output ist schematisch valide (Code-as-Truth gilt fuer Konstante,
+    nicht fuer Bit-Equality)
+- **Code-Review (GPT-5.4)**: 0 HIGH/CRITICAL, 3 MEDIUM + 1 LOW gefunden,
+  alle vor Commit gefixt:
+  - MED Doc-Kommentare aktualisiert (Determinismus-Behauptung raus)
+  - MED `as string`-Cast ersetzt durch typisierte Konstante + named placeholder
+  - MED Runtime-Schema-Check nach Automerge.load
+  - LOW `execFileSync` nutzt `process.execPath` statt `'node'`
+- **Tests**: 672/672 gruen, tsc clean, 0 Regressionen.
 
 ### ADR-020 v1+v2 Registry Replication Recovery — Code-Implementierung (PR #134)
 
