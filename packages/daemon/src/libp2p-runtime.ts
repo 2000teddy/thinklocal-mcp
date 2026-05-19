@@ -275,10 +275,45 @@ class NoopLibp2pRuntime implements Libp2pRuntime {
   }
 }
 
-class ActiveLibp2pRuntime implements Libp2pRuntime {
+/**
+ * ADR-020 Phase 1.1 (HIGH-Finding aus pal:codereview gpt-5.5):
+ * libp2p `peer:connect` und `peer:disconnect` liefern `detail` als
+ * Connection-Objekt mit eigener `toString()` (typisch: "[object Object]").
+ * Wir muessen `remotePeer` bevorzugen, statt das generische `toString()`.
+ *
+ * Exportiert fuer Unit-Tests.
+ */
+export function extractPeerIdFromConnectionEvent(evt: unknown): string | null {
+  const detail = (evt as { detail?: unknown } | null)?.detail;
+  if (detail == null) return null;
+  // 1. detail.remotePeer.toString() — libp2p v2/v3 Connection-Shape
+  const remotePeer =
+    (detail as { remotePeer?: { toString?: () => string } })?.remotePeer ??
+    (detail as { connection?: { remotePeer?: { toString?: () => string } } })?.connection?.remotePeer;
+  const remoteStr = remotePeer?.toString?.();
+  if (remoteStr && remoteStr !== '[object Object]') return remoteStr;
+  // 2. detail selbst (alte libp2p-Variante: detail IST der PeerId)
+  // Nur akzeptieren wenn nicht generisches Objekt-toString
+  if (typeof detail === 'string') return detail;
+  const detailStr = (detail as { toString?: () => string })?.toString?.();
+  if (detailStr && detailStr !== '[object Object]') return detailStr;
+  return null;
+}
+
+export class ActiveLibp2pRuntime implements Libp2pRuntime {
   private node: any;
   private state: Libp2pRuntimeState;
   private readonly hooks: Libp2pRuntimeHooks;
+  /**
+   * ADR-020 Phase 1.1: Dedup-Set fuer laufende Auto-Dials nach
+   * peer:discovery. libp2p dialt nach Discovery NICHT automatisch (Breaking
+   * Change libp2p v3); die Anwendung muss explizit dialen. Ohne Dedup
+   * werden bei periodischen mDNS-Reannouncements duplizierte Dial-Versuche
+   * geloggt.
+   */
+  private dialingPeers = new Set<string>();
+  /** ADR-020 Phase 1.1 (MEDIUM aus pal:codereview): Stop-Guard fuer Auto-Dial. */
+  private stopped = false;
 
   constructor(
     initialState: Libp2pRuntimeState,
@@ -323,11 +358,18 @@ class ActiveLibp2pRuntime implements Libp2pRuntime {
       },
     });
 
+    // ADR-020 Phase 1.1: peerId VOR node.start() lesen, damit der
+    // peer:discovery-Handler die Self-Filter-Pruefung hat, sobald das
+    // erste Event eintrifft. Listener-Anbringung VOR node.start(),
+    // damit fruehe mDNS-Events nicht verloren gehen.
+    this.state.peerId = String(this.node.peerId?.toString?.() ?? '');
+    this.registerProtocolHandlers();
+    this.attachEventListeners();
+
     if (typeof this.node.start === 'function') {
       await this.node.start();
     }
 
-    this.state.peerId = String(this.node.peerId?.toString?.() ?? '');
     this.state.listenMultiaddrs = Array.isArray(this.node.getMultiaddrs?.())
       ? this.node.getMultiaddrs().map((addr: { toString(): string }) => addr.toString())
       : this.state.listenMultiaddrs;
@@ -337,8 +379,12 @@ class ActiveLibp2pRuntime implements Libp2pRuntime {
     this.state.reason = null;
     this.refreshNatState();
 
-    this.registerProtocolHandlers();
-    this.attachEventListeners();
+    // ADR-020 Phase 1.1: defensiver PeerStore-Scan. Falls Discovery
+    // bereits VOR der Listener-Registrierung gefeuert hat (kann bei
+    // schnellem mDNS-Cache passieren), dialen wir alle bekannten
+    // nicht-verbundenen Peers einmalig nach. Best-effort, kein Crash bei
+    // API-Inkompatibilitaet zwischen libp2p-Versionen.
+    await this.dialKnownPeers();
     this.log?.info(
       {
         peerId: this.state.peerId,
@@ -354,6 +400,8 @@ class ActiveLibp2pRuntime implements Libp2pRuntime {
   }
 
   async stop(): Promise<void> {
+    this.stopped = true;
+    this.dialingPeers.clear();
     if (this.node && typeof this.node.stop === 'function') {
       await this.node.stop();
       this.log?.info('libp2p Runtime gestoppt');
@@ -526,10 +574,7 @@ class ActiveLibp2pRuntime implements Libp2pRuntime {
     };
     const onConnect = (evt: any) => {
       stateRefresh();
-      const peerId =
-        evt?.detail?.toString?.() ??
-        evt?.detail?.remotePeer?.toString?.() ??
-        null;
+      const peerId = extractPeerIdFromConnectionEvent(evt);
       if (peerId && this.hooks.peerEvents?.onPeerConnect) {
         try {
           this.hooks.peerEvents.onPeerConnect(peerId);
@@ -540,10 +585,7 @@ class ActiveLibp2pRuntime implements Libp2pRuntime {
     };
     const onDisconnect = (evt: any) => {
       stateRefresh();
-      const peerId =
-        evt?.detail?.toString?.() ??
-        evt?.detail?.remotePeer?.toString?.() ??
-        null;
+      const peerId = extractPeerIdFromConnectionEvent(evt);
       if (peerId && this.hooks.peerEvents?.onPeerDisconnect) {
         try {
           this.hooks.peerEvents.onPeerDisconnect(peerId);
@@ -553,15 +595,101 @@ class ActiveLibp2pRuntime implements Libp2pRuntime {
       }
     };
 
+    // ADR-020 Phase 1.1: libp2p v3 dialt nach peer:discovery NICHT
+    // automatisch (#onDiscoveryPeer macht nur peerStore.merge). Ohne
+    // diesen Listener bleibt das Mesh stumm: mDNS findet Peers, aber
+    // niemand verbindet sie. Siehe ADR-020-Phase-1.1-autodial.md.
+    const onDiscovery = (evt: any) => {
+      const detail = evt?.detail;
+      const peerIdObj = detail?.id;
+      const peerIdStr = peerIdObj?.toString?.();
+      if (!peerIdStr) return;
+      this.autoDialDiscoveredPeer(peerIdObj, peerIdStr);
+    };
+
     if (typeof this.node?.addEventListener === 'function') {
       this.node.addEventListener('peer:connect', onConnect);
       this.node.addEventListener('peer:disconnect', onDisconnect);
+      this.node.addEventListener('peer:discovery', onDiscovery);
       return;
     }
 
     if (typeof this.node?.on === 'function') {
       this.node.on('peer:connect', onConnect);
       this.node.on('peer:disconnect', onDisconnect);
+      this.node.on('peer:discovery', onDiscovery);
+    }
+  }
+
+  /**
+   * ADR-020 Phase 1.1: dialt einen via peer:discovery entdeckten Peer.
+   *
+   * Schutzschichten:
+   * - Self-Filter via this.state.peerId
+   * - Bereits-verbunden-Filter (Lograuschen reduzieren; libp2p selbst
+   *   dedupliziert intern noch einmal)
+   * - In-Flight-Dedup via this.dialingPeers (mDNS feuert periodisch)
+   * - .catch(log.debug) — Dial-Fehler sind erwartbar bei offline Peers
+   */
+  private autoDialDiscoveredPeer(peerIdObj: unknown, peerIdStr: string): void {
+    if (this.stopped) return;
+    if (peerIdStr === this.state.peerId) return;
+    if (this.dialingPeers.has(peerIdStr)) return;
+    try {
+      const connected = this.node?.getConnections?.(peerIdObj);
+      if (Array.isArray(connected) && connected.length > 0) return;
+    } catch {
+      // getConnections fehlt in manchen libp2p-Versionen — best effort
+    }
+    if (typeof this.node?.dial !== 'function') return;
+
+    this.dialingPeers.add(peerIdStr);
+    Promise.resolve(this.node.dial(peerIdObj))
+      .then(() => {
+        this.log?.debug({ peerId: peerIdStr }, 'auto-dial nach peer:discovery erfolgreich');
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.log?.debug({ peerId: peerIdStr, err: msg }, 'auto-dial nach peer:discovery fehlgeschlagen');
+      })
+      .finally(() => {
+        this.dialingPeers.delete(peerIdStr);
+      });
+  }
+
+  /**
+   * ADR-020 Phase 1.1: defensiver Scan. Iteriert ueber bekannte Peers im
+   * PeerStore und dialt diejenigen, die wir noch nicht connected sind.
+   * Schliesst die Race, falls mDNS-Discovery vor unserem Listener gefeuert
+   * hat.
+   *
+   * Implementierung ist defensive, weil die PeerStore-API zwischen
+   * libp2p-Versionen variiert (peerStore.all() vs .peers() vs async
+   * iterator). Schlaegt der Aufruf fehl, ist das kein Fehler — der
+   * peer:discovery-Listener faengt periodische Re-Announces auf.
+   */
+  private async dialKnownPeers(): Promise<void> {
+    const peerStore = this.node?.peerStore;
+    if (!peerStore) return;
+    let peers: any[] = [];
+    try {
+      if (typeof peerStore.all === 'function') {
+        peers = await peerStore.all();
+      } else if (typeof peerStore.peers === 'function') {
+        peers = await peerStore.peers();
+      }
+    } catch (err) {
+      this.log?.debug(
+        { err: (err as Error)?.message },
+        'peerStore-Scan beim Start uebersprungen (API nicht verfuegbar)',
+      );
+      return;
+    }
+    for (const peer of peers) {
+      const peerIdObj = peer?.id ?? peer;
+      const peerIdStr = peerIdObj?.toString?.();
+      if (!peerIdStr) continue;
+      this.autoDialDiscoveredPeer(peerIdObj, peerIdStr);
     }
   }
 

@@ -393,4 +393,28 @@ Gesamtsuite 682/682 (vorher 672), 0 Regressionen.
 
 ---
 
-*Letzte Aktualisierung: 2026-05-19 10:43 — PR #134 ADR-020 v1+v2 (MacBook) + v1.0 Production-Genesis-Blob (Mac mini), gemergt nach #133.*
+## Session 2026-05-19 — ADR-020 Phase 1.1 libp2p Auto-Dial Hotfix
+
+| #   | PR                                      | Datum       | CO | CG | TS | CR | PC | DO | Findings                           |
+|-----|-----------------------------------------|-------------|----|----|----|----|----|----|----|
+| 141 | ADR-020 Phase 1.1 libp2p auto-dial      | 2026-05-19  | ✅ | —  | ✅ | ✅ | ✅ | ✅ | 2 HIGH + 1 MEDIUM, alle gefixt + Regression-Tests |
+
+**Problem:** Nach PR #134 (ADR-020 v1) konvergiert das Mesh nicht. RegistrySyncCoordinator startet, aber `peers`-Map permanent leer. 5+ Stunden Live-Debugging auf Mac mini + MacBook ergaben: libp2p v3 dialt nach `peer:discovery` NICHT automatisch (`#onDiscoveryPeer` macht nur `peerStore.merge`). Die Anwendung muss explizit dialen.
+
+**CO:** `pal:consensus` (Konsens-ID 5801b78c) — GPT-5.5 (8/10) + Gemini 2.5 Pro (9/10), einstimmig. Diagnose und Fix-Ansatz bestaetigt.
+**CG:** uebersprungen (reiner Bug-Fix).
+**TS:** 14 Unit-Tests in `libp2p-autodial.test.ts` (neu) + 1 Regression-Test in `registry-sync-coordinator.test.ts`. Alle 53 sync/libp2p-Tests gruen. Live-Test auf MacBook bestaetigt: peer:discovery → autoDial-Pipeline aktiv.
+**CR:** `pal:codereview` GPT-5.5 — 2 HIGH + 3 MEDIUM Findings:
+- HIGH: `peer:connect`-Event-Parsing nutzte generic `detail.toString()` → `"[object Object]"`. Auch ohne diesen Fix waere auto-dial nutzlos gewesen, weil Coordinator falsche Peer-IDs bekommt. Fix + 6 Regression-Tests fuer `extractPeerIdFromConnectionEvent`.
+- HIGH: `RegistrySyncCoordinator.runRound()` setzte `entry.inflight` NACH IIFE-Aufruf, aber im converged-Pfad (`message===null`) lief die IIFE synchron bis zum inneren `finally`, das `inflight=null` setzte — danach ueberschrieb der outer `entry.inflight = promise` das Ergebnis dauerhaft. Peer permanent blockiert. Fix: Cleanup ausschliesslich im outer finally. + Regression-Test.
+- MEDIUM: stop-Guard im autoDial gegen Use-after-Stop, + Regression-Test.
+- MEDIUM deferred: Backoff (Phase 1.2), In-Flight-Cap (niedrige Prio, libp2p deduppt).
+- MEDIUM dokumentiert: kein echter libp2p-Integration-Test (Live-Test auf 5 Nodes kompensiert).
+**PC:** `pal:precommit` GPT-5.5 — clean.
+**DO:** ADR-020-Phase-1.1-autodial.md (neu) + CHANGES.md + COMPLIANCE-TABLE.md.
+
+**Live-Befund:** Auto-Dial-Pipeline laeuft. libp2p-Dials zu den 4 Peers scheitern aktuell mit "All multiaddr dials failed" / "aborted due to timeout" — separater Bug auf Netzwerkebene (vermutlich asymmetrisch: andere Nodes haben Phase 1.1 noch nicht). Wird durch Rollout auf alle 5 Nodes geklaert.
+
+---
+
+*Letzte Aktualisierung: 2026-05-19 21:50 — ADR-020 Phase 1.1 libp2p auto-dial Hotfix.*
