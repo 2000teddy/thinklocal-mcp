@@ -421,6 +421,22 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 
 ---
 
+## Operative Verbesserungen (User-Wunsch 2026-05-19)
+
+- [ ] 🟠 **Build-Versionsnummer + Build-Nummer im Mesh sichtbar** — Jeder Daemon liest beim Start `VERSION` + `BUILD` aus dem Repo-Root und meldet `build_version` / `build_number` / `build_node` / `build_date` im `agent_card`, `/api/status` und in den MCP-Tools `mesh_status` + `discover_peers`. Vorbild Konstruktion siehe `~/.claude/projects/.../memory/project_feature_build_version_compat.md`.
+  - **Why:** Beim 5-Node-Rollout heute (ADR-019 P1.1, ADR-020 P1.1) war nicht erkennbar, welche Nodes schon den neuen Build laufen. Inkompatibilitaeten zeigen sich nur durch verwirrende Fehler (siehe ADR-020-Phase-1.1-bug-report Bug #2/#3/#4).
+  - **Voraussetzung fuer:** Auto-Update (siehe unten) — ohne Build-Stempel kann der Update-Mechanismus nicht entscheiden, ob ein Update noetig ist.
+  - **Vorgehen:** ADR schreiben, CO + CG, dann packages/daemon/src/build-info.ts mit Tests. Kleine, isolierte Aenderung — guter Kandidat fuer einen unabhaengigen PR neben den Mesh-Bugfixes.
+
+- [ ] 🟠 **Auto-Update Sparkle-Style — Phase 1.5 von ADR-017** — ADR-017 existiert bereits als Proposed (`docs/architecture/ADR-017-auto-update.md`) mit Phase 1 (CLI-Befehl) + Phase 2 (Mesh-Update via OTS). User-Wunsch 2026-05-19: **Phase 1.5** als Background-Polling-Loop im Daemon:
+  - Daemon polled GitHub Releases (oder Update-Manifest) in konfigurierbaren Intervallen ("einmal am Tag", "jede Stunde", "manuell")
+  - Bei verfuegbarem neueren Build: download + SHA256-Verifikation + selbst neu installieren
+  - Konfigurierbar via `config/daemon.toml` oder Env-Vars: Polling-Frequenz, Stable/Beta-Kanal, Auto-Install vs. Admin-Approval, Skip-this-Version
+  - Vorbild: Sparkle.app fuer macOS (https://sparkle-project.org/)
+  - **Phase 2 (Mesh-propagierte Updates) bleibt aufgeschoben** — solange Mesh-Sync nicht stabil ist (siehe ADR-020 Bug-Report), waere ein mesh-basiertes Update kontraproduktiv: ein kaputtes Mesh kann nicht zuverlaessig sein eigenes Update verteilen.
+
+- [ ] 🟢 **Pairing-URI-Migrationsskript** — `packages/daemon/scripts/migrate-pairings.mjs` als Folge aus dem ADR-005-Migrationsbug (siehe `docs/architecture/ADR-020-Phase-1.1-bug-report.md` Bug #4). Detektiert hostname-basierte SPIFFE-URIs in `paired-peers.json`, holt die korrekten Host-ID-URIs via `/.well-known/agent-card.json` des Peers, schreibt atomar zurueck. Plus Daemon-Startup-Warning bei erkannten Legacy-Eintraegen.
+
 ## Zukunftsideen (Post-MVP)
 
 - [ ] 💡 **Natürliche-Sprache-Queries** — "Hat jemand im Netzwerk eine Datenbank?" statt strukturierter Capability-Abfragen
