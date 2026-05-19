@@ -95,6 +95,8 @@ mdns_service_type = "_thinklocal._tcp"
 | `TLMCP_AGENT_TYPE` | Agent-Typ | claude-code |
 | `TLMCP_NO_TLS` | TLS deaktivieren (Dev) | - |
 | `TLMCP_STATIC_PEERS` | Statische Peers (komma-separiert) | - |
+| `TLMCP_ALLOWED_MESH_CIDRS` | Mesh-CIDRs (ADR-019, komma-separiert) | - |
+| `TLMCP_EXCLUDE_INTERFACE_PATTERNS` | Interface-Excludes (ADR-019) | Defaults |
 | `TELEGRAM_BOT_TOKEN` | Telegram Bot Token | - |
 | `TELEGRAM_ALLOWED_CHATS` | Erlaubte Chat-IDs | - |
 
@@ -269,6 +271,47 @@ thinklocal logs      # Live-Logs anzeigen
 3. Firewall: Port 9440 muss offen sein
 4. mDNS: avahi-daemon auf Linux installiert?
 5. TLS-Mismatch pruefen — siehe "Peer ohne TLS ignoriert" weiter unten
+6. Multi-Interface-Problem — siehe "Mesh nicht gefunden trotz aktivem Daemon"
+
+### Mesh nicht gefunden trotz aktivem Daemon (Multi-Interface, ADR-019)
+
+Bei Hosts mit **mehreren aktiven Netzwerk-Interfaces** (z.B. MacBook mit
+USB-Ethernet im LAN + WLAN + DMZ direkt an der Fritzbox) findet der Daemon
+moeglicherweise keine Peers oder wird mit der falschen IP entdeckt.
+
+**Symptom:** `mesh_status` zeigt `peers_online: 0` oder Peers werden mit IPs
+aus dem falschen Subnet entdeckt (z.B. `host: "10.0.0.20"` statt `"10.10.10.55"`).
+
+**Ursache:** `bonjour-service` published ohne explizite CIDR-Policy auf einem
+beliebigen Interface und enthaelt ALLE lokalen IPs in den A-Records — Peers
+versuchen sich dann ueber DMZ/WLAN-IPs zu verbinden, die nicht routbar sind
+oder von der Mesh-CA nicht gedeckt werden.
+
+**Fix:** Im `config/daemon.toml` die `allowed_mesh_cidrs` auf das Mesh-Subnet
+beschraenken:
+
+```toml
+[discovery]
+mdns_service_type = "_thinklocal._tcp"
+allowed_mesh_cidrs = ["10.10.10.0/24"]
+```
+
+Oder via Env:
+```bash
+TLMCP_ALLOWED_MESH_CIDRS="10.10.10.0/24,192.168.1.0/24"
+```
+
+Mit dieser Policy:
+- Daemon published mDNS nur auf Interfaces in den erlaubten CIDRs
+- A-Records werden auf die Mesh-IP beschraenkt (Anti-Leakage)
+- Empfangene Peers ausserhalb der CIDRs werden ignoriert (Anti-Reflector)
+- Daemon-Restart noetig: `thinklocal restart`
+
+Default-Excludes (immer aktiv): `docker*`, `tailscale*`, `utun*`, `veth*`,
+`bridge*`, `br-*`, `tun*`, `tap*`, `awdl*`, `llw*`, `anpi*`, `ap*`, `gif*`,
+`stf*`, `lo*`. Weitere via `exclude_interface_patterns` in der Config.
+
+Siehe `docs/architecture/ADR-019-multi-interface-discovery.md` fuer Details.
 
 ### Peer ohne TLS ignoriert (requireTls)
 

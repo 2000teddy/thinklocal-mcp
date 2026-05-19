@@ -16,6 +16,23 @@ heartbeat_timeout_missed = 3
 [discovery]
 mdns_service_type = "_thinklocal._tcp"
 
+# ADR-019: Multi-Interface Discovery Policy
+# Bei Multi-Homed Hosts (mehrere NICs in verschiedenen Subnetzen) wird
+# bonjour-service ohne Pinning auf ein "falsches" Interface published
+# (z.B. DMZ statt LAN). Diese Optionen begrenzen Discovery auf das Mesh-Subnet.
+#
+# Wenn leer: auto-detect (alle nicht-virtuellen Interfaces erlaubt).
+# Empfohlen fuer Multi-Subnet-Hosts: explizit setzen.
+#
+# allowed_mesh_cidrs = ["10.10.10.0/24"]
+allowed_mesh_cidrs = []
+#
+# Interface-Namen die ausgeschlossen werden (Glob-Patterns "name*" oder "*name").
+# Wenn leer: Default-Excludes (docker*, tailscale*, utun*, veth*, bridge*, br-*,
+# tun*, tap*, awdl*, llw*, anpi*, ap*, gif*, stf*, lo*) werden verwendet.
+# exclude_interface_patterns = ["docker*", "tailscale*", "utun*"]
+exclude_interface_patterns = []
+
 [libp2p]
 enabled = true                  # Wird im local-Modus implizit deaktiviert, ausser per Env-Override
 listen_port = 9540              # Default: daemon.port + 100
