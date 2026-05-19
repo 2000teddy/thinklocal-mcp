@@ -40,6 +40,21 @@ async function fetchDaemon(path: string): Promise<unknown> {
   return requestDaemonJson(path, { baseUrl: DAEMON_URL, dataDir: DATA_DIR });
 }
 
+/**
+ * ADR-020 Phase 1.1 Bug-Report #2:
+ * Baut die URL fuer Cross-Node-Skill-Execution. Remote-Peers im Mesh laufen
+ * grundsaetzlich mit mTLS+HTTPS — der lokale RUNTIME_MODE der mcp-stdio-
+ * Subprocess darf das nicht beeinflussen. Frueher war das Protokoll an
+ * `RUNTIME_MODE === 'lan' ? 'https' : 'http'` gekoppelt, was bei
+ * subprocess-environments ohne TLMCP_RUNTIME_MODE in HTTP gegen einen
+ * HTTPS-Port resultierte ("Parse Error: Expected HTTP/, RTSP/ or ICE/").
+ *
+ * Exportiert fuer Unit-Tests.
+ */
+export function buildRemotePeerUrl(host: string, port: number): string {
+  return `https://${host}:${port}`;
+}
+
 async function postDaemon(path: string, body: unknown): Promise<unknown> {
   return requestDaemonJson(path, {
     baseUrl: DAEMON_URL,
@@ -278,14 +293,22 @@ server.tool(
     // bzw. TLS-Read-Fehler, und die Cross-Node-Skill-Execution war effektiv
     // kaputt.
     //
-    // Fix: URL-Schema nach RUNTIME_MODE waehlen und requestDaemonJson nutzen.
-    // Dieser Client laedt automatisch das volle Mesh-Trust-Bundle (eigene
+    // Bug-Fix 2026-05-19 (ADR-020 Phase 1.1 Bug-Report #2): Frueher wurde
+    // `peerProto` aus dem lokalen `RUNTIME_MODE` abgeleitet (`'lan' ? 'https'
+    //  : 'http'`). Wenn die mcp-stdio-Subprocess-Umgebung kein
+    // TLMCP_RUNTIME_MODE gesetzt hatte (haeufig bei Linux-Hosts, siehe
+    // iobroker), war RUNTIME_MODE='local' → peerProto='http' → der Client
+    // schickte HTTP-Bytes an HTTPS-only Peer-Port 9440 → "Parse Error:
+    // Expected HTTP/, RTSP/ or ICE/". Remote-Peers im Mesh laufen
+    // grundsaetzlich mit mTLS+HTTPS (production-Config). Daher: immer HTTPS
+    // fuer Remote-Peers, unabhaengig vom lokalen RUNTIME_MODE.
+    //
+    // requestDaemonJson laedt automatisch das volle Mesh-Trust-Bundle (eigene
     // Mesh-CA + alle Peer-CAs aus paired-peers.json) plus das eigene
     // node.crt/key als Client-Cert — exakt was fuer mTLS gegen einen
     // gepairten Peer benoetigt wird.
     try {
-      const peerProto = RUNTIME_MODE === 'lan' ? 'https' : 'http';
-      const peerUrl = `${peerProto}://${peer.host}:${peer.port}`;
+      const peerUrl = buildRemotePeerUrl(peer.host, peer.port);
 
       const data = await requestDaemonJson('/api/tasks/execute', {
         baseUrl: peerUrl,

@@ -8,6 +8,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-05-19
 
+### ADR-020 Phase 1.1 Bug-Report #2 — `execute_remote_skill` Port-Mix (Hotfix)
+
+**Symptom:** `execute_remote_skill` liefert auf bestimmten Hosts `"Parse Error: Expected HTTP/, RTSP/ or ICE/"`. Verifiziert live auf influxdb gegen iobroker.
+
+**Root Cause:** In `mcp-stdio.ts` war das Protokoll fuer die Remote-Peer-URL an `RUNTIME_MODE === 'lan' ? 'https' : 'http'` gekoppelt. Die mcp-stdio-Subprocess wird vom Claude-Code-MCP-Harness ohne `TLMCP_RUNTIME_MODE` gestartet (verifiziert: `/proc/<pid>/environ` auf influxdb enthaelt nur `TLMCP_DAEMON_URL`, kein RUNTIME_MODE). Default → `'local'` → `peerProto='http'` → HTTP-Bytes an HTTPS-only Peer-Port 9440 → Parse-Error im HTTP-Parser.
+
+**Fix:** `packages/daemon/src/mcp-stdio.ts`: neue exportierte Hilfsfunktion `buildRemotePeerUrl(host, port)` liefert immer `https://`. Remote-Peers im Mesh laufen grundsaetzlich mit mTLS+HTTPS (Production-Config), unabhaengig vom lokalen RUNTIME_MODE. `RUNTIME_MODE` bleibt fuer den LOKALEN Daemon-URL erhalten.
+
+**Tests:** `packages/daemon/src/mcp-stdio-remote-skill.test.ts` (neu, 4 Tests).
+
 ### ADR-020 Phase 1.1 — libp2p Auto-Dial nach Peer-Discovery (Hotfix)
 
 **Behebt das Convergenz-Problem aus PR #134:** Nach Merge von ADR-020 v1 lief der `RegistrySyncCoordinator`, aber `peers`-Map blieb permanent leer. Root Cause: libp2p v3 dialt nach `peer:discovery` NICHT automatisch — `Libp2pNode.#onDiscoveryPeer` macht nur `peerStore.merge`. Die Anwendung muss explizit dialen. mDNS funktionierte, aber niemand baute Verbindungen auf → kein peer:connect → CRDT-Sync nie aktiv.
