@@ -687,8 +687,19 @@ async function main(): Promise<void> {
 
   const proto = cardServer.protocol;
 
-  // 9. mDNS Discovery starten
-  const discovery = new MdnsDiscovery(config.discovery.mdns_service_type, log, config.daemon.tls_enabled);
+  // 9. mDNS Discovery starten (ADR-019: mit Policy fuer Interface-Pinning + Anti-Leakage)
+  const discovery = new MdnsDiscovery(
+    config.discovery.mdns_service_type,
+    log,
+    config.daemon.tls_enabled,
+    {
+      allowed_mesh_cidrs: config.discovery.allowed_mesh_cidrs,
+      exclude_interface_patterns:
+        config.discovery.exclude_interface_patterns.length > 0
+          ? config.discovery.exclude_interface_patterns
+          : undefined,
+    },
+  );
 
   discovery.publish(
     `${config.daemon.hostname}-${config.daemon.agent_type}`,

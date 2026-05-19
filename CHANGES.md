@@ -82,6 +82,37 @@ v1-Branch ist live-deploy-faehig.
   `REGISTRY_GENESIS_BLOB_BASE64` produziert werden (aktuell Placeholder, schuetzt
   Production-Guard).
 
+### ADR-019 Phase 1.1 — Bind-Regression-Hotfix
+
+Phase-1-Code hatte `new Bonjour({ interface: meshIp })` ohne `bind`-Option. Das
+fuehrt in `multicast-dns/index.js` Zeile 65 dazu, dass der UDP-Socket auf die
+**unicast**-IP `meshIp:5353` gebunden wird statt auf `0.0.0.0:5353`. Folge: der
+Kernel verwirft Multicast-Pakete an 224.0.0.251 — Receive ist tot, Outbound
+funktioniert weiter. Live beobachtet auf Mac mini `10.10.10.94`: 0 Peers im
+mesh_status trotz vollstaendiger Sichtbarkeit im OS-`dns-sd`.
+
+- **Multi-Modell-Konsens** (GPT-5.4 8/10, GPT-5.1-Codex 8/10, Gemini-3-Pro 9/10):
+  einstimmig **Option 3** statt Option 1 (Rollback) oder Option 2 (private
+  internals). `new Bonjour({ interface: meshIp, bind: '0.0.0.0' })` nutzt das
+  natuerliche multicast-dns API: `bind` gewinnt fuer Receive (Zeile 65),
+  `interface` bleibt fuer outbound `setMulticastInterface()` (Zeile 153).
+- **`packages/daemon/src/discovery.ts`**: Konstruktor um `bind: '0.0.0.0'`
+  erweitert. Log-Message angepasst.
+- **`packages/daemon/src/discovery.ts`**: Konstruktor um optionalen
+  `networkInterfacesSource`-Parameter erweitert (Test-Hook, MEDIUM-Fix
+  Code-Review GPT-5.4 — deterministische Tests statt CI-Host-Abhaengigkeit).
+- **`packages/daemon/src/discovery.test.ts`** (5 neue Tests):
+  - `bind:"0.0.0.0"` + `interface:meshIp` deterministisch via Stub
+  - Positiver CIDR-Policy-Pfad mit matching Interface (LOW-FIX CR)
+  - Ohne Mesh-IP: Bonjour mit `{}` (Backward-Compat)
+  - Regression-Invariante: `bind !== interface`
+  - Shutdown-Ordering: `stop()` ruft `browser.stop` + `unpublishAll` + `destroy` (LOW-FIX CR)
+- **`docs/architecture/ADR-019-multi-interface-discovery.md`**: Status auf
+  Phase 1.1, neuer Hotfix-Block mit Symptom/Root-Cause/Konsens/Fix/Tests.
+- **Code-Review (GPT-5.4)**: 0 HIGH/CRITICAL, 1 MEDIUM + 2 LOW gefunden, alle
+  vor Commit gefixt mit Regression-Tests.
+- **Tests**: 690/690 gruen (vorher 685), 0 Regressionen.
+
 ### ADR-020 + ADR-021: CRDT-Replikation und Skill-Health (Proposed)
 
 - **`docs/architecture/ADR-020-registry-replication-recovery.md`** (neu):
@@ -113,6 +144,42 @@ v1-Branch ist live-deploy-faehig.
   Zustand gebracht" — der Bug war von Anfang an im Code, fiel nur jetzt
   durch den 5-Node-Test auf.
 
+### ADR-019 Multi-Interface mDNS Discovery (Phase 1)
+
+Bei Hosts mit mehreren Netzwerk-Interfaces (z.B. MacBook mit Ethernet im LAN
++ WLAN + DMZ-Verbindung) wurden Peers ueber falsche IPs entdeckt — der Daemon
+verbendete sich gegen DMZ-IPs (10.0.0.20) statt Mesh-IPs (10.10.10.55) und
+mTLS-Handshakes scheiterten. Multi-Modell-Konsensus (GPT-5.4 + Gemini 3 Pro):
+CIDR-basierte Interface-Selektion + Bonjour mit explizitem Pinning + empfangs-
+seitige CIDR-Validierung gegen Reflector-Leakage.
+
+- **PoC via tcpdump bewiesen:** `bonjour-service`'s `{ interface }` Option
+  steuert nur den Multicast-Socket, NICHT die A-Records. Selbst mit Pinning
+  werden alle lokalen IPs in den A-Records published. Loesung: zusaetzlich
+  `Service.records()` monkey-patchen.
+- **`packages/daemon/src/discovery-policy.ts`** (neu): CIDR-Match (`ipInCidr`),
+  Interface-Inventarisierung mit Dependency-Injection (testbar), Default-Excludes
+  fuer 15 virtuelle Interface-Typen (docker/tailscale/utun/veth/bridge/...).
+- **`packages/daemon/src/discovery.ts`** (erweitert): Konstruktor pinned auf
+  `getMeshIp(policy)`, publish() ruft `restrictServiceToIp()` auf, browse()
+  filtert empfangene Peer-IPs via `isPeerIpAllowed()`.
+- **`packages/daemon/src/config.ts`** (erweitert): `allowed_mesh_cidrs` und
+  `exclude_interface_patterns` in `[discovery]`, fail-fast bei ungueltigen CIDRs.
+- **Env-Vars**: `TLMCP_ALLOWED_MESH_CIDRS`, `TLMCP_EXCLUDE_INTERFACE_PATTERNS`.
+- **`docs/architecture/ADR-019-multi-interface-discovery.md`**: Vollstaendige
+  Konsensus-Doku mit Phase-2-Limitationen (kein Reconcile-Loop, IPv6 spaeter).
+- **`docs/USER-GUIDE.md`**: Neuer Troubleshooting-Eintrag "Mesh nicht gefunden
+  trotz aktivem Daemon".
+- **Code-Review (GPT-5.4)**: 1 HIGH + 2 MEDIUM + 4 LOW Findings — alle vor
+  Merge gefixt mit Regression-Tests (parseInt-Spoofing, leere Excludes,
+  Idempotenz, CIDR-Validation, Hostname-Fallback, leere A-Records).
+- **Precommit-Review (GPT-5.4)**: weitere 1 HIGH + 1 MEDIUM + 1 LOW gefunden:
+  - HIGH: `allowed_mesh_cidrs` ohne Match = silent fallback → jetzt fail-closed
+  - MEDIUM: User-Excludes ersetzten Defaults → jetzt gemerged
+  - LOW: Tests prueften nur Helper → 3 echte MdnsDiscovery-Wiring-Tests ergaenzt
+- **Tests**: 37 Unit-Tests + 12 Integration-Tests, Gesamt **685/685 gruen**
+  (vorher 672), 0 Regressionen.
+
 ## [Unreleased] — 2026-05-16
 
 ### macOS-Deployment als LaunchDaemon dokumentiert
@@ -135,6 +202,8 @@ v1-Branch ist live-deploy-faehig.
 - Relevant fuer den **Installer/Distribution**: alle hartkodierten Pfade
   (`/Users/chris/...`, Node-Version, `UserName`) muessen per Template ersetzt
   werden.
+
+---
 
 ## [Unreleased] — 2026-04-14
 

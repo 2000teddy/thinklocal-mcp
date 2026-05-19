@@ -368,4 +368,29 @@ Shell-Injection die in Produktion ein Sicherheitsrisiko waere.
 
 ---
 
-*Letzte Aktualisierung: 2026-05-19 10:43 — PR #140 ADR-020 v1.0 Production-Genesis-Blob (Mac mini).*
+## Session 2026-05-17/18 — ADR-019 Multi-Interface Discovery
+
+| #   | Beschreibung                              | Datum       | CO | CG | TS | CR | PC | DO | Findings                            |
+|-----|-------------------------------------------|-------------|----|----|----|----|----|----|-------------------------------------|
+| 133 | ADR-019 Multi-Interface mDNS Discovery    | 05-18 00:20 | ✅ | —  | ✅ | ✅ | ✅ | ✅ | CR: 1H+2M+4L, PC: +1H+1M+1L — alle gefixt |
+
+**CO:** Multi-Modell-Konsensus 2026-05-17 — GPT-5.4 (8/10), Gemini 3 Pro (9/10).
+Minimax + Grok uebersprungen (PAL/OpenRouter-Probleme).
+**CG:** uebersprungen — Tests selbst geschrieben weil sehr fokussiert.
+**TS:** 37 Unit-Tests + 9 Integration-Tests + 10 Regression-Tests fuer CR-Findings.
+Gesamtsuite 682/682 (vorher 672), 0 Regressionen.
+**CR:** `pal:codereview` mit GPT-5.4, 7 Findings — alle vor Merge gefixt:
+- HIGH: `exclude_interface_patterns: []` aushebelte die Defaults
+- MEDIUM: parseInt-Eigenheit in `ipv4ToNum`/`ipInCidr` erlaubte Spoofing
+- MEDIUM: kein Reconcile-Loop (als Phase-2 dokumentiert)
+- LOW: 4 Findings (Idempotenz, leere A-Records, CIDR-Validation, IPv6-Fallback)
+
+**PC:** `pal:precommit` mit GPT-5.4, 3 weitere Findings — alle vor Commit gefixt:
+- HIGH: `allowed_mesh_cidrs` ohne Match = silent fallback → fail-closed throw
+- MEDIUM: User-Excludes ersetzten Defaults → Merge-Semantik
+- LOW: Tests prueften nur Helper → 3 echte MdnsDiscovery-Wiring-Tests
+**DO:** ADR-019, USER-GUIDE (Troubleshooting), CHANGES.md aktualisiert.
+
+---
+
+*Letzte Aktualisierung: 2026-05-19 10:43 — PR #134 ADR-020 v1+v2 (MacBook) + v1.0 Production-Genesis-Blob (Mac mini), gemergt nach #133.*
