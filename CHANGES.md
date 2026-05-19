@@ -8,6 +8,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-05-19
 
+### ADR-020 Phase 1.1 Bug-Report #4 — Pairing-URI-Migrationsskript
+
+**Symptom:** AGENT_MESSAGE-Sender bekommen `ack_status: "rejected"`, Empfaenger loggen `AGENT_MESSAGE von nicht-gepairtem Sender abgelehnt`. SKILL_ANNOUNCE bekommt 403. Systemisch auf allen 5 Nodes.
+
+**Root Cause:** Pairing-Eintraege vom 7.-10.4.2026 nutzen Host-ID-basierte SPIFFE-URIs (`spiffe://thinklocal/host/<16-hex>/agent/<type>`), Pairings vom 13.4.2026 (vor einem Schema-Wechsel) nutzen hostname-basierte URIs (`spiffe://thinklocal/host/iobroker/agent/...`). Alte Eintraege wurden nie automatisch migriert. AGENT_MESSAGE wird gegen den falschen Eintrag verglichen.
+
+**Fix:**
+- **`packages/daemon/scripts/migrate-pairings.mjs`** (neu): One-Shot-Script, holt agent-card vom Peer via mTLS, ersetzt Legacy-URI durch aktuelle Host-ID-URI. Atomares Schreiben mit Backup. Unterstuetzt `--dry-run`. Verfuegbar als `npm run migrate-pairings`.
+- **`packages/daemon/src/pairing.ts`**: Neue exportierte Hilfsfunktion `isHostIdSpiffeUri()` + Regex `HOST_ID_URI_PATTERN`. `PairingStore.load()` warnt bei Start wenn Legacy-Eintraege erkannt werden, mit Hinweis auf das Migrationsskript.
+
+**Tests:** `pairing.test.ts`: 8 neue Tests (6 fuer URI-Klassifizierung, 2 fuer Startup-Warning).
+
+**Manuelle Verifikation:** Migrationsskript live auf MacBook ausgefuehrt — 1 Legacy-Eintrag erfolgreich ersetzt. Backup-Datei erzeugt.
+
 ### ADR-020 Phase 1.1 Bug-Report #3 — libp2p `connectionEncrypters` Config-Key (Critical-Hotfix)
 
 **Symptom (Live-Befund 2026-05-19):** Nach PR #135 (Auto-Dial-Fix) feuerten die Discovery-Listener wie erwartet, aber **alle** libp2p-Dials scheiterten mit `"All multiaddr dials failed"` oder `"aborted due to timeout"`. 0 erfolgreiche Verbindungen, `registry_sync = {}` auf allen 5 Nodes. Verifiziert via libp2p-Probe-Skript: `EncryptionFailedError: At least one protocol must be specified`.
