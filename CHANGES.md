@@ -8,6 +8,42 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-05-18
 
+### ADR-020 v1+v2 Registry Replication Recovery — Code-Implementierung (PR #134)
+
+- **Hauptbug behoben**: `libp2p-runtime.ts:335-356` registriert nicht mehr
+  Placeholder-Handler, die alle eingehenden Streams sofort schliessen. Stattdessen
+  pluggable Protocol-Handler via Constructor-Hooks (Default bleibt Placeholder fuer
+  Protokolle ohne Implementierung).
+- **`packages/daemon/src/registry-sync-protocol.ts`** (neu): Length-prefix Framing
+  mit 8 MiB Max-Frame, multi-chunk reads, abortable iterator, 1-Frame-per-Stream-
+  Konvention. Cleanup via `iterator.return()` bei jedem Fehlerpfad.
+- **`packages/daemon/src/registry-sync-coordinator.ts`** (neu): Per-Peer
+  Anti-Entropy Sync mit Inflight-Singleflight, AbortController + Generation-Token
+  fuer Reconnect-Safety, 3-Strike-HangUp bei Timeouts, Inbound-Buffer-Limit gegen
+  Memory-DoS (16 Messages / 16 MiB), Jitter-Timer (±20 %).
+- **`packages/daemon/src/registry-sync-libp2p-adapter.ts`** (neu):
+  `wireRegistrySync()` verheiratet Coordinator und libp2p. Erzeugt SyncTransport,
+  Protocol-Handler fuer `/thinklocal/mesh/registry/1.0.0`, Peer-Events.
+- **`packages/daemon/src/registry.ts`**: Shared-Genesis-Doc via
+  `REGISTRY_GENESIS_BLOB_BASE64` + `loadGenesisDoc()`. Loest entdeckten
+  Architektur-Bug (disjoint history-trees) — `Automerge.clone(genesis)` statt
+  separater `Automerge.init()` pro Daemon. Production-Guard verhindert
+  versehentlichen Deploy mit Placeholder. v2.1: `last_sync` deprecated. v2.4: neue
+  Methode `getHeads()` als verlaessliche Konvergenz-Metrik.
+- **`/api/registry/republish`** (Safety Valve, admin-only via mTLS,
+  rate-limited): erzwingt sofortige Sync-Round pro Peer fuer Triage.
+- **`/api/status`** erweitert um `libp2p.registry_sync` Per-Peer-Block
+  (rounds, converged, last_round_at, consecutive_timeouts, last_error, in_flight).
+- **AuditEventType**: neuer Event-Typ `REGISTRY_REPUBLISH`.
+- **Compliance**: CO ✅ (4-Modell-Konsens: gpt-5.2 + gemini-3-pro + gpt-5.5 +
+  MiniMax-M2.7), CG ✅ (gemini-3-pro auf Test-Skizzen), TS ✅ (31/31 gruen:
+  11 Protocol + 18 Coordinator + 2 Integration), CR ✅ (gpt-5.5: 5 HIGH-Findings
+  alle gefixt mit Regression-Tests), PC ✅ (internal), DO ✅ (ADR-020 v1+v2 +
+  COMPLIANCE-TABLE PR #139).
+- **Production-Deploy-Hinweis**: Bevor v1 in Production live geht, muss der echte
+  `REGISTRY_GENESIS_BLOB_BASE64` produziert werden (aktuell Placeholder, schuetzt
+  Production-Guard).
+
 ### ADR-020 + ADR-021: CRDT-Replikation und Skill-Health (Proposed)
 
 - **`docs/architecture/ADR-020-registry-replication-recovery.md`** (neu):
