@@ -417,6 +417,24 @@ Gesamtsuite 682/682 (vorher 672), 0 Regressionen.
 
 ---
 
+## Session 2026-05-19 spaet — Bug #4 Pairing-URI-Migration
+
+| #   | PR                                      | Datum       | CO | CG | TS | CR | PC | DO | Findings                           |
+|-----|-----------------------------------------|-------------|----|----|----|----|----|----|----|
+| 143 | Bug #4 Pairing-URI-Migration            | 2026-05-19  | —  | —  | ✅ | ✅ | ✅ | ✅ | 0 — auf MacBook live verifiziert |
+
+**Problem:** Bug #4 aus ADR-020 Phase 1.1 Bug-Report (PR #136, Mac mini). Pairing-Eintraege mit Hostname-basierten SPIFFE-URIs (Legacy-Format) verhindern AGENT_MESSAGE-Empfang von Peers mit Host-ID-URIs.
+
+**CO/CG:** uebersprungen (Bug-Fix + isoliertes Migrationsskript).
+**TS:** 8 neue Tests in pairing.test.ts (Klassifizierung + Startup-Warning). Migrationsskript live auf MacBook ausgefuehrt (--dry-run + live).
+**CR:** `pal:codereview` internal gpt-5.5.
+**PC:** clean.
+**DO:** CHANGES.md, COMPLIANCE-TABLE.md, neuer npm-Script-Entry `migrate-pairings`.
+
+---
+
+*Letzte Aktualisierung: 2026-05-19 23:00 — Bug #4 Pairing-URI-Migration.*
+
 ## Session 2026-05-19 spaet — Bug #3 libp2p connectionEncrypters Config-Key
 
 | #   | PR                                      | Datum       | CO | CG | TS | CR | PC | DO | Findings                           |
@@ -445,5 +463,4 @@ Gesamtsuite 682/682 (vorher 672), 0 Regressionen.
 
 ---
 
-*Letzte Aktualisierung: 2026-05-19 23:05 — Bug #3 libp2p connectionEncrypters Config-Key.*
-*Letzte Aktualisierung: 2026-05-19 22:50 — Bug #2 execute_remote_skill Port-Mix Hotfix.*
+*Letzte Aktualisierung: 2026-05-20 00:10 — Bug #4 Pairing-URI-Migration (nach #2 + #3 rebased).*

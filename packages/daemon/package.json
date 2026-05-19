@@ -13,7 +13,8 @@
     "test:watch": "vitest",
     "lint": "eslint src/ --ext .ts",
     "format": "prettier --write 'src/**/*.ts'",
-    "format:check": "prettier --check 'src/**/*.ts'"
+    "format:check": "prettier --check 'src/**/*.ts'",
+    "migrate-pairings": "node scripts/migrate-pairings.mjs"
   },
   "dependencies": {
     "@automerge/automerge": "^3.2.5",
