@@ -397,12 +397,6 @@ export class RegistrySyncCoordinator {
         this.log?.debug({ peerId, err: msg }, 'registry sync round failed');
       } finally {
         clearTimeout(timer);
-        // Generation-Check: nur den eigenen entry aufraeumen
-        const current = this.peers.get(peerId);
-        if (current && current.generation === generation) {
-          current.inflight = null;
-          current.abortController = null;
-        }
       }
     })();
 
@@ -410,7 +404,21 @@ export class RegistrySyncCoordinator {
     try {
       await promise;
     } finally {
+      // ADR-020 Phase 1.1 (HIGH-Finding aus pal:codereview gpt-5.5):
+      // Cleanup MUSS hier passieren, nicht im inner finally der IIFE.
+      // Wenn `generateSyncMessage` `null` liefert (converged), laeuft die
+      // IIFE synchron bis zum inner finally — DAS PASSIERT VOR dem
+      // `entry.inflight = promise` oben. Inner finally wuerde inflight=null
+      // setzen, das outer dann mit dem resolved Promise wieder ueberschreiben
+      // → entry.inflight bleibt permanent gesetzt → runRound() bei naechstem
+      // Aufruf in Z. 344 blockiert. Daher: Cleanup AUSSCHLIESSLICH im
+      // aeusseren finally, wo `entry.inflight = promise` garantiert
+      // schon ausgefuehrt wurde.
       const current = this.peers.get(peerId);
+      if (current && current.generation === generation) {
+        current.inflight = null;
+        current.abortController = null;
+      }
       if (
         current &&
         current.generation === generation &&

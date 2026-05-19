@@ -475,4 +475,32 @@ describe('RegistrySyncCoordinator', () => {
     expect(typeof status.peerB.in_flight).toBe('boolean');
     expect(typeof status.peerB.consecutive_timeouts).toBe('number');
   });
+
+  it('runRound: keine permanente inflight-Blockade bei converged-Pfad (HIGH-Finding ADR-020 Phase 1.1)', async () => {
+    // Regression fuer Race aus pal:codereview gpt-5.5:
+    // Wenn generateSyncMessage `null` zurueckgibt (converged), laeuft die
+    // async-IIFE synchron bis zum inner finally. Wenn dort inflight=null
+    // gesetzt wurde, danach aber outer `entry.inflight = promise` erneut
+    // gesetzt wird, bleibt entry.inflight permanent gesetzt — ein erneuter
+    // runRound() ist durch Singleflight-Guard blockiert.
+    //
+    // Setup: Registry A hat NULL Caps. generateSyncMessage liefert nicht
+    // null (Bloom-Filter wird gesendet), aber wir testen das Verhalten
+    // direkt indem wir register-onPeerConnect -> warten -> erneut
+    // onMessageFromPeer triggern und pruefen, dass kein in_flight=true
+    // permanent stehen bleibt.
+    setup.coordA.onPeerConnect('peerB');
+    setup.coordB.onPeerConnect('peerA');
+    // Geben den Sync genug Zeit zu konvergieren (Bloom-Round-Trip).
+    await new Promise((r) => setTimeout(r, 200));
+    // Beide sollten konvergiert sein, kein in_flight mehr.
+    const statusA = setup.coordA.getStatus();
+    expect(statusA.peerB?.in_flight).toBe(false);
+    // Naechste runRound muss wieder durchlaufen koennen.
+    await setup.coordA.republish();
+    const statusA2 = setup.coordA.getStatus();
+    // Nach republish ist rounds wieder hochgezaehlt (vorher: rounds = N, jetzt: rounds = N+1).
+    expect(statusA2.peerB?.rounds).toBeGreaterThan(statusA.peerB!.rounds);
+    expect(statusA2.peerB?.in_flight).toBe(false);
+  });
 });

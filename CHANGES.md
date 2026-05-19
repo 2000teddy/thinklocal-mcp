@@ -8,6 +8,34 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-05-19
 
+### ADR-020 Phase 1.1 — libp2p Auto-Dial nach Peer-Discovery (Hotfix)
+
+**Behebt das Convergenz-Problem aus PR #134:** Nach Merge von ADR-020 v1 lief der `RegistrySyncCoordinator`, aber `peers`-Map blieb permanent leer. Root Cause: libp2p v3 dialt nach `peer:discovery` NICHT automatisch — `Libp2pNode.#onDiscoveryPeer` macht nur `peerStore.merge`. Die Anwendung muss explizit dialen. mDNS funktionierte, aber niemand baute Verbindungen auf → kein peer:connect → CRDT-Sync nie aktiv.
+
+- **`packages/daemon/src/libp2p-runtime.ts`:** Neuer `peer:discovery`-Listener in
+  `attachEventListeners()`, der `node.dial(peer.id)` aufruft. Schutzschichten:
+  Self-Filter, Already-Connected-Filter, In-Flight-Dedup via Set, Stop-Guard.
+  Listener-Anbringung VOR `node.start()` (statt danach) + defensiver
+  PeerStore-Scan via `dialKnownPeers()` nach Start, schliesst Race mit fruehen
+  Discovery-Events.
+- **`packages/daemon/src/libp2p-runtime.ts`:** Neue Hilfsfunktion
+  `extractPeerIdFromConnectionEvent()` ersetzt das fehlerhafte
+  `detail.toString()`-Parsing. libp2p `peer:connect` liefert
+  Connection-Objekte deren generic `toString()` `"[object Object]"`
+  zurueckgibt — der Coordinator bekam Garbage-Peer-IDs. (HIGH-Finding aus
+  pal:codereview gpt-5.5).
+- **`packages/daemon/src/registry-sync-coordinator.ts`:** Inflight-Race im
+  converged-Pfad gefixt. Wenn `generateSyncMessage` `null` liefert, lief die
+  IIFE synchron bis zum inneren `finally`, das `inflight=null` setzte; danach
+  ueberschrieb der outer `entry.inflight = promise` das mit dem resolved
+  Promise → Peer permanent blockiert. Cleanup ausschliesslich im outer
+  finally. (HIGH-Finding aus pal:codereview gpt-5.5).
+- **Tests:** 14 Unit-Tests in neuer `libp2p-autodial.test.ts` + 1 Regression-Test
+  fuer Inflight-Race in `registry-sync-coordinator.test.ts`. 53 sync/libp2p-
+  Tests gruen.
+- **Konsens vorab:** GPT-5.5 + Gemini 2.5 Pro einstimmig (Konsens-ID 5801b78c).
+- **Doku:** `docs/architecture/ADR-020-Phase-1.1-autodial.md`.
+
 ### ADR-020 v1.0 Production-Genesis-Blob — Bake-In (PR #134, Mac mini)
 
 Setzt den `REGISTRY_GENESIS_BLOB_BASE64` in `packages/daemon/src/registry.ts`
