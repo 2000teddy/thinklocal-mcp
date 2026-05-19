@@ -42,22 +42,119 @@ export interface Capability {
 export interface RegistryDoc {
   /** Map: skill_key → Capability (key = `${agent_id}::${skill_id}`) */
   capabilities: Record<string, Capability>;
-  /** Letzte Sync-Zeit pro Peer */
+  /**
+   * @deprecated Wird seit ADR-020 v2.1 nicht mehr beschrieben — Status-
+   * Metadaten gehoeren ausserhalb des CRDT (siehe RegistrySyncCoordinator).
+   * Feld bleibt im Schema, damit Genesis-Doc-Kompatibilitaet erhalten ist;
+   * neue Eintraege werden NICHT mehr hinzugefuegt.
+   */
   last_sync: Record<string, string>;
 }
 
 // --- Registry-Klasse ---
 
+/**
+ * Genesis-Blob fuer das Mesh-weit geteilte Automerge-Doc. Alle Daemons
+ * MUESSEN denselben Blob-String aus diesem Code laden — dann landen sie
+ * im selben History-Tree und ihre Aenderungen sind via Automerge-Sync
+ * konfliktfrei mergebar.
+ *
+ * Begruendung siehe ADR-020 v1.0. Der Blob wurde am 2026-05-19 einmalig
+ * mit `packages/daemon/scripts/produce-genesis-blob.mjs` produziert.
+ *
+ * WICHTIG (verifiziert 2026-05-19): Automerge 2.x ist zwischen Process-Runs
+ * NICHT bit-deterministisch — auch nicht mit festgenagelter Actor-ID.
+ * Wiederholtes Ausfuehren des Skripts liefert einen semantisch
+ * aequivalenten, aber NICHT byte-identischen Blob. Quelle der Wahrheit
+ * ist deshalb dieser eingebettete String (Code-as-Truth).
+ *
+ * AENDERUNGS-VERBOT (operationell): solange ein Mesh online ist, darf
+ * dieser Blob NICHT geaendert werden. Aenderung wuerde neugestartete
+ * Daemons in einen anderen History-Tree zwingen — Sync ist dann tot.
+ */
+const GENESIS_PLACEHOLDER = '__GENESIS_PLACEHOLDER__';
+export const REGISTRY_GENESIS_BLOB_BASE64: string =
+  'hW9Kg16BiJYAiAEBFAAAAAAAAAAAAAAAAAAAAAAAAAAAAX/b6h1vWAAj/O5p9GMPxjsfm+qr6huLTNRz9haWGiK1BgECAwITAiMGQAJWAgcVGCECIwI0AUICVgKAAQJ/AH8BfwJ/l76w0AZ/AH8HfgxjYXBhYmlsaXRpZXMJbGFzdF9zeW5jAgACAQICAAIAAgAA';
+
+let cachedGenesis: Automerge.Doc<RegistryDoc> | null = null;
+
+function loadGenesisDoc(): Automerge.Doc<RegistryDoc> {
+  if (cachedGenesis !== null) {
+    return Automerge.clone(cachedGenesis);
+  }
+  // Production-Guard + Dev-Bootstrap-Pfad. Falls jemand
+  // REGISTRY_GENESIS_BLOB_BASE64 versehentlich wieder auf den Placeholder
+  // setzt, greift dieser Check. Typisierung der Konstante auf `string`
+  // (oben) verhindert dass TypeScript den Vergleich als immer-falsch
+  // narrowt — robuster als ein `as string`-Cast hier.
+  if (REGISTRY_GENESIS_BLOB_BASE64 === GENESIS_PLACEHOLDER) {
+    if (process.env.NODE_ENV === 'production' && !process.env.TLMCP_ALLOW_BOOTSTRAP_GENESIS) {
+      throw new Error(
+        'REGISTRY_GENESIS_BLOB_BASE64 must be replaced with a real genesis blob ' +
+          'before production deploy. Set TLMCP_ALLOW_BOOTSTRAP_GENESIS=1 to override.',
+      );
+    }
+    // Bootstrap-Modus: produziere Genesis on-the-fly. ACHTUNG: Bei dieser
+    // Variante muss ein Peer zuerst seinen save() per anderem Kanal an
+    // alle anderen verteilen, sonst klappt Sync nicht. Geeignet fuer
+    // Single-Node-Test und initialen Bootstrap.
+    const doc = Automerge.from({ capabilities: {}, last_sync: {} }) as Automerge.Doc<RegistryDoc>;
+    cachedGenesis = doc;
+    return Automerge.clone(doc);
+  }
+  const buf = Buffer.from(REGISTRY_GENESIS_BLOB_BASE64, 'base64');
+  const doc = Automerge.load<RegistryDoc>(new Uint8Array(buf));
+
+  // MEDIUM/LOW-FIX (CR GPT-5.4 + PC GPT-5.4): Fail-fast Schema-Check beim
+  // Boot. Wenn der Blob ladbar ist aber nicht die kanonische Genesis-Struktur
+  // enthaelt (capabilities + last_sync als leere PLAIN-Object-Maps + genau
+  // ein History-Head), wuerden Sync-Fehler erst viel spaeter und obskurer
+  // auftauchen. Hier scheitert der Daemon-Start sofort.
+  //
+  // Wichtig: Array.isArray-Check, weil `[]` auch `typeof === 'object'` ist
+  // und sonst die Validierung umgehen wuerde (PC-Finding MEDIUM).
+  if (!isEmptyRecord(doc.capabilities) || !isEmptyRecord(doc.last_sync)) {
+    throw new Error(
+      'REGISTRY_GENESIS_BLOB_BASE64 hat nicht die kanonische Genesis-Struktur ' +
+        '(capabilities + last_sync als leere Maps). Code-as-Truth verletzt — ' +
+        'siehe ADR-020 v1.0.',
+    );
+  }
+
+  // PC-Finding LOW: Single-Root-Invariante auch zur Laufzeit pruefen
+  // (nicht nur im Test). Mehrere Heads im Genesis wuerden Daemons in
+  // unterschiedliche Sub-Trees splitten.
+  const heads = Automerge.getHeads(doc);
+  if (heads.length !== 1) {
+    throw new Error(
+      `REGISTRY_GENESIS_BLOB_BASE64 hat ${heads.length} Heads statt 1 ` +
+        '(Single-Root-Doc-Invariante verletzt) — siehe ADR-020 v1.0.',
+    );
+  }
+
+  cachedGenesis = doc;
+  return Automerge.clone(cachedGenesis);
+}
+
+/**
+ * Prueft ob `value` ein leeres Plain-Object (kein Array, nicht null) ist.
+ * Wichtig: `[]` ist auch `typeof === 'object'` — wuerde sonst durchrutschen.
+ */
+function isEmptyRecord(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.keys(value as object).length === 0
+  );
+}
+
 export class CapabilityRegistry {
   private doc: Automerge.Doc<RegistryDoc>;
 
   constructor(private log?: Logger) {
-    this.doc = Automerge.init<RegistryDoc>();
-    this.doc = Automerge.change(this.doc, (d) => {
-      d.capabilities = {};
-      d.last_sync = {};
-    });
-    this.log?.debug('Capability Registry initialisiert');
+    this.doc = loadGenesisDoc();
+    this.log?.debug('Capability Registry initialisiert (aus Genesis)');
   }
 
   /**
@@ -136,6 +233,16 @@ export class CapabilityRegistry {
    */
   getCapabilityHash(): string {
     return this.hashCapabilities(Object.values(this.doc.capabilities));
+  }
+
+  /**
+   * ADR-020 v2.4: Automerge-Heads als Konvergenz-Identifier. Bei Sync-
+   * Konvergenz haben beide Peers identische Heads — verlaesslicher als
+   * der capability-feld-spezifische getCapabilityHash() (der z.B.
+   * description-Aenderungen unsichtbar macht).
+   */
+  getHeads(): string[] {
+    return Automerge.getHeads(this.doc);
   }
 
   /**

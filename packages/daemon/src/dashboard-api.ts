@@ -32,6 +32,20 @@ export interface DashboardApiDeps {
   rateLimiter?: RateLimiter;
   vault?: CredentialVault;
   executor?: TaskExecutor;
+  /**
+   * ADR-020 v1 Safety Valve: erzwingt sofortige Sync-Round pro Peer.
+   * Optional — wenn nicht gesetzt, ist der Endpoint deaktiviert.
+   */
+  registrySyncRepublish?: () => Promise<void>;
+  /** ADR-020 v1: Per-Peer Sync-Status fuer /api/status libp2p-Block. */
+  getRegistrySyncStatus?: () => Record<string, {
+    rounds: number;
+    converged: boolean;
+    last_round_at: string | null;
+    consecutive_timeouts: number;
+    last_error: string | null;
+    in_flight: boolean;
+  }>;
 }
 
 /**
@@ -67,7 +81,26 @@ export function registerDashboardApi(server: FastifyInstance, deps: DashboardApi
       capabilities_count: registry.getAllCapabilities().length,
       active_tasks: tasks.getActiveTasks().length,
       audit_events: audit.count(),
+      registry_sync: deps.getRegistrySyncStatus?.() ?? {},
     };
+  });
+
+  // POST /api/registry/republish — Safety Valve (ADR-020 v1).
+  // Erzwingt sofortige Sync-Round pro Peer. mTLS-Auth wie alle /api/*.
+  // Rate-Limit zusaetzlich (siehe checkRateLimit oben).
+  server.post('/api/registry/republish', async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!checkRateLimit(request, reply)) return;
+    if (!deps.registrySyncRepublish) {
+      return reply.code(503).send({ error: 'Registry sync not initialised' });
+    }
+    audit.append('REGISTRY_REPUBLISH', identity.spiffeUri, request.ip);
+    try {
+      await deps.registrySyncRepublish();
+      return { status: 'ok', message: 'Registry republish triggered' };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return reply.code(500).send({ error: `Republish failed: ${msg}` });
+    }
   });
 
   // GET /api/peers — Alle Peers

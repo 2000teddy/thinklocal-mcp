@@ -245,12 +245,14 @@ Tests wurden bisher als "selbstverstaendlicher Bestandteil von Code" behandelt u
 | 136 | tbd       | ADR-016 Token-Onboarding Phase 3 — CLI + MCP Tools             | 04-13 00:42 | —  | —  | ✅ | ✅ | —  | ✅ | thinklocal.ts: 4 CLI-Befehle (token create/list/revoke, join). mcp-stdio.ts: 2 MCP-Tools (token_create, token_list). tsc + 633/633 Tests gruen. |
 | 137 | tbd       | ADR-017 Auto-Update CLI-Befehl (Phase 1)                       | 04-13 14:44 | —  | —  | —  | —  | —  | ✅ | ADR-017 Architektur-Dokument + `thinklocal update` CLI (--check/--auto). GitHub Releases API, Version-Diff, git pull + npm install + Restart. Hilfetext aktualisiert. Doc-only ADR + Feature-Code ohne externe Abhaengigkeiten. |
 | 138 | tbd       | ADR-018 Observer Agent Phase 1 — lokale Intelligenz            | 04-14 23:45 | ✅ | —  | ✅ | —  | —  | ✅ | ADR-018 + PRO_CON_THINKBIG.md. Neues Paket `packages/observer/` mit 4 Modulen: model-selector, system-probes, ollama-client, analyzer + observer-agent CLI. 44 Tests gruen. CO: Multi-Modell-Analyse (Gemini Pro + Claude Sonnet + Devil's Advocate). |
+| 139 | tbd       | ADR-020 v1+v2 Registry Replication Recovery (CRDT-Sync-Fix)    | 05-18 23:42 | ✅ | ✅ | ✅ | ✅ | —  | ✅ | **Smoking Gun**: libp2p-runtime.ts:335-356 Placeholder-Handler schliessen alle eingehenden Streams sofort — Registry-Sync hat nie funktioniert. **v1**: 5 Bausteine (echte Handler + Length-Prefix-Framing + RegistrySyncCoordinator + bidirektionaler Sync + Timeout-Cleanup + Shared-Genesis). **v2**: v2.1 last_sync deprecated, v2.3 SLO-Methode getSloViolations, v2.4 Registry.getHeads(). v2.2 (Owner-wins) + v2.5 (Chunking) in eigene ADRs verschoben. **CO**: 4-Modell-Konsensus (gpt-5.2 9/10, gemini-3-pro 9/10, gpt-5.5 8/10, MiniMax-M2.7 7/10). **CG**: pal:chat gemini-3-pro auf Test-Skizzen — initSyncState-Persistenz, Mock-Transport asynchron, Math.random-Mock fuer Jitter. **TS**: 31/31 gruen (11 Protocol + 18 Coordinator + 2 Integration). **CR**: pal:codereview gpt-5.5 → 5 HIGH-Findings, alle gefixt mit Regression-Tests: AbortController+Generation-Token, stop() bricht aktiv ab, onPeerDisconnect aborted, readFrame abortable+iterator.return-cleanup, Inbound-Buffer-Limit gegen Memory-DoS, Production-Guard fuer Placeholder-Genesis. **DO**: ADR-020 v1/v2 mit Streitpunkten + Konsequenzen + Tests. |
+| 140 | #134      | ADR-020 v1.0 Production-Genesis-Blob (Bake-In, Mac mini)        | 05-19 10:35 | —  | —  | ✅ | ✅ | ✅ | ✅ | Ersetzt `__GENESIS_PLACEHOLDER__` in `registry.ts` durch realen Automerge-Blob (192 Bytes Base64) + Skript `scripts/produce-genesis-blob.mjs` fuer Audit-Trail. **Wichtige Erkenntnis**: Automerge 2.x ist NICHT bit-deterministisch zwischen Process-Runs — Code-as-Truth fuer den konkreten Blob-Wert, Skript erzeugt nur semantisch aequivalente Blobs. **TS**: 5 neue Tests (not-placeholder, ladbar+canonical, mergebar via Automerge.merge, single-head, script-output schematisch valide). 672/672 gruen. **CR (gpt-5.4)**: 0 HIGH, 3 MED + 1 LOW gefixt: Doc-Determinismus-Claim entfernt, `as string`-Cast durch typisierte Konstante + `GENESIS_PLACEHOLDER` named ersetzt, Runtime-Schema-Check nach `Automerge.load`, `process.execPath` statt `'node'` im Test. **PC**: pal:precommit, ohne Findings. **DO**: CHANGES.md Eintrag. Bug-Fix-PR fuer v1-Branch — CO + CG entfallen. |
 
 ---
 
 ## Gesamtstatistik
 
-### Compliance-Rate ueber alle 106 Eintraege
+### Compliance-Rate ueber alle 140 Eintraege
 
 | Regel            | Anwendbar | Eingehalten (✅/⚠️) | Rate     |
 |------------------|:---------:|:-------------------:|:--------:|
@@ -391,4 +393,4 @@ Gesamtsuite 682/682 (vorher 672), 0 Regressionen.
 
 ---
 
-*Letzte Aktualisierung: 2026-05-18 00:15 — ADR-019 Multi-Interface mDNS Discovery Phase 1.*
+*Letzte Aktualisierung: 2026-05-19 10:43 — PR #134 ADR-020 v1+v2 (MacBook) + v1.0 Production-Genesis-Blob (Mac mini), gemergt nach #133.*

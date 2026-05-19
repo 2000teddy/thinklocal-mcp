@@ -75,7 +75,33 @@ Wenn er es nur **theoretisch wackelig** macht → v2.
 
 ### v1 — MVP (Mesh entfrieren)
 
-Fuenf Bausteine, die zwingend zusammen ausgerollt werden:
+Sechs Bausteine, die zwingend zusammen ausgerollt werden:
+
+#### v1.0 Shared Genesis-Doc
+
+**Bei der Implementierung 2026-05-18 entdeckt:** Jeder Daemon ruft im
+`CapabilityRegistry`-Constructor `Automerge.init()` separat auf. Das erzeugt
+**disjoint history-trees** — Automerge `receiveSyncMessage` zwischen Docs
+ohne gemeinsame Genesis kann ihre Changes nicht mergen. Konsequenz im
+Debug-Test:
+
+```
+Round 2: A=agentA::capA  B=agentA::capA  (B verliert sein eigenes capB)
+Direct merge result: agentB::capB         (auch Automerge.merge funktioniert nicht)
+```
+
+Mit `Automerge.clone(genesis)` als Konstruktor-Pfad: sofortige Konvergenz
+nach 2 Round-Trips, beide Caps auf beiden Seiten.
+
+Fix: `registry.ts` exportiert `REGISTRY_GENESIS_BLOB_BASE64`, alle Daemons
+laden im Konstruktor `Automerge.load(decode(GENESIS_BLOB))`. Der Blob wird
+einmalig produziert und ist Teil der Code-Base.
+
+**Production-TODO**: Bevor v1 deployed wird, muss der echte
+`REGISTRY_GENESIS_BLOB_BASE64` produziert und der Placeholder ersetzt werden.
+Aktuell ist Bootstrap-Modus aktiv (on-the-fly Genesis pro Prozess), was fuer
+Tests funktioniert, aber **nicht** fuer Mesh-Deployments mit getrennten
+Prozessen.
 
 #### v1.1 Echte libp2p-Handler statt Placeholder
 
@@ -120,11 +146,13 @@ triggern **nicht zuverlaessig** `peer:disconnect`. Zusaetzlich zum Event-Hook:
 - Nach 3 fehlgeschlagenen Rounds in Folge → SyncState verwerfen + Connection
   forcen zu schliessen (libp2p `hangUp(peerId)`)
 
-### v2 — Robustheit & Architektur-Reinheit (Folge-PR)
+### v2 — Robustheit & Architektur-Reinheit
 
-Optional ausrollbar, **nachdem** v1 in Production stabil laeuft:
+**Status 2026-05-18:** v2.1, v2.3 und v2.4 sind in diesem PR implementiert.
+v2.2 (Owner-wins) und v2.5 (Backpressure/Chunking) bleiben als separate
+Folge-ADRs — beide sind Architektur-Schritte mit eigenem Scope.
 
-#### v2.1 `last_sync` aus dem CRDT-Doc entfernen
+#### v2.1 `last_sync` aus dem CRDT-Doc entfernen ✅
 
 In `registry.ts:45-47` existiert `last_sync: Record<string, string>` als Feld
 im Automerge-RegistryDoc. Wenn der Coordinator das pro Sync-Runde
@@ -132,7 +160,13 @@ aktualisiert, erzeugt **jede** Round neue Divergenz → die Konvergenz-Garantie
 ist mathematisch unmoeglich zu erfuellen. Status-Metadaten gehoeren
 ausserhalb des CRDT (lokales Memory + `/api/status`).
 
-#### v2.2 Owner-wins-Semantik erzwingen
+**Umsetzung 2026-05-18:** Schema-Feld bleibt mit `@deprecated`-Marker
+erhalten (Genesis-Kompatibilitaet), wird aber von keinem Code-Pfad mehr
+beschrieben. Status-Metadaten liefert der `RegistrySyncCoordinator` ueber
+seinen internen state — exponiert via `getStatus()` und
+`getSloViolations()`.
+
+#### v2.2 Owner-wins-Semantik erzwingen — **Verschoben in eigene ADR-022**
 
 `markAgentOffline()` (Z. 91-99) und `removePeerCapabilities()` (Z. 223-237)
 mutieren fremde Agent-Namespaces im CRDT. Das ist semantisch falsch:
@@ -140,27 +174,50 @@ Resurrection durch konkurrente Syncs, false deletions, Last-Writer-Wins-
 Konflikte. Umbau auf strikt: **nur Owner schreibt eigene Caps**, Fremdstatus
 landet im separaten Observation-Layer.
 
-#### v2.3 Konvergenz-Garantie an libp2p-connected koppeln
+**Verschoben in ADR-022:** Owner-wins ist ein architektonischer Schritt mit
+weitreichenden Folgen (Refactor von `mesh.ts`, `agent-card.ts`, Capability-
+Routing-Filter, Migration der bestehenden CRDT-Inhalte). Das verdient eine
+eigene ADR mit klarer Migrationsstrategie und Test-Plan.
+
+#### v2.3 Konvergenz-Garantie an libp2p-connected koppeln ✅
 
 `peers_online` aus `mesh.ts` misst HTTPS-Heartbeat-Liveness, nicht libp2p-
 Reachability. Half-open libp2p-Connection bei online HTTPS = Garantie nicht
 erfuellbar. SLO sollte auf `libp2p.connected[P] && last_sync_round[P]
 successful` basieren.
 
-#### v2.4 Hash-Metrik auf Automerge-Heads umstellen
+**Umsetzung 2026-05-18:** Neue Methode
+`RegistrySyncCoordinator.getSloViolations({ divergenceLimitMs, connectedPeerIds, now })`
+liefert Peers, die divergent + connected laenger als das Limit sind. Default
+`divergenceLimitMs = 60_000` entspricht der v2-SLO. Aufrufer (z.B.
+Dashboard-API) reicht die libp2p-connected Peer-IDs als Filter rein.
+
+#### v2.4 Hash-Metrik auf Automerge-Heads umstellen ✅
 
 `getCapabilityHash()` (Z. 145-149) hasht nur `agent_id::skill_id:version:
 health`. Aenderungen an description, permissions, trust_level, updated_at
 oder CRDT-Heads bleiben unsichtbar — Regressions-Tests koennen unbemerkt
 gruenen. Konvergenz-Pruefung sollte Automerge `getHeads()` vergleichen,
-nicht den Capability-Hash. (v1 darf zur Not beides loggen.)
+nicht den Capability-Hash.
 
-#### v2.5 Backpressure/Chunking fuer grosse Doc-Payloads
+**Umsetzung 2026-05-18:** Neue Methode `CapabilityRegistry.getHeads()` (siehe
+registry.ts). Integrations-Test fuer 2-Node-Convergence prueft jetzt
+zusaetzlich `regA.getHeads().sort() === regB.getHeads().sort()`.
+`getCapabilityHash()` bleibt fuer Backwards-Compat erhalten, ist aber nicht
+mehr autoritativ.
+
+#### v2.5 Backpressure/Chunking fuer grosse Doc-Payloads — **Verschoben in eigene ADR-023**
 
 `Automerge.save()` bei 10.000+ Capabilities = mehrere MB. Yamux-Pull-Stream
 kann abbrechen, wenn Reader langsamer als Writer. Bei 5 Nodes × ~10 Caps
 nicht akut — wird bei 100+ Caps oder mehr Nodes relevant. Loesung:
 Chunking + ACK-basiertes Stream-Handshake.
+
+**Verschoben in ADR-023:** Aktuell bleibt die 8 MiB Single-Frame-
+Beschraenkung (siehe registry-sync-protocol.ts). Erst wenn das real
+beisst, lohnt sich der Chunking-Aufwand. Bis dahin schuetzt das
+Frame-Limit + der Inbound-Buffer-Cap (16 Messages / 16 MiB) gegen
+Memory-Exhaustion.
 
 ### Erhaltene Bausteine (v1, unabhaengig von obiger Aufteilung)
 
@@ -238,15 +295,33 @@ Bloom-Filter-Wiederholung.
 
 Zu testen:
 - Initialer `peer:connect` triggert genau einen Push
-- Konvergenz nach Round-Trip (Hash-Equality via `getHeads`)
+- Konvergenz nach Round-Trip — **Wichtig in v1:** Hash-Equality via
+  `exportCapabilities()`-Hash (extrahierte Caps-Liste), **nicht** via
+  `getHeads()`. Solange `last_sync` im CRDT-Doc steht (Entfernung ist v2.1),
+  mutiert jeder Sync-Versuch das Doc und erzeugt neue Heads — `getHeads()`
+  wuerde dann nie Equality erreichen. Ab v2.1 darf wieder auf `getHeads()`
+  umgestellt werden.
 - `peer:disconnect` + `peer:connect` ergibt frischen SyncState (Reset-Garantie)
-- Timer-Tick triggert Sync-Push fuer connected peers (Fake-Timers via
-  `vi.useFakeTimers()` + `vi.advanceTimersByTimeAsync()`)
-- Jitter-Bandbreite (Tick-Intervall in [40 s, 50 s])
+- Timer-Tick triggert Sync-Push fuer connected peers via Fake-Timers:
+  `vi.useFakeTimers({ shouldAdvanceTime: false })` + manuelles
+  `await vi.advanceTimersByTimeAsync(...)`. Auto-Advance maskiert
+  Race-Conditions.
+- Jitter-Bandbreite: kein statistischer n=100-Test (zu langsam, in CI flaky),
+  stattdessen **Boundary-Test mit gemocktem RNG**:
+  - `vi.spyOn(Math, 'random').mockReturnValue(0)` → Tick bei unterer Grenze
+  - `vi.spyOn(Math, 'random').mockReturnValue(0.999)` → Tick bei oberer Grenze
 - Per-Peer Singleflight: paralleler Init-Push und Timer-Tick fuehren zu nur
   einer Sync-Round pro Peer
+- AbortController-Timeout deterministisch via Fake-Timers: Sync triggern,
+  `advanceTimersByTimeAsync(timeoutMs)`, assert dass Promise mit
+  `AbortError` rejected und SyncState aufgeraeumt
+- 3-Strike-HangUp: drei aufeinanderfolgende Sync-Rounds ins Timeout laufen
+  lassen → Coordinator ruft `hangUp(peerId)` auf, SyncState verworfen
 - Safety Valve: `republish()` triggert sofortigen Round-Trip
 - Cleanup: `stop()` raeumt alle Timer + Event-Listener weg
+
+Mock-Transport: **zwingend asynchron via Promise-Queue**. Ein synchroner Mock
+maskiert Race-Conditions und Deadlocks in der Singleflight-Logik.
 
 ### Integration (3 Nodes, korrekte Partition)
 
@@ -275,6 +350,13 @@ Erwartung nach Reconnect: Alle drei gleich nach ≤ 2 Sync-Intervallen.
 
 Cleanup im `finally`-Block, damit Test-Aborts keine Zombie-Daemons
 hinterlassen.
+
+**Bewusste Entscheidung gegen "nackte libp2p-Nodes ohne Daemon":** Der
+ursprueliche Bug lag im **Wiring** des Daemons (`libp2p-runtime.ts:342`),
+nicht im libp2p selbst. Mit nackten Nodes wuerde genau die Integrationsschicht
+weggemockt, in der der Bug passiert ist. `spawnDaemonInProcess` mit
+deaktivierten Sub-Systemen (HTTP-Server, Background-Tasks via Config-Flag) ist
+der richtige Trade-off zwischen Realismus und Isolation.
 
 ### Property (In-Memory, kein Daemon-Spawn)
 
