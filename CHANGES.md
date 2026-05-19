@@ -8,6 +8,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-05-19
 
+### ADR-020 Phase 1.1 Bug-Report #3 — libp2p `connectionEncrypters` Config-Key (Critical-Hotfix)
+
+**Symptom (Live-Befund 2026-05-19):** Nach PR #135 (Auto-Dial-Fix) feuerten die Discovery-Listener wie erwartet, aber **alle** libp2p-Dials scheiterten mit `"All multiaddr dials failed"` oder `"aborted due to timeout"`. 0 erfolgreiche Verbindungen, `registry_sync = {}` auf allen 5 Nodes. Verifiziert via libp2p-Probe-Skript: `EncryptionFailedError: At least one protocol must be specified`.
+
+**Root Cause:** Die Daemon-Konfig in `libp2p-runtime.ts` setzte `connectionEncryption: [noise()]`. In libp2p v2+ wurde dieser Key umbenannt zu `connectionEncrypters` (mit `-ers`, Plural). Der alte Key wird **silent ignoriert** — Noise war im laufenden Daemon nie konfiguriert. Bei jedem Dial scheiterte multistream-select an "keine Encryption-Protokolle".
+
+**Fix:** `packages/daemon/src/libp2p-runtime.ts`: `connectionEncryption` → `connectionEncrypters`. One-line change.
+
+**Tests:** `packages/daemon/src/libp2p-runtime-config.test.ts` (neu, 4 Regression-Tests): prueft sowohl den Source-Text als auch die zur Laufzeit an `createLibp2p()` uebergebenen Optionen. Damit kann der Bug nie wieder zurueckkehren.
+
+**Folge:** Loest den Live-Befund aus PR #135 (alle Auto-Dials scheiterten) UND einen Teil von Bug #3 (Asymmetrisches Sync-Hole) — das libp2p-CRDT-Sync war komplett kaputt, der GossipSync-Fallback hat die teilweise Sichtbarkeit liefert.
+
 ### ADR-020 Phase 1.1 — libp2p Auto-Dial nach Peer-Discovery (Hotfix)
 
 **Behebt das Convergenz-Problem aus PR #134:** Nach Merge von ADR-020 v1 lief der `RegistrySyncCoordinator`, aber `peers`-Map blieb permanent leer. Root Cause: libp2p v3 dialt nach `peer:discovery` NICHT automatisch — `Libp2pNode.#onDiscoveryPeer` macht nur `peerStore.merge`. Die Anwendung muss explizit dialen. mDNS funktionierte, aber niemand baute Verbindungen auf → kein peer:connect → CRDT-Sync nie aktiv.
