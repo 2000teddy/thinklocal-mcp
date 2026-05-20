@@ -435,7 +435,24 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
   - Vorbild: Sparkle.app fuer macOS (https://sparkle-project.org/)
   - **Phase 2 (Mesh-propagierte Updates) bleibt aufgeschoben** — solange Mesh-Sync nicht stabil ist (siehe ADR-020 Bug-Report), waere ein mesh-basiertes Update kontraproduktiv: ein kaputtes Mesh kann nicht zuverlaessig sein eigenes Update verteilen.
 
-- [ ] 🟢 **Pairing-URI-Migrationsskript** — `packages/daemon/scripts/migrate-pairings.mjs` als Folge aus dem ADR-005-Migrationsbug (siehe `docs/architecture/ADR-020-Phase-1.1-bug-report.md` Bug #4). Detektiert hostname-basierte SPIFFE-URIs in `paired-peers.json`, holt die korrekten Host-ID-URIs via `/.well-known/agent-card.json` des Peers, schreibt atomar zurueck. Plus Daemon-Startup-Warning bei erkannten Legacy-Eintraegen.
+- [x] 🟢 **Pairing-URI-Migrationsskript** — `packages/daemon/scripts/migrate-pairings.mjs` als Folge aus dem ADR-005-Migrationsbug (siehe `docs/architecture/ADR-020-Phase-1.1-bug-report.md` Bug #4). Detektiert hostname-basierte SPIFFE-URIs in `paired-peers.json`, holt die korrekten Host-ID-URIs via `/.well-known/agent-card.json` des Peers, schreibt atomar zurueck. Plus Daemon-Startup-Warning bei erkannten Legacy-Eintraegen. **GELOEST 2026-05-19, PR #139.**
+
+## ADR-020 Phase 1.1 Bug-Report — Abarbeitung 2026-05-19/20
+
+Alle 4 Bugs aus `docs/architecture/ADR-020-Phase-1.1-bug-report.md` adressiert. 5 PRs gemerged in einer Session, alle 5 Mesh-Nodes deployed, libp2p-CRDT-Coordinator-Sync funktional auf allen 5 Nodes (`coord_peers=4`, `all_converged=true`).
+
+- [x] 🔴 **Bug #1: RegistrySyncCoordinator faehrt keine Sync-Rounds** — Root Cause: libp2p v3 dialt nach `peer:discovery` NICHT automatisch (`#onDiscoveryPeer` macht nur `peerStore.merge`). Fix: expliziter `peer:discovery`-Listener mit Self-Filter, Already-Connected-Filter, In-Flight-Dedup, Stop-Guard + defensiver PeerStore-Scan nach Start. Bonus aus CR: peer:connect-Event-Parser Bug (`detail.toString()` lieferte `"[object Object]"`) + Inflight-Race im Coordinator (converged-Pfad blockierte Peer permanent). **PR #135.**
+- [x] 🔴 **Bug #2: execute_remote_skill Port-Mix** — Root Cause: `peerProto` an lokales `RUNTIME_MODE` gekoppelt; mcp-stdio-Subprocess hatte kein `TLMCP_RUNTIME_MODE` → Default `'local'` → HTTP an HTTPS-only Port. Fix: `buildRemotePeerUrl(host, port)` liefert immer `https://`. **PR #137.**
+- [x] 🔴 **Bug #3 (kritisch): libp2p `connectionEncryption` → `connectionEncrypters` Config-Key** — Root Cause: libp2p v2+ benutzt `connectionEncrypters` (Plural mit -ers); der alte Key wurde silent ignoriert → Noise nie konfiguriert → jeder Dial scheiterte mit `EncryptionFailedError`. Das erklaerte warum PR #135 Auto-Dial korrekt fired aber 0 Connections lieferte. Fix: one-line rename. **PR #140.**
+- [x] 🟠 **Bug #4: Pairing-URI-Migration** — siehe oben, **PR #139**.
+
+**Live-Endstand 2026-05-20 00:25:** Alle 5 Nodes (MacBook, minimac, iobroker, ai-n8n-local, influxdb) haben `coord_peers=4`, `peers_online=4`. CRDT-Sync laeuft, Coordinator-Rounds melden `converged: true`. Stale `npm run daemon`-Prozess auf ai-n8n-local (2h19m) blockte Port 9540 → gekillt.
+
+## Phase 1.2 — Folge aus Phase 1.1 Bug-Report (offen)
+
+- [ ] 🟠 **Capability-Counts variieren trotz CRDT-converged** — Endstand-Beobachtung: alle 5 Nodes melden `all_converged=true` im libp2p-CRDT-Coordinator, aber `/api/capabilities` zeigt unterschiedliche Counts (8-13) und Hashes. Vermutung: GossipSync (HTTPS-Pull) importiert Capabilities lokal in `registry.ts`, pusht sie aber nicht ins Automerge-CRDT. Konsequenz: jede Node hat eine eigene "lokale Sicht" plus die geteilte CRDT-Sicht (die kleiner ist). Kein Konvergenz-Blocker auf libp2p-Ebene, aber funktional ein Sync-Hole. Diagnose: `GossipSync.importCapabilities()` und `CapabilityRegistry.register()` Pfad pruefen — wird `registry.register()` aufgerufen, das ins Automerge-Doc schreibt, oder nur eine in-memory Map gepflegt?
+
+- [ ] 🟡 **better-sqlite3 ABI-Mismatch auf Node v26** — 227 Test-Failures `NODE_MODULE_VERSION 127 ... requires 147` wenn `npx vitest` mit Homebrew node v26 statt nvm-node v22 laeuft. Lokale Workarounds: `npm rebuild better-sqlite3` mit dem richtigen node, oder PATH-Pinning. Sauber: `engines.node` in `package.json` strikter + Test-Runner-Wrapper der die Node-Version checkt + ggf. eine `vitest.config.ts`-`pool` Option die nicht die System-Node-ABI ausnutzt.
 
 ## Zukunftsideen (Post-MVP)
 
