@@ -463,4 +463,22 @@ Gesamtsuite 682/682 (vorher 672), 0 Regressionen.
 
 ---
 
-*Letzte Aktualisierung: 2026-05-20 00:10 — Bug #4 Pairing-URI-Migration (nach #2 + #3 rebased).*
+## Session 2026-05-20 — Test-Tooling: SQLite-ABI-Smoke-Test + `.nvmrc`-Check
+
+| #   | PR                                      | Datum       | CO | CG | TS | CR | PC | DO | Findings                           |
+|-----|-----------------------------------------|-------------|----|----|----|----|----|----|----|
+| 145 | Test-Tooling SQLite-ABI-Smoke-Test      | 2026-05-20  | —  | —  | ✅ | ✅ | ✅ | ✅ | 0 — beide Pfade (v22 / v26) live verifiziert |
+
+**Problem:** 227 Daemon-Tests scheiterten cryptisch auf Node v26 (Homebrew-Default), weil `check-native-modules.cjs` den ABI-Mismatch nicht erkannte (lazy binding + missing-file Fallback). Folge: jede Test-Session brauchte manuelles `PATH=...v22.22.3/bin:$PATH` als Tribal-Knowledge.
+
+**CO/CG:** uebersprungen (Test-Tooling-Fix, kein Architektur-Aspekt).
+**TS:** Refactoring zu Pure-Helpers + 16 node:test-Tests in `check-native-modules.test.cjs`. Daemon-Suite 758/758 gruen auf v22. `pretest`-Hook macht fail-fast mit klarer Anleitung auf v26.
+**CR:** `pal:codereview` internal gpt-5.5.
+**PC:** clean.
+**DO:** CHANGES.md, COMPLIANCE-TABLE.md, neuer `.nvmrc`-Pin.
+
+**Bezuege:** Folge aus dem Abend-Befund vom 2026-05-19 dass die Daemon-Tests fuer den User „pre-existing failures" zeigen, was die Test-Suite faktisch nutzlos macht.
+
+---
+
+*Letzte Aktualisierung: 2026-05-20 11:30 — Test-Tooling SQLite-ABI-Smoke-Test.*

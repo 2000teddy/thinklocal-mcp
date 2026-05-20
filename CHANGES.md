@@ -6,7 +6,45 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-05-19
+## [Unreleased] — 2026-05-20
+
+### Test-Tooling — SQLite-ABI-Smoke-Test + `.nvmrc`-Check + `pretest`-Hook
+
+**Problem:** Die 227 Test-Failures der Daemon-Suite auf Node v26 (Homebrew-Default) waren bisher als „pre-existing Test-Failures" bekannt — verursacht durch ABI-Mismatch zwischen better-sqlite3 (vorgebaut gegen Node v22 NODE_MODULE_VERSION 127) und der laufenden Node v26 (NODE_MODULE_VERSION 147). `scripts/check-native-modules.cjs` versuchte das automatisch zu erkennen, aber:
+
+1. `require('better-sqlite3')` reicht nicht zur Erkennung — Bindings werden lazy beim Konstruktor-Aufruf geladen
+2. Nach fehlgeschlagenem Rebuild fehlt die `.node`-Datei komplett → Fehler-Meldung wird „Could not locate the bindings file" (kein NODE_MODULE_VERSION-Match mehr)
+3. Auto-Rebuild auf Node v26 scheitert hart (kein prebuilt + node-gyp-Inkompatibilitaet)
+
+**Aenderungen:**
+
+- **`.nvmrc`** (neu): pinnt Node-Version auf `22.22.3` (deckt sich mit `~/.thinklocal/bin/daemon-launchagent.sh`)
+- **`scripts/check-native-modules.cjs`** (refaktoriert):
+  - **Smoke-Test** (`SMOKE_TESTS['better-sqlite3']`): `new mod(':memory:')` triggert echtes Binding-Load, erzwingt ABI-Check
+  - **Missing-Binding-Detection**: erkennt „Could not locate the bindings file" als Symptom eines vorausgegangenen Crashs und behandelt es wie ABI-Mismatch
+  - **`.nvmrc`-Check** vor Rebuild-Versuch: bei Major-Version-Mismatch → klare Fehlermeldung mit konkretem Loesungs-Hint (`nvm use 22.22.3` oder `PATH=...`) statt verzweifeltem node-gyp-Crash
+  - **Refactoring**: pure helpers `classifyLoadError`, `checkNvmrcMatch`, `formatNvmrcMismatchMessage`, `probeNativeModule` extrahiert + via `module.exports` exponiert; CLI-Code in `main()` mit `if (require.main === module)`-Guard
+- **`packages/daemon/package.json`**: neuer `pretest`-Hook `node ../../scripts/check-native-modules.cjs` — bricht `npm test` mit klarer Anleitung ab, statt 227 cryptische Test-Failures zu zeigen
+- **`scripts/check-native-modules.test.cjs`** (neu, 16 Tests): node:test-Suite fuer die Helper-Funktionen
+- **`package.json` (root)**: neuer `test:scripts`-Hook in `npm test`
+
+**Verifikation:**
+
+```
+PATH="$HOME/.nvm/versions/node/v22.22.3/bin:$PATH" npm --prefix packages/daemon test
+→ Test Files  69 passed (69)
+   Tests  758 passed (758)   # vorher: 758 - 227 = 531 grün
+   Duration  2.59s
+
+node scripts/check-native-modules.cjs               (auf v26)
+→ exit=1, klare Anleitung wie auf v22 zu wechseln
+
+node scripts/check-native-modules.cjs               (auf v22)
+→ exit=0, "OK: better-sqlite3"
+
+node --test scripts/check-native-modules.test.cjs   (auf v22)
+→ 16 / 16 pass
+```
 
 ### ADR-020 Phase 1.1 Bug-Report #4 — Pairing-URI-Migrationsskript
 
