@@ -8,6 +8,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-03
 
+### ADR-022 Voraussetzung #0 — libp2p-Ed25519-Key persistiert (stabile PeerID)
+
+**Grundlage** der PeerID-gewurzelten Identität: der libp2p-Key wurde bisher bei JEDEM Start neu erzeugt (belegt durch 2 Smoke-Tests mit verschiedenen PeerIDs) → PeerID instabil. Jetzt persistiert.
+
+- **`libp2p-identity.ts`** (neu): `loadOrCreateLibp2pPrivateKey` — Ed25519 via `@libp2p/crypto`, protobuf nach `<dataDir>/keys/libp2p-ed25519.key`, **crash-durable** (fsync Datei+Verzeichnis), `0600` (keys/-Dir `0700`), Perm-Warnung, Ed25519-Typcheck, **fail-loud** bei korruptem Key (kein stilles Neugenerieren → kein Identitätswechsel).
+- **`libp2p-runtime.ts` / `index.ts`**: `createLibp2p({ privateKey })` verdrahtet; Key-Laden gated auf `libp2p.enabled`.
+- **Deps:** `@libp2p/crypto@^5.1.19` + `@libp2p/peer-id@^5.1.9` (auf libp2p v2 gepinnt, kein Versions-Skew).
+- **Akzeptanz:** Unit-Test beweist zwei aufeinanderfolgende Loads → **IDENTISCHE PeerID** (Gegenbeweis zu den 2 Smoke-Tests). Suite **779 grün**, `tsc` clean.
+- **CR** (gpt-5.3-codex): 2 HIGH (fsync-Durability, enabled-Gating) + 4 MEDIUM — alle gefixt (+Regressionstest). **PC** clean. Commit `8718f0b`.
+
+Verbleibt: authz vollständig auf PeerID + Cert-SAN=`node/<PeerID>` (admin-seitiges CSR-Signing auf .94, cross-node).
+
 ### ADR-022 Schritt 1 — PeerID-gewurzelte Identität (Code → TS → CR → PC)
 
 Teil-Umsetzung des ADR-022-Migrations-Pfads (additiv/kompatibel, **kein** harter Cutover). Adressiert die zwei Root-Causes des SKILL_ANNOUNCE-403 „Unknown sender":

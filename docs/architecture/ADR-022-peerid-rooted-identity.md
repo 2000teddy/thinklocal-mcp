@@ -100,6 +100,7 @@ Code-Zugriff da ist — am Code gesehen statt vermutet.)
 
 ## Offene Punkte
 
+- [x] **Voraussetzung #0 — libp2p-Key-Persistenz** — ✅ ERLEDIGT (Commit `8718f0b`, `libp2p-identity.ts`): Ed25519-Key persistiert, PeerID über Neustarts STABIL (Akzeptanztest). Die Identitätswurzel ist damit verfügbar.
 - [ ] **403-Root-Cause empirisch bestätigen** via `.94`-Gegenprobe (Trust-Bundle vs. Drift).
 - [ ] Bidirektionale Trust-Bundle-Propagation als eigener Schritt (Baustelle 1).
 - [ ] SAN-Detailfrage: behält der Pfad einen `/agent/<type>`-Suffix, oder reicht `/node/<PeerID>` (PeerID ist per-Daemon eindeutig)? Im Umsetzungs-Prompt klären.
