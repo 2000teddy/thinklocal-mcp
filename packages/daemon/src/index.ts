@@ -36,6 +36,7 @@ import { isLoopbackHost } from './runtime-mode.js';
 import { TaskExecutor } from './task-executor.js';
 import { createLibp2pRuntime } from './libp2p-runtime.js';
 import { checkIdentityConsistency } from './peer-identity.js';
+import { loadOrCreateLibp2pPrivateKey } from './libp2p-identity.js';
 import { wireRegistrySync } from './registry-sync-libp2p-adapter.js';
 import type { SecretRequestPayload, SecretResponsePayload, AgentMessagePayload, AgentMessageAckPayload } from './messages.js';
 import { AgentInbox } from './agent-inbox.js';
@@ -199,6 +200,13 @@ async function main(): Promise<void> {
   // ersten peer:connect-Events bereits am Coordinator landen.
   const registrySync = wireRegistrySync({ registry, log });
 
+  // ADR-022 #0: persistierten libp2p-Ed25519-Key laden/erzeugen → stabile PeerID
+  // über Neustarts. NUR wenn libp2p aktiv ist (CR HIGH): im local-Modus ist libp2p
+  // deaktiviert → kein Key-Laden, eine korrupte Datei darf den Boot dann nicht blocken.
+  const libp2pKey = config.libp2p.enabled
+    ? await loadOrCreateLibp2pPrivateKey(config.daemon.data_dir, log)
+    : undefined;
+
   const libp2pRuntime = await createLibp2pRuntime({
     enabled: config.libp2p.enabled,
     bindHost: config.daemon.bind_host,
@@ -208,6 +216,7 @@ async function main(): Promise<void> {
     relayTransportEnabled: config.libp2p.relay_transport_enabled,
     relayServiceEnabled: config.libp2p.relay_service_enabled,
     announceMultiaddrs: config.libp2p.announce_multiaddrs,
+    privateKey: libp2pKey?.privateKey,
   }, log, {
     protocolHandlers: registrySync.protocolHandlers,
     peerEvents: registrySync.peerEvents,
@@ -224,6 +233,9 @@ async function main(): Promise<void> {
   // signiertes Hostname-SAN-Cert) divergieren sie bewusst — wir loggen alle drei
   // nebeneinander und failen LAUT. Hart-Abbruch nur bei TLMCP_STRICT_IDENTITY=1,
   // sonst würde der Daemon im aktuellen (erwarteten) Drift-Zustand gar nicht starten.
+  // ADR-022 #0 ERLEDIGT: die PeerID ist jetzt stabil (persistierter Key). Sobald authz
+  // + Cert-SAN auf node/<PeerID> umgestellt sind, wird TLMCP_STRICT_IDENTITY=1 gefahrlos
+  // — die Scharfschaltung bleibt aber bewusst Christians Entscheidung (nicht automatisch).
   {
     const certSan = tlsBundle ? extractSpiffeUri(tlsBundle.certPem) : null;
     const peerId = libp2pRuntime.getState().peerId;

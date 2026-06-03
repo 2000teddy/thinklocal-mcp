@@ -49,9 +49,8 @@ export interface AgentIdentity {
    * ADR-022 (Item 3, TODO): Zielzustand ist `spiffe://thinklocal/node/<PeerID>`,
    * abgeleitet aus der libp2p-PeerID (siehe peer-identity.ts `peerIdToSpiffeUri`).
    * BLOCKER, weshalb hier noch die stableNodeId-Form steht:
-   *   (0) Die libp2p-Ed25519-PeerID wird aktuell NICHT persistiert (neuer Key je
-   *       Start) → sie ist noch nicht stabil genug als Identitätswurzel. Muss zuerst
-   *       persistiert werden (createLibp2p({ privateKey }) + @libp2p/crypto).
+   *   (0) ✅ ERLEDIGT (libp2p-identity.ts): der Ed25519-Key wird jetzt persistiert,
+   *       die PeerID ist über Neustarts STABIL. Verbleibend für den Cert-SAN ist (3b).
    *   (3b) Das Serving-Cert wird beim Token-Join vom Admin (.94) signiert; dessen
    *        CSR-Signierung muss ebenfalls den node/<PeerID>-SAN ausstellen
    *        (Cross-Node, kann TH01 nicht allein). Außerdem entsteht das Cert im

@@ -1,4 +1,5 @@
 import type { Logger } from 'pino';
+import type { PrivateKey } from '@libp2p/interface';
 import type { RuntimeMode } from './runtime-mode.js';
 
 export interface Libp2pRuntimeConfig {
@@ -10,6 +11,14 @@ export interface Libp2pRuntimeConfig {
   relayTransportEnabled: boolean;
   relayServiceEnabled: boolean;
   announceMultiaddrs: string[];
+  /**
+   * ADR-022 #0: persistierter libp2p-Ed25519-PrivateKey. Wird an createLibp2p
+   * durchgereicht, damit die PeerID über Neustarts STABIL bleibt. Lose typisiert
+   * (unknown), um die harte @libp2p/interface-Typabhängigkeit in diesem Modul zu
+   * vermeiden ist nicht nötig — Type-only-Import wird beim Compile gelöscht. Wenn
+   * undefined: libp2p generiert (wie früher) einen ephemeren Key.
+   */
+  privateKey?: PrivateKey;
 }
 
 export type Libp2pRuntimeStatus = 'disabled' | 'ready' | 'degraded';
@@ -339,6 +348,9 @@ export class ActiveLibp2pRuntime implements Libp2pRuntime {
 
   async start(): Promise<void> {
     this.node = await this.deps.createLibp2p({
+      // ADR-022 #0: persistierter Key → stabile PeerID. Ohne privateKey generiert
+      // libp2p (wie früher) einen ephemeren Key bei jedem Start.
+      ...(this.config.privateKey ? { privateKey: this.config.privateKey } : {}),
       addresses: {
         listen: getLibp2pListenMultiaddrs(this.config.bindHost, this.config.listenPort),
         ...(this.config.announceMultiaddrs.length > 0 ? { announce: this.config.announceMultiaddrs } : {}),
