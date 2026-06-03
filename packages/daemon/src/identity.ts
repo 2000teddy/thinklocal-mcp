@@ -43,7 +43,21 @@ export interface AgentIdentity {
   publicKeyPem: string;
   /** PEM-encoded ECDSA private key */
   privateKeyPem: string;
-  /** SPIFFE URI: spiffe://thinklocal/host/<stableNodeId>/agent/<type> */
+  /**
+   * SPIFFE URI: spiffe://thinklocal/host/<stableNodeId>/agent/<type>.
+   *
+   * ADR-022 (Item 3, TODO): Zielzustand ist `spiffe://thinklocal/node/<PeerID>`,
+   * abgeleitet aus der libp2p-PeerID (siehe peer-identity.ts `peerIdToSpiffeUri`).
+   * BLOCKER, weshalb hier noch die stableNodeId-Form steht:
+   *   (0) Die libp2p-Ed25519-PeerID wird aktuell NICHT persistiert (neuer Key je
+   *       Start) → sie ist noch nicht stabil genug als Identitätswurzel. Muss zuerst
+   *       persistiert werden (createLibp2p({ privateKey }) + @libp2p/crypto).
+   *   (3b) Das Serving-Cert wird beim Token-Join vom Admin (.94) signiert; dessen
+   *        CSR-Signierung muss ebenfalls den node/<PeerID>-SAN ausstellen
+   *        (Cross-Node, kann TH01 nicht allein). Außerdem entsteht das Cert im
+   *        Boot VOR dem libp2p-Start → Reihenfolge muss umgestellt werden.
+   * Bis dahin macht die §Startup-Assertion (peer-identity.ts) die Divergenz sichtbar.
+   */
   spiffeUri: string;
   /** Hex-encoded SHA-256 fingerprint of the public key */
   fingerprint: string;

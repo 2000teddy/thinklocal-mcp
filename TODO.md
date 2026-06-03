@@ -75,6 +75,21 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
   - Owner-wins erzwingen (Voraussetzung: ADR-020 v2.2)
   - Skill bleibt geladen, nur Routing toggelt — kein Hot-Reload
 
+## Knoten-Identität — PeerID-gewurzelt (ADR-022, entschieden 2026-06-03)
+
+- [ ] 🔴 **Identität auf libp2p-PeerID umstellen** — Konsens (2 pal:consensus-Läufe, einstimmig Option 1),
+  `docs/architecture/ADR-022-peerid-rooted-identity.md` (Accepted). Heute drei parallele Identifier
+  (hostname-SAN, hashed-hardware stable-node-id, libp2p-PeerID) → Drift → SKILL_ANNOUNCE-403.
+  **403-Root-Cause am Code belegt:** `'Unknown sender'` (`agent-card.ts:210-212`), App-Layer (HTTP-403,
+  kein TLS-Fehler → CA-Trust ist NICHT der Blocker; die frühere Trust-Bundle-Hypothese ist damit erledigt).
+  **Umsetzung (Prompt folgt separat):**
+  - [ ] Ed25519-Key → CSR mit SAN `spiffe://thinklocal/node/<PeerID>` → Mesh-CA signiert → Cert ersetzen.
+  - [ ] authz-Checks auf PeerID umstellen; Startup-Assertion die LAUT failt bei Divergenz PeerID/SAN/authz.
+  - [ ] `getPeerPublicKey` aus verifizierten Agent-Cards **auf die kanonische PeerID keyen** + `SKILL_ANNOUNCE`-Retry bei „Unknown sender" (Timing-Baustelle b).
+  - [ ] Clone-Detection (VM/Pi-Golden-Image dupliziert Key) als Launch-Blocker.
+  - [ ] Dual-Accept-Fenster beim Cutover (alt `host/…` + neu `node/<PeerID>`), damit das laufende Mesh nicht bricht.
+  - Gehört zu PR #74/#139 (Legacy-Hostname-URI-Migration).
+
 ## Phase 1 — Fundament: Identität, Verschlüsselung, Discovery (Wochen 1-3)
 
 ### 1.1 Agent-Identität & Kryptografie

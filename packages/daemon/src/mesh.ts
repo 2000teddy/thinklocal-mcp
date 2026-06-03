@@ -2,6 +2,7 @@ import { fetch, type Dispatcher } from 'undici';
 import type { Logger } from 'pino';
 import type { DiscoveredPeer } from './discovery.js';
 import type { AgentCard } from './agent-card.js';
+import { spiffeUriToPeerId } from './peer-identity.js';
 
 export type PeerStatus = 'online' | 'offline' | 'unknown';
 
@@ -140,6 +141,52 @@ export class MeshManager {
 
   getPeer(agentId: string): MeshPeer | undefined {
     return this.peers.get(agentId);
+  }
+
+  /**
+   * ADR-022: tolerante Auflösung des Signatur-Public-Keys eines Absenders.
+   * Behebt Root-Cause (a) des SKILL_ANNOUNCE-403 „Unknown sender": der Sender
+   * wird über die KANONISCHE PeerID aufgelöst, nicht nur über die exakte
+   * (evtl. driftende) SPIFFE-URI. Reihenfolge (von stark → schwach gebunden):
+   *   1. exakter Map-Treffer (Discovery-`agentId`), card-backed,
+   *   2. exakter Card-`spiffeUri`-Treffer (falls Discovery-Key ≠ Card-URI),
+   *   3. kanonische PeerID (`spiffe://thinklocal/node/<PeerID>`) gegen `libp2p.peerId`
+   *      — FAIL-CLOSED: nur bei GENAU EINEM Treffer, sonst `undefined`.
+   *
+   * Speist sich ausschließlich aus VERIFIZIERTEN Agent-Cards (publicKey gesetzt),
+   * nie aus OS-/Hostname-Quellen. Die Signaturprüfung des Envelopes erfolgt
+   * downstream gegen den zurückgegebenen Key → ein Fehlgriff degradiert zu 403,
+   * nicht zu einer akzeptierten Fälschung.
+   *
+   * SICHERHEITS-NOTE (CR gpt-5.3-codex, HIGH): `libp2p.peerId` stammt derzeit aus
+   * dem mDNS-TXT (`discovered.p2pPeerId`) und ist NICHT kryptografisch an die Card
+   * gebunden. Der PeerID-Fallback (3) ist deshalb bewusst fail-closed und nur eine
+   * Übergangsbrücke, bis cert-SAN=PeerID (ADR-022 Item 0/3) die echte Bindung über
+   * den mTLS-/Noise-Pfad liefert. Bis dahin sind die exakten Card-Treffer (1/2) die
+   * stark gebundenen Pfade.
+   */
+  resolvePeerPublicKey(senderUri: string): string | undefined {
+    // 1. exakter Discovery-Key
+    const direct = this.peers.get(senderUri);
+    if (direct?.agentCard?.publicKey) return direct.agentCard.publicKey;
+
+    // 2. exakter Card-spiffeUri-Treffer
+    for (const peer of this.peers.values()) {
+      if (peer.agentCard?.publicKey && peer.agentCard.spiffeUri === senderUri) {
+        return peer.agentCard.publicKey;
+      }
+    }
+
+    // 3. kanonischer PeerID-Fallback — fail-closed bei 0 oder >1 Treffern
+    const wantPeerId = spiffeUriToPeerId(senderUri);
+    if (!wantPeerId) return undefined;
+    const matches: string[] = [];
+    for (const peer of this.peers.values()) {
+      if (peer.agentCard?.publicKey && peer.libp2p.peerId === wantPeerId) {
+        matches.push(peer.agentCard.publicKey);
+      }
+    }
+    return matches.length === 1 ? matches[0] : undefined;
   }
 
   get peerCount(): number {
