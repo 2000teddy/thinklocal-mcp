@@ -12,7 +12,7 @@
 6. **CR** — `pal:codereview` mit GPT-5.4 oder Gemini Pro
 7. **HIGH-Findings fixen** — sofort, niemals als TODO verschieben. **Jeder HIGH/CRITICAL Finding bekommt einen Regression-Test.** Tests wieder gruen.
 8. **PC** — `pal:precommit`
-9. **git commit** — signed
+9. **git commit** (unsigniert ok — Solo-Betrieb, keine Signing-Pflicht)
 10. **DO** — Documentation: README / USER-GUIDE / API-REFERENCE / CHANGES.md / TODO.md / TESTING.md
 11. **PR** — `gh pr create`, COMPLIANCE-TABLE.md Zeile mit CO/CG/TS/CR/PC/DO
 12. **Merge** — nur nach vollstaendigem Compliance-Check

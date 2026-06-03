@@ -6,6 +6,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
+## [Unreleased] — 2026-06-03
+
+### Governance — Regel „signierte Commits" entfernt (HISTORY-Vermerk)
+
+CLAUDE.md, UNVERHANDELBARE REIHENFOLGE Schritt 9: „**git commit** — signed" → „**git commit** (unsigniert ok)". Die Pflicht zu signierten Commits (GPG / signoff) ist **entfernt**.
+
+**Begründung:** Solo-Betrieb, eigene Repos, kein externer Contributor — Commit-Signing löst hier kein reales Problem und erzeugt nur Key-Verwaltungs-Aufwand über viele Maschinen (z.B. hat TH01 keinen GPG-Secret-Key). Die Regel war für dieses Setup **nicht anwendbar**. **Unsignierte Commits sind ab sofort regelkonform.**
+
+(Das Repo führt keine separate HISTORY.md; dieser CHANGES-Eintrag ist der History-Vermerk.)
+
+---
+
 ## [Unreleased] — 2026-05-20
 
 ### Test-Tooling — SQLite-ABI-Smoke-Test + `.nvmrc`-Check + `pretest`-Hook
