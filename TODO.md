@@ -82,10 +82,11 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
   (hostname-SAN, hashed-hardware stable-node-id, libp2p-PeerID) → Drift → SKILL_ANNOUNCE-403.
   **403-Root-Cause am Code belegt:** `'Unknown sender'` (`agent-card.ts:210-212`), App-Layer (HTTP-403,
   kein TLS-Fehler → CA-Trust ist NICHT der Blocker; die frühere Trust-Bundle-Hypothese ist damit erledigt).
-  **Umsetzung (Prompt folgt separat):**
-  - [ ] Ed25519-Key → CSR mit SAN `spiffe://thinklocal/node/<PeerID>` → Mesh-CA signiert → Cert ersetzen.
-  - [ ] authz-Checks auf PeerID umstellen; Startup-Assertion die LAUT failt bei Divergenz PeerID/SAN/authz.
-  - [ ] `getPeerPublicKey` aus verifizierten Agent-Cards **auf die kanonische PeerID keyen** + `SKILL_ANNOUNCE`-Retry bei „Unknown sender" (Timing-Baustelle b).
+  **Umsetzung (Schritt 1 erledigt — Commit `1683396`, s. CHANGES 2026-06-03):**
+  - [ ] 🔴 **VORAUSSETZUNG:** libp2p-Ed25519-Key PERSISTIEREN (`createLibp2p({ privateKey })` + `@libp2p/crypto`) — aktuell ephemer, neue PeerID je Start. Ohne das ist PeerID-als-Identität unmöglich. (npm install nötig → ABI/Lockfile beachten.)
+  - [ ] Ed25519-Key → CSR mit SAN `spiffe://thinklocal/node/<PeerID>` → Mesh-CA signiert → Cert ersetzen. (BLOCKER: admin-seitiges CSR-Signing auf .94, cross-node.)
+  - [~] Startup-Assertion (Divergenz PeerID/SAN/authz, laut; strict via `TLMCP_STRICT_IDENTITY`) — ✅ ERLEDIGT. authz-Checks VOLLSTÄNDIG auf PeerID umstellen — OFFEN (braucht stabile PeerID, s. Voraussetzung).
+  - [x] `getPeerPublicKey` aus verifizierten Agent-Cards **auf die kanonische PeerID keyen** (fail-closed) + `SKILL_ANNOUNCE`-Retry bei „Unknown sender" (Timing-Baustelle b) — ✅ ERLEDIGT (`mesh.resolvePeerPublicKey` + `index.ts`).
   - [ ] Clone-Detection (VM/Pi-Golden-Image dupliziert Key) als Launch-Blocker.
   - [ ] Dual-Accept-Fenster beim Cutover (alt `host/…` + neu `node/<PeerID>`), damit das laufende Mesh nicht bricht.
   - Gehört zu PR #74/#139 (Legacy-Hostname-URI-Migration).

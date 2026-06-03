@@ -6,6 +6,22 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
+## [Unreleased] — 2026-06-03
+
+### ADR-022 Schritt 1 — PeerID-gewurzelte Identität (Code → TS → CR → PC)
+
+Teil-Umsetzung des ADR-022-Migrations-Pfads (additiv/kompatibel, **kein** harter Cutover). Adressiert die zwei Root-Causes des SKILL_ANNOUNCE-403 „Unknown sender":
+
+- **`peer-identity.ts`** (neu): kanonische SPIFFE-Ableitung aus der libp2p-PeerID (`spiffe://thinklocal/node/<PeerID>`, strikt geankert) + `checkIdentityConsistency()` für die §Startup-Assertion.
+- **`mesh.ts` `resolvePeerPublicKey()`**: tolerante, **fail-closed** Auflösung des Signatur-Public-Keys (exakter agentId → exakte card-spiffeUri → eindeutige PeerID). Behebt Root-Cause (a) Identitäts-Drift.
+- **`index.ts`**: SKILL_ANNOUNCE mit **Retry+Backoff** (4 Versuche) gegen den 403 (Root-Cause b, Timing); **Startup-Assertion** (loggt PeerID/Cert-SAN/authz-Identität; warn, harter Abbruch via `TLMCP_STRICT_IDENTITY=1`); Resolver-Wiring.
+- **Tests:** peer-identity 10, mesh-Resolver 6 (inkl. fail-closed). Suite **774 grün**, `tsc` clean.
+- **CR** (gpt-5.3-codex): 1 HIGH (fail-closed) + 3 MEDIUM + 1 LOW — alle gefixt (+Regressionstest). **PC** clean. Commit `1683396` (unsigniert — kein GPG-Key auf TH01).
+
+**Offene Blocker (separat):** (1) libp2p-Ed25519-Key wird nicht persistiert → PeerID je Start neu — **Voraussetzung** für PeerID-als-Identität (braucht `@libp2p/crypto` + `createLibp2p({privateKey})` + `npm install`). (2) Cert-SAN-Umstellung auf `node/<PeerID>` braucht admin-seitiges CSR-Signing (.94, cross-node). Details: `docs/architecture/ADR-022-peerid-rooted-identity.md`.
+
+---
+
 ## [Unreleased] — 2026-05-20
 
 ### Test-Tooling — SQLite-ABI-Smoke-Test + `.nvmrc`-Check + `pretest`-Hook
