@@ -48,6 +48,14 @@ Teil-Umsetzung des ADR-022-Migrations-Pfads (additiv/kompatibel, **kein** harter
 
 **Offene Blocker (separat):** (1) libp2p-Ed25519-Key wird nicht persistiert → PeerID je Start neu — **Voraussetzung** für PeerID-als-Identität (braucht `@libp2p/crypto` + `createLibp2p({privateKey})` + `npm install`). (2) Cert-SAN-Umstellung auf `node/<PeerID>` braucht admin-seitiges CSR-Signing (.94, cross-node). Details: `docs/architecture/ADR-022-peerid-rooted-identity.md`.
 
+### Governance — Regel „signierte Commits" entfernt (HISTORY-Vermerk)
+
+CLAUDE.md, UNVERHANDELBARE REIHENFOLGE Schritt 9: „**git commit** — signed" → „**git commit** (unsigniert ok)". Die Pflicht zu signierten Commits (GPG / signoff) ist **entfernt**.
+
+**Begründung:** Solo-Betrieb, eigene Repos, kein externer Contributor — Commit-Signing löst hier kein reales Problem und erzeugt nur Key-Verwaltungs-Aufwand über viele Maschinen (z.B. hat TH01 keinen GPG-Secret-Key). Die Regel war für dieses Setup **nicht anwendbar**. **Unsignierte Commits sind ab sofort regelkonform.**
+
+(Das Repo führt keine separate HISTORY.md; dieser CHANGES-Eintrag ist der History-Vermerk.)
+
 ---
 
 ## [Unreleased] — 2026-05-20
