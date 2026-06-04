@@ -310,6 +310,9 @@ async function main(): Promise<void> {
     // SKILL_ANNOUNCE-403 „Unknown sender"). Auflösung via mesh, nicht via
     // OS-/Hostname-URI. Siehe MeshManager.resolvePeerPublicKey.
     getPeerPublicKey: (agentId: string) => mesh.resolvePeerPublicKey(agentId),
+    // ADR-022 §3 (channel-bound): ein CA-validierter mTLS-Cert-SAN node/<PeerID>
+    // schaltet die kanonische PeerID-Auflösung für diesen Peer frei.
+    onPeerCertVerified: (peerId: string) => mesh.markPeerIdVerified(peerId),
     onMessage: async (envelope: MessageEnvelope) => {
       // Rate-Limiting prüfen
       if (!rateLimiter.allow(envelope.sender)) {

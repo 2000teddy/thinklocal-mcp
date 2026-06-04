@@ -498,4 +498,21 @@ Gesamtsuite 682/682 (vorher 672), 0 Regressionen.
 
 ---
 
-*Letzte Aktualisierung: 2026-06-04 — ADR-022 PeerID-rooted Identity (PR #143).*
+## Session 2026-06-04 — ADR-022 Schritt 3 / WS-1 (channel-bound HTTPS-Authz)
+
+| #    | PR                                      | Datum       | CO | CG | TS | CR | PC | DO | Findings                           |
+|------|-----------------------------------------|-------------|----|----|----|----|----|----|----|
+| WS-1 | ADR-022 §3 channel-bound HTTPS authz    | 2026-06-04  | ✅ | —  | ✅ | ✅ | ✅ | ✅ | 1 HIGH + 1 MEDIUM + 2 LOW (gpt-5.5) — HIGH+MEDIUM+1 LOW gefixt, 1 LOW zurueckgestellt |
+
+**CO:** Konsensus fuer Schritt 3 bereits in der ADR-022 §Schritt-3-Sektion (PR #144) dokumentiert (channel-binding, PoP, atomarer Cutover) — kein neuer CO-Lauf fuer diesen additiven Teil-Workstream noetig.
+**CG:** — (kein clink gemini; Tests von Hand).
+**TS:** 792 Tests gruen, tsc clean. Neuer HIGH-Regressionstest (non-host non-canonical Sender → fail-closed), unique-match-Test fuer markPeerIdVerified, authorizeHttpsSender-Matrix (canonical+match / +no-cert / +mismatch / legacy).
+**CR:** `pal:codereview` gpt-5.5 — 1 HIGH (Legacy-Bypass zu breit) + 1 MEDIUM (mark-all) + 2 LOW; HIGH+MEDIUM+1 LOW (socket.authorized) gefixt + Regressionstest, 1 LOW (PeerID-Regex-Praefix) bewusst zurueckgestellt/dokumentiert.
+**PC:** `pal:precommit` (gpt-5.3-codex) clean — ready_for_commit, 0 Issues.
+**DO:** CHANGES.md, COMPLIANCE-TABLE.md; ADR-022 §Schritt-3-Sektion bereits gemerged (#144).
+
+**Scope-Hinweis:** additiv/fail-closed — inert bis .94 `node/<PeerID>`-Certs ausstellt; kein Verhaltenswechsel fuer Legacy-`host/`-Sender, kein .94-Eingriff.
+
+---
+
+*Letzte Aktualisierung: 2026-06-04 — ADR-022 Schritt 3 / WS-1 (channel-bound HTTPS authz).*

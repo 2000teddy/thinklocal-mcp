@@ -14,6 +14,7 @@ import { ReplayGuard } from './replay.js';
 import { RateLimiter } from './ratelimit.js';
 import type { Logger } from 'pino';
 import type { Libp2pRuntimeState } from './libp2p-runtime.js';
+import { authorizeHttpsSender, spiffeFromSubjectAltName } from './peer-identity.js';
 
 export interface AgentCard {
   name: string;
@@ -106,6 +107,12 @@ export interface AgentCardServerOptions {
   log?: Logger;
   /** Map von bekannten Peer-Public-Keys (agentId → PEM) für Signaturprüfung */
   getPeerPublicKey?: (agentId: string) => string | undefined;
+  /**
+   * ADR-022 §3 (channel-bound): wird gerufen, wenn der präsentierte (CA-validierte)
+   * mTLS-Cert-SAN eine kanonische `node/<PeerID>` kryptografisch bestätigt — der
+   * Aufrufer markiert die PeerID dann als verifiziert (mesh.markPeerIdVerified).
+   */
+  onPeerCertVerified?: (peerId: string) => void;
   /** Handler für eingehende Mesh-Nachrichten */
   onMessage?: MessageHandler;
   /** Rate-Limiter für alle Endpoints */
@@ -205,6 +212,27 @@ export class AgentCardServer {
         const { Decoder } = await import('cbor-x');
         const decoder = new Decoder({ structuredClone: true });
         const rawEnvelope = decoder.decode(Buffer.from(signed.envelope)) as MessageEnvelope;
+
+        // ADR-022 §3: channel-gebundene HTTPS-Authz. Bei kanonischem
+        // node/<PeerID>-Sender MUSS der präsentierte (per rejectUnauthorized bereits
+        // CA-validierte) mTLS-Client-Cert-SAN exakt dem Sender entsprechen — dann ist
+        // die PeerID kryptografisch an diese Verbindung gebunden. Legacy host/<id>:
+        // kein Cert-Gate (Migrations-Kompat). NIE aus mDNS/Card autorisieren.
+        // CR gpt-5.5 LOW (defense-in-depth): nur den SAN eines TLS-validierten Sockets
+        // (`authorized===true`) verwenden — schützt gegen künftige TLS-Konfig-Drift.
+        const tlsSock = request.raw.socket as {
+          authorized?: boolean;
+          getPeerCertificate?: () => { subjectaltname?: string };
+        };
+        const peerCert = tlsSock.authorized === true ? tlsSock.getPeerCertificate?.() : undefined;
+        const authz = authorizeHttpsSender(rawEnvelope.sender, spiffeFromSubjectAltName(peerCert?.subjectaltname));
+        if (!authz.ok) {
+          return reply.code(403).send({ error: 'Sender not authorized for this channel', reason: authz.reason });
+        }
+        if (authz.verifiedPeerId) {
+          // CA-verbürgter Cert-SAN → PeerID-Auflösung für diesen Peer freischalten.
+          opts.onPeerCertVerified?.(authz.verifiedPeerId);
+        }
 
         // Public Key des Senders nachschlagen
         const senderKey = opts.getPeerPublicKey?.(rawEnvelope.sender);

@@ -95,3 +95,68 @@ export function checkIdentityConsistency(t: IdentityTriple): IdentityConsistency
 
   return { consistent: divergences.length === 0, expected, divergences };
 }
+
+/**
+ * Extrahiert die SPIFFE-URI aus dem `subjectaltname`-String eines mTLS-Peer-Certs
+ * (Node `TLSSocket.getPeerCertificate().subjectaltname`), Format z.B.:
+ * `"URI:spiffe://thinklocal/node/<PeerID>, DNS:foo, IP Address:10.0.0.1"`.
+ * Liefert die erste `URI:spiffe://`-Eintragung oder null.
+ */
+export function spiffeFromSubjectAltName(subjectAltName: string | undefined | null): string | null {
+  if (!subjectAltName) return null;
+  for (const part of subjectAltName.split(',')) {
+    const t = part.trim();
+    if (t.startsWith('URI:spiffe://')) return t.slice('URI:'.length);
+  }
+  return null;
+}
+
+export interface HttpsSenderAuthz {
+  ok: boolean;
+  /** PeerID, deren Bindung der präsentierte Cert-SAN kryptografisch (CA-verbürgt) belegt — nur bei kanonischem Sender + Match. */
+  verifiedPeerId?: string;
+  /** true bei Legacy-`host/<id>`-Sender: Cert-Gate übersprungen, bestehende exakte Auflösung greift (Migrations-Kompat). */
+  legacy?: boolean;
+  /** Ablehnungsgrund, wenn ok=false. */
+  reason?: string;
+}
+
+/**
+ * ADR-022 Schritt 3 — channel-gebundene HTTPS-Authz (CR gpt-5.5: HTTPS-Nachrichten
+ * AUSSCHLIESSLICH über den präsentierten mTLS-Cert-SAN autorisieren, nie über ein
+ * globales Flag, nie aus mDNS/Card).
+ *
+ * - KANONISCHER `node/<PeerID>`-Sender: der (per rejectUnauthorized CA-validierte)
+ *   Client-Cert-SAN MUSS exakt `envelope.sender` sein → PeerID ist dann kryptografisch
+ *   an diese Verbindung gebunden (`verifiedPeerId`). Fehlt/Mismatch → Ablehnung.
+ * - LEGACY `host/<id>`-Sender: kein Cert-Gate (`legacy:true`); die bestehenden exakten
+ *   Auflösungspfade greifen (Migrations-Kompatibilität, additiv).
+ *
+ * Reine Funktion (kein I/O) → vollständig unit-testbar.
+ */
+/** True nur für das exakte Legacy-Schema `spiffe://thinklocal/host/<id>` (kein Suffix). */
+export function isLegacyHostUri(uri: string): boolean {
+  return /^spiffe:\/\/thinklocal\/host\/[A-Za-z0-9._-]+\/agent\/[A-Za-z0-9._-]+$/.test(uri);
+}
+
+export function authorizeHttpsSender(senderUri: string, certSpiffe: string | null): HttpsSenderAuthz {
+  const wantPeerId = spiffeUriToPeerId(senderUri);
+  if (wantPeerId === null) {
+    // CR gpt-5.5 HIGH: NUR exaktes host/<id>-Legacy-Schema bekommt den Cert-Gate-Bypass.
+    // Alles andere (malformed, fremde SPIFFE-Formen, node/<PeerID>/suffix) → fail-closed.
+    if (isLegacyHostUri(senderUri)) {
+      return { ok: true, legacy: true };
+    }
+    return { ok: false, reason: 'unsupported sender URI: only canonical node/<PeerID> or legacy host/<id>/agent/<type>' };
+  }
+  const certPeerId = certSpiffe ? spiffeUriToPeerId(certSpiffe) : null;
+  if (certPeerId !== null && certPeerId === wantPeerId) {
+    return { ok: true, verifiedPeerId: wantPeerId };
+  }
+  return {
+    ok: false,
+    reason: certPeerId === null
+      ? 'kanonischer node/<PeerID>-Sender, aber kein passender mTLS-Cert-SAN präsentiert'
+      : `Cert-SAN PeerID (${certPeerId}) != Sender PeerID (${wantPeerId})`,
+  };
+}

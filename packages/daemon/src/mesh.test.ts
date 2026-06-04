@@ -135,4 +135,18 @@ describe('MeshManager.resolvePeerPublicKey — ADR-022 tolerant resolution', () 
     expect(mesh.getPeer(uri)!.libp2p.peerId).toBe('k51qzi5differentpeerid999');
     expect(mesh.getPeer(uri)!.libp2p.peerIdVerified).toBe(false);
   });
+
+  it('markPeerIdVerified(peerId) sets the crypto-verified flag and unlocks canonical resolution', () => {
+    const mesh = mkMesh();
+    mesh.addPeer(disc({ agentId: LEGACY, p2pPeerId: PID }));
+    mesh.updateAgentCard(LEGACY, card('PUBKEY-V', LEGACY));
+    // Before: unverified → canonical resolution off.
+    expect(mesh.resolvePeerPublicKey(peerIdToSpiffeUri(PID))).toBeUndefined();
+    // The crypto path (CA-validated cert SAN / Noise) marks it.
+    expect(mesh.markPeerIdVerified(PID)).toBe(true);
+    expect(mesh.getPeer(LEGACY)!.libp2p.peerIdVerified).toBe(true);
+    expect(mesh.resolvePeerPublicKey(peerIdToSpiffeUri(PID))).toBe('PUBKEY-V');
+    // Unknown PeerID → no-op.
+    expect(mesh.markPeerIdVerified('12D3KooWNoSuchPeer')).toBe(false);
+  });
 });
