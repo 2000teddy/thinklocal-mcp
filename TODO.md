@@ -75,6 +75,24 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
   - Owner-wins erzwingen (Voraussetzung: ADR-020 v2.2)
   - Skill bleibt geladen, nur Routing toggelt — kein Hot-Reload
 
+## Knoten-Identität — PeerID-gewurzelt (ADR-022, entschieden 2026-06-03)
+
+> **Branch `agent/claude-code/adr022-peerid-identity` = MERGEBAR (2026-06-04).** Schritt 1 + Voraussetzung #0 + die 2 HIGH / 3 MEDIUM / LOW Security-Fixes sind drin, **2× von gpt-5.5 reviewt** (beide HIGH bestätigt geschlossen, keine neuen HIGH+), 784 Tests grün, tsc clean. Push/PR/Merge macht der Operator. **Folge-Schritt (NICHT in diesem Branch):** Cert-SAN-Cutover auf `node/<PeerID>` (admin-seitiges CSR-Signing auf .94) — erst DER setzt `peerIdVerified` über den mTLS-/Noise-Pfad und aktiviert die kanonische PeerID-Auflösung; bis dahin bleibt sie fail-closed inert.
+
+- [ ] 🔴 **Identität auf libp2p-PeerID umstellen** — Konsens (2 pal:consensus-Läufe, einstimmig Option 1),
+  `docs/architecture/ADR-022-peerid-rooted-identity.md` (Accepted). Heute drei parallele Identifier
+  (hostname-SAN, hashed-hardware stable-node-id, libp2p-PeerID) → Drift → SKILL_ANNOUNCE-403.
+  **403-Root-Cause am Code belegt:** `'Unknown sender'` (`agent-card.ts:210-212`), App-Layer (HTTP-403,
+  kein TLS-Fehler → CA-Trust ist NICHT der Blocker; die frühere Trust-Bundle-Hypothese ist damit erledigt).
+  **Umsetzung (Schritt 1 erledigt — Commit `1683396`, s. CHANGES 2026-06-03):**
+  - [x] 🔴 **VORAUSSETZUNG: libp2p-Ed25519-Key PERSISTIEREN** — ✅ ERLEDIGT (Commit `8718f0b`, `libp2p-identity.ts`): PeerID stabil über Neustarts, Akzeptanztest grün, crash-durable+0600. `@libp2p/crypto`+`@libp2p/peer-id` (v5, gepinnt).
+  - [ ] Ed25519-Key → CSR mit SAN `spiffe://thinklocal/node/<PeerID>` → Mesh-CA signiert → Cert ersetzen. (BLOCKER: admin-seitiges CSR-Signing auf .94, cross-node.)
+  - [~] Startup-Assertion (Divergenz PeerID/SAN/authz, laut; strict via `TLMCP_STRICT_IDENTITY`) — ✅ ERLEDIGT. authz-Checks VOLLSTÄNDIG auf PeerID umstellen — OFFEN (braucht stabile PeerID, s. Voraussetzung).
+  - [x] `getPeerPublicKey` aus verifizierten Agent-Cards **auf die kanonische PeerID keyen** (fail-closed) + `SKILL_ANNOUNCE`-Retry bei „Unknown sender" (Timing-Baustelle b) — ✅ ERLEDIGT (`mesh.resolvePeerPublicKey` + `index.ts`).
+  - [ ] Clone-Detection (VM/Pi-Golden-Image dupliziert Key) als Launch-Blocker.
+  - [ ] Dual-Accept-Fenster beim Cutover (alt `host/…` + neu `node/<PeerID>`), damit das laufende Mesh nicht bricht.
+  - Gehört zu PR #74/#139 (Legacy-Hostname-URI-Migration).
+
 ## Phase 1 — Fundament: Identität, Verschlüsselung, Discovery (Wochen 1-3)
 
 ### 1.1 Agent-Identität & Kryptografie

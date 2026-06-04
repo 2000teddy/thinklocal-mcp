@@ -4,7 +4,7 @@ import { Agent as UndiciAgent, fetch } from 'undici';
 import { loadConfig } from './config.js';
 import { createLogger } from './logger.js';
 import { loadOrCreateIdentity } from './identity.js';
-import { loadOrCreateTlsBundle, getCertDaysLeft, type NodeCertBundle } from './tls.js';
+import { loadOrCreateTlsBundle, getCertDaysLeft, extractSpiffeUri, type NodeCertBundle } from './tls.js';
 import { AuditLog } from './audit.js';
 import { MdnsDiscovery } from './discovery.js';
 import { AgentCardServer } from './agent-card.js';
@@ -35,6 +35,8 @@ import { loadOrCreateVaultPassphrase } from './vault-passphrase.js';
 import { isLoopbackHost } from './runtime-mode.js';
 import { TaskExecutor } from './task-executor.js';
 import { createLibp2pRuntime } from './libp2p-runtime.js';
+import { checkIdentityConsistency } from './peer-identity.js';
+import { loadOrCreateLibp2pPrivateKey } from './libp2p-identity.js';
 import { wireRegistrySync } from './registry-sync-libp2p-adapter.js';
 import type { SecretRequestPayload, SecretResponsePayload, AgentMessagePayload, AgentMessageAckPayload } from './messages.js';
 import { AgentInbox } from './agent-inbox.js';
@@ -198,6 +200,13 @@ async function main(): Promise<void> {
   // ersten peer:connect-Events bereits am Coordinator landen.
   const registrySync = wireRegistrySync({ registry, log });
 
+  // ADR-022 #0: persistierten libp2p-Ed25519-Key laden/erzeugen → stabile PeerID
+  // über Neustarts. NUR wenn libp2p aktiv ist (CR HIGH): im local-Modus ist libp2p
+  // deaktiviert → kein Key-Laden, eine korrupte Datei darf den Boot dann nicht blocken.
+  const libp2pKey = config.libp2p.enabled
+    ? await loadOrCreateLibp2pPrivateKey(config.daemon.data_dir, log)
+    : undefined;
+
   const libp2pRuntime = await createLibp2pRuntime({
     enabled: config.libp2p.enabled,
     bindHost: config.daemon.bind_host,
@@ -207,6 +216,7 @@ async function main(): Promise<void> {
     relayTransportEnabled: config.libp2p.relay_transport_enabled,
     relayServiceEnabled: config.libp2p.relay_service_enabled,
     announceMultiaddrs: config.libp2p.announce_multiaddrs,
+    privateKey: libp2pKey?.privateKey,
   }, log, {
     protocolHandlers: registrySync.protocolHandlers,
     peerEvents: registrySync.peerEvents,
@@ -216,6 +226,39 @@ async function main(): Promise<void> {
   if (config.libp2p.enabled) {
     registrySync.coordinator.start();
     log.info('RegistrySyncCoordinator gestartet (ADR-020 v1)');
+  }
+
+  // ADR-022 §Startup-Assertion: PeerID / Cert-SAN / authz-Identität müssen
+  // übereinstimmen. Während der Migration (Legacy `host/<stableNodeId>` + admin-
+  // signiertes Hostname-SAN-Cert) divergieren sie bewusst — wir loggen alle drei
+  // nebeneinander und failen LAUT. Hart-Abbruch nur bei TLMCP_STRICT_IDENTITY=1,
+  // sonst würde der Daemon im aktuellen (erwarteten) Drift-Zustand gar nicht starten.
+  // ADR-022 #0 ERLEDIGT: die PeerID ist jetzt stabil (persistierter Key). Sobald authz
+  // + Cert-SAN auf node/<PeerID> umgestellt sind, wird TLMCP_STRICT_IDENTITY=1 gefahrlos
+  // — die Scharfschaltung bleibt aber bewusst Christians Entscheidung (nicht automatisch).
+  {
+    const certSan = tlsBundle ? extractSpiffeUri(tlsBundle.certPem) : null;
+    const peerId = libp2pRuntime.getState().peerId;
+    const idCheck = checkIdentityConsistency({ authzSpiffe: identity.spiffeUri, certSan, peerId });
+    log.info(
+      { authzSpiffe: identity.spiffeUri, certSan, peerId, expected: idCheck.expected },
+      '[identity] ADR-022 Identitäts-Triple',
+    );
+    if (!idCheck.consistent) {
+      // CR LOW: erwartete Migrationsdrift im Non-Strict-Modus als warn (nicht error)
+      // loggen, damit Monitoring nicht falsch-kritisch eskaliert; strict → error + throw.
+      const strict = process.env['TLMCP_STRICT_IDENTITY'] === '1';
+      const ctx = { divergences: idCheck.divergences, expected: idCheck.expected, strict };
+      const msg =
+        '[identity] ADR-022 Divergenz: PeerID / Cert-SAN / authz-Identität stimmen NICHT überein';
+      if (strict) {
+        log.error(ctx, msg);
+        throw new Error(
+          `[identity] ADR-022 strict mode aktiv und Identitäts-Divergenz: ${idCheck.divergences.join('; ')}`,
+        );
+      }
+      log.warn(ctx, msg);
+    }
   }
 
   // 6. Mesh-Manager starten
@@ -263,10 +306,10 @@ async function main(): Promise<void> {
     trustedCaBundle: trustStoreNotifier?.current(),
     log,
     rateLimiter,
-    getPeerPublicKey: (agentId: string) => {
-      const peer = mesh.getPeer(agentId);
-      return peer?.agentCard?.publicKey;
-    },
+    // ADR-022: tolerante, PeerID-gekeyte Auflösung (behebt Root-Cause (a) des
+    // SKILL_ANNOUNCE-403 „Unknown sender"). Auflösung via mesh, nicht via
+    // OS-/Hostname-URI. Siehe MeshManager.resolvePeerPublicKey.
+    getPeerPublicKey: (agentId: string) => mesh.resolvePeerPublicKey(agentId),
     onMessage: async (envelope: MessageEnvelope) => {
       // Rate-Limiting prüfen
       if (!rateLimiter.allow(envelope.sender)) {
@@ -606,36 +649,61 @@ async function main(): Promise<void> {
     const signed = encodeAndSign(envelope, identity.privateKeyPem);
     const body = serializeSignedMessage(signed);
 
-    fetch(`${peer.endpoint}/message`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/cbor' },
-      body: Buffer.from(body),
-      signal: AbortSignal.timeout(10_000),
-      dispatcher: tlsDispatcher,
-    })
-      .then((res) => {
-        if (res.ok) {
-          log.info(
-            { peer: peerAgentId, skills: localSkills.map((s) => s.name) },
-            '[skill-discovery] SKILL_ANNOUNCE sent successfully',
-          );
-          eventBus.emit('skill:announced', {
-            peer: peerAgentId,
-            skills: localSkills.map((s) => s.name),
+    // ADR-022 Item 2: Retry mit Backoff gegen den „Unknown sender"-403 (Root-Cause b,
+    // Timing). Die Card-Registrierung beim Empfänger kann ms nach Discovery noch nicht
+    // da sein → erster Announce 403. Begrenzte Versuche, dann sauber aufgeben + loggen.
+    void (async () => {
+      const backoffsMs = [0, 750, 2000, 4000]; // 4 Versuche, erster sofort
+      for (let attempt = 0; attempt < backoffsMs.length; attempt++) {
+        const delay = backoffsMs[attempt] ?? 0;
+        if (delay > 0) await new Promise((r) => setTimeout(r, delay));
+        try {
+          const res = await fetch(`${peer.endpoint}/message`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/cbor' },
+            body: Buffer.from(body),
+            signal: AbortSignal.timeout(10_000),
+            dispatcher: tlsDispatcher,
           });
-        } else {
-          log.warn(
-            { peer: peerAgentId, status: res.status },
-            '[skill-discovery] SKILL_ANNOUNCE send failed',
+          // Body wird nie genutzt → canceln, damit undici die Connection freigibt (CR MEDIUM).
+          void res.body?.cancel().catch(() => {});
+          if (res.ok) {
+            log.info(
+              { peer: peerAgentId, skills: localSkills.map((s) => s.name), attempt: attempt + 1 },
+              '[skill-discovery] SKILL_ANNOUNCE sent successfully',
+            );
+            eventBus.emit('skill:announced', {
+              peer: peerAgentId,
+              skills: localSkills.map((s) => s.name),
+            });
+            return;
+          }
+          // Von den HTTP-Status ist nur 403 („Unknown sender" — Card noch nicht
+          // registriert) transient/retrybar; andere Status → sofort aufgeben.
+          // (Echte Sendefehler/Timeouts fängt der catch-Block und gelten als transient.)
+          if (res.status !== 403) {
+            log.warn(
+              { peer: peerAgentId, status: res.status },
+              '[skill-discovery] SKILL_ANNOUNCE abgelehnt (nicht retrybar)',
+            );
+            return;
+          }
+          log.debug(
+            { peer: peerAgentId, status: 403, attempt: attempt + 1, of: backoffsMs.length },
+            '[skill-discovery] SKILL_ANNOUNCE 403 (Unknown sender) — retry nach Backoff',
+          );
+        } catch (err) {
+          log.debug(
+            { peer: peerAgentId, attempt: attempt + 1, err: err instanceof Error ? err.message : String(err) },
+            '[skill-discovery] SKILL_ANNOUNCE Sendefehler — retry nach Backoff',
           );
         }
-      })
-      .catch((err) => {
-        log.warn(
-          { peer: peerAgentId, err: err instanceof Error ? err.message : String(err) },
-          '[skill-discovery] SKILL_ANNOUNCE send error (non-fatal)',
-        );
-      });
+      }
+      log.warn(
+        { peer: peerAgentId, attempts: backoffsMs.length },
+        '[skill-discovery] SKILL_ANNOUNCE endgültig fehlgeschlagen — Peer kennt unseren Sender-Key nicht, gebe auf',
+      );
+    })();
   });
 
   // Log discovery summary at startup

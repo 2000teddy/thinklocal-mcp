@@ -6,7 +6,47 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
+## [Unreleased] — 2026-06-04
+
+### ADR-022 Security-Review-Fixes — Branch jetzt MERGEBAR (2× gpt-5.5-reviewt)
+
+Zwei unabhängige `pal:codereview`-Läufe (gpt-5.5) über den ADR-022-Branch fanden 2 HIGH + 3 MEDIUM + LOW; alle gefixt, finale gpt-5.5-Bestätigung: **beide HIGH geschlossen, keine neuen HIGH/CRITICAL**.
+
+- **HIGH 1 (Spoofing) — `mesh.ts resolvePeerPublicKey`:** kanonische `spiffe://thinklocal/node/<PeerID>`-Sender-URIs lösen jetzt **ausschließlich** über eine **kryptografisch verifizierte** PeerID-Bindung auf (`peer.libp2p.peerIdVerified`, eindeutiger Match), NIE über die exakten `agentId`/`card.spiffeUri`-Treffer (die nur Legacy-`host/…`-URIs bedienen). `peerIdVerified` ist default `false` und wird **nie** aus mDNS/Card gesetzt → Pfad faktisch aus bis zum Cert-Cutover. Schließt den verifizierten Angriff (mDNS `agent-id=node/<victimPeerId>` + eigene Card/Key) konstruktiv. Commit `f023d38`.
+- **HIGH 2 (Key-Race) — `libp2p-identity.ts`:** exklusiver Create-Lock (`openSync 'wx'`) + Re-Check unter Lock + bounded fail-loud Wait (30s) → parallele First-Starts erzeugen nicht mehr zwei divergente Keys (PeerID-Drift). Commit `cb7f14d`.
+- **MEDIUM:** stale-verified — `updateAgentCard` setzt `peerIdVerified=false` bei PeerID-Wechsel (`f023d38`); keys/-Dir `0700` erzwingen/warnen + dir-fsync-Fehler warnen (`cb7f14d`); strenger SPIFFE-Parser (kein `trim`, `[A-Za-z0-9]+`) (`8d8088c`).
+- **LOW:** `writeSync` bis volle Länge; Lock-Timeout 5s→30s (`cb7f14d`).
+- **Tests:** 4 neue Security-Regressionstests (Spoofing-blockiert, Parallel-Race→selbe PeerID, Malformed-URI-abgelehnt, stale-verified-reset). Suite **784 grün**, `tsc` clean.
+
+**Status: ADR-022-Branch mergebar.** (Push/PR/Merge durch Operator.)
+
+---
+
 ## [Unreleased] — 2026-06-03
+
+### ADR-022 Voraussetzung #0 — libp2p-Ed25519-Key persistiert (stabile PeerID)
+
+**Grundlage** der PeerID-gewurzelten Identität: der libp2p-Key wurde bisher bei JEDEM Start neu erzeugt (belegt durch 2 Smoke-Tests mit verschiedenen PeerIDs) → PeerID instabil. Jetzt persistiert.
+
+- **`libp2p-identity.ts`** (neu): `loadOrCreateLibp2pPrivateKey` — Ed25519 via `@libp2p/crypto`, protobuf nach `<dataDir>/keys/libp2p-ed25519.key`, **crash-durable** (fsync Datei+Verzeichnis), `0600` (keys/-Dir `0700`), Perm-Warnung, Ed25519-Typcheck, **fail-loud** bei korruptem Key (kein stilles Neugenerieren → kein Identitätswechsel).
+- **`libp2p-runtime.ts` / `index.ts`**: `createLibp2p({ privateKey })` verdrahtet; Key-Laden gated auf `libp2p.enabled`.
+- **Deps:** `@libp2p/crypto@^5.1.19` + `@libp2p/peer-id@^5.1.9` (auf libp2p v2 gepinnt, kein Versions-Skew).
+- **Akzeptanz:** Unit-Test beweist zwei aufeinanderfolgende Loads → **IDENTISCHE PeerID** (Gegenbeweis zu den 2 Smoke-Tests). Suite **779 grün**, `tsc` clean.
+- **CR** (gpt-5.3-codex): 2 HIGH (fsync-Durability, enabled-Gating) + 4 MEDIUM — alle gefixt (+Regressionstest). **PC** clean. Commit `8718f0b`.
+
+Verbleibt: authz vollständig auf PeerID + Cert-SAN=`node/<PeerID>` (admin-seitiges CSR-Signing auf .94, cross-node).
+
+### ADR-022 Schritt 1 — PeerID-gewurzelte Identität (Code → TS → CR → PC)
+
+Teil-Umsetzung des ADR-022-Migrations-Pfads (additiv/kompatibel, **kein** harter Cutover). Adressiert die zwei Root-Causes des SKILL_ANNOUNCE-403 „Unknown sender":
+
+- **`peer-identity.ts`** (neu): kanonische SPIFFE-Ableitung aus der libp2p-PeerID (`spiffe://thinklocal/node/<PeerID>`, strikt geankert) + `checkIdentityConsistency()` für die §Startup-Assertion.
+- **`mesh.ts` `resolvePeerPublicKey()`**: tolerante, **fail-closed** Auflösung des Signatur-Public-Keys (exakter agentId → exakte card-spiffeUri → eindeutige PeerID). Behebt Root-Cause (a) Identitäts-Drift.
+- **`index.ts`**: SKILL_ANNOUNCE mit **Retry+Backoff** (4 Versuche) gegen den 403 (Root-Cause b, Timing); **Startup-Assertion** (loggt PeerID/Cert-SAN/authz-Identität; warn, harter Abbruch via `TLMCP_STRICT_IDENTITY=1`); Resolver-Wiring.
+- **Tests:** peer-identity 10, mesh-Resolver 6 (inkl. fail-closed). Suite **774 grün**, `tsc` clean.
+- **CR** (gpt-5.3-codex): 1 HIGH (fail-closed) + 3 MEDIUM + 1 LOW — alle gefixt (+Regressionstest). **PC** clean. Commit `1683396` (unsigniert — kein GPG-Key auf TH01).
+
+**Offene Blocker (separat):** (1) libp2p-Ed25519-Key wird nicht persistiert → PeerID je Start neu — **Voraussetzung** für PeerID-als-Identität (braucht `@libp2p/crypto` + `createLibp2p({privateKey})` + `npm install`). (2) Cert-SAN-Umstellung auf `node/<PeerID>` braucht admin-seitiges CSR-Signing (.94, cross-node). Details: `docs/architecture/ADR-022-peerid-rooted-identity.md`.
 
 ### Governance — Regel „signierte Commits" entfernt (HISTORY-Vermerk)
 
