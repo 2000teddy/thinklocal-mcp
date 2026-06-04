@@ -5,7 +5,7 @@
  * Befehle:
  *   thinklocal start          Daemon starten (als Vordergrund-Prozess oder Service)
  *   thinklocal stop           Daemon stoppen
- *   thinklocal restart        Daemon neu starten
+ *   thinklocal restart        Daemon neu starten [--local|--lan]
  *   thinklocal status         Status anzeigen (laeuft?, Peers, Capabilities)
  *   thinklocal doctor         Diagnostik (Keys, Certs, Daemon, Peers, MCP)
  *   thinklocal logs           Live-Logs anzeigen
@@ -21,7 +21,9 @@ import { homedir, platform } from 'node:os';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, statSync } from 'node:fs';
 import { execSync, spawn, spawnSync } from 'node:child_process';
 import { getDefaultLocalDaemonUrl, requestDaemon, requestDaemonJson } from '../../daemon/src/local-daemon-client.js';
-import { resolveRuntimeSettings, parseRuntimeMode, type RuntimeMode } from '../../daemon/src/runtime-mode.js';
+import { resolveRuntimeSettings, parseRuntimeMode, runtimeModeFromFlags, type RuntimeMode } from '../../daemon/src/runtime-mode.js';
+import { onboardingUrlFromAdminUrl } from '../../daemon/src/onboarding-port.js';
+import { BUILTIN_SKILL_SERVICE_DEPS, serviceUnitDependencyLines } from '../../daemon/src/service-dependencies.js';
 import { runHeartbeatCommand } from './thinklocal-heartbeat.js';
 import type { SupportedTool } from '../../daemon/src/cli-adapters.js';
 
@@ -51,6 +53,19 @@ function systemdEscape(value: string): string {
   return `"${value.replace(/(["\\])/g, '\\$1')}"`;
 }
 
+/** True, wenn eine systemd-(System-)Unit `<svc>.service` auf dem Host installiert ist. */
+function systemdUnitExists(svc: string): boolean {
+  if (!/^[a-zA-Z0-9._@-]+$/.test(svc)) return false; // defensiv gegen Injection
+  try {
+    const out = execSync(`systemctl list-unit-files ${svc}.service --no-legend 2>/dev/null`, {
+      encoding: 'utf-8',
+    });
+    return out.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
 /** Atomisches Schreiben: temp-Datei + rename */
 function atomicWrite(filePath: string, content: string, mode = 0o600): void {
   const tmp = `${filePath}.${process.pid}.tmp`;
@@ -72,9 +87,7 @@ function getClaudeDesktopConfigPath(): string {
 }
 
 function resolveCliRuntimeMode(flags: string[], fallback: RuntimeMode = DEFAULT_RUNTIME_MODE): RuntimeMode {
-  if (flags.includes('--local')) return 'local';
-  if (flags.includes('--lan')) return 'lan';
-  return fallback;
+  return runtimeModeFromFlags(flags, fallback);
 }
 
 function getRuntimeSettingsFor(flags: string[], fallback: RuntimeMode = DEFAULT_RUNTIME_MODE) {
@@ -309,10 +322,12 @@ async function cmdStop(): Promise<void> {
   }
 }
 
-async function cmdRestart(): Promise<void> {
+async function cmdRestart(flags: string[] = []): Promise<void> {
   await cmdStop();
   await new Promise((r) => setTimeout(r, 2_000));
-  await cmdStart();
+  // Flags (z.B. --lan/--local) an cmdStart durchreichen — sonst startet der Daemon
+  // nach dem Restart im Default-Modus statt im gewuenschten (Bug: Flags gingen verloren).
+  await cmdStart(flags);
 }
 
 async function cmdDoctor(): Promise<void> {
@@ -728,20 +743,32 @@ async function cmdJoin(flags: string[]): Promise<void> {
   const agentType = process.env['TLMCP_AGENT_TYPE'] ?? 'claude-code';
   const agentId = `spiffe://thinklocal/host/${localHostname}/agent/${agentType}`;
 
-  info(`Hostname:  ${localHostname}`);
-  info(`Agent-ID:  ${agentId}`);
-  info(`Admin-URL: ${adminUrl}`);
+  // Der certlose Onboarding-Server lauscht NICHT auf dem mTLS-Haupt-Port (--admin-url),
+  // sondern auf Haupt-Port + 1 (single source: onboardingUrlFromAdminUrl). --admin-url
+  // bleibt die Haupt-URL (mTLS, 9440); der Join wird auf den Onboarding-Port (9441) geleitet.
+  let onboardingOrigin: string;
+  try {
+    onboardingOrigin = onboardingUrlFromAdminUrl(adminUrl);
+  } catch {
+    fail('admin-url ist keine gültige URL');
+    return;
+  }
+
+  info(`Hostname:     ${localHostname}`);
+  info(`Agent-ID:     ${agentId}`);
+  info(`Admin-URL:    ${adminUrl}`);
+  info(`Onboarding:   ${onboardingOrigin} (certlos, Haupt-Port + 1)`);
   console.log();
 
   try {
-    // POST /onboarding/join to the admin node
+    // POST /onboarding/join to the admin node's CERTLESS onboarding server (port + 1).
     // SECURITY: The new node does NOT have a cert yet, so we MUST skip TLS
     // verification for this initial request. The Bearer token authenticates
     // the request instead. After join, all further communication uses mTLS.
     // We temporarily set NODE_TLS_REJECT_UNAUTHORIZED=0 for this one call.
     const origTls = process.env['NODE_TLS_REJECT_UNAUTHORIZED'];
     process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0';
-    const joinUrl = `${adminUrl}/onboarding/join`;
+    const joinUrl = `${onboardingOrigin}/onboarding/join`;
     let joinRes: Response;
     try {
       joinRes = await fetch(joinUrl, {
@@ -1325,11 +1352,18 @@ function installSystemdService(
 
   mkdirSync(serviceDir, { recursive: true });
 
+  // Boot-Race-Schutz (ADR-021 / TODO 2026-05-17): wenn ein eingebauter Skill einen
+  // externen systemd-Service braucht (z.B. influxdb) UND dessen Unit auf dem Host existiert,
+  // Ordering/Soft-Dep ergänzen, damit der Daemon erst NACH dem Service startet. Generisch
+  // aus den Skill-Manifests (BUILTIN_SKILL_SERVICE_DEPS), nicht influxdb-hartkodiert.
+  const svcDepLines = serviceUnitDependencyLines(BUILTIN_SKILL_SERVICE_DEPS, systemdUnitExists);
+  const svcDepBlock = svcDepLines.length > 0 ? `\n${svcDepLines.join('\n')}` : '';
+
   // systemd-Quoting fuer alle Pfade
   const unit = `[Unit]
 Description=thinklocal-mcp Mesh Daemon
 After=network-online.target
-Wants=network-online.target
+Wants=network-online.target${svcDepBlock}
 
 [Service]
 Type=simple
@@ -1700,6 +1734,269 @@ async function cmdRemove(targetArg: string, flags: string[]): Promise<void> {
   console.log();
 }
 
+// --- Update ---
+
+const GITHUB_OWNER = '2000teddy';
+const GITHUB_REPO = 'thinklocal-mcp';
+
+interface GitHubRelease {
+  tag_name: string;
+  name: string;
+  published_at: string;
+  html_url: string;
+  tarball_url: string;
+  body: string;
+  assets: Array<{
+    name: string;
+    browser_download_url: string;
+    size: number;
+  }>;
+}
+
+function getCurrentVersion(): string {
+  const pkgPath = resolve(INSTALL_DIR, 'package.json');
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { version: string };
+    return pkg.version;
+  } catch {
+    return '0.0.0';
+  }
+}
+
+async function fetchLatestRelease(): Promise<GitHubRelease | null> {
+  const { default: https } = await import('node:https');
+  return new Promise((resolveP, rejectP) => {
+    const options = {
+      hostname: 'api.github.com',
+      path: `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`,
+      method: 'GET',
+      headers: {
+        'User-Agent': `thinklocal-mcp/${getCurrentVersion()}`,
+        'Accept': 'application/vnd.github.v3+json',
+      },
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk: Buffer) => { data += chunk.toString(); });
+      res.on('end', () => {
+        if (res.statusCode === 404) {
+          resolveP(null);
+          return;
+        }
+        if (res.statusCode === 403) {
+          // Rate-limited
+          resolveP(null);
+          return;
+        }
+        if (res.statusCode !== 200) {
+          rejectP(new Error(`GitHub API returned ${res.statusCode}: ${data.slice(0, 200)}`));
+          return;
+        }
+        try {
+          resolveP(JSON.parse(data) as GitHubRelease);
+        } catch (e) {
+          rejectP(new Error(`Failed to parse GitHub API response: ${(e as Error).message}`));
+        }
+      });
+    });
+
+    req.on('error', (e) => rejectP(e));
+    req.setTimeout(10_000, () => {
+      req.destroy();
+      rejectP(new Error('GitHub API request timed out'));
+    });
+    req.end();
+  });
+}
+
+function parseVersion(tag: string): string {
+  return tag.replace(/^v/, '');
+}
+
+function compareVersions(a: string, b: string): number {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    const diff = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+async function cmdUpdate(flags: string[]): Promise<void> {
+  const checkOnly = flags.includes('--check');
+  const autoMode = flags.includes('--auto');
+
+  header('thinklocal update');
+
+  // 1. Aktuelle Version lesen
+  const currentVersion = getCurrentVersion();
+  info(`Aktuelle Version: ${C.bold}v${currentVersion}${C.reset}`);
+
+  // 2. Neueste Version via GitHub API abfragen
+  info('Pruefe GitHub Releases...');
+  let release: GitHubRelease | null;
+  try {
+    release = await fetchLatestRelease();
+  } catch (e) {
+    fail(`GitHub API Fehler: ${(e as Error).message}`);
+    info('Pruefe Internetverbindung oder versuche es spaeter erneut.');
+    info(`Rate-Limit: 60 Anfragen/Stunde ohne Token.`);
+    process.exitCode = 1;
+    return;
+  }
+
+  if (!release) {
+    warn('Kein Release auf GitHub gefunden.');
+    info(`Repository: https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases`);
+    info('Erstelle ein Release auf GitHub um Auto-Updates zu ermoeglichen.');
+    process.exitCode = 1;
+    return;
+  }
+
+  const latestVersion = parseVersion(release.tag_name);
+  const cmp = compareVersions(latestVersion, currentVersion);
+
+  if (cmp <= 0) {
+    ok(`Bereits auf dem neuesten Stand: v${currentVersion}`);
+    process.exitCode = 0;
+    return;
+  }
+
+  // 3. Update verfuegbar — Details anzeigen
+  console.log();
+  console.log(`  ${C.green}${C.bold}Update verfuegbar!${C.reset}`);
+  console.log(`    Aktuell:  v${currentVersion}`);
+  console.log(`    Neueste:  v${latestVersion}`);
+  console.log(`    Release:  ${release.name || release.tag_name}`);
+  console.log(`    Datum:    ${release.published_at?.slice(0, 10) ?? 'unbekannt'}`);
+  console.log(`    URL:      ${release.html_url}`);
+
+  // Release-Notes anzeigen (gekuerzt)
+  if (release.body) {
+    console.log();
+    console.log(`  ${C.bold}Release-Notes:${C.reset}`);
+    const lines = release.body.split('\n').slice(0, 15);
+    for (const line of lines) {
+      console.log(`    ${C.dim}${line}${C.reset}`);
+    }
+    if (release.body.split('\n').length > 15) {
+      console.log(`    ${C.dim}... (weitere Details auf GitHub)${C.reset}`);
+    }
+  }
+  console.log();
+
+  // 4. Nur pruefen?
+  if (checkOnly) {
+    info('Zum Installieren: thinklocal update');
+    process.exitCode = 1; // Exit 1 = update available
+    return;
+  }
+
+  // 5. Bestaetigung (ausser --auto)
+  if (!autoMode) {
+    const readline = await import('node:readline');
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const answer = await new Promise<string>((resolveP) => {
+      rl.question(`  Update auf v${latestVersion} installieren? [j/N] `, (ans) => {
+        rl.close();
+        resolveP(ans.trim().toLowerCase());
+      });
+    });
+
+    if (answer !== 'j' && answer !== 'ja' && answer !== 'y' && answer !== 'yes') {
+      info('Update abgebrochen.');
+      return;
+    }
+  }
+
+  // 6. Update durchfuehren via git pull + npm install
+  info('Starte Update...');
+
+  // Backup-Marker
+  const backupMarker = resolve(DATA_DIR, '.update-backup-version');
+  try {
+    mkdirSync(DATA_DIR, { recursive: true });
+    atomicWrite(backupMarker, currentVersion);
+  } catch { /* best-effort */ }
+
+  // git pull
+  info('git pull...');
+  try {
+    const pullResult = spawnSync('git', ['pull', '--ff-only'], {
+      cwd: INSTALL_DIR,
+      encoding: 'utf-8',
+      timeout: 60_000,
+    });
+    if (pullResult.status !== 0) {
+      fail(`git pull fehlgeschlagen: ${pullResult.stderr?.trim() || 'unbekannter Fehler'}`);
+      info('Manuelle Loesung: cd ' + INSTALL_DIR + ' && git pull');
+      process.exitCode = 1;
+      return;
+    }
+    ok('git pull erfolgreich');
+  } catch (e) {
+    fail(`git pull Fehler: ${(e as Error).message}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  // npm install
+  info('npm install...');
+  try {
+    const npmResult = spawnSync('npm', ['install'], {
+      cwd: INSTALL_DIR,
+      encoding: 'utf-8',
+      timeout: 120_000,
+      env: { ...process.env, NODE_ENV: 'production' },
+    });
+    if (npmResult.status !== 0) {
+      fail(`npm install fehlgeschlagen: ${npmResult.stderr?.slice(0, 500) || 'unbekannter Fehler'}`);
+      warn('Rollback: git checkout v' + currentVersion);
+      process.exitCode = 1;
+      return;
+    }
+    ok('npm install erfolgreich');
+  } catch (e) {
+    fail(`npm install Fehler: ${(e as Error).message}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  // Neue Version verifizieren
+  const newVersion = getCurrentVersion();
+  if (compareVersions(newVersion, currentVersion) <= 0) {
+    warn(`Version nach Update unveraendert (v${newVersion}). Moeglicherweise kein neues Release-Tag.`);
+  } else {
+    ok(`Version aktualisiert: v${currentVersion} -> v${newVersion}`);
+  }
+
+  // Daemon restart
+  info('Daemon wird neu gestartet...');
+  try {
+    const running = await isDaemonRunning();
+    if (running) {
+      await cmdRestart();
+      ok('Daemon neu gestartet');
+    } else {
+      info('Daemon war nicht aktiv — kein Restart noetig');
+      info('Starte mit: thinklocal start');
+    }
+  } catch (e) {
+    warn(`Daemon-Restart fehlgeschlagen: ${(e as Error).message}`);
+    info('Manuell starten: thinklocal restart');
+  }
+
+  // Cleanup backup marker
+  try {
+    const { unlinkSync } = await import('node:fs');
+    unlinkSync(backupMarker);
+  } catch { /* best-effort */ }
+
+  console.log(`\n  ${C.green}${C.bold}Update auf v${newVersion} abgeschlossen!${C.reset}\n`);
+}
+
 // --- Main ---
 
 async function main(): Promise<void> {
@@ -1709,13 +2006,14 @@ async function main(): Promise<void> {
   switch (cmd) {
     case 'start': return cmdStart(args.slice(1));
     case 'stop': return cmdStop();
-    case 'restart': return cmdRestart();
+    case 'restart': return cmdRestart(args.slice(1));
     case 'status': return cmdStatus();
     case 'doctor': return cmdDoctor();
     case 'logs': return cmdLogs();
     case 'bootstrap': return cmdBootstrap(args.slice(1));
     case 'peers': return cmdPeers();
     case 'uninstall': return cmdUninstall();
+    case 'update': return cmdUpdate(args.slice(1));
     case 'check':
       if (args[1]) return cmdCheck(args[1]);
       console.log('  Nutzung: thinklocal check <host> oder thinklocal check <host>:<port>');
@@ -1751,7 +2049,7 @@ async function main(): Promise<void> {
     bootstrap      Ersteinrichtung (Keys, Config, Service, MCP) [--local|--lan]
     start          Daemon starten (Service oder Vordergrund) [--local|--lan]
     stop           Daemon stoppen
-    restart        Daemon neu starten
+    restart        Daemon neu starten [--local|--lan]
     status         Status anzeigen
     doctor         Systemdiagnose (prueft alles)
     logs           Live-Logs anzeigen
@@ -1768,6 +2066,7 @@ async function main(): Promise<void> {
     mcp            MCP-Config-Snippet anzeigen
     mcp install    MCP in Claude Desktop + Code eintragen
     config show    Konfiguration anzeigen
+    update         Software aktualisieren [--check|--auto]
     heartbeat      Cron-Heartbeat-Prompts (ADR-004 Phase 1) anzeigen / status
     uninstall      Service + Config entfernen
 

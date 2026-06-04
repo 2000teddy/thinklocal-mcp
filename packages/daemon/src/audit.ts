@@ -30,7 +30,11 @@ export type AuditEventType =
   | 'TOKEN_CREATE'
   | 'TOKEN_REVOKE'
   | 'TOKEN_JOIN_REJECTED'
-  | 'TOKEN_JOIN_SUCCESS';
+  | 'TOKEN_JOIN_SUCCESS'
+  // ADR-020 v1: Registry-Sync Safety Valve
+  | 'REGISTRY_REPUBLISH'
+  // ADR-021: Skill-Health-Lifecycle State-Transition
+  | 'SKILL_HEALTH_TRANSITION';
 
 /**
  * ADR-007 Phase A: Entity types for structured audit querying.

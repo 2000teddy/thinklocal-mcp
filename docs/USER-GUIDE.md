@@ -95,6 +95,8 @@ mdns_service_type = "_thinklocal._tcp"
 | `TLMCP_AGENT_TYPE` | Agent-Typ | claude-code |
 | `TLMCP_NO_TLS` | TLS deaktivieren (Dev) | - |
 | `TLMCP_STATIC_PEERS` | Statische Peers (komma-separiert) | - |
+| `TLMCP_ALLOWED_MESH_CIDRS` | Mesh-CIDRs (ADR-019, komma-separiert) | - |
+| `TLMCP_EXCLUDE_INTERFACE_PATTERNS` | Interface-Excludes (ADR-019) | Defaults |
 | `TELEGRAM_BOT_TOKEN` | Telegram Bot Token | - |
 | `TELEGRAM_ALLOWED_CHATS` | Erlaubte Chat-IDs | - |
 
@@ -155,7 +157,78 @@ Dark/Light Mode: Toggle unten in der Sidebar.
 
 ---
 
-## 7. Peer-Discovery
+## 7. Token-basiertes Onboarding
+
+Seit ADR-016 koennen neue Nodes per Bearer-Token dem Mesh beitreten — ohne
+die SPAKE2-PIN-Zeremonie. Ideal fuer Single-Owner-Setups bei denen derselbe
+Admin alle Nodes kontrolliert.
+
+### Schritt-fuer-Schritt
+
+**1. Token auf dem Admin-Node erstellen (Port 9440, loopback)**
+
+```bash
+thinklocal token create --name influxdb-server --ttl 24
+# Ausgabe: Token: tlmcp_AbCdEf...  (einmalig verwendbar, 24h gueltig)
+```
+
+Alternativ via MCP-Tool `token_create` aus Claude Code heraus.
+
+**2. Token an den neuen Node uebermitteln**
+
+Per SSH, Messenger, oder sicheren Kanal — der Token ist Single-Use und
+zeitlich begrenzt. Nach einmaliger Verwendung ist er verbraucht.
+
+**3. Auf dem neuen Node dem Mesh beitreten (Port 9441, kein mTLS)**
+
+```bash
+thinklocal join --token tlmcp_AbCdEf... --admin-url https://10.10.10.55:9441
+```
+
+> **WICHTIG:** Der Join-Endpoint laeuft auf **Port 9441** (nicht 9440).
+> Port 9441 ist der oeffentliche HTTPS-Port fuer Onboarding und Mesh-Kommunikation.
+> Port 9440 ist ausschliesslich fuer loopback-APIs (Token-Management, Inbox, etc.).
+
+Der Join-Flow:
+1. Bearer-Token wird an den Admin-Node gesendet
+2. Admin validiert Token (SHA-256 Hash, Single-Use, TTL)
+3. Admin signiert das Node-Zertifikat mit der Mesh-CA
+4. Zertifikate werden zurueckgegeben und in `~/.thinklocal/tls/` gespeichert
+5. TrustStore wird hot-reloaded — der neue Peer ist sofort im Mesh sichtbar
+
+**4. Tokens verwalten**
+
+```bash
+thinklocal token list     # Alle Tokens anzeigen (Status, Ablauf)
+thinklocal token revoke <id>  # Token widerrufen
+```
+
+### 5-Node Mesh Beispiel
+
+| Node | IP | Agent-Typ | Onboarding |
+|------|-----|-----------|------------|
+| MacMini (Admin) | 10.10.10.55 | claude-code | Bootstrap (CA) |
+| influxdb | 10.10.10.56 | influxdb | `thinklocal join --token ... --admin-url https://10.10.10.55:9441` |
+| ai-n8n | 10.10.10.57 | ai-n8n | `thinklocal join --token ... --admin-url https://10.10.10.55:9441` |
+| MacBook Pro | 10.10.10.58 | claude-code | `thinklocal join --token ... --admin-url https://10.10.10.55:9441` |
+| ioBroker | 10.10.10.59 | iobroker | `thinklocal join --token ... --admin-url https://10.10.10.55:9441` |
+
+Ablauf: Auf dem MacMini je einen Token pro Node erstellen (`thinklocal token create --name <name>`),
+dann auf jedem Ziel-Node `thinklocal join` ausfuehren.
+
+### Troubleshooting Token-Onboarding
+
+| Fehlermeldung | Ursache | Loesung |
+|---------------|---------|---------|
+| `self-signed certificate` | Falscher Port (9440 statt 9441) | `--admin-url` muss Port **9441** verwenden |
+| `fetch failed` / `UNABLE_TO_VERIFY_LEAF_SIGNATURE` | Node.js < 22 oder fehlende TLS-Unterstuetzung | Node.js 22+ installieren (`nvm install 22`) |
+| `401 Unauthorized` | Token ungueltig, abgelaufen oder bereits verwendet | Neuen Token erstellen (`thinklocal token create`) |
+| `403 Forbidden` | Nicht vom Admin-Node aufgerufen | Token-Management nur auf dem Admin-Node moeglich |
+| `Connection refused` | Daemon laeuft nicht | `thinklocal start` auf dem Admin-Node |
+
+---
+
+## 8. Peer-Discovery (mDNS + Statisch)
 
 ### Automatisch (mDNS)
 
@@ -182,7 +255,7 @@ TLMCP_STATIC_PEERS="10.10.10.56:9440,192.168.1.100:9440"
 
 ---
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
 ### Daemon startet nicht
 
@@ -197,6 +270,126 @@ thinklocal logs      # Live-Logs anzeigen
 2. Netzwerk pruefen: `thinklocal check 10.10.10.56:9440`
 3. Firewall: Port 9440 muss offen sein
 4. mDNS: avahi-daemon auf Linux installiert?
+5. TLS-Mismatch pruefen — siehe "Peer ohne TLS ignoriert" weiter unten
+6. Multi-Interface-Problem — siehe "Mesh nicht gefunden trotz aktivem Daemon"
+
+### Mesh nicht gefunden trotz aktivem Daemon (Multi-Interface, ADR-019)
+
+Bei Hosts mit **mehreren aktiven Netzwerk-Interfaces** (z.B. MacBook mit
+USB-Ethernet im LAN + WLAN + DMZ direkt an der Fritzbox) findet der Daemon
+moeglicherweise keine Peers oder wird mit der falschen IP entdeckt.
+
+**Symptom:** `mesh_status` zeigt `peers_online: 0` oder Peers werden mit IPs
+aus dem falschen Subnet entdeckt (z.B. `host: "10.0.0.20"` statt `"10.10.10.55"`).
+
+**Ursache:** `bonjour-service` published ohne explizite CIDR-Policy auf einem
+beliebigen Interface und enthaelt ALLE lokalen IPs in den A-Records — Peers
+versuchen sich dann ueber DMZ/WLAN-IPs zu verbinden, die nicht routbar sind
+oder von der Mesh-CA nicht gedeckt werden.
+
+**Fix:** Im `config/daemon.toml` die `allowed_mesh_cidrs` auf das Mesh-Subnet
+beschraenken:
+
+```toml
+[discovery]
+mdns_service_type = "_thinklocal._tcp"
+allowed_mesh_cidrs = ["10.10.10.0/24"]
+```
+
+Oder via Env:
+```bash
+TLMCP_ALLOWED_MESH_CIDRS="10.10.10.0/24,192.168.1.0/24"
+```
+
+Mit dieser Policy:
+- Daemon published mDNS nur auf Interfaces in den erlaubten CIDRs
+- A-Records werden auf die Mesh-IP beschraenkt (Anti-Leakage)
+- Empfangene Peers ausserhalb der CIDRs werden ignoriert (Anti-Reflector)
+- Daemon-Restart noetig: `thinklocal restart`
+
+Default-Excludes (immer aktiv): `docker*`, `tailscale*`, `utun*`, `veth*`,
+`bridge*`, `br-*`, `tun*`, `tap*`, `awdl*`, `llw*`, `anpi*`, `ap*`, `gif*`,
+`stf*`, `lo*`. Weitere via `exclude_interface_patterns` in der Config.
+
+Siehe `docs/architecture/ADR-019-multi-interface-discovery.md` fuer Details.
+
+### Peer ohne TLS ignoriert (requireTls)
+
+Im LAN-Modus lehnt der Daemon Peers ab, die kein TLS sprechen.
+Log-Meldung: `"Peer ohne TLS ignoriert (requireTls aktiv)"`
+
+**Ursache:** Der Peer-Daemon laeuft mit `TLMCP_NO_TLS=1` (reines HTTP),
+waehrend alle anderen Nodes mTLS erwarten.
+
+**Fix auf dem betroffenen Peer:**
+
+```bash
+# Linux (systemd)
+vi ~/.config/systemd/user/thinklocal-daemon.service
+# Zeile "Environment=TLMCP_NO_TLS=1" entfernen
+systemctl --user daemon-reload
+systemctl --user restart thinklocal-daemon
+
+# macOS (launchd)
+# TLMCP_NO_TLS Key aus ~/Library/LaunchAgents/com.thinklocal.daemon.plist entfernen
+launchctl kickstart -k gui/$(id -u)/com.thinklocal.daemon
+```
+
+**Voraussetzung:** TLS-Zertifikate muessen existieren (`~/.thinklocal/tls/ca.crt.pem`,
+`node.crt.pem`, `node.key.pem`). Falls nicht: `thinklocal bootstrap` oder
+`ssh-bootstrap-trust.sh` ausfuehren.
+
+**Wichtig:** `TLMCP_NO_TLS=1` ist nur fuer lokale Entwicklung gedacht —
+niemals auf Nodes setzen, die am LAN-Mesh teilnehmen sollen.
+
+### MCP-Tools funktionieren nicht (socket hang up)
+
+Das MCP-stdio-Subprocess verbindet sich zum lokalen Daemon. Wenn der
+Daemon mTLS spricht, muss die URL in der MCP-Config auf `https://` stehen.
+
+**Symptom:** Alle `mcp__thinklocal__*` Tools liefern "socket hang up".
+
+**Fix — `~/.mcp.json` pruefen:**
+
+```json
+{
+  "mcpServers": {
+    "thinklocal": {
+      "env": {
+        "TLMCP_DAEMON_URL": "https://localhost:9440"
+      }
+    }
+  }
+}
+```
+
+Falsch: `http://localhost:9440` (wenn Daemon mit TLS laeuft)
+Richtig: `https://localhost:9440`
+
+**Nach der Aenderung:** Claude Code (CLI oder Desktop) **neu starten** —
+der MCP-Subprocess liest die Config nur beim Start.
+
+### Nach Daemon-Neustart: Claude Code neu starten
+
+Der MCP-Subprocess (`mcp-stdio.ts`) haelt eine persistente Verbindung
+zum Daemon. Nach einem Daemon-Neustart (Service-Restart, Reboot, Crash)
+muss Claude Code neu gestartet werden, damit sich der MCP-Subprocess
+neu verbindet. Ohne Neustart liefern alle MCP-Tools "socket hang up".
+
+```bash
+# macOS: Daemon-Status pruefen (unabhaengig von Claude Code)
+scripts/service.sh status
+
+# Linux: Daemon-Status pruefen
+systemctl --user status thinklocal-daemon
+
+# Direkt testen (mTLS curl):
+curl --insecure \
+  --cert ~/.thinklocal/tls/node.crt.pem \
+  --key ~/.thinklocal/tls/node.key.pem \
+  --cacert ~/.thinklocal/tls/ca.crt.pem \
+  https://localhost:9440/api/status
+```
 
 ### Hostname aendert sich staendig
 
@@ -218,7 +411,7 @@ cd ~/Entwicklung_local/thinklocal-mcp && npx tsx packages/cli/src/thinklocal.ts 
 
 ---
 
-## 8a. Cron-Heartbeat aktivieren (ADR-004 Phase 1)
+## 9a. Cron-Heartbeat aktivieren (ADR-004 Phase 1)
 
 Damit Agenten ihre Inbox automatisch checken (statt zu vergessen): jeder Agent
 registriert in seiner Harness zwei wiederkehrende Cron-Jobs.
@@ -253,7 +446,7 @@ Siehe `docs/architecture/ADR-004-cron-heartbeat.md` und
 
 ---
 
-## 9. Claude Code Integration
+## 10. Claude Code Integration
 
 Nach `thinklocal bootstrap` sind die MCP-Tools automatisch verfuegbar.
 
@@ -267,7 +460,7 @@ Teste in Claude Code:
 
 ---
 
-## 10. Sicherheit
+## 11. Sicherheit
 
 - **mTLS**: Verschluesselte Kommunikation zwischen allen Peers
 - **SPAKE2 Pairing**: PIN-basierte Trust-Etablierung

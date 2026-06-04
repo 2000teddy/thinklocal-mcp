@@ -1,0 +1,19 @@
+{
+  "name": "@thinklocal/observer",
+  "version": "0.1.0",
+  "description": "Observer Agent — lokale Intelligenz fuer headless Nodes",
+  "type": "module",
+  "main": "dist/observer-agent.js",
+  "scripts": {
+    "test": "vitest run",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "pino": "^9.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}

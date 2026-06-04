@@ -28,6 +28,30 @@ export function generatePin(): string {
 
 // --- Paired Peers Persistenz ---
 
+/**
+ * Bug #4 aus ADR-020 Phase 1.1 Bug-Report (PR #136):
+ * In der Vergangenheit wurden SPIFFE-URIs aus dem Hostname abgeleitet
+ * (`spiffe://thinklocal/host/iobroker/...`), spaeter umgestellt auf
+ * Host-Fingerprint (`spiffe://thinklocal/host/<16-hex>/...`). Pairings vom
+ * 7.-10.4.2026 sind Host-ID-basiert, vom 13.4.2026 hostname-basiert
+ * (durcheinander) — alte Eintraege wurden nie migriert. Folge: AGENT_MESSAGE
+ * von einem Peer mit aktueller Host-ID-URI wird gegen den hostname-basierten
+ * Eintrag verglichen → "nicht gepairt" reject.
+ *
+ * Diese RegEx erkennt das NEUE (korrekte) Format: 16 Hex-Zeichen als Host-ID.
+ */
+export const HOST_ID_URI_PATTERN = /^spiffe:\/\/thinklocal\/host\/[0-9a-f]{16}\/agent\/[^/]+$/;
+
+/**
+ * Klassifiziert eine SPIFFE-URI. Gibt true zurueck wenn die URI das aktuelle
+ * Host-ID-Schema hat. False fuer hostname-basierte Legacy-URIs.
+ *
+ * Exportiert fuer Migrationsscript + Unit-Tests.
+ */
+export function isHostIdSpiffeUri(uri: string): boolean {
+  return HOST_ID_URI_PATTERN.test(uri);
+}
+
 export interface PairedPeer {
   /** SPIFFE-URI des gepaarten Peers */
   agentId: string;
@@ -103,6 +127,21 @@ export class PairingStore {
         this.peers.set(peer.agentId, peer);
       }
       this.log?.info({ count: this.peers.size }, 'Gepaarte Peers geladen');
+
+      // Bug #4 (ADR-020 Phase 1.1 Bug-Report): Warnung wenn hostname-basierte
+      // Legacy-URIs erkannt werden. Diese blockieren AGENT_MESSAGE-Empfang
+      // von Peers, die mittlerweile Host-ID-basierte URIs benutzen.
+      const legacyUris = peers
+        .map((p) => p.agentId)
+        .filter((uri) => !isHostIdSpiffeUri(uri));
+      if (legacyUris.length > 0) {
+        this.log?.warn(
+          { legacyCount: legacyUris.length, legacyUris },
+          'paired-peers.json enthaelt hostname-basierte SPIFFE-URIs (Legacy). ' +
+            'Bitte `npm run migrate-pairings` ausfuehren — siehe Bug #4 in ' +
+            'docs/architecture/ADR-020-Phase-1.1-bug-report.md',
+        );
+      }
     } catch (err) {
       this.log?.warn({ err }, 'Fehler beim Laden der Pairing-Daten');
     }

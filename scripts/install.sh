@@ -334,6 +334,21 @@ install_linux_service() {
 
     mkdir -p "$HOME/.config/systemd/user"
 
+    # Boot-Race-Schutz (ADR-021 / TODO 2026-05-17): fuer jeden externen Service, den ein
+    # eingebauter Skill braucht UND dessen systemd-Unit auf diesem Host existiert,
+    # After=/Wants= ergaenzen (Daemon startet erst NACH dem Service). Kanonische Quelle der
+    # Service-Liste: packages/daemon/src/service-dependencies.ts (requirements.services der
+    # Skill-Manifests); hier generisch ueber die Liste iteriert, nicht influxdb-spezifisch.
+    SKILL_SERVICE_DEPS="influxdb"
+    SKILL_DEP_LINES=""
+    for svc in $SKILL_SERVICE_DEPS; do
+        if systemctl list-unit-files "${svc}.service" --no-legend 2>/dev/null | grep -q .; then
+            SKILL_DEP_LINES="${SKILL_DEP_LINES}After=${svc}.service
+Wants=${svc}.service
+"
+        fi
+    done
+
     # Service-Datei direkt generieren (NICHT aus Template!)
     # User-Services duerfen KEIN User=, Group=, ProtectSystem= etc. haben
     cat > "$SERVICE_DST" << SERVICEEOF
@@ -341,7 +356,7 @@ install_linux_service() {
 Description=thinklocal-mcp Mesh Daemon
 After=network-online.target
 Wants=network-online.target
-
+${SKILL_DEP_LINES}
 [Service]
 Type=simple
 ExecStart=$NODE_PATH $TSX_PATH $INDEX_PATH

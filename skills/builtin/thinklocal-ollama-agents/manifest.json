@@ -1,0 +1,43 @@
+{
+  "name": "thinklocal-ollama-agents",
+  "version": "1.0.0",
+  "description": "Expose local Ollama models and Ollama-launched agent personas as mesh capabilities",
+  "origin": "builtin",
+  "capabilities": [
+    "ollama.models",
+    "ollama.agent.launch",
+    "ollama.agent.endpoint",
+    "ollama.agent.delegate"
+  ],
+  "requires": {
+    "mcp_tools": [
+      "discover_peers",
+      "query_capabilities",
+      "mesh_status",
+      "execute_remote_skill"
+    ]
+  },
+  "format_version": 1,
+  "runtime": "manual",
+  "entrypoints": {
+    "native_api": "https://localhost:11434/api",
+    "openai_compatible_api": "https://10.10.25.103:11434/v1"
+  },
+  "model_selection": {
+    "source": "ollama list",
+    "exclude_patterns": [
+      "kimi",
+      "kimi-k2",
+      "k2"
+    ],
+    "default_context_tokens": 131072,
+    "default_max_output_tokens": 4096
+  },
+  "agent_personas": [
+    "claude",
+    "codex",
+    "droid",
+    "openrouter",
+    "openclaw"
+  ]
+}

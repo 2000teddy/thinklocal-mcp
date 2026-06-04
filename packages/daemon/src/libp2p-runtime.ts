@@ -1,4 +1,5 @@
 import type { Logger } from 'pino';
+import type { PrivateKey } from '@libp2p/interface';
 import type { RuntimeMode } from './runtime-mode.js';
 
 export interface Libp2pRuntimeConfig {
@@ -10,6 +11,14 @@ export interface Libp2pRuntimeConfig {
   relayTransportEnabled: boolean;
   relayServiceEnabled: boolean;
   announceMultiaddrs: string[];
+  /**
+   * ADR-022 #0: persistierter libp2p-Ed25519-PrivateKey. Wird an createLibp2p
+   * durchgereicht, damit die PeerID über Neustarts STABIL bleibt. Lose typisiert
+   * (unknown), um die harte @libp2p/interface-Typabhängigkeit in diesem Modul zu
+   * vermeiden ist nicht nötig — Type-only-Import wird beim Compile gelöscht. Wenn
+   * undefined: libp2p generiert (wie früher) einen ephemeren Key.
+   */
+  privateKey?: PrivateKey;
 }
 
 export type Libp2pRuntimeStatus = 'disabled' | 'ready' | 'degraded';
@@ -50,10 +59,54 @@ export interface Libp2pRuntimeState {
   reason: string | null;
 }
 
+/**
+ * Stream-Handler fuer eingehende libp2p-Streams. Erhalten den rohen Stream
+ * sowie die Remote-Peer-ID. Implementierungen sind verantwortlich fuer das
+ * Lesen aus stream.source, Schreiben in stream.sink und das saubere
+ * Schliessen (z.B. via stream.close()). Nicht resolvende Promises blockieren
+ * den Stream — Timeout/Abort liegt beim Handler.
+ */
+export type Libp2pProtocolHandler = (
+  stream: Libp2pStreamLike,
+  peerId: string,
+) => Promise<void>;
+
+/**
+ * Minimaler libp2p-Stream-Contract. Vermeidet harte Typabhaengigkeit auf
+ * @libp2p/interface, was Tests vereinfacht und Versionsupgrades entkoppelt.
+ */
+export interface Libp2pStreamLike {
+  source: AsyncIterable<Uint8Array>;
+  sink: (source: AsyncIterable<Uint8Array> | Iterable<Uint8Array>) => Promise<void>;
+  close?: () => Promise<void> | void;
+  abort?: (err: Error) => void;
+}
+
+export interface Libp2pPeerEvents {
+  onPeerConnect?: (peerId: string) => void;
+  onPeerDisconnect?: (peerId: string) => void;
+}
+
+export interface Libp2pRuntimeHooks {
+  /** Map: protocol-id → Handler. Wenn ein Protokoll nicht gemapt ist, gilt der Placeholder-Default. */
+  protocolHandlers?: Record<string, Libp2pProtocolHandler>;
+  peerEvents?: Libp2pPeerEvents;
+}
+
 export interface Libp2pRuntime {
   start(): Promise<void>;
   stop(): Promise<void>;
   getState(): Libp2pRuntimeState;
+  /**
+   * Oeffnet einen neuen Stream zu peerId mit dem angegebenen Protokoll.
+   * Wird vom RegistrySyncCoordinator als Transport genutzt. Wirft, wenn
+   * peer nicht erreichbar oder Protokoll nicht unterstuetzt.
+   */
+  dialProtocol?(peerId: string, protocol: string): Promise<Libp2pStreamLike>;
+  /** Trennt die libp2p-Connection zu peerId. */
+  hangUpPeer?(peerId: string): Promise<void>;
+  /** Liste der aktuell verbundenen Peer-IDs (als string). */
+  getConnectedPeerIds?(): string[];
 }
 
 type DynamicImport = (specifier: string) => Promise<unknown>;
@@ -231,9 +284,45 @@ class NoopLibp2pRuntime implements Libp2pRuntime {
   }
 }
 
-class ActiveLibp2pRuntime implements Libp2pRuntime {
+/**
+ * ADR-020 Phase 1.1 (HIGH-Finding aus pal:codereview gpt-5.5):
+ * libp2p `peer:connect` und `peer:disconnect` liefern `detail` als
+ * Connection-Objekt mit eigener `toString()` (typisch: "[object Object]").
+ * Wir muessen `remotePeer` bevorzugen, statt das generische `toString()`.
+ *
+ * Exportiert fuer Unit-Tests.
+ */
+export function extractPeerIdFromConnectionEvent(evt: unknown): string | null {
+  const detail = (evt as { detail?: unknown } | null)?.detail;
+  if (detail == null) return null;
+  // 1. detail.remotePeer.toString() — libp2p v2/v3 Connection-Shape
+  const remotePeer =
+    (detail as { remotePeer?: { toString?: () => string } })?.remotePeer ??
+    (detail as { connection?: { remotePeer?: { toString?: () => string } } })?.connection?.remotePeer;
+  const remoteStr = remotePeer?.toString?.();
+  if (remoteStr && remoteStr !== '[object Object]') return remoteStr;
+  // 2. detail selbst (alte libp2p-Variante: detail IST der PeerId)
+  // Nur akzeptieren wenn nicht generisches Objekt-toString
+  if (typeof detail === 'string') return detail;
+  const detailStr = (detail as { toString?: () => string })?.toString?.();
+  if (detailStr && detailStr !== '[object Object]') return detailStr;
+  return null;
+}
+
+export class ActiveLibp2pRuntime implements Libp2pRuntime {
   private node: any;
   private state: Libp2pRuntimeState;
+  private readonly hooks: Libp2pRuntimeHooks;
+  /**
+   * ADR-020 Phase 1.1: Dedup-Set fuer laufende Auto-Dials nach
+   * peer:discovery. libp2p dialt nach Discovery NICHT automatisch (Breaking
+   * Change libp2p v3); die Anwendung muss explizit dialen. Ohne Dedup
+   * werden bei periodischen mDNS-Reannouncements duplizierte Dial-Versuche
+   * geloggt.
+   */
+  private dialingPeers = new Set<string>();
+  /** ADR-020 Phase 1.1 (MEDIUM aus pal:codereview): Stop-Guard fuer Auto-Dial. */
+  private stopped = false;
 
   constructor(
     initialState: Libp2pRuntimeState,
@@ -251,12 +340,17 @@ class ActiveLibp2pRuntime implements Libp2pRuntime {
       yamux: () => unknown;
     },
     private readonly log?: Logger,
+    hooks?: Libp2pRuntimeHooks,
   ) {
     this.state = initialState;
+    this.hooks = hooks ?? {};
   }
 
   async start(): Promise<void> {
     this.node = await this.deps.createLibp2p({
+      // ADR-022 #0: persistierter Key → stabile PeerID. Ohne privateKey generiert
+      // libp2p (wie früher) einen ephemeren Key bei jedem Start.
+      ...(this.config.privateKey ? { privateKey: this.config.privateKey } : {}),
       addresses: {
         listen: getLibp2pListenMultiaddrs(this.config.bindHost, this.config.listenPort),
         ...(this.config.announceMultiaddrs.length > 0 ? { announce: this.config.announceMultiaddrs } : {}),
@@ -265,7 +359,16 @@ class ActiveLibp2pRuntime implements Libp2pRuntime {
         this.deps.tcp(),
         ...(this.config.relayTransportEnabled && this.deps.circuitRelayTransport ? [this.deps.circuitRelayTransport()] : []),
       ],
-      connectionEncryption: [this.deps.noise()],
+      // ADR-020 Phase 1.1 Bug-Report #3 (Live-Live-Befund 2026-05-19):
+      // libp2p v2+ benutzt `connectionEncrypters` (mit -ers, Plural),
+      // NICHT `connectionEncryption`. Der alte Key wurde silent ignoriert
+      // → kein Noise im Config → jede ausgehende Verbindung schlug mit
+      // `EncryptionFailedError: At least one protocol must be specified`
+      // fehl. Das erklaert die "All multiaddr dials failed"-Welle, die
+      // nach PR #135 (auto-dial) sichtbar wurde — der Auto-Dial-Code war
+      // korrekt, aber die libp2p-Konfig konnte keine Encryption aushandeln.
+      // Verifiziert via libp2p-Probe-Skript gegen iobroker.
+      connectionEncrypters: [this.deps.noise()],
       streamMuxers: [this.deps.yamux()],
       services: {
         identify: this.deps.identify(),
@@ -276,11 +379,18 @@ class ActiveLibp2pRuntime implements Libp2pRuntime {
       },
     });
 
+    // ADR-020 Phase 1.1: peerId VOR node.start() lesen, damit der
+    // peer:discovery-Handler die Self-Filter-Pruefung hat, sobald das
+    // erste Event eintrifft. Listener-Anbringung VOR node.start(),
+    // damit fruehe mDNS-Events nicht verloren gehen.
+    this.state.peerId = String(this.node.peerId?.toString?.() ?? '');
+    this.registerProtocolHandlers();
+    this.attachEventListeners();
+
     if (typeof this.node.start === 'function') {
       await this.node.start();
     }
 
-    this.state.peerId = String(this.node.peerId?.toString?.() ?? '');
     this.state.listenMultiaddrs = Array.isArray(this.node.getMultiaddrs?.())
       ? this.node.getMultiaddrs().map((addr: { toString(): string }) => addr.toString())
       : this.state.listenMultiaddrs;
@@ -290,8 +400,12 @@ class ActiveLibp2pRuntime implements Libp2pRuntime {
     this.state.reason = null;
     this.refreshNatState();
 
-    this.registerProtocolHandlers();
-    this.attachEventListeners();
+    // ADR-020 Phase 1.1: defensiver PeerStore-Scan. Falls Discovery
+    // bereits VOR der Listener-Registrierung gefeuert hat (kann bei
+    // schnellem mDNS-Cache passieren), dialen wir alle bekannten
+    // nicht-verbundenen Peers einmalig nach. Best-effort, kein Crash bei
+    // API-Inkompatibilitaet zwischen libp2p-Versionen.
+    await this.dialKnownPeers();
     this.log?.info(
       {
         peerId: this.state.peerId,
@@ -307,6 +421,8 @@ class ActiveLibp2pRuntime implements Libp2pRuntime {
   }
 
   async stop(): Promise<void> {
+    this.stopped = true;
+    this.dialingPeers.clear();
     if (this.node && typeof this.node.stop === 'function') {
       await this.node.stop();
       this.log?.info('libp2p Runtime gestoppt');
@@ -332,19 +448,135 @@ class ActiveLibp2pRuntime implements Libp2pRuntime {
     };
   }
 
+  async dialProtocol(peerId: string, protocol: string): Promise<Libp2pStreamLike> {
+    if (!this.node) throw new Error('libp2p node not started');
+    if (typeof this.node.dialProtocol !== 'function') {
+      throw new Error('libp2p node does not support dialProtocol');
+    }
+    const stream = await this.node.dialProtocol(peerId, protocol);
+    this.onStreamOpened(protocol);
+    return this.wrapStream(stream, protocol);
+  }
+
+  async hangUpPeer(peerId: string): Promise<void> {
+    if (!this.node) return;
+    if (typeof this.node.hangUp === 'function') {
+      await this.node.hangUp(peerId);
+    }
+  }
+
+  getConnectedPeerIds(): string[] {
+    const connections = this.node?.getConnections?.();
+    if (!Array.isArray(connections)) return [];
+    const ids = new Set<string>();
+    for (const conn of connections) {
+      const id = conn?.remotePeer?.toString?.();
+      if (id) ids.add(id);
+    }
+    return Array.from(ids);
+  }
+
+  /**
+   * Wickelt einen libp2p-Stream in den minimalen Libp2pStreamLike-Contract
+   * + Stream-Counter-Cleanup. Idempotent: close()/abort() decrementen den
+   * Counter genau einmal.
+   */
+  private wrapStream(stream: any, protocol: string): Libp2pStreamLike {
+    let closed = false;
+    const decrement = () => {
+      if (!closed) {
+        closed = true;
+        this.onStreamClosed(protocol);
+      }
+    };
+    return {
+      source: stream.source ?? stream,
+      sink: async (source) => {
+        await stream.sink(source);
+      },
+      close: async () => {
+        try {
+          await stream.close?.();
+        } finally {
+          decrement();
+        }
+      },
+      abort: (err: Error) => {
+        try {
+          stream.abort?.(err);
+        } finally {
+          decrement();
+        }
+      },
+    };
+  }
+
   private registerProtocolHandlers(): void {
     for (const protocol of this.state.multiplexer.protocols) {
+      const injected = this.hooks.protocolHandlers?.[protocol];
+
       const handler = async (evt: any) => {
         this.onStreamOpened(protocol);
+        let streamClosed = false;
+        const stream = evt?.stream ?? evt;
+        const remotePeer =
+          evt?.connection?.remotePeer?.toString?.() ??
+          stream?.connection?.remotePeer?.toString?.() ??
+          'unknown';
+
+        const ensureClosed = async () => {
+          if (streamClosed) return;
+          streamClosed = true;
+          try {
+            if (typeof stream?.close === 'function') {
+              await stream.close();
+            } else if (typeof stream?.abort === 'function') {
+              stream.abort(new Error('handler finished'));
+            }
+          } catch {
+            // ignore — best-effort
+          }
+          this.onStreamClosed(protocol);
+        };
+
         try {
-          const stream = evt?.stream ?? evt;
-          if (typeof stream?.close === 'function') {
-            await stream.close();
-          } else if (typeof stream?.abort === 'function') {
-            stream.abort(new Error('thinklocal placeholder protocol handler'));
+          if (injected) {
+            const wrapped: Libp2pStreamLike = {
+              source: stream?.source ?? stream,
+              sink: async (source) => {
+                await stream.sink(source);
+              },
+              close: async () => {
+                if (typeof stream?.close === 'function') await stream.close();
+              },
+              abort: (err: Error) => {
+                if (typeof stream?.abort === 'function') stream.abort(err);
+              },
+            };
+            await injected(wrapped, remotePeer);
+          } else {
+            // Placeholder-Verhalten fuer Protokolle ohne Handler:
+            // Stream sofort schliessen.
+            if (typeof stream?.close === 'function') {
+              await stream.close();
+            } else if (typeof stream?.abort === 'function') {
+              stream.abort(new Error('thinklocal placeholder protocol handler'));
+            }
+          }
+        } catch (err) {
+          this.log?.warn(
+            { protocol, peer: remotePeer, err: (err as Error)?.message },
+            'libp2p protocol handler threw',
+          );
+          if (typeof stream?.abort === 'function') {
+            try {
+              stream.abort(err as Error);
+            } catch {
+              // ignore
+            }
           }
         } finally {
-          this.onStreamClosed(protocol);
+          await ensureClosed();
         }
       };
 
@@ -357,20 +589,128 @@ class ActiveLibp2pRuntime implements Libp2pRuntime {
   }
 
   private attachEventListeners(): void {
-    const handler = () => {
+    const stateRefresh = () => {
       this.state.connectedPeers = this.readConnectedPeers();
       this.refreshNatState();
     };
+    const onConnect = (evt: any) => {
+      stateRefresh();
+      const peerId = extractPeerIdFromConnectionEvent(evt);
+      if (peerId && this.hooks.peerEvents?.onPeerConnect) {
+        try {
+          this.hooks.peerEvents.onPeerConnect(peerId);
+        } catch (err) {
+          this.log?.warn({ err: (err as Error)?.message }, 'peer:connect hook threw');
+        }
+      }
+    };
+    const onDisconnect = (evt: any) => {
+      stateRefresh();
+      const peerId = extractPeerIdFromConnectionEvent(evt);
+      if (peerId && this.hooks.peerEvents?.onPeerDisconnect) {
+        try {
+          this.hooks.peerEvents.onPeerDisconnect(peerId);
+        } catch (err) {
+          this.log?.warn({ err: (err as Error)?.message }, 'peer:disconnect hook threw');
+        }
+      }
+    };
+
+    // ADR-020 Phase 1.1: libp2p v3 dialt nach peer:discovery NICHT
+    // automatisch (#onDiscoveryPeer macht nur peerStore.merge). Ohne
+    // diesen Listener bleibt das Mesh stumm: mDNS findet Peers, aber
+    // niemand verbindet sie. Siehe ADR-020-Phase-1.1-autodial.md.
+    const onDiscovery = (evt: any) => {
+      const detail = evt?.detail;
+      const peerIdObj = detail?.id;
+      const peerIdStr = peerIdObj?.toString?.();
+      if (!peerIdStr) return;
+      this.autoDialDiscoveredPeer(peerIdObj, peerIdStr);
+    };
 
     if (typeof this.node?.addEventListener === 'function') {
-      this.node.addEventListener('peer:connect', handler);
-      this.node.addEventListener('peer:disconnect', handler);
+      this.node.addEventListener('peer:connect', onConnect);
+      this.node.addEventListener('peer:disconnect', onDisconnect);
+      this.node.addEventListener('peer:discovery', onDiscovery);
       return;
     }
 
     if (typeof this.node?.on === 'function') {
-      this.node.on('peer:connect', handler);
-      this.node.on('peer:disconnect', handler);
+      this.node.on('peer:connect', onConnect);
+      this.node.on('peer:disconnect', onDisconnect);
+      this.node.on('peer:discovery', onDiscovery);
+    }
+  }
+
+  /**
+   * ADR-020 Phase 1.1: dialt einen via peer:discovery entdeckten Peer.
+   *
+   * Schutzschichten:
+   * - Self-Filter via this.state.peerId
+   * - Bereits-verbunden-Filter (Lograuschen reduzieren; libp2p selbst
+   *   dedupliziert intern noch einmal)
+   * - In-Flight-Dedup via this.dialingPeers (mDNS feuert periodisch)
+   * - .catch(log.debug) — Dial-Fehler sind erwartbar bei offline Peers
+   */
+  private autoDialDiscoveredPeer(peerIdObj: unknown, peerIdStr: string): void {
+    if (this.stopped) return;
+    if (peerIdStr === this.state.peerId) return;
+    if (this.dialingPeers.has(peerIdStr)) return;
+    try {
+      const connected = this.node?.getConnections?.(peerIdObj);
+      if (Array.isArray(connected) && connected.length > 0) return;
+    } catch {
+      // getConnections fehlt in manchen libp2p-Versionen — best effort
+    }
+    if (typeof this.node?.dial !== 'function') return;
+
+    this.dialingPeers.add(peerIdStr);
+    Promise.resolve(this.node.dial(peerIdObj))
+      .then(() => {
+        this.log?.debug({ peerId: peerIdStr }, 'auto-dial nach peer:discovery erfolgreich');
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.log?.debug({ peerId: peerIdStr, err: msg }, 'auto-dial nach peer:discovery fehlgeschlagen');
+      })
+      .finally(() => {
+        this.dialingPeers.delete(peerIdStr);
+      });
+  }
+
+  /**
+   * ADR-020 Phase 1.1: defensiver Scan. Iteriert ueber bekannte Peers im
+   * PeerStore und dialt diejenigen, die wir noch nicht connected sind.
+   * Schliesst die Race, falls mDNS-Discovery vor unserem Listener gefeuert
+   * hat.
+   *
+   * Implementierung ist defensive, weil die PeerStore-API zwischen
+   * libp2p-Versionen variiert (peerStore.all() vs .peers() vs async
+   * iterator). Schlaegt der Aufruf fehl, ist das kein Fehler — der
+   * peer:discovery-Listener faengt periodische Re-Announces auf.
+   */
+  private async dialKnownPeers(): Promise<void> {
+    const peerStore = this.node?.peerStore;
+    if (!peerStore) return;
+    let peers: any[] = [];
+    try {
+      if (typeof peerStore.all === 'function') {
+        peers = await peerStore.all();
+      } else if (typeof peerStore.peers === 'function') {
+        peers = await peerStore.peers();
+      }
+    } catch (err) {
+      this.log?.debug(
+        { err: (err as Error)?.message },
+        'peerStore-Scan beim Start uebersprungen (API nicht verfuegbar)',
+      );
+      return;
+    }
+    for (const peer of peers) {
+      const peerIdObj = peer?.id ?? peer;
+      const peerIdStr = peerIdObj?.toString?.();
+      if (!peerIdStr) continue;
+      this.autoDialDiscoveredPeer(peerIdObj, peerIdStr);
     }
   }
 
@@ -435,6 +775,7 @@ class ActiveLibp2pRuntime implements Libp2pRuntime {
 export async function createLibp2pRuntime(
   config: Libp2pRuntimeConfig,
   log?: Logger,
+  hooks?: Libp2pRuntimeHooks,
 ): Promise<Libp2pRuntime> {
   const initialState = createInitialLibp2pState(config);
   if (!config.enabled) {
@@ -480,7 +821,7 @@ export async function createLibp2pRuntime(
       ping,
       tcp,
       yamux,
-    }, log);
+    }, log, hooks);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const degradedState: Libp2pRuntimeState = {

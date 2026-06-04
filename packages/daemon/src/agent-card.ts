@@ -14,6 +14,7 @@ import { ReplayGuard } from './replay.js';
 import { RateLimiter } from './ratelimit.js';
 import type { Logger } from 'pino';
 import type { Libp2pRuntimeState } from './libp2p-runtime.js';
+import { authorizeHttpsSender, spiffeUrisFromSubjectAltName, attestedPeerIdFromCert } from './peer-identity.js';
 
 export interface AgentCard {
   name: string;
@@ -59,6 +60,14 @@ export interface AgentCard {
         open_streams: number;
         streams_by_protocol: Record<string, number>;
       };
+      registry_sync?: Record<string, {
+        rounds: number;
+        converged: boolean;
+        last_round_at: string | null;
+        consecutive_timeouts: number;
+        last_error: string | null;
+        in_flight: boolean;
+      }>;
       nat: {
         enabled: boolean;
         reachability: 'unknown' | 'private' | 'public' | 'relay';
@@ -98,11 +107,38 @@ export interface AgentCardServerOptions {
   log?: Logger;
   /** Map von bekannten Peer-Public-Keys (agentId → PEM) für Signaturprüfung */
   getPeerPublicKey?: (agentId: string) => string | undefined;
+  /**
+   * ADR-022 §3 (channel-bound): wird gerufen, wenn der präsentierte (CA-validierte)
+   * mTLS-Cert-SAN eine kanonische `node/<PeerID>` kryptografisch bestätigt — der
+   * Aufrufer markiert die PeerID dann als verifiziert (mesh.markPeerIdVerified).
+   */
+  onPeerCertVerified?: (peerId: string) => void;
+  /**
+   * ADR-022 (CR gpt-5.5 WS-2 HIGH): SHA-256-Fingerprints der CAs, die berechtigt sind,
+   * eine `node/<PeerID>`-PoP-Attestierung auszustellen (die Admin-/Mesh-CA auf .94).
+   * NUR von diesen Ausstellern signierte kanonische Cert-SANs lösen `onPeerCertVerified`
+   * aus bzw. autorisieren einen kanonischen Sender. Leer/ungesetzt → kein Aussteller
+   * gilt als attestierend → kanonischer Pfad inert (Phase-0-Default; WS-3 setzt den Pin
+   * auf .94s Admin-CA). Schützt gegen eine bösartige gepairte Peer-CA im Trust-Bundle.
+   */
+  peerIdAttestingCaFingerprints?: string[];
   /** Handler für eingehende Mesh-Nachrichten */
   onMessage?: MessageHandler;
   /** Rate-Limiter für alle Endpoints */
   rateLimiter?: RateLimiter;
   getLibp2pState?: () => Libp2pRuntimeState;
+  /**
+   * Liefert Per-Peer Registry-Sync-Status (ADR-020 v1). Wird in
+   * /api/status unter `libp2p.registry_sync` ausgegeben.
+   */
+  getRegistrySyncStatus?: () => Record<string, {
+    rounds: number;
+    converged: boolean;
+    last_round_at: string | null;
+    consecutive_timeouts: number;
+    last_error: string | null;
+    in_flight: boolean;
+  }>;
 }
 
 export class AgentCardServer {
@@ -185,6 +221,54 @@ export class AgentCardServer {
         const { Decoder } = await import('cbor-x');
         const decoder = new Decoder({ structuredClone: true });
         const rawEnvelope = decoder.decode(Buffer.from(signed.envelope)) as MessageEnvelope;
+
+        // ADR-022 §3: channel-gebundene HTTPS-Authz. Bei kanonischem
+        // node/<PeerID>-Sender MUSS der präsentierte (per rejectUnauthorized bereits
+        // CA-validierte) mTLS-Client-Cert-SAN exakt dem Sender entsprechen — dann ist
+        // die PeerID kryptografisch an diese Verbindung gebunden. Legacy host/<id>:
+        // kein Cert-Gate (Migrations-Kompat). NIE aus mDNS/Card autorisieren.
+        // CR gpt-5.5 LOW (defense-in-depth): nur den SAN eines TLS-validierten Sockets
+        // (`authorized===true`) verwenden — schützt gegen künftige TLS-Konfig-Drift.
+        // `getPeerCertificate(true)` → Detail-Cert inkl. issuerCertificate (für den CA-Pin).
+        const tlsSock = request.raw.socket as {
+          authorized?: boolean;
+          getPeerCertificate?: (detailed?: boolean) => {
+            subjectaltname?: string;
+            issuerCertificate?: { fingerprint256?: string };
+          };
+        };
+        const peerCert = tlsSock.authorized === true ? tlsSock.getPeerCertificate?.(true) : undefined;
+        const certSans = spiffeUrisFromSubjectAltName(peerCert?.subjectaltname);
+        // Kanonische node/<PeerID>-SAN für den Sender-Abgleich (Migration: Cert kann
+        // Legacy+Canonical-SAN tragen — spiffeUrisFromSubjectAltName liefert beide).
+        const canonicalCertSan = certSans.find((u) => /^spiffe:\/\/thinklocal\/node\//.test(u)) ?? null;
+        const authz = authorizeHttpsSender(rawEnvelope.sender, canonicalCertSan);
+        if (!authz.ok) {
+          return reply.code(403).send({ error: 'Sender not authorized for this channel', reason: authz.reason });
+        }
+        // ADR-022 Phase 0 (Accept-both, CR gpt-5.5 WS-2 HIGH): Eine kanonische node/<PeerID>-
+        // Attestierung zählt NUR, wenn das Cert von einer GEPINNTEN PeerID-attestierenden CA
+        // (.94 Admin-CA) ausgestellt wurde — nicht von irgendeiner transport-vertrauten (z.B.
+        // gepairten Peer-)CA im mTLS-Bundle. Sonst könnte eine bösartige CA ein node/<victim>-
+        // Cert minten und eine fremde PeerID „verifizieren". Default (kein Pin) → null → inert.
+        const issuerFp = peerCert?.issuerCertificate?.fingerprint256 ?? null;
+        const attestedPeerId = attestedPeerIdFromCert(
+          certSans,
+          issuerFp,
+          opts.peerIdAttestingCaFingerprints ?? [],
+        );
+        // Kanonischer Sender, dessen Cert NICHT von der attestierenden CA stammt → ablehnen
+        // (Cert-Substitution-Schutz): die SAN-Übereinstimmung allein genügt nicht.
+        if (authz.verifiedPeerId && attestedPeerId === null) {
+          return reply
+            .code(403)
+            .send({ error: 'Canonical sender requires a PeerID-attesting certificate issuer' });
+        }
+        // Krypto-attestierte PeerID → Auflösung für diesen Peer freischalten (auch wenn der
+        // Sender noch Legacy ist: Phase-1-Fall, Cert reissued vor Sender-Flip).
+        if (attestedPeerId) {
+          opts.onPeerCertVerified?.(attestedPeerId);
+        }
 
         // Public Key des Senders nachschlagen
         const senderKey = opts.getPeerPublicKey?.(rawEnvelope.sender);
@@ -377,6 +461,7 @@ export class AgentCardServer {
             open_streams: libp2p.multiplexer.openStreams,
             streams_by_protocol: { ...libp2p.multiplexer.streamsByProtocol },
           },
+          registry_sync: this.opts.getRegistrySyncStatus?.() ?? {},
           nat: {
             enabled: libp2p.nat.enabled,
             reachability: libp2p.nat.reachability,

@@ -8,6 +8,8 @@ import {
   encryptWithKey,
   decryptWithKey,
   PairingStore,
+  isHostIdSpiffeUri,
+  HOST_ID_URI_PATTERN,
   type PairedPeer,
 } from './pairing.js';
 
@@ -109,6 +111,115 @@ describe('PairingStore — Persistenz gepaarter Peers', () => {
 
   // Cleanup
   it('cleanup', () => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+});
+
+describe('Bug #4 (ADR-020 Phase 1.1 Bug-Report): isHostIdSpiffeUri', () => {
+  it('akzeptiert korrekte Host-ID-URI (16 Hex-Zeichen)', () => {
+    expect(isHostIdSpiffeUri('spiffe://thinklocal/host/b4768fe0e2dfd41f/agent/claude-code')).toBe(true);
+    expect(isHostIdSpiffeUri('spiffe://thinklocal/host/68f7cd8e330acfe3/agent/gemini-cli')).toBe(true);
+    expect(isHostIdSpiffeUri('spiffe://thinklocal/host/0000000000000000/agent/x')).toBe(true);
+  });
+
+  it('lehnt hostname-basierte Legacy-URI ab', () => {
+    expect(isHostIdSpiffeUri('spiffe://thinklocal/host/iobroker/agent/claude-code')).toBe(false);
+    expect(isHostIdSpiffeUri('spiffe://thinklocal/host/MacBook-Pro-314.local/agent/claude-code')).toBe(false);
+    expect(isHostIdSpiffeUri('spiffe://thinklocal/host/Minimac.local/agent/claude-code')).toBe(false);
+  });
+
+  it('lehnt URI mit zu wenigen Hex-Zeichen ab', () => {
+    expect(isHostIdSpiffeUri('spiffe://thinklocal/host/abc123/agent/x')).toBe(false);
+    expect(isHostIdSpiffeUri('spiffe://thinklocal/host/abcdef1234567890a/agent/x')).toBe(false); // 17 hex
+  });
+
+  it('lehnt URI mit Nicht-Hex-Zeichen ab', () => {
+    expect(isHostIdSpiffeUri('spiffe://thinklocal/host/abcdef123456789g/agent/x')).toBe(false); // 'g' nicht hex
+    expect(isHostIdSpiffeUri('spiffe://thinklocal/host/ABCDEF1234567890/agent/x')).toBe(false); // uppercase nicht akzeptiert
+  });
+
+  it('lehnt falsches Schema ab', () => {
+    expect(isHostIdSpiffeUri('http://thinklocal/host/b4768fe0e2dfd41f/agent/claude-code')).toBe(false);
+    expect(isHostIdSpiffeUri('spiffe://other/host/b4768fe0e2dfd41f/agent/claude-code')).toBe(false);
+  });
+
+  it('Pattern ist exportiert und ein RegExp', () => {
+    expect(HOST_ID_URI_PATTERN).toBeInstanceOf(RegExp);
+  });
+});
+
+describe('Bug #4: PairingStore-Startup-Warning bei Legacy-URIs', () => {
+  it('loggt warn wenn Legacy-Eintrag erkannt wird', () => {
+    const tmpDir = mkdtempSync(resolve(tmpdir(), 'pairing-legacy-'));
+    const warns: any[] = [];
+    const fakeLog: any = {
+      info: () => {},
+      warn: (obj: any, msg: string) => warns.push({ obj, msg }),
+    };
+
+    // Pre-populate paired-peers.json with one legacy and one current entry
+    const file = resolve(tmpDir, 'pairing');
+    require('node:fs').mkdirSync(file, { recursive: true });
+    require('node:fs').writeFileSync(
+      resolve(file, 'paired-peers.json'),
+      JSON.stringify([
+        {
+          agentId: 'spiffe://thinklocal/host/iobroker/agent/claude-code',
+          publicKeyPem: '',
+          caCertPem: '',
+          fingerprint: 'x',
+          pairedAt: '2026-04-13',
+          hostname: 'iobroker',
+        },
+        {
+          agentId: 'spiffe://thinklocal/host/b4768fe0e2dfd41f/agent/claude-code',
+          publicKeyPem: '',
+          caCertPem: '',
+          fingerprint: 'y',
+          pairedAt: '2026-04-07',
+          hostname: 'iobroker-new',
+        },
+      ]),
+    );
+
+    new PairingStore(tmpDir, fakeLog);
+
+    const legacyWarn = warns.find((w) => typeof w.msg === 'string' && w.msg.includes('Legacy'));
+    expect(legacyWarn).toBeDefined();
+    expect(legacyWarn.obj.legacyCount).toBe(1);
+    expect(legacyWarn.obj.legacyUris).toContain('spiffe://thinklocal/host/iobroker/agent/claude-code');
+
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('kein warn wenn alle Eintraege Host-ID-Format haben', () => {
+    const tmpDir = mkdtempSync(resolve(tmpdir(), 'pairing-clean-'));
+    const warns: any[] = [];
+    const fakeLog: any = {
+      info: () => {},
+      warn: (obj: any, msg: string) => warns.push({ obj, msg }),
+    };
+    const file = resolve(tmpDir, 'pairing');
+    require('node:fs').mkdirSync(file, { recursive: true });
+    require('node:fs').writeFileSync(
+      resolve(file, 'paired-peers.json'),
+      JSON.stringify([
+        {
+          agentId: 'spiffe://thinklocal/host/b4768fe0e2dfd41f/agent/claude-code',
+          publicKeyPem: '',
+          caCertPem: '',
+          fingerprint: 'y',
+          pairedAt: '2026-04-07',
+          hostname: 'iobroker',
+        },
+      ]),
+    );
+
+    new PairingStore(tmpDir, fakeLog);
+
+    const legacyWarn = warns.find((w) => typeof w.msg === 'string' && w.msg.includes('Legacy'));
+    expect(legacyWarn).toBeUndefined();
+
     rmSync(tmpDir, { recursive: true, force: true });
   });
 });

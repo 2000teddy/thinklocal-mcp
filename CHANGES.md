@@ -6,7 +6,512 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
+## [Unreleased] — 2026-06-04
+
+### v0.31.1 — Boot-Race-Schutz im Installer (Skill-Service-Deps generisch)
+
+Spiegelt den manuell auf dem influxdb-Host (.56) angewandten Boot-Race-Fix (`After=influxdb.service`/`Wants=influxdb.service`) generisch in den Installer — ein frischer Install hat denselben Schutz, ohne influxdb-Hartkodierung.
+
+- **`service-dependencies.ts`** (neu): `collectSkillServiceDeps()` (Vereinigung der `requirements.services` über Skill-Manifests), `BUILTIN_SKILL_SERVICE_DEPS` (= `['influxdb']`, aus den Manifests abgeleitet), `serviceUnitDependencyLines(services, exists)` → `After=/Wants=`-Zeilen **nur** für Services, deren systemd-Unit auf dem Host existiert (kein hängendes `Wants=` auf Nicht-influxdb-Hosts).
+- **`thinklocal.ts`** (CLI-Bootstrap, der Pfad der die Mesh-`--user`-Units erzeugte): `systemdUnitExists()` (Injection-Regex-geschützt) + Einbau der Dep-Zeilen in die generierte Unit.
+- **`install.sh`**: generischer Shell-Loop + Presence-Check (kanonische Quelle: `service-dependencies.ts`).
+- **`build-deb.sh`** bewusst ausgenommen (Build-Zeit — Host-Presence-Check gehört nicht dorthin).
+- **CR gpt-5.5:** 0 Findings. **PC:** clean. **869 Tests grün** (+7), tsc clean, `bash -n` ok. Version 0.31.0 → **0.31.1**.
+
+---
+
+### v0.31.0 — ADR-021 Generisches Skill-Health-Monitoring
+
+Behebt den Boot-Race von 2026-05-17 generisch: Skills mit externer Abhängigkeit werden periodisch re-evaluiert, statt nur einmal beim Daemon-Start.
+
+- **`skill-health-monitor.ts`** (neu): zentraler `SkillHealthMonitor`. Skills liefern nur ihre `healthcheck.fn(signal)`; der Monitor schedult (linear 30s healthy / 60s unhealthy, Jitter ±20%), debounced per Hysterese (2 Erfolge → healthy, 3 Fehlschläge → unhealthy, binäre State-Machine, kein DEGRADED), single-flight, kooperatives AbortController-Timeout, `stop()` cancelt alles.
+- **Registry (`registry.ts`)**: Capability bekommt `availability`/`last_checked_at`/`consecutive_failures` (ADR-021 §4: Attribut statt Remove). `setAvailability()` schreibt **nur die eigene** Capability (Owner-only) und nur bei echtem Flip (minimaler Hash-Churn; `availability` ist im Capability-Hash). **Routing-Lookups (`findBySkill`/`findByCategory`) filtern `availability==='unhealthy'`** — ausgefallene Skills werden nicht mehr geroutet (back-compat: fehlendes Feld = verfügbar).
+- **`index.ts`**: InfluxDB-Skill wird jetzt IMMER registriert (initial-availability aus Boot-Check); Monitor verdrahtet (`influxdb`-Check) — bei Flip: `setAvailability` + Audit `SKILL_HEALTH_TRANSITION` + Registry-Republish; graceful stop im Shutdown.
+- **`/api/status`**: neuer `skills`-Block (State, last/next_check, consecutive_failures, last_error pro Skill).
+- **CR gpt-5.5:** 1 HIGH (Routing ignorierte availability) + 2 MEDIUM (Shutdown-Race, Hash ohne availability) + 2 LOW (idempotenz, stale re-register) — alle gefixt + Regressionstests; Re-Review bestätigt HIGH geschlossen. PC clean. **862 Tests grün** (+11), tsc clean. ADR-021 → Accepted. Version 0.30.3 → **0.31.0**.
+
+Voraussetzung-Hinweis (ADR-021 §8): Owner-wins im CRDT-Layer (ADR-020 v2.2) ist am Write-Site (`setAvailability` nur eigener Key) adressiert, im CRDT-Layer aber noch nicht erzwungen — offene Flanke, ADR-acknowledged.
+
+---
+
+### v0.30.3 — Registry-Republish-Endpoint: Test-Abdeckung + Live-Verifikation
+
+`POST /api/registry/republish` (ADR-020 v1 Safety-Valve, manueller Force-Push des Registry-Resyncs) existierte bereits (`dashboard-api.ts`, wired via `registrySyncRepublish`), war aber **untestet**. Verify-First: live bestätigt (authentifiziert → `{status:ok}` + Audit-Event `REGISTRY_REPUBLISH`, `audit_events` 36→37). Neuer Regressionstest `dashboard-api.test.ts` (Fastify-`inject`, 4 Fälle: ok / 503 unwired / 500 throws / 429 rate-limited). AuthZ = mTLS-Handshake (Mesh-Member) auf dem Hauptserver; LAN-only. **851 Tests grün** (+4), tsc+eslint clean. Version 0.30.2 → **0.30.3**.
+
+Side-note (pre-existing, out of scope): `registerApiAuth` (JWT-Hook) hat aktuell keine Aufrufstelle → `/api/*` ist nur per mTLS-Handshake gated (Mesh-Authz erfüllt; JWT-Schicht inaktiv). Nicht angefasst — separater Befund.
+
+---
+
+### Verify-First — „CRDT-Registry repliziert nicht" (17.05.) ist behoben ✅ (kein Code)
+
+Verifikation des 🔴-TODO von 2026-05-17 gegen das **heutige** Mesh: **nicht mehr reproduzierbar.** Behoben durch ADR-020 v1 (#139, 18.05.) — der Placeholder-Stream-Handler, der `/thinklocal/mesh/registry/1.0.0` sofort schloss, war der dortige „Smoking-Gun"-Fix. Live-Belege: TH01s `/api/capabilities` = **16 Caps aus 6 Nodes** gemerged; TH01 + .94 konsistent `registry_sync conv=5/5` (Automerge kein-Diff = in Sync); je 8 libp2p-Verbindungen; periodischer 45s-Resync-Coordinator + `republish()` vorhanden (= der vom TODO geforderte Fix). Kein Code-Fix nötig — TODO als erledigt markiert. (Optionaler Follow-up: expliziter HTTP-`/api/registry/republish`-Endpoint; intern bereits verdrahtet.)
+
+---
+
+### Fix v0.30.2 — `thinklocal restart` verlor Runtime-Flags
+
+`thinklocal restart --lan` (bzw. `--local`) verlor die Flags: `cmdRestart()` nahm keine Argumente und rief `cmdStart()` ohne Flags, und der Main-Dispatch reichte `args.slice(1)` nicht weiter → der Daemon startete nach dem Restart im Default-Modus statt im gewünschten (relevant im Vordergrund-/Dev-Pfad; der systemd-Pfad nutzt ohnehin die Unit-Env).
+
+- **`runtime-mode.ts`** (daemon): neue reine, exportierte `runtimeModeFromFlags(flags, fallback)` (`--local`→local, `--lan`→lan, sonst fallback) als single source — von der CLI genutzt, im daemon-Suite **CI-getestet**.
+- **`thinklocal.ts`**: `cmdRestart(flags)` reicht Flags an `cmdStart` durch; Main: `case 'restart': return cmdRestart(args.slice(1))` (wie alle anderen flag-nehmenden Befehle); `resolveCliRuntimeMode` delegiert an den Helfer (Verhalten identisch, `--local` schlägt `--lan`); Hilfe/Header zeigen `restart … [--local|--lan]`.
+- **CR gpt-5.5:** 0 Findings. **PC:** clean. **847 Tests grün** (+5 inkl. Regression „leere Flags → fallback statt lan"), tsc+eslint clean. Version 0.30.1 → **0.30.2**.
+
+---
+
+### Fix v0.30.1 — Token-Onboarding Port-Mismatch (`thinklocal join`)
+
+Der dokumentierte Join-Weg war kaputt: `thinklocal join` schickte den **certlosen** `POST /onboarding/join` an die `--admin-url` (mTLS-Haupt-Port 9440, `requestCert+rejectUnauthorized`) — der certlose Onboarding-Server lauscht aber auf **Haupt-Port + 1 (9441)**. Ein neuer Node ohne Cert scheiterte am TLS-Handshake.
+
+- **`packages/daemon/src/onboarding-port.ts`** (neu, **single source of truth**): `ONBOARDING_PORT_OFFSET`, `onboardingPort(mainPort)`, `onboardingUrlFromAdminUrl(adminUrl)` (URL-robust: nur http/https, `URL.origin`-Serialisierung (IPv6-sicher), Portbereich-Check, strippt Userinfo/Pfad/Query/Hash).
+- **`index.ts`**: Onboarding-Listen-Port nutzt jetzt `onboardingPort(config.daemon.port)` statt hartem `+1`.
+- **`thinklocal.ts` (CLI `join`)**: leitet die certlose Join-Origin via Helfer ab (Port+1) und postet dorthin; `--admin-url` bleibt die mTLS-Haupt-URL (9440). Variante A → kein Doppel-Bump, dokumentierter `:9440`-Weg funktioniert wieder.
+- **Live-verifiziert:** `join --admin-url https://10.10.10.94:9440` erreicht jetzt den Onboarding-Server auf `:9441` (App-403 „Token rejected", kein TLS-/Verbindungsfehler).
+- CR gpt-5.5: kein HIGH/CRITICAL; 1 MEDIUM (prozessweites `NODE_TLS_REJECT_UNAUTHORIZED=0` im CLI-Join — **vorbestehend**, sauberer Fix bräuchte undici-Dep in der CLI → als Follow-up in TODO.md, da Task abhängigkeitsfrei) + 2 LOW (Helfer-Härtung + Edge-Tests) gefixt. PC clean. **842 Tests grün** (+11), tsc+eslint clean. Version 0.30.0 → **0.30.1**.
+
+---
+
+### ADR-022 Schritt 3 — LIVE VERIFIZIERT (TH01-Rejoin grün, 403 weg) ✅
+
+WS-1 + WS-2 + WS-3 + Loopback-Fix sind im **Live-Mesh** end-to-end verifiziert:
+
+- **TH01 (10.10.10.80)** hat per `requestNodeCert` (PoP über seinen libp2p-Ed25519-Key) von der Admin-CA **.94 (10.10.10.94)** ein Cert mit SAN `spiffe://thinklocal/node/12D3KooWKZ4…Ynb` erhalten und serviert es (SAN inkl. Eigen-Loopback `localhost`/`127.0.0.1`/`::1`).
+- **.94-Gegenprobe grün:** **kein** SKILL_ANNOUNCE-403 / „Unknown sender" mehr auf dem .94↔TH01-Link; .94 importiert TH01s Announces (Gossip), `/api/peers` zeigt TH01 `status=online`. Die kanonische `node/<PeerID>`-Attestierung läuft über das CA-validierte Cert-SAN (Empfänger-Pin `TLMCP_PEERID_ATTESTING_CA_FP` = .94-CA-Fingerprint) — genau der Grund, warum der 403 verschwindet.
+- **MCP-Proxy geheilt:** lokaler mTLS-Fetch `https://localhost:9440/health` → HTTP 200 (Hostname-Verify gegen das wieder vorhandene localhost-SAN).
+- **Daemon:** active/running, 0 Restarts, Port 9440.
+- **Stand:** authz/`envelope.sender` weiterhin Legacy `host/cf00a5…` (Phase-3-Sender-Flip bewusst noch NICHT). Die 3 Alt-Code-Nodes (68f7cd8e/b4768fe0/e7aeb01312) ohne Accept-both ignorieren TH01 erwartungsgemäß.
+
+Damit ist der ursprüngliche SKILL_ANNOUNCE-403 auf dem Admin-Link **konstruktiv behoben** (über die PeerID-gewurzelte Identität statt Legacy-Resolution).
+
+---
+
+### ADR-022 WS-3 Fix — Eigen-Loopback im ausgestellten Cert (Live-Test-Befund)
+
+Beim TH01-Rejoin-Live-Test fiel auf: das WS-3-HIGH-Fix hatte mit dem Admin-Hostnamen versehentlich **auch `localhost`** aus dem ausgestellten `node/<PeerID>`-Cert entfernt. Der lokale mTLS-MCP-Proxy (`mcp-stdio` → `https://localhost:9440`, `rejectUnauthorized`) braucht aber ein `localhost`-SAN. `signNodeCertFromCsr` fügt jetzt das **eigene Loopback** (`localhost`/`127.0.0.1`/`::1`) wieder hinzu — kein Cross-Node-Vektor (Loopback ist stets lokal), Admin-/Fremd-Hostname bleibt ausgeschlossen, `CN=='localhost'` wird abgelehnt. gpt-5.5-CR bestätigt: WS-3-HIGH bleibt geschlossen. 831 Tests grün.
+
+---
+
+### ADR-022 Schritt 3 / WS-3 — Cross-Node PoP Cert-Issuance (node/<PeerID>)
+
+Dritter Workstream von Schritt 3: der joinende Node beweist per **Proof-of-Possession** (libp2p-Ed25519-Key = PeerID-Wurzel) seine Berechtigung und erhält von der Admin-CA (.94) ein X.509-Cert mit SAN `spiffe://thinklocal/node/<PeerID>`. Code **beider Seiten** gebaut.
+
+- **`cert-pop.ts`** (shared): domain-separierter, length-präfixierter PoP-Scope (`Domain ‖ CA-Fingerprint ‖ Nonce ‖ PeerID ‖ SPIFFE-URI ‖ CSR-Public-Key-Hash`); `signCertPop`/`verifyCertPop` über den libp2p-Ed25519-Key. Der **CSR-Key-Hash im Scope** schließt Cert-Substitution aus.
+- **`cert-issuer.ts`** (Admin/.94): `NonceStore` (single-use, TTL, Kapazitäts-Limit), CSR-Verify, `signNodeCertFromCsr` (signiert den CSR-Key; SAN = kanonische URI + **nur** Antragsteller-eigener CN/IP), `CertIssuer.verifyAndIssue` (Nonce→CSR→PoP→Sign, fail-closed).
+- **`cert-request.ts`** (Client): CSR/Keypair-Erzeugung, PoP-Aufbau, HTTP-Flow `requestNodeCert` (mTLS-Dispatcher authentifiziert, privater Key bleibt lokal).
+- **`cert-issuance-api.ts`**: `POST /api/cert/nonce` + `/api/cert/sign` auf dem Haupt-mTLS-Server (Mesh-Mitgliedschaft via mTLS gated; 503 bei Nonce-Erschöpfung).
+- **`index.ts`**: Admin-only-Wiring (nur mit CA-Key); `TLMCP_PEERID_ATTESTING_CA_FP` env verdrahtet den WS-2-Attestierungs-Pin (Default leer → inert).
+- **.94-Instruktion:** `docs/runbooks/ADR-022-WS3-94-cert-issuance.md` (Endpoints, Request/PoP-Format, Verifikation, Signing, Cert-Ablage, Empfänger-Pin, TH01-Rejoin-Test).
+- **CR gpt-5.5 (security):** 1 HIGH (Admin-Hostname/localhost-DNS-SAN-Impersonation im ausgestellten Cert) + 1 MEDIUM (Nonce-DoS) + 3 LOW — alle gefixt + Regressionstests; Re-Review bestätigt HIGH geschlossen, 0 Restfindings. PC clean. **831 Tests grün** (22 neue), tsc + eslint clean.
+
+---
+
+### ADR-022 Schritt 3 / WS-2 — Accept-both + Self-Identity (Phase 0, additiv, fail-closed)
+
+Zweiter Workstream von Schritt 3 (ADR-022 Migrations-Sequenz Phase 0): Jeder Node **akzeptiert** beide SPIFFE-SAN-Formen (Legacy `host/<id>/agent/<type>` UND kanonisch `node/<PeerID>`) und **emittiert weiterhin Legacy**. Damit wird ein in Phase 1 von .94 neu auf `node/<PeerID>` ausgestelltes Cert sofort als PeerID-Beweis erkannt, bevor irgendwer den Sender-URI flippt.
+
+- **`peer-identity.ts`** — neue reine Helfer: `spiffeUrisFromSubjectAltName()` (extrahiert **alle** URI-SANs → dual-SAN-Migrationscerts), `isAttestingIssuer()` (Fingerprint-Pin, normalisiert), `attestedPeerIdFromCert()` (zentrale Attestierungs-Entscheidung), `peerIdFromCertSan()`.
+- **`agent-card.ts`** — `/message` zieht die kanonische SAN aus dem (nur bei `authorized===true` gelesenen) Peer-Cert und attestiert die PeerID **nur**, wenn das Cert von einer **gepinnten PeerID-attestierenden CA** stammt (`opts.peerIdAttestingCaFingerprints`). Kanonischer Sender ohne attestierendes Cert → 403.
+- **`mesh.ts`** — `markPeerIdVerified` loggt bei mehrdeutigem mDNS-Match jetzt die Konflikt-Peers (Diagnose).
+- **`index.ts`** — leitet die kanonische Self-Identität (`node/<PeerID>`) ab + loggt sie samt Accept-both-Posture; emittiert weiter Legacy.
+- **Scope:** Phase-0-Default setzt **keinen** CA-Pin → die kanonische Attestierung ist **echt inert** (WS-3 setzt den .94-Admin-CA-Fingerprint). Kein Emit-/Cert-Ausstellungs-Wechsel.
+- **CR gpt-5.5 (security):** 1 HIGH (CA-Konflation: jede transport-vertraute CA konnte `node/<PeerID>` attestieren) + 1 MEDIUM (mDNS-Duplikat-Sichtbarkeit) + 2 LOW (Single-SAN-Parser, mark-vor-Sigverify). HIGH+MEDIUM+1 LOW (dual-SAN) gefixt + 12 Regressionstests; Re-Review (intern) bestätigt HIGH geschlossen, 0 Restfindings. PC clean. **809 Tests grün**, tsc clean.
+
+---
+
+### ADR-022 Schritt 3 / WS-1 — channel-gebundene HTTPS-Authz (additiv, fail-closed)
+
+Erster Implementierungs-Workstream von ADR-022 Schritt 3 (Cert-SAN-Cutover). Bindet die Autorisierung eingehender HTTPS-`/message`-Nachrichten **an den präsentierten mTLS-Client-Cert-SAN** — nie an ein globales Flag, nie an mDNS/Card (Konsensus-Kernprinzip „channel-bound authz").
+
+- **`peer-identity.ts`:** `spiffeFromSubjectAltName()` (parst `URI:spiffe://` aus dem TLS-`subjectaltname`), `authorizeHttpsSender(senderUri, certSpiffe)` — kanonischer `node/<PeerID>`-Sender MUSS einen CA-validierten Cert-SAN mit **exakt derselben PeerID** präsentieren (`verifiedPeerId`); fehlt/Mismatch → Ablehnung. `isLegacyHostUri()` — **nur** das exakte `host/<id>/agent/<type>`-Schema bekommt den Migrations-Bypass (`legacy:true`), alles andere ist fail-closed.
+- **`mesh.ts`:** `markPeerIdVerified(peerId)` — schaltet die kanonische PeerID-Auflösung für einen Peer frei, **nur bei eindeutigem Treffer** (mehrdeutige PeerID → nicht markiert + Warnung).
+- **`agent-card.ts`:** `/message`-Handler liest den SAN **nur** eines TLS-validierten Sockets (`authorized===true`) und gated über `authorizeHttpsSender`; bei verifiziertem kanonischem Sender → `onPeerCertVerified`-Callback.
+- **`index.ts`:** verdrahtet `onPeerCertVerified → mesh.markPeerIdVerified`.
+- **Scope:** inert bis .94 `node/<PeerID>`-Certs ausstellt (kein Live-Verhaltenswechsel für Legacy-`host/`-Sender, kein .94-Eingriff). CR gpt-5.5: 1 HIGH (Legacy-Bypass zu breit) + 1 MEDIUM (mark-all) + 2 LOW — HIGH+MEDIUM+1 LOW gefixt (+ Regressionstests), 1 LOW (PeerID-Regex-Präfix) bewusst zurückgestellt.
+- **Tests:** 792 grün, `tsc` clean; neuer HIGH-Regressionstest (non-host non-canonical → fail-closed), unique-match-Test für `markPeerIdVerified`.
+
+---
+
+### ADR-022 Security-Review-Fixes — Branch jetzt MERGEBAR (2× gpt-5.5-reviewt)
+
+Zwei unabhängige `pal:codereview`-Läufe (gpt-5.5) über den ADR-022-Branch fanden 2 HIGH + 3 MEDIUM + LOW; alle gefixt, finale gpt-5.5-Bestätigung: **beide HIGH geschlossen, keine neuen HIGH/CRITICAL**.
+
+- **HIGH 1 (Spoofing) — `mesh.ts resolvePeerPublicKey`:** kanonische `spiffe://thinklocal/node/<PeerID>`-Sender-URIs lösen jetzt **ausschließlich** über eine **kryptografisch verifizierte** PeerID-Bindung auf (`peer.libp2p.peerIdVerified`, eindeutiger Match), NIE über die exakten `agentId`/`card.spiffeUri`-Treffer (die nur Legacy-`host/…`-URIs bedienen). `peerIdVerified` ist default `false` und wird **nie** aus mDNS/Card gesetzt → Pfad faktisch aus bis zum Cert-Cutover. Schließt den verifizierten Angriff (mDNS `agent-id=node/<victimPeerId>` + eigene Card/Key) konstruktiv. Commit `f023d38`.
+- **HIGH 2 (Key-Race) — `libp2p-identity.ts`:** exklusiver Create-Lock (`openSync 'wx'`) + Re-Check unter Lock + bounded fail-loud Wait (30s) → parallele First-Starts erzeugen nicht mehr zwei divergente Keys (PeerID-Drift). Commit `cb7f14d`.
+- **MEDIUM:** stale-verified — `updateAgentCard` setzt `peerIdVerified=false` bei PeerID-Wechsel (`f023d38`); keys/-Dir `0700` erzwingen/warnen + dir-fsync-Fehler warnen (`cb7f14d`); strenger SPIFFE-Parser (kein `trim`, `[A-Za-z0-9]+`) (`8d8088c`).
+- **LOW:** `writeSync` bis volle Länge; Lock-Timeout 5s→30s (`cb7f14d`).
+- **Tests:** 4 neue Security-Regressionstests (Spoofing-blockiert, Parallel-Race→selbe PeerID, Malformed-URI-abgelehnt, stale-verified-reset). Suite **784 grün**, `tsc` clean.
+
+**Status: ADR-022-Branch mergebar.** (Push/PR/Merge durch Operator.)
+
+---
+
+## [Unreleased] — 2026-06-03
+
+### ADR-022 Voraussetzung #0 — libp2p-Ed25519-Key persistiert (stabile PeerID)
+
+**Grundlage** der PeerID-gewurzelten Identität: der libp2p-Key wurde bisher bei JEDEM Start neu erzeugt (belegt durch 2 Smoke-Tests mit verschiedenen PeerIDs) → PeerID instabil. Jetzt persistiert.
+
+- **`libp2p-identity.ts`** (neu): `loadOrCreateLibp2pPrivateKey` — Ed25519 via `@libp2p/crypto`, protobuf nach `<dataDir>/keys/libp2p-ed25519.key`, **crash-durable** (fsync Datei+Verzeichnis), `0600` (keys/-Dir `0700`), Perm-Warnung, Ed25519-Typcheck, **fail-loud** bei korruptem Key (kein stilles Neugenerieren → kein Identitätswechsel).
+- **`libp2p-runtime.ts` / `index.ts`**: `createLibp2p({ privateKey })` verdrahtet; Key-Laden gated auf `libp2p.enabled`.
+- **Deps:** `@libp2p/crypto@^5.1.19` + `@libp2p/peer-id@^5.1.9` (auf libp2p v2 gepinnt, kein Versions-Skew).
+- **Akzeptanz:** Unit-Test beweist zwei aufeinanderfolgende Loads → **IDENTISCHE PeerID** (Gegenbeweis zu den 2 Smoke-Tests). Suite **779 grün**, `tsc` clean.
+- **CR** (gpt-5.3-codex): 2 HIGH (fsync-Durability, enabled-Gating) + 4 MEDIUM — alle gefixt (+Regressionstest). **PC** clean. Commit `8718f0b`.
+
+Verbleibt: authz vollständig auf PeerID + Cert-SAN=`node/<PeerID>` (admin-seitiges CSR-Signing auf .94, cross-node).
+
+### ADR-022 Schritt 1 — PeerID-gewurzelte Identität (Code → TS → CR → PC)
+
+Teil-Umsetzung des ADR-022-Migrations-Pfads (additiv/kompatibel, **kein** harter Cutover). Adressiert die zwei Root-Causes des SKILL_ANNOUNCE-403 „Unknown sender":
+
+- **`peer-identity.ts`** (neu): kanonische SPIFFE-Ableitung aus der libp2p-PeerID (`spiffe://thinklocal/node/<PeerID>`, strikt geankert) + `checkIdentityConsistency()` für die §Startup-Assertion.
+- **`mesh.ts` `resolvePeerPublicKey()`**: tolerante, **fail-closed** Auflösung des Signatur-Public-Keys (exakter agentId → exakte card-spiffeUri → eindeutige PeerID). Behebt Root-Cause (a) Identitäts-Drift.
+- **`index.ts`**: SKILL_ANNOUNCE mit **Retry+Backoff** (4 Versuche) gegen den 403 (Root-Cause b, Timing); **Startup-Assertion** (loggt PeerID/Cert-SAN/authz-Identität; warn, harter Abbruch via `TLMCP_STRICT_IDENTITY=1`); Resolver-Wiring.
+- **Tests:** peer-identity 10, mesh-Resolver 6 (inkl. fail-closed). Suite **774 grün**, `tsc` clean.
+- **CR** (gpt-5.3-codex): 1 HIGH (fail-closed) + 3 MEDIUM + 1 LOW — alle gefixt (+Regressionstest). **PC** clean. Commit `1683396` (unsigniert — kein GPG-Key auf TH01).
+
+**Offene Blocker (separat):** (1) libp2p-Ed25519-Key wird nicht persistiert → PeerID je Start neu — **Voraussetzung** für PeerID-als-Identität (braucht `@libp2p/crypto` + `createLibp2p({privateKey})` + `npm install`). (2) Cert-SAN-Umstellung auf `node/<PeerID>` braucht admin-seitiges CSR-Signing (.94, cross-node). Details: `docs/architecture/ADR-022-peerid-rooted-identity.md`.
+
+### Governance — Regel „signierte Commits" entfernt (HISTORY-Vermerk)
+
+CLAUDE.md, UNVERHANDELBARE REIHENFOLGE Schritt 9: „**git commit** — signed" → „**git commit** (unsigniert ok)". Die Pflicht zu signierten Commits (GPG / signoff) ist **entfernt**.
+
+**Begründung:** Solo-Betrieb, eigene Repos, kein externer Contributor — Commit-Signing löst hier kein reales Problem und erzeugt nur Key-Verwaltungs-Aufwand über viele Maschinen (z.B. hat TH01 keinen GPG-Secret-Key). Die Regel war für dieses Setup **nicht anwendbar**. **Unsignierte Commits sind ab sofort regelkonform.**
+
+(Das Repo führt keine separate HISTORY.md; dieser CHANGES-Eintrag ist der History-Vermerk.)
+
+---
+
+## [Unreleased] — 2026-05-20
+
+### Test-Tooling — SQLite-ABI-Smoke-Test + `.nvmrc`-Check + `pretest`-Hook
+
+**Problem:** Die 227 Test-Failures der Daemon-Suite auf Node v26 (Homebrew-Default) waren bisher als „pre-existing Test-Failures" bekannt — verursacht durch ABI-Mismatch zwischen better-sqlite3 (vorgebaut gegen Node v22 NODE_MODULE_VERSION 127) und der laufenden Node v26 (NODE_MODULE_VERSION 147). `scripts/check-native-modules.cjs` versuchte das automatisch zu erkennen, aber:
+
+1. `require('better-sqlite3')` reicht nicht zur Erkennung — Bindings werden lazy beim Konstruktor-Aufruf geladen
+2. Nach fehlgeschlagenem Rebuild fehlt die `.node`-Datei komplett → Fehler-Meldung wird „Could not locate the bindings file" (kein NODE_MODULE_VERSION-Match mehr)
+3. Auto-Rebuild auf Node v26 scheitert hart (kein prebuilt + node-gyp-Inkompatibilitaet)
+
+**Aenderungen:**
+
+- **`.nvmrc`** (neu): pinnt Node-Version auf `22.22.3` (deckt sich mit `~/.thinklocal/bin/daemon-launchagent.sh`)
+- **`scripts/check-native-modules.cjs`** (refaktoriert):
+  - **Smoke-Test** (`SMOKE_TESTS['better-sqlite3']`): `new mod(':memory:')` triggert echtes Binding-Load, erzwingt ABI-Check
+  - **Missing-Binding-Detection**: erkennt „Could not locate the bindings file" als Symptom eines vorausgegangenen Crashs und behandelt es wie ABI-Mismatch
+  - **`.nvmrc`-Check** vor Rebuild-Versuch: bei Major-Version-Mismatch → klare Fehlermeldung mit konkretem Loesungs-Hint (`nvm use 22.22.3` oder `PATH=...`) statt verzweifeltem node-gyp-Crash
+  - **Refactoring**: pure helpers `classifyLoadError`, `checkNvmrcMatch`, `formatNvmrcMismatchMessage`, `probeNativeModule` extrahiert + via `module.exports` exponiert; CLI-Code in `main()` mit `if (require.main === module)`-Guard
+- **`packages/daemon/package.json`**: neuer `pretest`-Hook `node ../../scripts/check-native-modules.cjs` — bricht `npm test` mit klarer Anleitung ab, statt 227 cryptische Test-Failures zu zeigen
+- **`scripts/check-native-modules.test.cjs`** (neu, 16 Tests): node:test-Suite fuer die Helper-Funktionen
+- **`package.json` (root)**: neuer `test:scripts`-Hook in `npm test`
+
+**Verifikation:**
+
+```
+PATH="$HOME/.nvm/versions/node/v22.22.3/bin:$PATH" npm --prefix packages/daemon test
+→ Test Files  69 passed (69)
+   Tests  758 passed (758)   # vorher: 758 - 227 = 531 grün
+   Duration  2.59s
+
+node scripts/check-native-modules.cjs               (auf v26)
+→ exit=1, klare Anleitung wie auf v22 zu wechseln
+
+node scripts/check-native-modules.cjs               (auf v22)
+→ exit=0, "OK: better-sqlite3"
+
+node --test scripts/check-native-modules.test.cjs   (auf v22)
+→ 16 / 16 pass
+```
+
+### ADR-020 Phase 1.1 Bug-Report #4 — Pairing-URI-Migrationsskript
+
+**Symptom:** AGENT_MESSAGE-Sender bekommen `ack_status: "rejected"`, Empfaenger loggen `AGENT_MESSAGE von nicht-gepairtem Sender abgelehnt`. SKILL_ANNOUNCE bekommt 403. Systemisch auf allen 5 Nodes.
+
+**Root Cause:** Pairing-Eintraege vom 7.-10.4.2026 nutzen Host-ID-basierte SPIFFE-URIs (`spiffe://thinklocal/host/<16-hex>/agent/<type>`), Pairings vom 13.4.2026 (vor einem Schema-Wechsel) nutzen hostname-basierte URIs (`spiffe://thinklocal/host/iobroker/agent/...`). Alte Eintraege wurden nie automatisch migriert. AGENT_MESSAGE wird gegen den falschen Eintrag verglichen.
+
+**Fix:**
+- **`packages/daemon/scripts/migrate-pairings.mjs`** (neu): One-Shot-Script, holt agent-card vom Peer via mTLS, ersetzt Legacy-URI durch aktuelle Host-ID-URI. Atomares Schreiben mit Backup. Unterstuetzt `--dry-run`. Verfuegbar als `npm run migrate-pairings`.
+- **`packages/daemon/src/pairing.ts`**: Neue exportierte Hilfsfunktion `isHostIdSpiffeUri()` + Regex `HOST_ID_URI_PATTERN`. `PairingStore.load()` warnt bei Start wenn Legacy-Eintraege erkannt werden, mit Hinweis auf das Migrationsskript.
+
+**Tests:** `pairing.test.ts`: 8 neue Tests (6 fuer URI-Klassifizierung, 2 fuer Startup-Warning).
+
+**Manuelle Verifikation:** Migrationsskript live auf MacBook ausgefuehrt — 1 Legacy-Eintrag erfolgreich ersetzt. Backup-Datei erzeugt.
+
+### ADR-020 Phase 1.1 Bug-Report #3 — libp2p `connectionEncrypters` Config-Key (Critical-Hotfix)
+
+**Symptom (Live-Befund 2026-05-19):** Nach PR #135 (Auto-Dial-Fix) feuerten die Discovery-Listener wie erwartet, aber **alle** libp2p-Dials scheiterten mit `"All multiaddr dials failed"` oder `"aborted due to timeout"`. 0 erfolgreiche Verbindungen, `registry_sync = {}` auf allen 5 Nodes. Verifiziert via libp2p-Probe-Skript: `EncryptionFailedError: At least one protocol must be specified`.
+
+**Root Cause:** Die Daemon-Konfig in `libp2p-runtime.ts` setzte `connectionEncryption: [noise()]`. In libp2p v2+ wurde dieser Key umbenannt zu `connectionEncrypters` (mit `-ers`, Plural). Der alte Key wird **silent ignoriert** — Noise war im laufenden Daemon nie konfiguriert. Bei jedem Dial scheiterte multistream-select an "keine Encryption-Protokolle".
+
+**Fix:** `packages/daemon/src/libp2p-runtime.ts`: `connectionEncryption` → `connectionEncrypters`. One-line change.
+
+**Tests:** `packages/daemon/src/libp2p-runtime-config.test.ts` (neu, 4 Regression-Tests): prueft sowohl den Source-Text als auch die zur Laufzeit an `createLibp2p()` uebergebenen Optionen. Damit kann der Bug nie wieder zurueckkehren.
+
+**Folge:** Loest den Live-Befund aus PR #135 (alle Auto-Dials scheiterten) UND einen Teil von Bug #3 (Asymmetrisches Sync-Hole) — das libp2p-CRDT-Sync war komplett kaputt, der GossipSync-Fallback hat die teilweise Sichtbarkeit liefert.
+### ADR-020 Phase 1.1 Bug-Report #2 — `execute_remote_skill` Port-Mix (Hotfix)
+
+**Symptom:** `execute_remote_skill` liefert auf bestimmten Hosts `"Parse Error: Expected HTTP/, RTSP/ or ICE/"`. Verifiziert live auf influxdb gegen iobroker.
+
+**Root Cause:** In `mcp-stdio.ts` war das Protokoll fuer die Remote-Peer-URL an `RUNTIME_MODE === 'lan' ? 'https' : 'http'` gekoppelt. Die mcp-stdio-Subprocess wird vom Claude-Code-MCP-Harness ohne `TLMCP_RUNTIME_MODE` gestartet (verifiziert: `/proc/<pid>/environ` auf influxdb enthaelt nur `TLMCP_DAEMON_URL`, kein RUNTIME_MODE). Default → `'local'` → `peerProto='http'` → HTTP-Bytes an HTTPS-only Peer-Port 9440 → Parse-Error im HTTP-Parser.
+
+**Fix:** `packages/daemon/src/mcp-stdio.ts`: neue exportierte Hilfsfunktion `buildRemotePeerUrl(host, port)` liefert immer `https://`. Remote-Peers im Mesh laufen grundsaetzlich mit mTLS+HTTPS (Production-Config), unabhaengig vom lokalen RUNTIME_MODE. `RUNTIME_MODE` bleibt fuer den LOKALEN Daemon-URL erhalten.
+
+**Tests:** `packages/daemon/src/mcp-stdio-remote-skill.test.ts` (neu, 4 Tests).
+
+### ADR-020 Phase 1.1 — libp2p Auto-Dial nach Peer-Discovery (Hotfix)
+
+**Behebt das Convergenz-Problem aus PR #134:** Nach Merge von ADR-020 v1 lief der `RegistrySyncCoordinator`, aber `peers`-Map blieb permanent leer. Root Cause: libp2p v3 dialt nach `peer:discovery` NICHT automatisch — `Libp2pNode.#onDiscoveryPeer` macht nur `peerStore.merge`. Die Anwendung muss explizit dialen. mDNS funktionierte, aber niemand baute Verbindungen auf → kein peer:connect → CRDT-Sync nie aktiv.
+
+- **`packages/daemon/src/libp2p-runtime.ts`:** Neuer `peer:discovery`-Listener in
+  `attachEventListeners()`, der `node.dial(peer.id)` aufruft. Schutzschichten:
+  Self-Filter, Already-Connected-Filter, In-Flight-Dedup via Set, Stop-Guard.
+  Listener-Anbringung VOR `node.start()` (statt danach) + defensiver
+  PeerStore-Scan via `dialKnownPeers()` nach Start, schliesst Race mit fruehen
+  Discovery-Events.
+- **`packages/daemon/src/libp2p-runtime.ts`:** Neue Hilfsfunktion
+  `extractPeerIdFromConnectionEvent()` ersetzt das fehlerhafte
+  `detail.toString()`-Parsing. libp2p `peer:connect` liefert
+  Connection-Objekte deren generic `toString()` `"[object Object]"`
+  zurueckgibt — der Coordinator bekam Garbage-Peer-IDs. (HIGH-Finding aus
+  pal:codereview gpt-5.5).
+- **`packages/daemon/src/registry-sync-coordinator.ts`:** Inflight-Race im
+  converged-Pfad gefixt. Wenn `generateSyncMessage` `null` liefert, lief die
+  IIFE synchron bis zum inneren `finally`, das `inflight=null` setzte; danach
+  ueberschrieb der outer `entry.inflight = promise` das mit dem resolved
+  Promise → Peer permanent blockiert. Cleanup ausschliesslich im outer
+  finally. (HIGH-Finding aus pal:codereview gpt-5.5).
+- **Tests:** 14 Unit-Tests in neuer `libp2p-autodial.test.ts` + 1 Regression-Test
+  fuer Inflight-Race in `registry-sync-coordinator.test.ts`. 53 sync/libp2p-
+  Tests gruen.
+- **Konsens vorab:** GPT-5.5 + Gemini 2.5 Pro einstimmig (Konsens-ID 5801b78c).
+- **Doku:** `docs/architecture/ADR-020-Phase-1.1-autodial.md`.
+
+### ADR-020 v1.0 Production-Genesis-Blob — Bake-In (PR #134, Mac mini)
+
+Setzt den `REGISTRY_GENESIS_BLOB_BASE64` in `packages/daemon/src/registry.ts`
+durch einen echten Automerge-Blob (192 Bytes Base64) statt dem
+`__GENESIS_PLACEHOLDER__`. Damit greift der Production-Guard und der
+v1-Branch ist live-deploy-faehig.
+
+- **`packages/daemon/scripts/produce-genesis-blob.mjs`** (neu, 49 LoC):
+  reproduzierbares Skript fuer Audit-Trail. Erzeugt
+  `Automerge.from({capabilities:{}, last_sync:{}}, {actor: all-zero})`.
+  **Wichtige Erkenntnis verifiziert:** Automerge 2.x ist zwischen
+  Process-Runs nicht bit-deterministisch — Save() enthaelt eine variable
+  Komponente. Konsequenz: der eingebettete Blob in registry.ts ist die
+  verbindliche Quelle (Code-as-Truth), das Skript produziert nur
+  semantisch aequivalente Blobs.
+- **`packages/daemon/src/registry.ts`** (geaendert):
+  - Real-Blob statt Placeholder
+  - Typisierung der Konstante auf `string` (verhindert TS-Literal-Narrowing,
+    damit der Production-Guard nicht eliminiert wird)
+  - `GENESIS_PLACEHOLDER` als benannte Konstante statt Inline-String
+  - Fail-fast Schema-Check nach `Automerge.load`: capabilities + last_sync
+    muessen leere Maps sein
+  - Dev-Bootstrap-Fallback bleibt erhalten (Backward-Compat)
+- **`packages/daemon/tests/registry-genesis.test.ts`** (neu, 5 Tests):
+  - Blob ist nicht mehr Placeholder
+  - Blob laesst sich als Automerge-Doc mit kanonischer Empty-Schema laden
+  - Zwei Registries aus demselben Genesis koennen Caps mergen
+  - Blob hat genau einen Single-Root-Head (`/^[0-9a-f]{64}$/`)
+  - Skript-Output ist schematisch valide (Code-as-Truth gilt fuer Konstante,
+    nicht fuer Bit-Equality)
+- **Code-Review (GPT-5.4)**: 0 HIGH/CRITICAL, 3 MEDIUM + 1 LOW gefunden,
+  alle vor Commit gefixt:
+  - MED Doc-Kommentare aktualisiert (Determinismus-Behauptung raus)
+  - MED `as string`-Cast ersetzt durch typisierte Konstante + named placeholder
+  - MED Runtime-Schema-Check nach Automerge.load
+  - LOW `execFileSync` nutzt `process.execPath` statt `'node'`
+- **Tests**: 672/672 gruen, tsc clean, 0 Regressionen.
+
+### ADR-020 v1+v2 Registry Replication Recovery — Code-Implementierung (PR #134)
+
+- **Hauptbug behoben**: `libp2p-runtime.ts:335-356` registriert nicht mehr
+  Placeholder-Handler, die alle eingehenden Streams sofort schliessen. Stattdessen
+  pluggable Protocol-Handler via Constructor-Hooks (Default bleibt Placeholder fuer
+  Protokolle ohne Implementierung).
+- **`packages/daemon/src/registry-sync-protocol.ts`** (neu): Length-prefix Framing
+  mit 8 MiB Max-Frame, multi-chunk reads, abortable iterator, 1-Frame-per-Stream-
+  Konvention. Cleanup via `iterator.return()` bei jedem Fehlerpfad.
+- **`packages/daemon/src/registry-sync-coordinator.ts`** (neu): Per-Peer
+  Anti-Entropy Sync mit Inflight-Singleflight, AbortController + Generation-Token
+  fuer Reconnect-Safety, 3-Strike-HangUp bei Timeouts, Inbound-Buffer-Limit gegen
+  Memory-DoS (16 Messages / 16 MiB), Jitter-Timer (±20 %).
+- **`packages/daemon/src/registry-sync-libp2p-adapter.ts`** (neu):
+  `wireRegistrySync()` verheiratet Coordinator und libp2p. Erzeugt SyncTransport,
+  Protocol-Handler fuer `/thinklocal/mesh/registry/1.0.0`, Peer-Events.
+- **`packages/daemon/src/registry.ts`**: Shared-Genesis-Doc via
+  `REGISTRY_GENESIS_BLOB_BASE64` + `loadGenesisDoc()`. Loest entdeckten
+  Architektur-Bug (disjoint history-trees) — `Automerge.clone(genesis)` statt
+  separater `Automerge.init()` pro Daemon. Production-Guard verhindert
+  versehentlichen Deploy mit Placeholder. v2.1: `last_sync` deprecated. v2.4: neue
+  Methode `getHeads()` als verlaessliche Konvergenz-Metrik.
+- **`/api/registry/republish`** (Safety Valve, admin-only via mTLS,
+  rate-limited): erzwingt sofortige Sync-Round pro Peer fuer Triage.
+- **`/api/status`** erweitert um `libp2p.registry_sync` Per-Peer-Block
+  (rounds, converged, last_round_at, consecutive_timeouts, last_error, in_flight).
+- **AuditEventType**: neuer Event-Typ `REGISTRY_REPUBLISH`.
+- **Compliance**: CO ✅ (4-Modell-Konsens: gpt-5.2 + gemini-3-pro + gpt-5.5 +
+  MiniMax-M2.7), CG ✅ (gemini-3-pro auf Test-Skizzen), TS ✅ (31/31 gruen:
+  11 Protocol + 18 Coordinator + 2 Integration), CR ✅ (gpt-5.5: 5 HIGH-Findings
+  alle gefixt mit Regression-Tests), PC ✅ (internal), DO ✅ (ADR-020 v1+v2 +
+  COMPLIANCE-TABLE PR #139).
+- **Production-Deploy-Hinweis**: Bevor v1 in Production live geht, muss der echte
+  `REGISTRY_GENESIS_BLOB_BASE64` produziert werden (aktuell Placeholder, schuetzt
+  Production-Guard).
+
+### ADR-019 Phase 1.1 — Bind-Regression-Hotfix
+
+Phase-1-Code hatte `new Bonjour({ interface: meshIp })` ohne `bind`-Option. Das
+fuehrt in `multicast-dns/index.js` Zeile 65 dazu, dass der UDP-Socket auf die
+**unicast**-IP `meshIp:5353` gebunden wird statt auf `0.0.0.0:5353`. Folge: der
+Kernel verwirft Multicast-Pakete an 224.0.0.251 — Receive ist tot, Outbound
+funktioniert weiter. Live beobachtet auf Mac mini `10.10.10.94`: 0 Peers im
+mesh_status trotz vollstaendiger Sichtbarkeit im OS-`dns-sd`.
+
+- **Multi-Modell-Konsens** (GPT-5.4 8/10, GPT-5.1-Codex 8/10, Gemini-3-Pro 9/10):
+  einstimmig **Option 3** statt Option 1 (Rollback) oder Option 2 (private
+  internals). `new Bonjour({ interface: meshIp, bind: '0.0.0.0' })` nutzt das
+  natuerliche multicast-dns API: `bind` gewinnt fuer Receive (Zeile 65),
+  `interface` bleibt fuer outbound `setMulticastInterface()` (Zeile 153).
+- **`packages/daemon/src/discovery.ts`**: Konstruktor um `bind: '0.0.0.0'`
+  erweitert. Log-Message angepasst.
+- **`packages/daemon/src/discovery.ts`**: Konstruktor um optionalen
+  `networkInterfacesSource`-Parameter erweitert (Test-Hook, MEDIUM-Fix
+  Code-Review GPT-5.4 — deterministische Tests statt CI-Host-Abhaengigkeit).
+- **`packages/daemon/src/discovery.test.ts`** (5 neue Tests):
+  - `bind:"0.0.0.0"` + `interface:meshIp` deterministisch via Stub
+  - Positiver CIDR-Policy-Pfad mit matching Interface (LOW-FIX CR)
+  - Ohne Mesh-IP: Bonjour mit `{}` (Backward-Compat)
+  - Regression-Invariante: `bind !== interface`
+  - Shutdown-Ordering: `stop()` ruft `browser.stop` + `unpublishAll` + `destroy` (LOW-FIX CR)
+- **`docs/architecture/ADR-019-multi-interface-discovery.md`**: Status auf
+  Phase 1.1, neuer Hotfix-Block mit Symptom/Root-Cause/Konsens/Fix/Tests.
+- **Code-Review (GPT-5.4)**: 0 HIGH/CRITICAL, 1 MEDIUM + 2 LOW gefunden, alle
+  vor Commit gefixt mit Regression-Tests.
+- **Tests**: 690/690 gruen (vorher 685), 0 Regressionen.
+
+### ADR-020 + ADR-021: CRDT-Replikation und Skill-Health (Proposed)
+
+- **`docs/architecture/ADR-020-registry-replication-recovery.md`** (neu):
+  Root-Cause-Analyse + Fix-Plan fuer den eingefrorenen CRDT-Registry-Sync
+  im 5-Node-Mesh. Smoking Gun: `packages/daemon/src/libp2p-runtime.ts:335-356`
+  registriert fuer **alle** Mesh-Protokolle Placeholder-Handler, die
+  eingehende Streams sofort schliessen — Sync ueber libp2p hat nie
+  funktioniert, Heartbeats laufen nur deshalb, weil sie HTTPS-basiert sind.
+- **4-Modell-Konsens** (`gpt-5.2` 9/10, `gemini-3-pro-preview` 9/10,
+  `gpt-5.5` 8/10, `MiniMax-M2.7` 7/10): Confidence sinkt mit jedem Reviewer,
+  weil neue Edge-Cases sichtbar wurden. Loesung: **v1** (5 Blocker:
+  echte Handler, Length-Prefix-Framing, RegistrySyncCoordinator mit
+  Per-Peer-Singleflight, bidirektionaler Sync, Timeout-basiertes
+  SyncState-Cleanup) und **v2** (5 Robustheits-Punkte: `last_sync` aus
+  CRDT-Doc raus, Owner-wins erzwingen, libp2p-connected-SLO statt
+  HTTPS-online, Heads-Hash statt Capability-Hash, Backpressure/Chunking).
+- **Konvergenz-Garantie**: divergent + connected nicht laenger als 120 s
+  (v1) bzw. 60 s (v2). Verletzung = Regression.
+- **`docs/architecture/ADR-021-skill-health-lifecycle.md`** (neu):
+  Generisches Skill-Health-Monitoring als Antwort auf den InfluxDB-Boot-Race
+  (2026-05-17, Skill war 70 Min unsichtbar bis manueller Daemon-Restart).
+  Zentraler `SkillHealthMonitor` statt Plugin-Pattern, State-Machine binaer
+  (HEALTHY/UNHEALTHY, **kein** DEGRADED), Hysterese 2-up/3-down. Backoff
+  **linear** (30 s healthy / 60 s unhealthy, gegen GPTs Position), Registry-
+  Update via `availability`-Attribut (gegen Geminis Position, weil
+  k8s/Consul-Standard, weniger Hash-Churn, Debug-Sicht bleibt). Voraussetzung
+  ADR-020 v2.2 (Owner-wins).
+- **Verworfene Hypothese**: „Crash-Loops haben libp2p-Streams in Half-Open-
+  Zustand gebracht" — der Bug war von Anfang an im Code, fiel nur jetzt
+  durch den 5-Node-Test auf.
+
+### ADR-019 Multi-Interface mDNS Discovery (Phase 1)
+
+Bei Hosts mit mehreren Netzwerk-Interfaces (z.B. MacBook mit Ethernet im LAN
++ WLAN + DMZ-Verbindung) wurden Peers ueber falsche IPs entdeckt — der Daemon
+verbendete sich gegen DMZ-IPs (10.0.0.20) statt Mesh-IPs (10.10.10.55) und
+mTLS-Handshakes scheiterten. Multi-Modell-Konsensus (GPT-5.4 + Gemini 3 Pro):
+CIDR-basierte Interface-Selektion + Bonjour mit explizitem Pinning + empfangs-
+seitige CIDR-Validierung gegen Reflector-Leakage.
+
+- **PoC via tcpdump bewiesen:** `bonjour-service`'s `{ interface }` Option
+  steuert nur den Multicast-Socket, NICHT die A-Records. Selbst mit Pinning
+  werden alle lokalen IPs in den A-Records published. Loesung: zusaetzlich
+  `Service.records()` monkey-patchen.
+- **`packages/daemon/src/discovery-policy.ts`** (neu): CIDR-Match (`ipInCidr`),
+  Interface-Inventarisierung mit Dependency-Injection (testbar), Default-Excludes
+  fuer 15 virtuelle Interface-Typen (docker/tailscale/utun/veth/bridge/...).
+- **`packages/daemon/src/discovery.ts`** (erweitert): Konstruktor pinned auf
+  `getMeshIp(policy)`, publish() ruft `restrictServiceToIp()` auf, browse()
+  filtert empfangene Peer-IPs via `isPeerIpAllowed()`.
+- **`packages/daemon/src/config.ts`** (erweitert): `allowed_mesh_cidrs` und
+  `exclude_interface_patterns` in `[discovery]`, fail-fast bei ungueltigen CIDRs.
+- **Env-Vars**: `TLMCP_ALLOWED_MESH_CIDRS`, `TLMCP_EXCLUDE_INTERFACE_PATTERNS`.
+- **`docs/architecture/ADR-019-multi-interface-discovery.md`**: Vollstaendige
+  Konsensus-Doku mit Phase-2-Limitationen (kein Reconcile-Loop, IPv6 spaeter).
+- **`docs/USER-GUIDE.md`**: Neuer Troubleshooting-Eintrag "Mesh nicht gefunden
+  trotz aktivem Daemon".
+- **Code-Review (GPT-5.4)**: 1 HIGH + 2 MEDIUM + 4 LOW Findings — alle vor
+  Merge gefixt mit Regression-Tests (parseInt-Spoofing, leere Excludes,
+  Idempotenz, CIDR-Validation, Hostname-Fallback, leere A-Records).
+- **Precommit-Review (GPT-5.4)**: weitere 1 HIGH + 1 MEDIUM + 1 LOW gefunden:
+  - HIGH: `allowed_mesh_cidrs` ohne Match = silent fallback → jetzt fail-closed
+  - MEDIUM: User-Excludes ersetzten Defaults → jetzt gemerged
+  - LOW: Tests prueften nur Helper → 3 echte MdnsDiscovery-Wiring-Tests ergaenzt
+- **Tests**: 37 Unit-Tests + 12 Integration-Tests, Gesamt **685/685 gruen**
+  (vorher 672), 0 Regressionen.
+
+## [Unreleased] — 2026-05-16
+
+### macOS-Deployment als LaunchDaemon dokumentiert
+
+- **`docs/MACOS-DEPLOYMENT.md`** (neu): Empfohlener Setup-Pfad fuer macOS-Hosts,
+  speziell fuer headless / SSH-only / FileVault-Setups.
+- **Architekturentscheidung**: LaunchDaemon statt LaunchAgent, weil
+  LaunchAgents eine aktive Aqua-User-Session voraussetzen — bei FileVault
+  ohne Auto-Login (typisches Mac-mini-Setup) startet niemand automatisch
+  eine Session. LaunchDaemon laeuft ab Boot, KeepAlive aktiv, als
+  unprivilegierter User via `UserName=chris`.
+- **Wrapper `~/.thinklocal/bin/daemon-launchagent.sh`** wartet auf
+  Multicast-Route und IPv4-Adresse, verhindert `EHOSTUNREACH 224.0.0.251:5353`-
+  Crash bei zu fruehem Start.
+- **Stolperfallen dokumentiert**: Hostname-Hochzaehlen, `backgroundtaskmanagementd`-
+  TCC-Block fuer LaunchAgents seit Ventura, `launchctl bootstrap gui/<uid>`-
+  Fehler 125 ohne Aqua-Session, `better-sqlite3` ABI-Mismatch nach Node-Upgrade.
+- **Node-Empfehlung**: nvm-Node 22 LTS, nicht Homebrew (das aktuell 25/26
+  ausliefert, womit `better-sqlite3 11.x` nicht baut).
+- Relevant fuer den **Installer/Distribution**: alle hartkodierten Pfade
+  (`/Users/chris/...`, Node-Version, `UserName`) muessen per Template ersetzt
+  werden.
+
+---
+
+## [Unreleased] — 2026-04-14
+
+### ADR-018 Observer Agent Phase 1 — lokale Intelligenz fuer headless Nodes
+
+- **`docs/architecture/ADR-018-observer-agent.md`** (neu): Architektur fuer
+  einen separaten Observer-Prozess der proaktiv read-only System-Checks
+  ausfuehrt und Auffaelligkeiten ueber das lokale Modell analysiert.
+- **`packages/observer/`** (neues Paket): 4 Module + CLI-Einstiegspunkt:
+  - `model-selector.ts` — RAM-basierte Auswahl (qwen3.5:0.6b bis gemma4:26b)
+  - `system-probes.ts` — Whitelist sicherer Befehle (df, free, journalctl, crontab -l, apt list, …)
+  - `ollama-client.ts` — Minimalclient ohne externe Dependencies
+  - `analyzer.ts` — Prompt-Building + JSON-Parsing der Modell-Antwort
+  - `observer-agent.ts` — Hauptprozess mit `--send --admin=<uri>` Flags
+- **Sicherheit**: Read-only by default, keine rohen Logs in Prompts,
+  strikte Befehls-Whitelist, keine automatischen Schreib-Aktionen.
+- **Tests**: 44 Unit-Tests (model-selector 10, analyzer 14, system-probes 6, ollama-client 14).
+- **Daemon-Tests**: 636/636 unveraendert, 0 Regressionen.
+
 ## [Unreleased] — 2026-04-13
+
+### ADR-017 Auto-Update CLI-Befehl (Phase 1)
+
+- **`docs/architecture/ADR-017-auto-update.md`** (neu): ADR fuer zweistufigen
+  Auto-Update-Mechanismus. Phase 1: lokaler `thinklocal update` CLI-Befehl
+  (GitHub Releases, SHA256-Verifikation, Admin-Approval). Phase 2 (Zukunft):
+  Mesh-propagierte Updates ueber ADR-015 OTS-Mechanismus.
+- **`packages/cli/src/thinklocal.ts`**: Neuer `thinklocal update` Befehl mit
+  drei Modi: interaktiv (zeigt Version-Diff, fragt nach), `--check` (nur pruefen,
+  Exit-Code 0/1), `--auto` (automatisch fuer Cron/CI). Liest aktuelle Version
+  aus package.json, fragt GitHub API ab, zeigt Release-Notes, fuehrt bei
+  Bestaetigung `git pull --ff-only` + `npm install` + Daemon-Restart durch.
+  Hilfetext aktualisiert.
 
 ### ADR-016 Token-Onboarding Phase 3: CLI + MCP Tools
 

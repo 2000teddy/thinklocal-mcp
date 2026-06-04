@@ -4,7 +4,7 @@ import { Agent as UndiciAgent, fetch } from 'undici';
 import { loadConfig } from './config.js';
 import { createLogger } from './logger.js';
 import { loadOrCreateIdentity } from './identity.js';
-import { loadOrCreateTlsBundle, getCertDaysLeft, type NodeCertBundle } from './tls.js';
+import { loadOrCreateTlsBundle, getCertDaysLeft, extractSpiffeUri, type NodeCertBundle } from './tls.js';
 import { AuditLog } from './audit.js';
 import { MdnsDiscovery } from './discovery.js';
 import { AgentCardServer } from './agent-card.js';
@@ -29,18 +29,26 @@ import { registerWebSocket } from './websocket.js';
 import { registerComplianceApi } from './compliance-check.js';
 import { TokenStore } from './token-store.js';
 import { registerTokenApi } from './token-api.js';
+import { onboardingPort } from './onboarding-port.js';
+import { CertIssuer, NonceStore } from './cert-issuer.js';
+import { registerCertIssuanceApi } from './cert-issuance-api.js';
 import { readFileSync } from 'node:fs';
 import { CredentialVault } from './vault.js';
 import { loadOrCreateVaultPassphrase } from './vault-passphrase.js';
 import { isLoopbackHost } from './runtime-mode.js';
 import { TaskExecutor } from './task-executor.js';
 import { createLibp2pRuntime } from './libp2p-runtime.js';
+import { checkIdentityConsistency } from './peer-identity.js';
+import { loadOrCreateLibp2pPrivateKey } from './libp2p-identity.js';
+import { wireRegistrySync } from './registry-sync-libp2p-adapter.js';
 import type { SecretRequestPayload, SecretResponsePayload, AgentMessagePayload, AgentMessageAckPayload } from './messages.js';
 import { AgentInbox } from './agent-inbox.js';
 import { SYSTEM_MONITOR_MANIFEST } from './builtin-skills/system-monitor.js';
 import { INFLUXDB_MANIFEST, influxdbHealthCheck } from './builtin-skills/influxdb.js';
+import { SkillHealthMonitor } from './skill-health-monitor.js';
 import { TelegramGateway } from './telegram-gateway.js';
 import type { AgentCard } from './agent-card.js';
+import { seedBuiltinSkills } from './builtin-skill-seed.js';
 
 async function main(): Promise<void> {
   // Config-Pfad
@@ -170,14 +178,64 @@ async function main(): Promise<void> {
   // Eingebaute Skills registrieren
   skillManager.registerLocal({ ...SYSTEM_MONITOR_MANIFEST, author: identity.spiffeUri });
 
-  // InfluxDB Skill nur registrieren wenn InfluxDB erreichbar ist
+  // ADR-021: InfluxDB-Skill IMMER registrieren — `availability` spiegelt den Health-State
+  // (initial aus einem Boot-Check). Der SkillHealthMonitor re-evaluiert periodisch und
+  // toggelt availability bei Service-Ausfall/-Erholung (heilt den Boot-Race von 2026-05-17).
   const influxAvailable = await influxdbHealthCheck();
-  if (influxAvailable) {
-    skillManager.registerLocal({ ...INFLUXDB_MANIFEST, author: identity.spiffeUri });
-    log.info('InfluxDB Skill registriert — Datenbank erreichbar');
-  } else {
-    log.info('InfluxDB nicht erreichbar — Skill nicht registriert');
+  skillManager.registerLocal(
+    { ...INFLUXDB_MANIFEST, author: identity.spiffeUri },
+    influxAvailable ? 'healthy' : 'unhealthy',
+  );
+  log.info({ influxAvailable }, 'InfluxDB Skill registriert (Health-Monitor übernimmt Re-Evaluierung)');
+
+  // Neutral builtin skills aus skills/builtin/ in das Runtime-Verzeichnis
+  // seeden (Codex Ollama-Skill Pattern). Die Skills werden beim nächsten
+  // SkillDiscovery-Startup automatisch entdeckt und registriert.
+  const seededSkills = seedBuiltinSkills({
+    dataDir: config.daemon.data_dir,
+    ownAgentId: identity.spiffeUri,
+    log,
+  });
+  if (seededSkills.installed.length > 0) {
+    log.info({ skills: seededSkills.installed }, 'Builtin-Skills geseeded');
   }
+
+  // Registry-Sync (ADR-020 v1): Coordinator + Adapter zwischen Automerge
+  // und libp2p. Hooks werden vor runtime.start() registriert, damit die
+  // ersten peer:connect-Events bereits am Coordinator landen.
+  const registrySync = wireRegistrySync({ registry, log });
+
+  // ADR-021: zentraler Skill-Health-Monitor. Skills mit externer Abhängigkeit melden
+  // nur ihre healthcheck-fn; der Monitor schedult, debounced (Hysterese), timeoutet und
+  // toggelt bei einem State-Flip die `availability` der EIGENEN Capability + Audit + Push.
+  const skillHealthMonitor = new SkillHealthMonitor({
+    log,
+    onTransition: (t) => {
+      const availability = t.to === 'healthy' ? 'healthy' : 'unhealthy';
+      registry.setAvailability(identity.spiffeUri, t.skillId, availability, t.consecutiveFailures, new Date().toISOString());
+      audit.append(
+        'SKILL_HEALTH_TRANSITION',
+        identity.spiffeUri,
+        `${t.skillId}:${t.from}->${t.to} fails=${t.consecutiveFailures}${t.lastError ? ` err=${t.lastError}` : ''}`,
+        'skill',
+        t.skillId,
+      );
+      // Sofortiger Registry-Push, damit das Mesh den State-Flip schnell sieht (ADR-020 Resync).
+      void registrySync.coordinator
+        .republish()
+        .catch((err) => log.warn({ err, skillId: t.skillId }, '[skill-health] republish nach Transition fehlgeschlagen'));
+    },
+  });
+  // Skills mit externer Abhängigkeit registrieren (generisch erweiterbar: Ollama, Telegram, …).
+  skillHealthMonitor.register('influxdb', (signal) => influxdbHealthCheck(signal));
+  skillHealthMonitor.start();
+
+  // ADR-022 #0: persistierten libp2p-Ed25519-Key laden/erzeugen → stabile PeerID
+  // über Neustarts. NUR wenn libp2p aktiv ist (CR HIGH): im local-Modus ist libp2p
+  // deaktiviert → kein Key-Laden, eine korrupte Datei darf den Boot dann nicht blocken.
+  const libp2pKey = config.libp2p.enabled
+    ? await loadOrCreateLibp2pPrivateKey(config.daemon.data_dir, log)
+    : undefined;
 
   const libp2pRuntime = await createLibp2pRuntime({
     enabled: config.libp2p.enabled,
@@ -188,8 +246,62 @@ async function main(): Promise<void> {
     relayTransportEnabled: config.libp2p.relay_transport_enabled,
     relayServiceEnabled: config.libp2p.relay_service_enabled,
     announceMultiaddrs: config.libp2p.announce_multiaddrs,
-  }, log);
+    privateKey: libp2pKey?.privateKey,
+  }, log, {
+    protocolHandlers: registrySync.protocolHandlers,
+    peerEvents: registrySync.peerEvents,
+  });
+  registrySync.setRuntime(libp2pRuntime);
   await libp2pRuntime.start();
+  if (config.libp2p.enabled) {
+    registrySync.coordinator.start();
+    log.info('RegistrySyncCoordinator gestartet (ADR-020 v1)');
+  }
+
+  // ADR-022 §Startup-Assertion: PeerID / Cert-SAN / authz-Identität müssen
+  // übereinstimmen. Während der Migration (Legacy `host/<stableNodeId>` + admin-
+  // signiertes Hostname-SAN-Cert) divergieren sie bewusst — wir loggen alle drei
+  // nebeneinander und failen LAUT. Hart-Abbruch nur bei TLMCP_STRICT_IDENTITY=1,
+  // sonst würde der Daemon im aktuellen (erwarteten) Drift-Zustand gar nicht starten.
+  // ADR-022 #0 ERLEDIGT: die PeerID ist jetzt stabil (persistierter Key). Sobald authz
+  // + Cert-SAN auf node/<PeerID> umgestellt sind, wird TLMCP_STRICT_IDENTITY=1 gefahrlos
+  // — die Scharfschaltung bleibt aber bewusst Christians Entscheidung (nicht automatisch).
+  {
+    const certSan = tlsBundle ? extractSpiffeUri(tlsBundle.certPem) : null;
+    const peerId = libp2pRuntime.getState().peerId;
+    const idCheck = checkIdentityConsistency({ authzSpiffe: identity.spiffeUri, certSan, peerId });
+    log.info(
+      { authzSpiffe: identity.spiffeUri, certSan, peerId, expected: idCheck.expected },
+      '[identity] ADR-022 Identitäts-Triple',
+    );
+    // ADR-022 Phase 0 (Accept-both / Self-Identity-Ableitung): Der Node KENNT seine
+    // kanonische node/<PeerID>-Identität (idCheck.expected), EMITTIERT aber weiterhin
+    // Legacy (authzSpiffe + Cert-SAN = host/<id>) bis zum Cert-SAN-Cutover. Eingehend
+    // werden beide SAN-Formen akzeptiert (peer-identity.authorizeHttpsSender +
+    // peerIdFromCertSan-Brücke). Die kanonische Self-URI ist hiermit für den späteren
+    // Phase-3-Flip abgeleitet und sichtbar.
+    if (idCheck.expected) {
+      log.info(
+        { canonicalSelfUri: idCheck.expected, emitting: identity.spiffeUri },
+        '[identity] ADR-022 Accept-both aktiv: kanonische Self-Identität abgeleitet, emittiere weiter Legacy',
+      );
+    }
+    if (!idCheck.consistent) {
+      // CR LOW: erwartete Migrationsdrift im Non-Strict-Modus als warn (nicht error)
+      // loggen, damit Monitoring nicht falsch-kritisch eskaliert; strict → error + throw.
+      const strict = process.env['TLMCP_STRICT_IDENTITY'] === '1';
+      const ctx = { divergences: idCheck.divergences, expected: idCheck.expected, strict };
+      const msg =
+        '[identity] ADR-022 Divergenz: PeerID / Cert-SAN / authz-Identität stimmen NICHT überein';
+      if (strict) {
+        log.error(ctx, msg);
+        throw new Error(
+          `[identity] ADR-022 strict mode aktiv und Identitäts-Divergenz: ${idCheck.divergences.join('; ')}`,
+        );
+      }
+      log.warn(ctx, msg);
+    }
+  }
 
   // 6. Mesh-Manager starten
   const mesh = new MeshManager(
@@ -226,6 +338,13 @@ async function main(): Promise<void> {
     skillManager,
   );
 
+  // ADR-022 WS-3: Fingerprints der CAs, die `node/<PeerID>` attestieren dürfen (.94 Admin-CA).
+  // Kommagetrennt via Env. Ungesetzt → leer → kanonische Attestierung inert (sicherer Default).
+  const peerIdAttestingCaFingerprints = (process.env['TLMCP_PEERID_ATTESTING_CA_FP'] ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
   // 8. Agent Card Server starten (HTTP oder HTTPS).
   // trustedCaBundle: aggregiert eigene CA + gepairte Peer-CAs. Hot-Reload bei
   // neuen Pairings ist Phase 2 — aktuell zaehlt der Snapshot zum Startzeitpunkt.
@@ -236,10 +355,19 @@ async function main(): Promise<void> {
     trustedCaBundle: trustStoreNotifier?.current(),
     log,
     rateLimiter,
-    getPeerPublicKey: (agentId: string) => {
-      const peer = mesh.getPeer(agentId);
-      return peer?.agentCard?.publicKey;
-    },
+    // ADR-022: tolerante, PeerID-gekeyte Auflösung (behebt Root-Cause (a) des
+    // SKILL_ANNOUNCE-403 „Unknown sender"). Auflösung via mesh, nicht via
+    // OS-/Hostname-URI. Siehe MeshManager.resolvePeerPublicKey.
+    getPeerPublicKey: (agentId: string) => mesh.resolvePeerPublicKey(agentId),
+    // ADR-022 §3 (channel-bound): ein CA-validierter mTLS-Cert-SAN node/<PeerID>
+    // schaltet die kanonische PeerID-Auflösung für diesen Peer frei.
+    onPeerCertVerified: (peerId: string) => mesh.markPeerIdVerified(peerId),
+    // ADR-022 (CR gpt-5.5 WS-2 HIGH): NUR von der attestierenden Admin-CA (.94)
+    // signierte node/<PeerID>-Certs dürfen eine PeerID attestieren — nicht jede CA im
+    // Trust-Bundle. WS-3: per Env `TLMCP_PEERID_ATTESTING_CA_FP` (kommagetrennte SHA-256-
+    // Fingerprints von .94s CA-Cert) scharfschaltbar. Ungesetzt → kanonische Attestierung
+    // inert (sicherer Default). Siehe .94-Instruktion / docs für die Fingerprint-Verteilung.
+    peerIdAttestingCaFingerprints: peerIdAttestingCaFingerprints,
     onMessage: async (envelope: MessageEnvelope) => {
       // Rate-Limiting prüfen
       if (!rateLimiter.allow(envelope.sender)) {
@@ -385,6 +513,7 @@ async function main(): Promise<void> {
       }
     },
     getLibp2pState: () => libp2pRuntime.getState(),
+    getRegistrySyncStatus: () => registrySync.coordinator.getStatus(),
   });
   // 8b. Task-Manager + Executor initialisieren
   const taskManager = new TaskManager(log);
@@ -436,6 +565,22 @@ async function main(): Promise<void> {
     rateLimiter,
   });
 
+  // 8c1c. ADR-022 Schritt 3 / WS-3: PoP-basierte node/<PeerID>-Cert-Ausstellung.
+  // NUR auf Admin-Nodes (CA-Key vorhanden). Endpoints liegen auf dem HAUPT-mTLS-Server
+  // (9440) → nur Mesh-Mitglieder mit gültigem Legacy/node-Cert erreichen sie; die
+  // kryptografische Identität liefert der PoP. Stellt Certs mit SAN node/<PeerID> aus.
+  if (caBundle && caBundle.caCertPem && caBundle.caKeyPem) {
+    const nonceStore = new NonceStore();
+    const certIssuer = new CertIssuer({ ca: caBundle, nonceStore, log });
+    registerCertIssuanceApi(cardServer.getServer(), {
+      issuer: certIssuer,
+      nonceStore,
+      log,
+      rateLimiter,
+    });
+    log.info({ caFingerprint: certIssuer.fingerprint }, 'ADR-022 WS-3: PoP-Cert-Ausstellung aktiv (Admin-Node)');
+  }
+
   // Onboarding server: separate HTTPS port WITHOUT client-cert requirement.
   // New nodes don't have a cert yet, so /onboarding/join must be reachable
   // without mTLS. Only the Bearer token authenticates the request.
@@ -463,9 +608,9 @@ async function main(): Promise<void> {
       rateLimiter,
     });
 
-    const onboardingPort = config.daemon.port + 1; // 9441
-    await onboardingServer.listen({ port: onboardingPort, host: '0.0.0.0' });
-    log.info({ port: onboardingPort }, 'Onboarding-Server gestartet (HTTPS ohne mTLS-Pflicht)');
+    const onboardingListenPort = onboardingPort(config.daemon.port); // Haupt-Port + 1 (single source)
+    await onboardingServer.listen({ port: onboardingListenPort, host: '0.0.0.0' });
+    log.info({ port: onboardingListenPort }, 'Onboarding-Server gestartet (HTTPS ohne mTLS-Pflicht)');
   }
 
   // 8c2. Agent Registry (ADR-004 Phase 2)
@@ -578,36 +723,61 @@ async function main(): Promise<void> {
     const signed = encodeAndSign(envelope, identity.privateKeyPem);
     const body = serializeSignedMessage(signed);
 
-    fetch(`${peer.endpoint}/message`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/cbor' },
-      body: Buffer.from(body),
-      signal: AbortSignal.timeout(10_000),
-      dispatcher: tlsDispatcher,
-    })
-      .then((res) => {
-        if (res.ok) {
-          log.info(
-            { peer: peerAgentId, skills: localSkills.map((s) => s.name) },
-            '[skill-discovery] SKILL_ANNOUNCE sent successfully',
-          );
-          eventBus.emit('skill:announced', {
-            peer: peerAgentId,
-            skills: localSkills.map((s) => s.name),
+    // ADR-022 Item 2: Retry mit Backoff gegen den „Unknown sender"-403 (Root-Cause b,
+    // Timing). Die Card-Registrierung beim Empfänger kann ms nach Discovery noch nicht
+    // da sein → erster Announce 403. Begrenzte Versuche, dann sauber aufgeben + loggen.
+    void (async () => {
+      const backoffsMs = [0, 750, 2000, 4000]; // 4 Versuche, erster sofort
+      for (let attempt = 0; attempt < backoffsMs.length; attempt++) {
+        const delay = backoffsMs[attempt] ?? 0;
+        if (delay > 0) await new Promise((r) => setTimeout(r, delay));
+        try {
+          const res = await fetch(`${peer.endpoint}/message`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/cbor' },
+            body: Buffer.from(body),
+            signal: AbortSignal.timeout(10_000),
+            dispatcher: tlsDispatcher,
           });
-        } else {
-          log.warn(
-            { peer: peerAgentId, status: res.status },
-            '[skill-discovery] SKILL_ANNOUNCE send failed',
+          // Body wird nie genutzt → canceln, damit undici die Connection freigibt (CR MEDIUM).
+          void res.body?.cancel().catch(() => {});
+          if (res.ok) {
+            log.info(
+              { peer: peerAgentId, skills: localSkills.map((s) => s.name), attempt: attempt + 1 },
+              '[skill-discovery] SKILL_ANNOUNCE sent successfully',
+            );
+            eventBus.emit('skill:announced', {
+              peer: peerAgentId,
+              skills: localSkills.map((s) => s.name),
+            });
+            return;
+          }
+          // Von den HTTP-Status ist nur 403 („Unknown sender" — Card noch nicht
+          // registriert) transient/retrybar; andere Status → sofort aufgeben.
+          // (Echte Sendefehler/Timeouts fängt der catch-Block und gelten als transient.)
+          if (res.status !== 403) {
+            log.warn(
+              { peer: peerAgentId, status: res.status },
+              '[skill-discovery] SKILL_ANNOUNCE abgelehnt (nicht retrybar)',
+            );
+            return;
+          }
+          log.debug(
+            { peer: peerAgentId, status: 403, attempt: attempt + 1, of: backoffsMs.length },
+            '[skill-discovery] SKILL_ANNOUNCE 403 (Unknown sender) — retry nach Backoff',
+          );
+        } catch (err) {
+          log.debug(
+            { peer: peerAgentId, attempt: attempt + 1, err: err instanceof Error ? err.message : String(err) },
+            '[skill-discovery] SKILL_ANNOUNCE Sendefehler — retry nach Backoff',
           );
         }
-      })
-      .catch((err) => {
-        log.warn(
-          { peer: peerAgentId, err: err instanceof Error ? err.message : String(err) },
-          '[skill-discovery] SKILL_ANNOUNCE send error (non-fatal)',
-        );
-      });
+      }
+      log.warn(
+        { peer: peerAgentId, attempts: backoffsMs.length },
+        '[skill-discovery] SKILL_ANNOUNCE endgültig fehlgeschlagen — Peer kennt unseren Sender-Key nicht, gebe auf',
+      );
+    })();
   });
 
   // Log discovery summary at startup
@@ -634,6 +804,9 @@ async function main(): Promise<void> {
     rateLimiter,
     vault,
     executor: taskExecutor,
+    registrySyncRepublish: () => registrySync.coordinator.republish(),
+    getRegistrySyncStatus: () => registrySync.coordinator.getStatus(),
+    getSkillHealth: () => skillHealthMonitor.getStatus(),
   });
 
   await cardServer.start();
@@ -657,8 +830,19 @@ async function main(): Promise<void> {
 
   const proto = cardServer.protocol;
 
-  // 9. mDNS Discovery starten
-  const discovery = new MdnsDiscovery(config.discovery.mdns_service_type, log, config.daemon.tls_enabled);
+  // 9. mDNS Discovery starten (ADR-019: mit Policy fuer Interface-Pinning + Anti-Leakage)
+  const discovery = new MdnsDiscovery(
+    config.discovery.mdns_service_type,
+    log,
+    config.daemon.tls_enabled,
+    {
+      allowed_mesh_cidrs: config.discovery.allowed_mesh_cidrs,
+      exclude_interface_patterns:
+        config.discovery.exclude_interface_patterns.length > 0
+          ? config.discovery.exclude_interface_patterns
+          : undefined,
+    },
+  );
 
   discovery.publish(
     `${config.daemon.hostname}-${config.daemon.agent_type}`,
@@ -788,6 +972,7 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string): Promise<void> => {
     log.info({ signal }, 'Shutdown eingeleitet...');
     telegramGateway?.stop();
+    skillHealthMonitor.stop();
     gossip.stop();
     mesh.stopHeartbeatLoop();
     taskManager.stop();
@@ -797,6 +982,7 @@ async function main(): Promise<void> {
     agentInbox.close();
     rateLimiter.stop();
     discovery.stop();
+    await registrySync.coordinator.stop();
     await libp2pRuntime.stop();
     await cardServer.stop();
     audit.append('PEER_LEAVE', identity.spiffeUri, 'graceful shutdown');

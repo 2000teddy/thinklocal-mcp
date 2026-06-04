@@ -243,12 +243,16 @@ Tests wurden bisher als "selbstverstaendlicher Bestandteil von Code" behandelt u
 | 134 | tbd       | ADR-016 Token-Onboarding Phase 1 (token-store.ts)               | 04-12 00:15 | —  | —  | ✅ | ✅ | ✅ | ✅ | `token-store.ts` SQLite-backed Token-Store. ADR-016 Architektur-Dokument. 41 neue Tests, 618/618 gruen. CO: Konsensus vom 04-07 (GPT-5.4+Gemini Pro 9/10). CG: n/a. |
 | 135 | #125      | ADR-016 Token-Onboarding Phase 2 — REST API                    | 04-13 10:50 | —  | —  | ✅ | ✅ | —  | ✅ | token-api.ts: 4 Endpoints (create/list/revoke/join). CR Gemini Pro: 1 CRITICAL (TOCTOU gefixt), 1 HIGH (Rate-Limiting added), 2 MEDIUM (Input-Validation gefixt, Key-over-wire akzeptiert), 1 LOW. 15 Tests, 633/633 gruen. |
 | 136 | tbd       | ADR-016 Token-Onboarding Phase 3 — CLI + MCP Tools             | 04-13 00:42 | —  | —  | ✅ | ✅ | —  | ✅ | thinklocal.ts: 4 CLI-Befehle (token create/list/revoke, join). mcp-stdio.ts: 2 MCP-Tools (token_create, token_list). tsc + 633/633 Tests gruen. |
+| 137 | tbd       | ADR-017 Auto-Update CLI-Befehl (Phase 1)                       | 04-13 14:44 | —  | —  | —  | —  | —  | ✅ | ADR-017 Architektur-Dokument + `thinklocal update` CLI (--check/--auto). GitHub Releases API, Version-Diff, git pull + npm install + Restart. Hilfetext aktualisiert. Doc-only ADR + Feature-Code ohne externe Abhaengigkeiten. |
+| 138 | tbd       | ADR-018 Observer Agent Phase 1 — lokale Intelligenz            | 04-14 23:45 | ✅ | —  | ✅ | —  | —  | ✅ | ADR-018 + PRO_CON_THINKBIG.md. Neues Paket `packages/observer/` mit 4 Modulen: model-selector, system-probes, ollama-client, analyzer + observer-agent CLI. 44 Tests gruen. CO: Multi-Modell-Analyse (Gemini Pro + Claude Sonnet + Devil's Advocate). |
+| 139 | tbd       | ADR-020 v1+v2 Registry Replication Recovery (CRDT-Sync-Fix)    | 05-18 23:42 | ✅ | ✅ | ✅ | ✅ | —  | ✅ | **Smoking Gun**: libp2p-runtime.ts:335-356 Placeholder-Handler schliessen alle eingehenden Streams sofort — Registry-Sync hat nie funktioniert. **v1**: 5 Bausteine (echte Handler + Length-Prefix-Framing + RegistrySyncCoordinator + bidirektionaler Sync + Timeout-Cleanup + Shared-Genesis). **v2**: v2.1 last_sync deprecated, v2.3 SLO-Methode getSloViolations, v2.4 Registry.getHeads(). v2.2 (Owner-wins) + v2.5 (Chunking) in eigene ADRs verschoben. **CO**: 4-Modell-Konsensus (gpt-5.2 9/10, gemini-3-pro 9/10, gpt-5.5 8/10, MiniMax-M2.7 7/10). **CG**: pal:chat gemini-3-pro auf Test-Skizzen — initSyncState-Persistenz, Mock-Transport asynchron, Math.random-Mock fuer Jitter. **TS**: 31/31 gruen (11 Protocol + 18 Coordinator + 2 Integration). **CR**: pal:codereview gpt-5.5 → 5 HIGH-Findings, alle gefixt mit Regression-Tests: AbortController+Generation-Token, stop() bricht aktiv ab, onPeerDisconnect aborted, readFrame abortable+iterator.return-cleanup, Inbound-Buffer-Limit gegen Memory-DoS, Production-Guard fuer Placeholder-Genesis. **DO**: ADR-020 v1/v2 mit Streitpunkten + Konsequenzen + Tests. |
+| 140 | #134      | ADR-020 v1.0 Production-Genesis-Blob (Bake-In, Mac mini)        | 05-19 10:35 | —  | —  | ✅ | ✅ | ✅ | ✅ | Ersetzt `__GENESIS_PLACEHOLDER__` in `registry.ts` durch realen Automerge-Blob (192 Bytes Base64) + Skript `scripts/produce-genesis-blob.mjs` fuer Audit-Trail. **Wichtige Erkenntnis**: Automerge 2.x ist NICHT bit-deterministisch zwischen Process-Runs — Code-as-Truth fuer den konkreten Blob-Wert, Skript erzeugt nur semantisch aequivalente Blobs. **TS**: 5 neue Tests (not-placeholder, ladbar+canonical, mergebar via Automerge.merge, single-head, script-output schematisch valide). 672/672 gruen. **CR (gpt-5.4)**: 0 HIGH, 3 MED + 1 LOW gefixt: Doc-Determinismus-Claim entfernt, `as string`-Cast durch typisierte Konstante + `GENESIS_PLACEHOLDER` named ersetzt, Runtime-Schema-Check nach `Automerge.load`, `process.execPath` statt `'node'` im Test. **PC**: pal:precommit, ohne Findings. **DO**: CHANGES.md Eintrag. Bug-Fix-PR fuer v1-Branch — CO + CG entfallen. |
 
 ---
 
 ## Gesamtstatistik
 
-### Compliance-Rate ueber alle 106 Eintraege
+### Compliance-Rate ueber alle 140 Eintraege
 
 | Regel            | Anwendbar | Eingehalten (✅/⚠️) | Rate     |
 |------------------|:---------:|:-------------------:|:--------:|
@@ -364,4 +368,277 @@ Shell-Injection die in Produktion ein Sicherheitsrisiko waere.
 
 ---
 
-*Letzte Aktualisierung: 2026-04-13 00:42 — Token-Onboarding Phase 3 CLI + MCP Tools.*
+## Session 2026-05-17/18 — ADR-019 Multi-Interface Discovery
+
+| #   | Beschreibung                              | Datum       | CO | CG | TS | CR | PC | DO | Findings                            |
+|-----|-------------------------------------------|-------------|----|----|----|----|----|----|-------------------------------------|
+| 133 | ADR-019 Multi-Interface mDNS Discovery    | 05-18 00:20 | ✅ | —  | ✅ | ✅ | ✅ | ✅ | CR: 1H+2M+4L, PC: +1H+1M+1L — alle gefixt |
+
+**CO:** Multi-Modell-Konsensus 2026-05-17 — GPT-5.4 (8/10), Gemini 3 Pro (9/10).
+Minimax + Grok uebersprungen (PAL/OpenRouter-Probleme).
+**CG:** uebersprungen — Tests selbst geschrieben weil sehr fokussiert.
+**TS:** 37 Unit-Tests + 9 Integration-Tests + 10 Regression-Tests fuer CR-Findings.
+Gesamtsuite 682/682 (vorher 672), 0 Regressionen.
+**CR:** `pal:codereview` mit GPT-5.4, 7 Findings — alle vor Merge gefixt:
+- HIGH: `exclude_interface_patterns: []` aushebelte die Defaults
+- MEDIUM: parseInt-Eigenheit in `ipv4ToNum`/`ipInCidr` erlaubte Spoofing
+- MEDIUM: kein Reconcile-Loop (als Phase-2 dokumentiert)
+- LOW: 4 Findings (Idempotenz, leere A-Records, CIDR-Validation, IPv6-Fallback)
+
+**PC:** `pal:precommit` mit GPT-5.4, 3 weitere Findings — alle vor Commit gefixt:
+- HIGH: `allowed_mesh_cidrs` ohne Match = silent fallback → fail-closed throw
+- MEDIUM: User-Excludes ersetzten Defaults → Merge-Semantik
+- LOW: Tests prueften nur Helper → 3 echte MdnsDiscovery-Wiring-Tests
+**DO:** ADR-019, USER-GUIDE (Troubleshooting), CHANGES.md aktualisiert.
+
+---
+
+## Session 2026-05-19 — ADR-020 Phase 1.1 libp2p Auto-Dial Hotfix
+
+| #   | PR                                      | Datum       | CO | CG | TS | CR | PC | DO | Findings                           |
+|-----|-----------------------------------------|-------------|----|----|----|----|----|----|----|
+| 141 | ADR-020 Phase 1.1 libp2p auto-dial      | 2026-05-19  | ✅ | —  | ✅ | ✅ | ✅ | ✅ | 2 HIGH + 1 MEDIUM, alle gefixt + Regression-Tests |
+
+**Problem:** Nach PR #134 (ADR-020 v1) konvergiert das Mesh nicht. RegistrySyncCoordinator startet, aber `peers`-Map permanent leer. 5+ Stunden Live-Debugging auf Mac mini + MacBook ergaben: libp2p v3 dialt nach `peer:discovery` NICHT automatisch (`#onDiscoveryPeer` macht nur `peerStore.merge`). Die Anwendung muss explizit dialen.
+
+**CO:** `pal:consensus` (Konsens-ID 5801b78c) — GPT-5.5 (8/10) + Gemini 2.5 Pro (9/10), einstimmig. Diagnose und Fix-Ansatz bestaetigt.
+**CG:** uebersprungen (reiner Bug-Fix).
+**TS:** 14 Unit-Tests in `libp2p-autodial.test.ts` (neu) + 1 Regression-Test in `registry-sync-coordinator.test.ts`. Alle 53 sync/libp2p-Tests gruen. Live-Test auf MacBook bestaetigt: peer:discovery → autoDial-Pipeline aktiv.
+**CR:** `pal:codereview` GPT-5.5 — 2 HIGH + 3 MEDIUM Findings:
+- HIGH: `peer:connect`-Event-Parsing nutzte generic `detail.toString()` → `"[object Object]"`. Auch ohne diesen Fix waere auto-dial nutzlos gewesen, weil Coordinator falsche Peer-IDs bekommt. Fix + 6 Regression-Tests fuer `extractPeerIdFromConnectionEvent`.
+- HIGH: `RegistrySyncCoordinator.runRound()` setzte `entry.inflight` NACH IIFE-Aufruf, aber im converged-Pfad (`message===null`) lief die IIFE synchron bis zum inneren `finally`, das `inflight=null` setzte — danach ueberschrieb der outer `entry.inflight = promise` das Ergebnis dauerhaft. Peer permanent blockiert. Fix: Cleanup ausschliesslich im outer finally. + Regression-Test.
+- MEDIUM: stop-Guard im autoDial gegen Use-after-Stop, + Regression-Test.
+- MEDIUM deferred: Backoff (Phase 1.2), In-Flight-Cap (niedrige Prio, libp2p deduppt).
+- MEDIUM dokumentiert: kein echter libp2p-Integration-Test (Live-Test auf 5 Nodes kompensiert).
+**PC:** `pal:precommit` GPT-5.5 — clean.
+**DO:** ADR-020-Phase-1.1-autodial.md (neu) + CHANGES.md + COMPLIANCE-TABLE.md.
+
+**Live-Befund:** Auto-Dial-Pipeline laeuft. libp2p-Dials zu den 4 Peers scheitern aktuell mit "All multiaddr dials failed" / "aborted due to timeout" — separater Bug auf Netzwerkebene (vermutlich asymmetrisch: andere Nodes haben Phase 1.1 noch nicht). Wird durch Rollout auf alle 5 Nodes geklaert.
+
+---
+
+## Session 2026-05-19 spaet — Bug #4 Pairing-URI-Migration
+
+| #   | PR                                      | Datum       | CO | CG | TS | CR | PC | DO | Findings                           |
+|-----|-----------------------------------------|-------------|----|----|----|----|----|----|----|
+| 143 | Bug #4 Pairing-URI-Migration            | 2026-05-19  | —  | —  | ✅ | ✅ | ✅ | ✅ | 0 — auf MacBook live verifiziert |
+
+**Problem:** Bug #4 aus ADR-020 Phase 1.1 Bug-Report (PR #136, Mac mini). Pairing-Eintraege mit Hostname-basierten SPIFFE-URIs (Legacy-Format) verhindern AGENT_MESSAGE-Empfang von Peers mit Host-ID-URIs.
+
+**CO/CG:** uebersprungen (Bug-Fix + isoliertes Migrationsskript).
+**TS:** 8 neue Tests in pairing.test.ts (Klassifizierung + Startup-Warning). Migrationsskript live auf MacBook ausgefuehrt (--dry-run + live).
+**CR:** `pal:codereview` internal gpt-5.5.
+**PC:** clean.
+**DO:** CHANGES.md, COMPLIANCE-TABLE.md, neuer npm-Script-Entry `migrate-pairings`.
+
+---
+
+*Letzte Aktualisierung: 2026-05-19 23:00 — Bug #4 Pairing-URI-Migration.*
+
+## Session 2026-05-19 spaet — Bug #3 libp2p connectionEncrypters Config-Key
+
+| #   | PR                                      | Datum       | CO | CG | TS | CR | PC | DO | Findings                           |
+|-----|-----------------------------------------|-------------|----|----|----|----|----|----|----|
+| 144 | Bug #3 libp2p connectionEncrypters Key  | 2026-05-19  | —  | —  | ✅ | ✅ | ✅ | ✅ | 0 — via libp2p-Probe live verifiziert |
+
+**Problem (Live-Befund):** Auto-Dial aus PR #135 fired korrekt, aber jeder Dial scheiterte mit `EncryptionFailedError`. Root Cause: libp2p v2+ benutzt `connectionEncrypters` (Plural), nicht `connectionEncryption`. Alter Key silent ignoriert → Noise nie konfiguriert.
+
+**CO/CG:** uebersprungen (One-line Config-Fix). Diagnose via direkter libp2p-Probe + node_modules/libp2p source review.
+**TS:** 4 Regression-Tests in libp2p-runtime-config.test.ts (Source-Text-Check + Runtime-Optionen-Check). 25 libp2p-Tests gruen.
+**CR:** internal validation, gpt-5.5.
+**PC:** clean.
+## Session 2026-05-19 spaet — Bug #2 `execute_remote_skill` Port-Mix Hotfix
+
+| #   | PR                                      | Datum       | CO | CG | TS | CR | PC | DO | Findings                           |
+|-----|-----------------------------------------|-------------|----|----|----|----|----|----|----|
+| 142 | Bug #2 execute_remote_skill Port-Mix    | 2026-05-19  | —  | —  | ✅ | ✅ | ✅ | ✅ | 0 — Diagnose live verifiziert via /proc/<pid>/environ |
+
+**Problem:** ADR-020 Phase 1.1 Bug-Report #2 (Mac mini, PR #136). execute_remote_skill schickte HTTP-Bytes an HTTPS-only Peer-Port.
+
+**CO/CG:** uebersprungen (reiner Bug-Fix, CLAUDE.md erlaubt).
+**TS:** 4 Unit-Tests in neuer `mcp-stdio-remote-skill.test.ts`. Pre-existing 227 Test-Failures sind unrelated better-sqlite3 ABI auf Node v26.
+**CR:** `pal:codereview` (internal validation, gpt-5.5) — 0 Findings.
+**PC:** vor Commit, clean.
+**DO:** CHANGES.md, COMPLIANCE-TABLE.md.
+
+---
+
+## Session 2026-05-20 — Test-Tooling: SQLite-ABI-Smoke-Test + `.nvmrc`-Check
+
+| #   | PR                                      | Datum       | CO | CG | TS | CR | PC | DO | Findings                           |
+|-----|-----------------------------------------|-------------|----|----|----|----|----|----|----|
+| 145 | Test-Tooling SQLite-ABI-Smoke-Test      | 2026-05-20  | —  | —  | ✅ | ✅ | ✅ | ✅ | 0 — beide Pfade (v22 / v26) live verifiziert |
+
+**Problem:** 227 Daemon-Tests scheiterten cryptisch auf Node v26 (Homebrew-Default), weil `check-native-modules.cjs` den ABI-Mismatch nicht erkannte (lazy binding + missing-file Fallback). Folge: jede Test-Session brauchte manuelles `PATH=...v22.22.3/bin:$PATH` als Tribal-Knowledge.
+
+**CO/CG:** uebersprungen (Test-Tooling-Fix, kein Architektur-Aspekt).
+**TS:** Refactoring zu Pure-Helpers + 16 node:test-Tests in `check-native-modules.test.cjs`. Daemon-Suite 758/758 gruen auf v22. `pretest`-Hook macht fail-fast mit klarer Anleitung auf v26.
+**CR:** `pal:codereview` internal gpt-5.5.
+**PC:** clean.
+**DO:** CHANGES.md, COMPLIANCE-TABLE.md, neuer `.nvmrc`-Pin.
+
+**Bezuege:** Folge aus dem Abend-Befund vom 2026-05-19 dass die Daemon-Tests fuer den User „pre-existing failures" zeigen, was die Test-Suite faktisch nutzlos macht.
+
+---
+
+## Session 2026-06-04 — ADR-022 PeerID-rooted Identity (Schritt 1 + #0 + Security-Fixes)
+
+| #   | PR                                      | Datum       | CO | CG | TS | CR | PC | DO | Findings                           |
+|-----|-----------------------------------------|-------------|----|----|----|----|----|----|----|
+| 143 | ADR-022 PeerID-rooted Identity          | 2026-06-04  | ✅ | —  | ✅ | ✅ | ✅ | ✅ | 2 HIGH + 3 MEDIUM + LOW (2× gpt-5.5) — alle gefixt |
+
+**CO:** 2 `pal:consensus`-Läufe (gpt-5.5 / gemini-2.5-pro / gemini-3.1-pro / MiniMax-M2.7) → einstimmig Option 1 (PeerID-gewurzelte Identität). ADR-022 Accepted.
+**CG:** — (kein clink gemini; Tests von Hand).
+**TS:** 784 Tests gruen, tsc clean. 4 neue Security-Regressionstests (Spoofing-blockiert, Parallel-Race→selbe PeerID, Malformed-URI abgelehnt, stale-verified-reset) + Akzeptanztest (stabile PeerID ueber Neustarts).
+**CR:** 1. Review gpt-5.3-codex, 2. + finale Bestaetigung gpt-5.5 — beide HIGH bestaetigt geschlossen, keine neuen HIGH+.
+**PC:** `pal:precommit` clean.
+**DO:** ADR-022-peerid-rooted-identity.md, CHANGES.md, TODO.md, Memory.
+
+**Scope-Hinweis:** additiv/kompatibel — aktiviert die kanonische PeerID-Aufloesung noch NICHT (fail-closed inert bis Cert-SAN-Cutover auf .94); der Live-403 wird hier noch nicht behoben.
+
+---
+
+## Session 2026-06-04 — ADR-022 Schritt 3 / WS-1 (channel-bound HTTPS-Authz)
+
+| #    | PR                                      | Datum       | CO | CG | TS | CR | PC | DO | Findings                           |
+|------|-----------------------------------------|-------------|----|----|----|----|----|----|----|
+| WS-1 | ADR-022 §3 channel-bound HTTPS authz    | 2026-06-04  | ✅ | —  | ✅ | ✅ | ✅ | ✅ | 1 HIGH + 1 MEDIUM + 2 LOW (gpt-5.5) — HIGH+MEDIUM+1 LOW gefixt, 1 LOW zurueckgestellt |
+
+**CO:** Konsensus fuer Schritt 3 bereits in der ADR-022 §Schritt-3-Sektion (PR #144) dokumentiert (channel-binding, PoP, atomarer Cutover) — kein neuer CO-Lauf fuer diesen additiven Teil-Workstream noetig.
+**CG:** — (kein clink gemini; Tests von Hand).
+**TS:** 792 Tests gruen, tsc clean. Neuer HIGH-Regressionstest (non-host non-canonical Sender → fail-closed), unique-match-Test fuer markPeerIdVerified, authorizeHttpsSender-Matrix (canonical+match / +no-cert / +mismatch / legacy).
+**CR:** `pal:codereview` gpt-5.5 — 1 HIGH (Legacy-Bypass zu breit) + 1 MEDIUM (mark-all) + 2 LOW; HIGH+MEDIUM+1 LOW (socket.authorized) gefixt + Regressionstest, 1 LOW (PeerID-Regex-Praefix) bewusst zurueckgestellt/dokumentiert.
+**PC:** `pal:precommit` (gpt-5.3-codex) clean — ready_for_commit, 0 Issues.
+**DO:** CHANGES.md, COMPLIANCE-TABLE.md; ADR-022 §Schritt-3-Sektion bereits gemerged (#144).
+
+**Scope-Hinweis:** additiv/fail-closed — inert bis .94 `node/<PeerID>`-Certs ausstellt; kein Verhaltenswechsel fuer Legacy-`host/`-Sender, kein .94-Eingriff.
+
+---
+
+## Session 2026-06-04 — ADR-022 Schritt 3 / WS-2 (Accept-both + Self-Identity, Phase 0)
+
+| #    | PR                                      | Datum       | CO | CG | TS | CR | PC | DO | Findings                           |
+|------|-----------------------------------------|-------------|----|----|----|----|----|----|----|
+| WS-2 | ADR-022 §3 Accept-both (Phase 0)        | 2026-06-04  | ✅ | —  | ✅ | ✅ | ✅ | ✅ | 1 HIGH + 1 MEDIUM + 2 LOW (gpt-5.5) — HIGH+MEDIUM+1 LOW gefixt + Re-Review bestaetigt, 1 LOW zurueckgestellt |
+
+**CO:** Phase-0-Sequenz bereits in der ADR-022 §Schritt-3-Sektion (#144) konsentiert — kein neuer CO-Lauf.
+**CG:** — (Tests von Hand).
+**TS:** 809 Tests gruen (+12 neu), tsc clean, eslint 0 errors. HIGH-Regression (`attestedPeerIdFromCert`: non-attesting/empty-pin → null), dual-SAN-Extraktion, isAttestingIssuer-Matrix, peerIdFromCertSan accept-both-Bruecke.
+**CR:** `pal:codereview` gpt-5.5 (security) — 1 HIGH (CA-Konflation: jede transport-vertraute CA konnte `node/<PeerID>` attestieren) + 1 MEDIUM (mDNS-Dup-Sichtbarkeit) + 2 LOW. HIGH+MEDIUM+1 LOW (dual-SAN) gefixt; Re-Review (intern, gpt-5.5) bestaetigt HIGH geschlossen, 0 Restfindings. 1 LOW (mark-vor-Sigverify) bewusst zurueckgestellt (durch Issuer-Pin entschaerft).
+**PC:** `pal:precommit` (gpt-5.3-codex) clean — ready_for_commit, 0 Issues.
+**DO:** CHANGES.md, COMPLIANCE-TABLE.md.
+
+**Scope-Hinweis:** additiv/fail-closed — Phase-0-Default setzt KEINEN attestierenden CA-Pin → kanonische Attestierung echt inert (WS-3 setzt den .94-Admin-CA-Fingerprint). Kein Emit-/Cert-Wechsel.
+
+---
+
+## Session 2026-06-04 — ADR-022 Schritt 3 / WS-3 (Cross-Node PoP Cert-Issuance)
+
+| #    | PR                                      | Datum       | CO | CG | TS | CR | PC | DO | Findings                           |
+|------|-----------------------------------------|-------------|----|----|----|----|----|----|----|
+| WS-3 | ADR-022 §3 PoP Cert-Issuance (node/<PeerID>) | 2026-06-04 | ✅ | —  | ✅ | ✅ | ✅ | ✅ | 1 HIGH + 1 MEDIUM + 3 LOW (gpt-5.5) — alle gefixt + Re-Review bestaetigt |
+
+**CO:** Schritt-3-Konsensus (PoP-Scope inkl. X.509-Pubkey-Hash, atomarer Cutover) in ADR-022 §Schritt-3 (#144).
+**CG:** — (Tests von Hand).
+**TS:** 831 Tests gruen (+22), tsc + eslint clean. cert-pop (Scope-Determinismus, length-prefix-Ambiguitaet, sign/verify-Roundtrip + Tamper/Fremd-Key/Fremd-PeerID/Fremd-CA), cert-issuer (NonceStore single-use/TTL, signNodeCertFromCsr SAN-Korrektheit + HIGH-Regression „kein Admin-Hostname/localhost", bogus-CN-drop, E2E Client↔Admin-Interop, cert-substitution/Fremd-PeerID/Fremd-CA-Abwehr).
+**CR:** `pal:codereview` gpt-5.5 (security) — 1 HIGH (Admin-Hostname/localhost-DNS-SAN-Impersonation) + 1 MEDIUM (Nonce-DoS) + 3 LOW; alle gefixt + Regressionstests; Re-Review (intern) bestaetigt HIGH geschlossen, 0 Restfindings.
+**PC:** `pal:precommit` (gpt-5.3-codex) clean — ready_for_commit.
+**DO:** CHANGES.md, COMPLIANCE-TABLE.md, `docs/runbooks/ADR-022-WS3-94-cert-issuance.md` (.94-Instruktion).
+
+**Scope-Hinweis:** Code beider Seiten (Client+Admin). `.94` rollt aus + verteilt den Empfänger-Pin (`TLMCP_PEERID_ATTESTING_CA_FP`); dann TH01-Rejoin live. Privater TLS-Key verlaesst den Node nie (nur CSR-Pubkey transitiert).
+
+---
+
+## Session 2026-06-04 — ADR-022 WS-3 Fix (Eigen-Loopback im Cert, Live-Test-Befund)
+
+| #     | PR                                      | Datum       | CO | CG | TS | CR | PC | DO | Findings                           |
+|-------|-----------------------------------------|-------------|----|----|----|----|----|----|----|
+| WS-3a | ADR-022 §3 Loopback-SAN-Fix             | 2026-06-04  | —  | —  | ✅ | ✅ | ✅ | ✅ | Live-Test-Befund: localhost-SAN versehentlich entfernt (MCP-Proxy); Eigen-Loopback wieder rein, HIGH bleibt zu |
+
+**Bug-Fix-PR (CO/CG entfallen).** **TS:** 831 grün, tsc+eslint clean; SAN-Regressionstests aktualisiert (`['localhost','th01']`, bogus-CN→`['localhost']`). **CR:** gpt-5.5 (security, intern) — Eigen-Loopback kein Cross-Node-Vektor, WS-3-HIGH (Admin-Host-Impersonation) bleibt geschlossen, 0 Findings. **PC:** gpt-5.3-codex clean. **DO:** CHANGES.md, COMPLIANCE-TABLE.md.
+
+---
+
+## Session 2026-06-04 — ADR-022 Schritt 3 LIVE-VERIFIKATION (Peer-Deploy + Live-Test)
+
+Pflichtschritt #13 (Peer-Deploy + Live-Test) für WS-1/2/3 + Loopback-Fix — **grün im Live-Mesh**:
+
+- **Krypto-Flow:** TH01 → `requestNodeCert` (PoP, libp2p-Ed25519) → .94 stellt `node/<PeerID>`-Cert aus → installiert + Daemon-Restart.
+- **.94↔TH01-Link 403-frei:** .94-Gegenprobe — kein SKILL_ANNOUNCE-403 / „Unknown sender" mehr; .94 importiert TH01s Announces, `/api/peers` `status=online`. Kanonische Attestierung via Cert-SAN (Pin = .94-CA-FP `b56aa30…`).
+- **MCP-Proxy geheilt:** `https://localhost:9440/health` → HTTP 200.
+- **Daemon:** active/running, 0 Restarts, Port 9440 listen.
+- **Offen:** Phase-3-Sender-Flip (NUR auf Christians Wort); Upgrade der 3 Alt-Code-Nodes auf WS-2.
+
+Doc-only-Eintrag (Abschluss-Dokumentation Live-Test); kein Code → CO/CG/TS/CR/PC entfallen, DO ✅.
+
+---
+
+## Session 2026-06-04 — Fix v0.30.1 Token-Onboarding Port-Mismatch (thinklocal join)
+
+| #       | PR  | Datum      | CO | CG | TS | CR | PC | DO | Findings                           |
+|---------|-----|------------|----|----|----|----|----|----|----|
+| v0.30.1 | tbd | 2026-06-04 | —  | —  | ✅ | ✅ | ✅ | ✅ | Bug-Fix: certloser Join ging an mTLS-Port 9440 statt Onboarding 9441. CR gpt-5.5: 0 HIGH, 1 MEDIUM (vorbestehend → Follow-up) + 2 LOW gefixt |
+
+**Bug-Fix-PR (CO/CG entfallen).** **TS:** 842 grün (+11), tsc+eslint clean; Regressionstest `:9440→:9441` + IPv6/userinfo/default-port/protocol-Edge-Cases; CLI-Smoke live (erreicht :9441). **CR:** gpt-5.5 full — single-source-Helfer korrekt, mTLS bleibt 9440, kein HIGH; 1 MEDIUM (prozessweites NODE_TLS_REJECT_UNAUTHORIZED=0 — vorbestehend, abhängigkeitsfreier Scope → TODO-Follow-up) + 2 LOW (Helfer-Härtung + Edge-Tests) gefixt. **PC:** gpt-5.3-codex clean. **DO:** CHANGES, COMPLIANCE, TODO, package.json 0.30.1.
+
+---
+
+## Session 2026-06-04 — Fix v0.30.2 `thinklocal restart` verlor Runtime-Flags
+
+| #       | PR  | Datum      | CO | CG | TS | CR | PC | DO | Findings                           |
+|---------|-----|------------|----|----|----|----|----|----|----|
+| v0.30.2 | tbd | 2026-06-04 | —  | —  | ✅ | ✅ | ✅ | ✅ | Bug-Fix: restart reichte --lan/--local nicht an start durch. CR gpt-5.5: 0 Findings |
+
+**Bug-Fix-PR (CO/CG entfallen).** **TS:** 847 grün (+5), tsc+eslint clean; Regression in `runtime-mode.test.ts` (leere Flags → fallback statt lan; `--lan`→lan; `--local` schlägt `--lan`) — CI-gated im daemon-Suite. **CR:** gpt-5.5 full — 0 Findings; Verdrahtung wie etablierte `args.slice(1)`-Befehle, Delegation erhält Präzedenz. **PC:** gpt-5.3-codex clean. **DO:** CHANGES, COMPLIANCE, package.json 0.30.2.
+
+**Hinweis:** `thinklocal.ts` läuft `main()` beim Import automatisch → nicht unit-importierbar; die Dispatch-Verdrahtung ist review-verifiziert (+ `--help`-Smoke), die testbare Entscheidungslogik (`runtimeModeFromFlags`) ist CI-getestet.
+
+---
+
+## Session 2026-06-04 — Verify-First: CRDT-Registry-Replikation (17.05.-TODO)
+
+| #         | PR  | Datum      | CO | CG | TS | CR | PC | DO | Findings                           |
+|-----------|-----|------------|----|----|----|----|----|----|----|
+| verify-01 | tbd | 2026-06-04 | —  | —  | —  | —  | —  | ✅ | Verify-First: 17.05.-Bug „CRDT repliziert nicht" NICHT reproduzierbar — behoben durch ADR-020 v1 (#139). Kein Code |
+
+**Verify-only, kein Code → CO/CG/TS/CR/PC entfallen, DO ✅.** Live-Verifikation gegen das heutige Mesh (TH01s mTLS-Cert gegen Peer-Agent-Cards + lokale `/api/capabilities`): TH01-Registry = 16 Caps aus 6 Nodes gemerged; TH01 + .94 konsistent `registry_sync conv=5/5` (2 Passes); je 8 libp2p-Verbindungen; periodischer 45s-Resync + `republish()` vorhanden. TODO-Item als erledigt markiert (mit Belegen). **DO:** CHANGES.md, COMPLIANCE-TABLE.md, TODO.md.
+
+---
+
+## Session 2026-06-04 — v0.30.3 Registry-Republish-Endpoint Test-Abdeckung
+
+| #       | PR  | Datum      | CO | CG | TS | CR | PC | DO | Findings                           |
+|---------|-----|------------|----|----|----|----|----|----|----|
+| v0.30.3 | tbd | 2026-06-04 | —  | —  | ✅ | ✅ | ✅ | ✅ | `POST /api/registry/republish` existierte (ADR-020 v1), war untestet. Live verifiziert + Regressionstest. CR gpt-5.5: 0 Findings |
+
+**Bug-Fix/Test-PR (CO/CG entfallen).** **TS:** 851 grün (+4), tsc+eslint clean; `dashboard-api.test.ts` (Fastify-inject: ok/503/500/429). **CR:** gpt-5.5 — 0 Findings (test-only, Endpoint live-verifiziert: auth→ok + Audit-Delta). **PC:** gpt-5.3-codex clean. **DO:** CHANGES, COMPLIANCE, TODO, package.json 0.30.3.
+
+**Side-note (pre-existing, out of scope):** `registerApiAuth` (JWT-Hook) ohne Aufrufstelle → `/api/*` nur mTLS-gated (Mesh-Authz erfüllt). Separater Befund, nicht angefasst.
+
+---
+
+## Session 2026-06-04 — v0.31.0 ADR-021 Generisches Skill-Health-Monitoring
+
+| #       | PR  | Datum      | CO | CG | TS | CR | PC | DO | Findings                           |
+|---------|-----|------------|----|----|----|----|----|----|----|
+| v0.31.0 | tbd | 2026-06-04 | ✅ | —  | ✅ | ✅ | ✅ | ✅ | ADR-021 SkillHealthMonitor + availability-Attribut. CR gpt-5.5: 1 HIGH (Routing-Filter) + 2 MEDIUM + 2 LOW — alle gefixt + Re-Review |
+
+**CO:** Konsens 2026-05-18 in ADR-021 (gpt-5.2 8/10 + gemini-3-pro 9/10). **CG:** — (Tests von Hand). **TS:** 862 grün (+11), tsc clean; skill-health-monitor.test.ts (Hysterese 2-up/3-down, Timeout, Single-Flight, Intervall-Switch, Jitter, stop(), Shutdown-Race) + registry.test.ts (availability-Routing-Filter HIGH-Regression, setAvailability owner-only/idempotent/Hash-Flip). **CR:** `pal:codereview` gpt-5.5 — 1 HIGH (findBySkill/findByCategory ignorierten availability) + 2 MEDIUM (Shutdown-Race onTransition, Hash ohne availability) + 2 LOW (idempotenz, stale re-register) gefixt; Re-Review bestätigt HIGH geschlossen, 0 Restfindings. **PC:** gpt-5.3-codex clean. **DO:** ADR-021 (Accepted), CHANGES, COMPLIANCE, TODO, package.json 0.31.0.
+
+**Voraussetzung-Hinweis:** ADR-020 v2.2 (Owner-wins CRDT) am Write-Site adressiert (setAvailability nur eigener Key), CRDT-Layer-Enforcement offen (ADR-acknowledged).
+
+---
+
+## Session 2026-06-04 — v0.31.1 Boot-Race-Schutz im Installer (Skill-Service-Deps)
+
+| #       | PR  | Datum      | CO | CG | TS | CR | PC | DO | Findings                           |
+|---------|-----|------------|----|----|----|----|----|----|----|
+| v0.31.1 | tbd | 2026-06-04 | —  | —  | ✅ | ✅ | ✅ | ✅ | Spiegelt .56-Boot-Race-Fix generisch in Installer (CLI + install.sh). CR gpt-5.5: 0 Findings |
+
+**Bug-/Tech-Debt-PR (CO/CG entfallen).** **TS:** 869 grün (+7), tsc clean, `bash -n` ok; service-dependencies.test.ts (Manifest-Sammlung, Host-conditional After=/Wants=, dep-aber-absent→keine Zeilen). **CR:** gpt-5.5 — 0 Findings; generisch (aus Manifests, nicht influxdb-hartkodiert), Injection-Regex-geschützt, Presence-Check verhindert hängende Wants=. **PC:** gpt-5.3-codex clean. **DO:** CHANGES, COMPLIANCE, TODO, package.json 0.31.1.
+
+**Scope:** CLI-Bootstrap + install.sh (Install-Zeit); build-deb.sh ausgenommen (Build-Zeit). Laufender .56-Daemon nicht angefasst (nur Repo).
+
+---
+
+*Letzte Aktualisierung: 2026-06-04 — v0.31.1 Installer Boot-Race-Schutz (Skill-Service-Deps).*
