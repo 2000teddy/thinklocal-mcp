@@ -5,7 +5,7 @@
  * Befehle:
  *   thinklocal start          Daemon starten (als Vordergrund-Prozess oder Service)
  *   thinklocal stop           Daemon stoppen
- *   thinklocal restart        Daemon neu starten
+ *   thinklocal restart        Daemon neu starten [--local|--lan]
  *   thinklocal status         Status anzeigen (laeuft?, Peers, Capabilities)
  *   thinklocal doctor         Diagnostik (Keys, Certs, Daemon, Peers, MCP)
  *   thinklocal logs           Live-Logs anzeigen
@@ -21,7 +21,7 @@ import { homedir, platform } from 'node:os';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, statSync } from 'node:fs';
 import { execSync, spawn, spawnSync } from 'node:child_process';
 import { getDefaultLocalDaemonUrl, requestDaemon, requestDaemonJson } from '../../daemon/src/local-daemon-client.js';
-import { resolveRuntimeSettings, parseRuntimeMode, type RuntimeMode } from '../../daemon/src/runtime-mode.js';
+import { resolveRuntimeSettings, parseRuntimeMode, runtimeModeFromFlags, type RuntimeMode } from '../../daemon/src/runtime-mode.js';
 import { onboardingUrlFromAdminUrl } from '../../daemon/src/onboarding-port.js';
 import { runHeartbeatCommand } from './thinklocal-heartbeat.js';
 import type { SupportedTool } from '../../daemon/src/cli-adapters.js';
@@ -73,9 +73,7 @@ function getClaudeDesktopConfigPath(): string {
 }
 
 function resolveCliRuntimeMode(flags: string[], fallback: RuntimeMode = DEFAULT_RUNTIME_MODE): RuntimeMode {
-  if (flags.includes('--local')) return 'local';
-  if (flags.includes('--lan')) return 'lan';
-  return fallback;
+  return runtimeModeFromFlags(flags, fallback);
 }
 
 function getRuntimeSettingsFor(flags: string[], fallback: RuntimeMode = DEFAULT_RUNTIME_MODE) {
@@ -310,10 +308,12 @@ async function cmdStop(): Promise<void> {
   }
 }
 
-async function cmdRestart(): Promise<void> {
+async function cmdRestart(flags: string[] = []): Promise<void> {
   await cmdStop();
   await new Promise((r) => setTimeout(r, 2_000));
-  await cmdStart();
+  // Flags (z.B. --lan/--local) an cmdStart durchreichen — sonst startet der Daemon
+  // nach dem Restart im Default-Modus statt im gewuenschten (Bug: Flags gingen verloren).
+  await cmdStart(flags);
 }
 
 async function cmdDoctor(): Promise<void> {
@@ -1985,7 +1985,7 @@ async function main(): Promise<void> {
   switch (cmd) {
     case 'start': return cmdStart(args.slice(1));
     case 'stop': return cmdStop();
-    case 'restart': return cmdRestart();
+    case 'restart': return cmdRestart(args.slice(1));
     case 'status': return cmdStatus();
     case 'doctor': return cmdDoctor();
     case 'logs': return cmdLogs();
@@ -2028,7 +2028,7 @@ async function main(): Promise<void> {
     bootstrap      Ersteinrichtung (Keys, Config, Service, MCP) [--local|--lan]
     start          Daemon starten (Service oder Vordergrund) [--local|--lan]
     stop           Daemon stoppen
-    restart        Daemon neu starten
+    restart        Daemon neu starten [--local|--lan]
     status         Status anzeigen
     doctor         Systemdiagnose (prueft alles)
     logs           Live-Logs anzeigen

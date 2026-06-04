@@ -583,4 +583,16 @@ Doc-only-Eintrag (Abschluss-Dokumentation Live-Test); kein Code → CO/CG/TS/CR/
 
 ---
 
-*Letzte Aktualisierung: 2026-06-04 — Fix v0.30.1 Onboarding-Port-Mismatch (join → :9441).*
+## Session 2026-06-04 — Fix v0.30.2 `thinklocal restart` verlor Runtime-Flags
+
+| #       | PR  | Datum      | CO | CG | TS | CR | PC | DO | Findings                           |
+|---------|-----|------------|----|----|----|----|----|----|----|
+| v0.30.2 | tbd | 2026-06-04 | —  | —  | ✅ | ✅ | ✅ | ✅ | Bug-Fix: restart reichte --lan/--local nicht an start durch. CR gpt-5.5: 0 Findings |
+
+**Bug-Fix-PR (CO/CG entfallen).** **TS:** 847 grün (+5), tsc+eslint clean; Regression in `runtime-mode.test.ts` (leere Flags → fallback statt lan; `--lan`→lan; `--local` schlägt `--lan`) — CI-gated im daemon-Suite. **CR:** gpt-5.5 full — 0 Findings; Verdrahtung wie etablierte `args.slice(1)`-Befehle, Delegation erhält Präzedenz. **PC:** gpt-5.3-codex clean. **DO:** CHANGES, COMPLIANCE, package.json 0.30.2.
+
+**Hinweis:** `thinklocal.ts` läuft `main()` beim Import automatisch → nicht unit-importierbar; die Dispatch-Verdrahtung ist review-verifiziert (+ `--help`-Smoke), die testbare Entscheidungslogik (`runtimeModeFromFlags`) ist CI-getestet.
+
+---
+
+*Letzte Aktualisierung: 2026-06-04 — Fix v0.30.2 restart-Flags (--lan/--local durchgereicht).*

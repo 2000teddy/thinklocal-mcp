@@ -8,6 +8,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-04
 
+### Fix v0.30.2 — `thinklocal restart` verlor Runtime-Flags
+
+`thinklocal restart --lan` (bzw. `--local`) verlor die Flags: `cmdRestart()` nahm keine Argumente und rief `cmdStart()` ohne Flags, und der Main-Dispatch reichte `args.slice(1)` nicht weiter → der Daemon startete nach dem Restart im Default-Modus statt im gewünschten (relevant im Vordergrund-/Dev-Pfad; der systemd-Pfad nutzt ohnehin die Unit-Env).
+
+- **`runtime-mode.ts`** (daemon): neue reine, exportierte `runtimeModeFromFlags(flags, fallback)` (`--local`→local, `--lan`→lan, sonst fallback) als single source — von der CLI genutzt, im daemon-Suite **CI-getestet**.
+- **`thinklocal.ts`**: `cmdRestart(flags)` reicht Flags an `cmdStart` durch; Main: `case 'restart': return cmdRestart(args.slice(1))` (wie alle anderen flag-nehmenden Befehle); `resolveCliRuntimeMode` delegiert an den Helfer (Verhalten identisch, `--local` schlägt `--lan`); Hilfe/Header zeigen `restart … [--local|--lan]`.
+- **CR gpt-5.5:** 0 Findings. **PC:** clean. **847 Tests grün** (+5 inkl. Regression „leere Flags → fallback statt lan"), tsc+eslint clean. Version 0.30.1 → **0.30.2**.
+
+---
+
 ### Fix v0.30.1 — Token-Onboarding Port-Mismatch (`thinklocal join`)
 
 Der dokumentierte Join-Weg war kaputt: `thinklocal join` schickte den **certlosen** `POST /onboarding/join` an die `--admin-url` (mTLS-Haupt-Port 9440, `requestCert+rejectUnauthorized`) — der certlose Onboarding-Server lauscht aber auf **Haupt-Port + 1 (9441)**. Ein neuer Node ohne Cert scheiterte am TLS-Handshake.
