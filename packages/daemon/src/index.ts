@@ -29,6 +29,7 @@ import { registerWebSocket } from './websocket.js';
 import { registerComplianceApi } from './compliance-check.js';
 import { TokenStore } from './token-store.js';
 import { registerTokenApi } from './token-api.js';
+import { onboardingPort } from './onboarding-port.js';
 import { CertIssuer, NonceStore } from './cert-issuer.js';
 import { registerCertIssuanceApi } from './cert-issuance-api.js';
 import { readFileSync } from 'node:fs';
@@ -580,9 +581,9 @@ async function main(): Promise<void> {
       rateLimiter,
     });
 
-    const onboardingPort = config.daemon.port + 1; // 9441
-    await onboardingServer.listen({ port: onboardingPort, host: '0.0.0.0' });
-    log.info({ port: onboardingPort }, 'Onboarding-Server gestartet (HTTPS ohne mTLS-Pflicht)');
+    const onboardingListenPort = onboardingPort(config.daemon.port); // Haupt-Port + 1 (single source)
+    await onboardingServer.listen({ port: onboardingListenPort, host: '0.0.0.0' });
+    log.info({ port: onboardingListenPort }, 'Onboarding-Server gestartet (HTTPS ohne mTLS-Pflicht)');
   }
 
   // 8c2. Agent Registry (ADR-004 Phase 2)
