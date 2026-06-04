@@ -8,6 +8,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-04
 
+### v0.30.3 — Registry-Republish-Endpoint: Test-Abdeckung + Live-Verifikation
+
+`POST /api/registry/republish` (ADR-020 v1 Safety-Valve, manueller Force-Push des Registry-Resyncs) existierte bereits (`dashboard-api.ts`, wired via `registrySyncRepublish`), war aber **untestet**. Verify-First: live bestätigt (authentifiziert → `{status:ok}` + Audit-Event `REGISTRY_REPUBLISH`, `audit_events` 36→37). Neuer Regressionstest `dashboard-api.test.ts` (Fastify-`inject`, 4 Fälle: ok / 503 unwired / 500 throws / 429 rate-limited). AuthZ = mTLS-Handshake (Mesh-Member) auf dem Hauptserver; LAN-only. **851 Tests grün** (+4), tsc+eslint clean. Version 0.30.2 → **0.30.3**.
+
+Side-note (pre-existing, out of scope): `registerApiAuth` (JWT-Hook) hat aktuell keine Aufrufstelle → `/api/*` ist nur per mTLS-Handshake gated (Mesh-Authz erfüllt; JWT-Schicht inaktiv). Nicht angefasst — separater Befund.
+
+---
+
 ### Verify-First — „CRDT-Registry repliziert nicht" (17.05.) ist behoben ✅ (kein Code)
 
 Verifikation des 🔴-TODO von 2026-05-17 gegen das **heutige** Mesh: **nicht mehr reproduzierbar.** Behoben durch ADR-020 v1 (#139, 18.05.) — der Placeholder-Stream-Handler, der `/thinklocal/mesh/registry/1.0.0` sofort schloss, war der dortige „Smoking-Gun"-Fix. Live-Belege: TH01s `/api/capabilities` = **16 Caps aus 6 Nodes** gemerged; TH01 + .94 konsistent `registry_sync conv=5/5` (Automerge kein-Diff = in Sync); je 8 libp2p-Verbindungen; periodischer 45s-Resync-Coordinator + `republish()` vorhanden (= der vom TODO geforderte Fix). Kein Code-Fix nötig — TODO als erledigt markiert. (Optionaler Follow-up: expliziter HTTP-`/api/registry/republish`-Endpoint; intern bereits verdrahtet.)

@@ -605,4 +605,16 @@ Doc-only-Eintrag (Abschluss-Dokumentation Live-Test); kein Code → CO/CG/TS/CR/
 
 ---
 
-*Letzte Aktualisierung: 2026-06-04 — Verify-First: CRDT-Registry-Replikation behoben (ADR-020 #139).*
+## Session 2026-06-04 — v0.30.3 Registry-Republish-Endpoint Test-Abdeckung
+
+| #       | PR  | Datum      | CO | CG | TS | CR | PC | DO | Findings                           |
+|---------|-----|------------|----|----|----|----|----|----|----|
+| v0.30.3 | tbd | 2026-06-04 | —  | —  | ✅ | ✅ | ✅ | ✅ | `POST /api/registry/republish` existierte (ADR-020 v1), war untestet. Live verifiziert + Regressionstest. CR gpt-5.5: 0 Findings |
+
+**Bug-Fix/Test-PR (CO/CG entfallen).** **TS:** 851 grün (+4), tsc+eslint clean; `dashboard-api.test.ts` (Fastify-inject: ok/503/500/429). **CR:** gpt-5.5 — 0 Findings (test-only, Endpoint live-verifiziert: auth→ok + Audit-Delta). **PC:** gpt-5.3-codex clean. **DO:** CHANGES, COMPLIANCE, TODO, package.json 0.30.3.
+
+**Side-note (pre-existing, out of scope):** `registerApiAuth` (JWT-Hook) ohne Aufrufstelle → `/api/*` nur mTLS-gated (Mesh-Authz erfüllt). Separater Befund, nicht angefasst.
+
+---
+
+*Letzte Aktualisierung: 2026-06-04 — v0.30.3 Registry-Republish-Endpoint (Test + Verifikation).*

@@ -1,6 +1,6 @@
 {
   "name": "thinklocal-mcp",
-  "version": "0.30.2",
+  "version": "0.30.3",
   "description": "Encrypted P2P communication between AI CLI agents on the local network",
   "private": true,
   "type": "module",
