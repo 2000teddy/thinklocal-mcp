@@ -13,6 +13,17 @@ export function parseRuntimeMode(value?: string | null): RuntimeMode {
   return value === 'local' ? 'local' : 'lan';
 }
 
+/**
+ * Leitet den Runtime-Modus aus CLI-Flags ab: `--local` → local, `--lan` → lan,
+ * sonst `fallback`. Reine Funktion (shared zwischen CLI-Befehlen) — damit die
+ * Modus-Wahl konsistent ist und Befehle wie `restart` ihre Flags nicht verlieren.
+ */
+export function runtimeModeFromFlags(flags: readonly string[], fallback: RuntimeMode = 'local'): RuntimeMode {
+  if (flags.includes('--local')) return 'local';
+  if (flags.includes('--lan')) return 'lan';
+  return fallback;
+}
+
 export function resolveRuntimeSettings(args: {
   bindHost?: string | null;
   mode?: string | null;
