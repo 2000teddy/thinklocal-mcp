@@ -7,6 +7,14 @@ import { peerIdToSpiffeUri } from './peer-identity.js';
 const noopEvents = { onPeerOnline: () => {}, onPeerOffline: () => {} };
 const mkMesh = () => new MeshManager(10_000, 3, noopEvents);
 
+// Simuliert den KÜNFTIGEN Krypto-Pfad (mTLS cert-SAN=node/<PeerID> oder libp2p-Noise),
+// der peerIdVerified setzen wird. In Produktion gibt es diesen Pfad noch nicht → der
+// PeerID-Fallback ist faktisch aus (HIGH 1).
+function markPeerIdVerified(mesh: MeshManager, agentId: string): void {
+  const p = mesh.getPeer(agentId);
+  if (p) p.libp2p.peerIdVerified = true;
+}
+
 function disc(p: Partial<DiscoveredPeer> & { agentId: string }): DiscoveredPeer {
   return {
     name: p.name ?? 'peer',
@@ -41,13 +49,28 @@ describe('MeshManager.resolvePeerPublicKey — ADR-022 tolerant resolution', () 
     expect(mesh.resolvePeerPublicKey(LEGACY)).toBe('PUBKEY-A');
   });
 
-  it('resolves a canonical node/<PeerID> sender via libp2p.peerId even when the card URI drifts (Root-Cause a fix)', () => {
+  it('canonical node/<PeerID> resolves ONLY when the PeerID is crypto-verified (HIGH 1 gate)', () => {
     const mesh = mkMesh();
-    // Peer discovered under a legacy/hostname URI but carries the libp2p PeerID.
+    // Peer discovered under a legacy/hostname URI, carrying a libp2p PeerID FROM mDNS.
     mesh.addPeer(disc({ agentId: LEGACY, p2pPeerId: PID }));
     mesh.updateAgentCard(LEGACY, card('PUBKEY-B', LEGACY));
-    // Sender signs with the canonical PeerID URI — must still resolve.
+    // Unverified (mDNS-sourced) PeerID → fallback OFF → does NOT resolve.
+    expect(mesh.resolvePeerPublicKey(peerIdToSpiffeUri(PID))).toBeUndefined();
+    // Once a real crypto path verifies the PeerID binding → resolves.
+    markPeerIdVerified(mesh, LEGACY);
     expect(mesh.resolvePeerPublicKey(peerIdToSpiffeUri(PID))).toBe('PUBKEY-B');
+  });
+
+  it('SECURITY HIGH 1: attacker card (own key) advertising a VICTIM PeerID does NOT resolve — spoofing blocked', () => {
+    const mesh = mkMesh();
+    const VICTIM_PID = PID;
+    // Attacker owns a verified-looking agent-card (ATTACKER-KEY) but advertises the
+    // victim's PeerID via UNAUTHENTICATED mDNS → peerIdVerified stays false.
+    const attacker = 'spiffe://thinklocal/host/attacker/agent/claude-code';
+    mesh.addPeer(disc({ agentId: attacker, p2pPeerId: VICTIM_PID, host: '10.10.10.66' }));
+    mesh.updateAgentCard(attacker, card('ATTACKER-KEY', attacker));
+    // Sending as the victim's canonical node/<PeerID> URI must NOT return ATTACKER-KEY.
+    expect(mesh.resolvePeerPublicKey(peerIdToSpiffeUri(VICTIM_PID))).toBeUndefined();
   });
 
   it('resolves by card.spiffeUri when it differs from the discovery map key', () => {
@@ -70,17 +93,46 @@ describe('MeshManager.resolvePeerPublicKey — ADR-022 tolerant resolution', () 
     expect(mesh.resolvePeerPublicKey('spiffe://thinklocal/node/UNKNOWN')).toBeUndefined();
   });
 
-  it('fail-closed: ambiguous PeerID match (two peers claim same mDNS peerId) resolves to undefined (CR HIGH)', () => {
+  it('fail-closed: even with crypto-verified PeerIDs, an AMBIGUOUS match (two peers, same PeerID) → undefined', () => {
     const mesh = mkMesh();
-    // Two distinct discovery keys both advertising the SAME libp2p peerId (mDNS is
-    // unauthenticated → an attacker could spoof a victim's PeerID). Must NOT trust either.
-    mesh.addPeer(disc({ agentId: 'spiffe://thinklocal/host/aaa/agent/claude-code', p2pPeerId: PID }));
-    mesh.addPeer(disc({ agentId: 'spiffe://thinklocal/host/bbb/agent/claude-code', p2pPeerId: PID, host: '10.10.10.10' }));
-    mesh.updateAgentCard('spiffe://thinklocal/host/aaa/agent/claude-code', card('KEY-AAA', 'spiffe://thinklocal/host/aaa/agent/claude-code'));
-    mesh.updateAgentCard('spiffe://thinklocal/host/bbb/agent/claude-code', card('KEY-BBB', 'spiffe://thinklocal/host/bbb/agent/claude-code'));
-    // PeerID fallback is ambiguous (2 matches) → fail-closed.
+    const aaa = 'spiffe://thinklocal/host/aaa/agent/claude-code';
+    const bbb = 'spiffe://thinklocal/host/bbb/agent/claude-code';
+    mesh.addPeer(disc({ agentId: aaa, p2pPeerId: PID }));
+    mesh.addPeer(disc({ agentId: bbb, p2pPeerId: PID, host: '10.10.10.10' }));
+    mesh.updateAgentCard(aaa, card('KEY-AAA', aaa));
+    mesh.updateAgentCard(bbb, card('KEY-BBB', bbb));
+    // Even if BOTH were crypto-verified, two peers sharing one PeerID is ambiguous → fail-closed.
+    markPeerIdVerified(mesh, aaa);
+    markPeerIdVerified(mesh, bbb);
     expect(mesh.resolvePeerPublicKey(peerIdToSpiffeUri(PID))).toBeUndefined();
-    // But exact-spiffeUri resolution for each is still unambiguous and works.
-    expect(mesh.resolvePeerPublicKey('spiffe://thinklocal/host/aaa/agent/claude-code')).toBe('KEY-AAA');
+    // Exact-agentId resolution stays unambiguous and works.
+    expect(mesh.resolvePeerPublicKey(aaa)).toBe('KEY-AAA');
+  });
+
+  it('SECURITY HIGH 1 (complete): node/<PeerID> as agentId OR card.spiffeUri does NOT resolve via exact match', () => {
+    const mesh = mkMesh();
+    const victimUri = peerIdToSpiffeUri(PID); // spiffe://thinklocal/node/<PID>
+    // Attacker publishes the victim's CANONICAL URI as its mDNS agent-id AND its card
+    // spiffeUri, with its OWN key. peerIdVerified stays false (mDNS/card not crypto-verified).
+    mesh.addPeer(disc({ agentId: victimUri, p2pPeerId: PID, host: '10.10.10.66' }));
+    mesh.updateAgentCard(victimUri, card('ATTACKER-KEY', victimUri));
+    // Canonical node/<PeerID> URIs MUST bypass the exact agentId/card branches entirely →
+    // only a crypto-verified PeerID binding may resolve them. Here: not verified → undefined.
+    expect(mesh.resolvePeerPublicKey(victimUri)).toBeUndefined();
+  });
+
+  it('MEDIUM: a PeerID change via updateAgentCard resets peerIdVerified to false (no stale verification)', () => {
+    const mesh = mkMesh();
+    const uri = 'spiffe://thinklocal/host/x/agent/claude-code';
+    mesh.addPeer(disc({ agentId: uri, p2pPeerId: PID }));
+    mesh.updateAgentCard(uri, card('K', uri));
+    markPeerIdVerified(mesh, uri);
+    expect(mesh.getPeer(uri)!.libp2p.peerIdVerified).toBe(true);
+    // Card now reports a DIFFERENT peerId → prior verification must be invalidated.
+    const card2 = card('K', uri) as unknown as { mesh: { libp2p: { peer_id: string } } };
+    card2.mesh.libp2p.peer_id = 'k51qzi5differentpeerid999';
+    mesh.updateAgentCard(uri, card2 as unknown as AgentCard);
+    expect(mesh.getPeer(uri)!.libp2p.peerId).toBe('k51qzi5differentpeerid999');
+    expect(mesh.getPeer(uri)!.libp2p.peerIdVerified).toBe(false);
   });
 });
