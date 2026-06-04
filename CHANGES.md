@@ -8,6 +8,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-04
 
+### Verify-First — „CRDT-Registry repliziert nicht" (17.05.) ist behoben ✅ (kein Code)
+
+Verifikation des 🔴-TODO von 2026-05-17 gegen das **heutige** Mesh: **nicht mehr reproduzierbar.** Behoben durch ADR-020 v1 (#139, 18.05.) — der Placeholder-Stream-Handler, der `/thinklocal/mesh/registry/1.0.0` sofort schloss, war der dortige „Smoking-Gun"-Fix. Live-Belege: TH01s `/api/capabilities` = **16 Caps aus 6 Nodes** gemerged; TH01 + .94 konsistent `registry_sync conv=5/5` (Automerge kein-Diff = in Sync); je 8 libp2p-Verbindungen; periodischer 45s-Resync-Coordinator + `republish()` vorhanden (= der vom TODO geforderte Fix). Kein Code-Fix nötig — TODO als erledigt markiert. (Optionaler Follow-up: expliziter HTTP-`/api/registry/republish`-Endpoint; intern bereits verdrahtet.)
+
+---
+
 ### Fix v0.30.2 — `thinklocal restart` verlor Runtime-Flags
 
 `thinklocal restart --lan` (bzw. `--local`) verlor die Flags: `cmdRestart()` nahm keine Argumente und rief `cmdStart()` ohne Flags, und der Main-Dispatch reichte `args.slice(1)` nicht weiter → der Daemon startete nach dem Restart im Default-Modus statt im gewünschten (relevant im Vordergrund-/Dev-Pfad; der systemd-Pfad nutzt ohnehin die Unit-Env).

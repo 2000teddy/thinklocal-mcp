@@ -19,8 +19,11 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 
 ## Skill Health & Lifecycle (entdeckt 2026-05-17)
 
-- [ ] 🔴 **CRDT-Registry repliziert nicht — eingefrorene Inkonsistenz im Mesh** (entdeckt 2026-05-17, ca. 21:45)
-  Mesh aktuell mit 5 Nodes: `MacBook-Pro` (10.10.10.55), `ai-n8n-local` (.222), `iobroker` (.52), `influxdb` (.56), `minimac-60` (.94). Heartbeats laufen sauber (`mesh_status.peers_online = 4` auf allen Seiten), aber `/api/capabilities` liefert auf jedem Peer eine **andere** Sicht mit **anderem Hash**:
+- [x] 🔴 **CRDT-Registry repliziert nicht — eingefrorene Inkonsistenz im Mesh** (entdeckt 2026-05-17, **BEHOBEN/verifiziert 2026-06-04**)
+  **Aufloesung (Verify-First 2026-06-04):** NICHT mehr reproduzierbar — behoben durch **ADR-020 v1 (PR #139, 2026-05-18)**, einen Tag nach dem Befund. Root-Cause (Placeholder-Stream-Handler in `libp2p-runtime.ts` schlossen `/thinklocal/mesh/registry/1.0.0`-Streams sofort) war exakt der ADR-020-„Smoking-Gun"-Fix. **Live-Belege (heutiges Mesh):** (a) TH01s `/api/capabilities` zeigt **16 Caps aus 6 distinkten Nodes** gemerged (kein Single-View); (b) TH01 + .94 melden konsistent (2 Passes) `registry_sync conv=5/5` — Automerge `generateSyncMessage===null` = kein Diff = in Sync; (c) je 8 libp2p-Verbindungen; (d) der vom TODO geforderte **periodische idempotente Resync existiert** (`RegistrySyncCoordinator`, 45s-Tick + `republish()`). Offen-optional (kein Blocker, da Replikation laeuft): expliziter HTTP-`/api/registry/republish`-Endpoint als manueller Anstoss (intern via `registrySyncRepublish` bereits verdrahtet). Hinweis: .56/.222 antworten TH01 mit `SELF_SIGNED_CERT_IN_CHAIN` (eigene CA, separates Trust-Bundle-Thema — NICHT Registry-Replikation; ihre Caps replizieren via libp2p trotzdem).
+
+  ---
+  _Original-Befund (2026-05-17, historisch):_ Mesh mit 5 Nodes: `MacBook-Pro` (10.10.10.55), `ai-n8n-local` (.222), `iobroker` (.52), `influxdb` (.56), `minimac-60` (.94). Heartbeats liefen sauber, aber `/api/capabilities` lieferte auf jedem Peer eine **andere** Sicht mit **anderem Hash**:
   - ai-n8n-local: 7 caps, hash `cdc348dec...`
   - iobroker: 9 caps, hash `dea131900...`
   - influxdb: 10 caps, hash `2eb192295...`

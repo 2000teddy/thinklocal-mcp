@@ -595,4 +595,14 @@ Doc-only-Eintrag (Abschluss-Dokumentation Live-Test); kein Code → CO/CG/TS/CR/
 
 ---
 
-*Letzte Aktualisierung: 2026-06-04 — Fix v0.30.2 restart-Flags (--lan/--local durchgereicht).*
+## Session 2026-06-04 — Verify-First: CRDT-Registry-Replikation (17.05.-TODO)
+
+| #         | PR  | Datum      | CO | CG | TS | CR | PC | DO | Findings                           |
+|-----------|-----|------------|----|----|----|----|----|----|----|
+| verify-01 | tbd | 2026-06-04 | —  | —  | —  | —  | —  | ✅ | Verify-First: 17.05.-Bug „CRDT repliziert nicht" NICHT reproduzierbar — behoben durch ADR-020 v1 (#139). Kein Code |
+
+**Verify-only, kein Code → CO/CG/TS/CR/PC entfallen, DO ✅.** Live-Verifikation gegen das heutige Mesh (TH01s mTLS-Cert gegen Peer-Agent-Cards + lokale `/api/capabilities`): TH01-Registry = 16 Caps aus 6 Nodes gemerged; TH01 + .94 konsistent `registry_sync conv=5/5` (2 Passes); je 8 libp2p-Verbindungen; periodischer 45s-Resync + `republish()` vorhanden. TODO-Item als erledigt markiert (mit Belegen). **DO:** CHANGES.md, COMPLIANCE-TABLE.md, TODO.md.
+
+---
+
+*Letzte Aktualisierung: 2026-06-04 — Verify-First: CRDT-Registry-Replikation behoben (ADR-020 #139).*
