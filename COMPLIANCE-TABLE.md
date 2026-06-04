@@ -515,4 +515,21 @@ Gesamtsuite 682/682 (vorher 672), 0 Regressionen.
 
 ---
 
-*Letzte Aktualisierung: 2026-06-04 — ADR-022 Schritt 3 / WS-1 (channel-bound HTTPS authz).*
+## Session 2026-06-04 — ADR-022 Schritt 3 / WS-2 (Accept-both + Self-Identity, Phase 0)
+
+| #    | PR                                      | Datum       | CO | CG | TS | CR | PC | DO | Findings                           |
+|------|-----------------------------------------|-------------|----|----|----|----|----|----|----|
+| WS-2 | ADR-022 §3 Accept-both (Phase 0)        | 2026-06-04  | ✅ | —  | ✅ | ✅ | ✅ | ✅ | 1 HIGH + 1 MEDIUM + 2 LOW (gpt-5.5) — HIGH+MEDIUM+1 LOW gefixt + Re-Review bestaetigt, 1 LOW zurueckgestellt |
+
+**CO:** Phase-0-Sequenz bereits in der ADR-022 §Schritt-3-Sektion (#144) konsentiert — kein neuer CO-Lauf.
+**CG:** — (Tests von Hand).
+**TS:** 809 Tests gruen (+12 neu), tsc clean, eslint 0 errors. HIGH-Regression (`attestedPeerIdFromCert`: non-attesting/empty-pin → null), dual-SAN-Extraktion, isAttestingIssuer-Matrix, peerIdFromCertSan accept-both-Bruecke.
+**CR:** `pal:codereview` gpt-5.5 (security) — 1 HIGH (CA-Konflation: jede transport-vertraute CA konnte `node/<PeerID>` attestieren) + 1 MEDIUM (mDNS-Dup-Sichtbarkeit) + 2 LOW. HIGH+MEDIUM+1 LOW (dual-SAN) gefixt; Re-Review (intern, gpt-5.5) bestaetigt HIGH geschlossen, 0 Restfindings. 1 LOW (mark-vor-Sigverify) bewusst zurueckgestellt (durch Issuer-Pin entschaerft).
+**PC:** `pal:precommit` (gpt-5.3-codex) clean — ready_for_commit, 0 Issues.
+**DO:** CHANGES.md, COMPLIANCE-TABLE.md.
+
+**Scope-Hinweis:** additiv/fail-closed — Phase-0-Default setzt KEINEN attestierenden CA-Pin → kanonische Attestierung echt inert (WS-3 setzt den .94-Admin-CA-Fingerprint). Kein Emit-/Cert-Wechsel.
+
+---
+
+*Letzte Aktualisierung: 2026-06-04 — ADR-022 Schritt 3 / WS-2 (Accept-both, Phase 0).*
