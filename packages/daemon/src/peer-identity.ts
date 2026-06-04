@@ -139,6 +139,90 @@ export function isLegacyHostUri(uri: string): boolean {
   return /^spiffe:\/\/thinklocal\/host\/[A-Za-z0-9._-]+\/agent\/[A-Za-z0-9._-]+$/.test(uri);
 }
 
+/**
+ * Accept-both-Brücke (ADR-022 Phase 0): liefert die PeerID, die ein präsentierter
+ * mTLS-Cert-SAN kryptografisch belegt — UNABHÄNGIG davon, ob `envelope.sender` noch
+ * die Legacy-`host/<id>`-Form trägt.
+ *
+ * WARUM separat von `authorizeHttpsSender`: In Phase 1 wird das Cert eines Nodes auf
+ * SAN `node/<PeerID>` neu ausgestellt (von der CA/.94, nach PoP-Verifikation), der
+ * `envelope.sender` bleibt aber noch Legacy (Flip erst in Phase 3). Über diesen Pfad
+ * erkennt der Empfänger die PeerID-Bindung SOFORT aus dem CA-signierten Cert-SAN —
+ * statt erst beim späteren Sender-Flip. Das ist genau der „accept-both"-Rollout:
+ * ein node/<PeerID>-Cert wird überall akzeptiert+verwertet, bevor irgendwer flippt.
+ *
+ * Sicherheit: Der Aufrufer MUSS garantieren, dass `certSan` von einem TLS-VALIDIERTEN
+ * Socket stammt (`authorized===true`) — dann ist der SAN CA-signiert und die CA hat
+ * (Pfad B) den PoP geprüft, d.h. der Verbindungspartner kontrolliert den Ed25519-Key
+ * dieser PeerID. Ein Angreifer kann kein CA-signiertes `node/<victimPeerId>`-Cert
+ * erlangen (PoP braucht den fremden privaten Key). null, wenn kein kanonischer SAN.
+ */
+export function peerIdFromCertSan(certSan: string | null): string | null {
+  return certSan ? spiffeUriToPeerId(certSan) : null;
+}
+
+/**
+ * Extrahiert ALLE `URI:spiffe://`-Einträge aus einem `subjectaltname`-String.
+ * Migrationskritisch (CR gpt-5.5 WS-2 LOW): ein Übergangs-Cert kann gleichzeitig
+ * eine Legacy-`host/<id>`- UND eine kanonische `node/<PeerID>`-SAN tragen. Der
+ * Single-Wert-Parser `spiffeFromSubjectAltName` liefert nur den ERSTEN Eintrag und
+ * würde — je nach Reihenfolge — die kanonische SAN übersehen. Hier alle, damit der
+ * Aufrufer gezielt die `node/<PeerID>`-SAN herausziehen kann.
+ */
+export function spiffeUrisFromSubjectAltName(subjectAltName: string | undefined | null): string[] {
+  if (!subjectAltName) return [];
+  const out: string[] = [];
+  for (const part of subjectAltName.split(',')) {
+    const t = part.trim();
+    if (t.startsWith('URI:spiffe://')) out.push(t.slice('URI:'.length));
+  }
+  return out;
+}
+
+/** Normalisiert einen X.509-Fingerprint (Doppelpunkte raus, Großschreibung) für Vergleiche. */
+function normalizeFingerprint(fp: string): string {
+  return fp.replace(/:/g, '').toUpperCase();
+}
+
+/**
+ * True, wenn `issuerFingerprint` zu einer der `attestingFingerprints` gehört —
+ * der CAs, die laut ADR-022 berechtigt sind, eine `node/<PeerID>`-PoP-Attestierung
+ * auszustellen (die Admin-/Mesh-CA auf .94). Leere Liste / fehlender Fingerprint
+ * → false (fail-closed, Pfad inert bis der Pin gesetzt ist).
+ */
+export function isAttestingIssuer(
+  issuerFingerprint: string | null | undefined,
+  attestingFingerprints: readonly string[],
+): boolean {
+  if (!issuerFingerprint || attestingFingerprints.length === 0) return false;
+  const want = normalizeFingerprint(issuerFingerprint);
+  return attestingFingerprints.some((fp) => normalizeFingerprint(fp) === want);
+}
+
+/**
+ * Zentrale Attestierungs-Entscheidung für eingehende mTLS-Verbindungen (ADR-022
+ * Phase 0, CR gpt-5.5 WS-2 HIGH). Liefert die PeerID NUR, wenn BEIDES gilt:
+ *  1. das Cert trägt eine kanonische `node/<PeerID>`-SAN, UND
+ *  2. der Aussteller ist eine GEPINNTE PeerID-attestierende CA (.94).
+ *
+ * WARUM der Issuer-Pin kritisch ist: Der mTLS-Trust-Bundle enthält bewusst MEHRERE
+ * CAs (eigene Mesh-CA + gepairte Peer-CAs). Würde jede transport-vertraute CA als
+ * attestierend gelten, könnte eine bösartige gepairte CA ein `node/<victimPeerId>`-
+ * Cert ausstellen und damit eine fremde PeerID „verifizieren" (Cert-Substitution /
+ * Confused-Deputy). Nur die CA, die den ADR-022-PoP (Signatur über X.509-Pubkey-Hash)
+ * erzwingt, darf attestieren. null = keine Attestierung (fail-closed).
+ */
+export function attestedPeerIdFromCert(
+  certSans: readonly string[],
+  issuerFingerprint: string | null | undefined,
+  attestingFingerprints: readonly string[],
+): string | null {
+  const canonical = certSans.find((u) => peerIdFromCertSan(u) !== null) ?? null;
+  if (canonical === null) return null;
+  if (!isAttestingIssuer(issuerFingerprint, attestingFingerprints)) return null;
+  return peerIdFromCertSan(canonical);
+}
+
 export function authorizeHttpsSender(senderUri: string, certSpiffe: string | null): HttpsSenderAuthz {
   const wantPeerId = spiffeUriToPeerId(senderUri);
   if (wantPeerId === null) {

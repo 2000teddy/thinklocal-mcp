@@ -14,7 +14,7 @@ import { ReplayGuard } from './replay.js';
 import { RateLimiter } from './ratelimit.js';
 import type { Logger } from 'pino';
 import type { Libp2pRuntimeState } from './libp2p-runtime.js';
-import { authorizeHttpsSender, spiffeFromSubjectAltName } from './peer-identity.js';
+import { authorizeHttpsSender, spiffeUrisFromSubjectAltName, attestedPeerIdFromCert } from './peer-identity.js';
 
 export interface AgentCard {
   name: string;
@@ -113,6 +113,15 @@ export interface AgentCardServerOptions {
    * Aufrufer markiert die PeerID dann als verifiziert (mesh.markPeerIdVerified).
    */
   onPeerCertVerified?: (peerId: string) => void;
+  /**
+   * ADR-022 (CR gpt-5.5 WS-2 HIGH): SHA-256-Fingerprints der CAs, die berechtigt sind,
+   * eine `node/<PeerID>`-PoP-Attestierung auszustellen (die Admin-/Mesh-CA auf .94).
+   * NUR von diesen Ausstellern signierte kanonische Cert-SANs lösen `onPeerCertVerified`
+   * aus bzw. autorisieren einen kanonischen Sender. Leer/ungesetzt → kein Aussteller
+   * gilt als attestierend → kanonischer Pfad inert (Phase-0-Default; WS-3 setzt den Pin
+   * auf .94s Admin-CA). Schützt gegen eine bösartige gepairte Peer-CA im Trust-Bundle.
+   */
+  peerIdAttestingCaFingerprints?: string[];
   /** Handler für eingehende Mesh-Nachrichten */
   onMessage?: MessageHandler;
   /** Rate-Limiter für alle Endpoints */
@@ -220,18 +229,45 @@ export class AgentCardServer {
         // kein Cert-Gate (Migrations-Kompat). NIE aus mDNS/Card autorisieren.
         // CR gpt-5.5 LOW (defense-in-depth): nur den SAN eines TLS-validierten Sockets
         // (`authorized===true`) verwenden — schützt gegen künftige TLS-Konfig-Drift.
+        // `getPeerCertificate(true)` → Detail-Cert inkl. issuerCertificate (für den CA-Pin).
         const tlsSock = request.raw.socket as {
           authorized?: boolean;
-          getPeerCertificate?: () => { subjectaltname?: string };
+          getPeerCertificate?: (detailed?: boolean) => {
+            subjectaltname?: string;
+            issuerCertificate?: { fingerprint256?: string };
+          };
         };
-        const peerCert = tlsSock.authorized === true ? tlsSock.getPeerCertificate?.() : undefined;
-        const authz = authorizeHttpsSender(rawEnvelope.sender, spiffeFromSubjectAltName(peerCert?.subjectaltname));
+        const peerCert = tlsSock.authorized === true ? tlsSock.getPeerCertificate?.(true) : undefined;
+        const certSans = spiffeUrisFromSubjectAltName(peerCert?.subjectaltname);
+        // Kanonische node/<PeerID>-SAN für den Sender-Abgleich (Migration: Cert kann
+        // Legacy+Canonical-SAN tragen — spiffeUrisFromSubjectAltName liefert beide).
+        const canonicalCertSan = certSans.find((u) => /^spiffe:\/\/thinklocal\/node\//.test(u)) ?? null;
+        const authz = authorizeHttpsSender(rawEnvelope.sender, canonicalCertSan);
         if (!authz.ok) {
           return reply.code(403).send({ error: 'Sender not authorized for this channel', reason: authz.reason });
         }
-        if (authz.verifiedPeerId) {
-          // CA-verbürgter Cert-SAN → PeerID-Auflösung für diesen Peer freischalten.
-          opts.onPeerCertVerified?.(authz.verifiedPeerId);
+        // ADR-022 Phase 0 (Accept-both, CR gpt-5.5 WS-2 HIGH): Eine kanonische node/<PeerID>-
+        // Attestierung zählt NUR, wenn das Cert von einer GEPINNTEN PeerID-attestierenden CA
+        // (.94 Admin-CA) ausgestellt wurde — nicht von irgendeiner transport-vertrauten (z.B.
+        // gepairten Peer-)CA im mTLS-Bundle. Sonst könnte eine bösartige CA ein node/<victim>-
+        // Cert minten und eine fremde PeerID „verifizieren". Default (kein Pin) → null → inert.
+        const issuerFp = peerCert?.issuerCertificate?.fingerprint256 ?? null;
+        const attestedPeerId = attestedPeerIdFromCert(
+          certSans,
+          issuerFp,
+          opts.peerIdAttestingCaFingerprints ?? [],
+        );
+        // Kanonischer Sender, dessen Cert NICHT von der attestierenden CA stammt → ablehnen
+        // (Cert-Substitution-Schutz): die SAN-Übereinstimmung allein genügt nicht.
+        if (authz.verifiedPeerId && attestedPeerId === null) {
+          return reply
+            .code(403)
+            .send({ error: 'Canonical sender requires a PeerID-attesting certificate issuer' });
+        }
+        // Krypto-attestierte PeerID → Auflösung für diesen Peer freischalten (auch wenn der
+        // Sender noch Legacy ist: Phase-1-Fall, Cert reissued vor Sender-Flip).
+        if (attestedPeerId) {
+          opts.onPeerCertVerified?.(attestedPeerId);
         }
 
         // Public Key des Senders nachschlagen

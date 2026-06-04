@@ -233,7 +233,14 @@ export class MeshManager {
     const matches = [...this.peers.values()].filter((p) => p.libp2p.peerId === peerId);
     if (matches.length !== 1) {
       if (matches.length > 1) {
-        this.log?.warn({ peerId, matches: matches.length }, 'PeerID-Verifikation nicht eindeutig — nicht markiert');
+        // CR gpt-5.5 WS-2 MEDIUM: Ein LAN-Angreifer kann per mDNS denselben p2pPeerId wie
+        // ein legitimer Peer annoncieren → matches>1 → die echte Attestierung wird (fail-closed)
+        // nicht markiert. Kein Sicherheits-, aber ein Availability-Risiko für den Cutover.
+        // Detail-Logging, damit der Konflikt operativ sichtbar + bereinigbar ist.
+        this.log?.warn(
+          { peerId, matches: matches.map((p) => ({ agentId: p.agentId, host: p.host, endpoint: p.endpoint })) },
+          'PeerID-Verifikation nicht eindeutig (mDNS-Duplikat?) — nicht markiert',
+        );
       }
       return false;
     }

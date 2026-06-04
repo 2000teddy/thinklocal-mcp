@@ -244,6 +244,18 @@ async function main(): Promise<void> {
       { authzSpiffe: identity.spiffeUri, certSan, peerId, expected: idCheck.expected },
       '[identity] ADR-022 Identitäts-Triple',
     );
+    // ADR-022 Phase 0 (Accept-both / Self-Identity-Ableitung): Der Node KENNT seine
+    // kanonische node/<PeerID>-Identität (idCheck.expected), EMITTIERT aber weiterhin
+    // Legacy (authzSpiffe + Cert-SAN = host/<id>) bis zum Cert-SAN-Cutover. Eingehend
+    // werden beide SAN-Formen akzeptiert (peer-identity.authorizeHttpsSender +
+    // peerIdFromCertSan-Brücke). Die kanonische Self-URI ist hiermit für den späteren
+    // Phase-3-Flip abgeleitet und sichtbar.
+    if (idCheck.expected) {
+      log.info(
+        { canonicalSelfUri: idCheck.expected, emitting: identity.spiffeUri },
+        '[identity] ADR-022 Accept-both aktiv: kanonische Self-Identität abgeleitet, emittiere weiter Legacy',
+      );
+    }
     if (!idCheck.consistent) {
       // CR LOW: erwartete Migrationsdrift im Non-Strict-Modus als warn (nicht error)
       // loggen, damit Monitoring nicht falsch-kritisch eskaliert; strict → error + throw.
@@ -313,6 +325,11 @@ async function main(): Promise<void> {
     // ADR-022 §3 (channel-bound): ein CA-validierter mTLS-Cert-SAN node/<PeerID>
     // schaltet die kanonische PeerID-Auflösung für diesen Peer frei.
     onPeerCertVerified: (peerId: string) => mesh.markPeerIdVerified(peerId),
+    // ADR-022 Phase 0 (CR gpt-5.5 WS-2 HIGH): NUR von der attestierenden Admin-CA (.94)
+    // signierte node/<PeerID>-Certs dürfen eine PeerID attestieren — nicht jede CA im
+    // Trust-Bundle. Phase 0: noch KEIN Pin gesetzt → kanonische Attestierung inert (genau
+    // das gewollte „inert bis .94"). WS-3 setzt hier den/die Fingerprint(s) der .94-Admin-CA.
+    peerIdAttestingCaFingerprints: undefined,
     onMessage: async (envelope: MessageEnvelope) => {
       // Rate-Limiting prüfen
       if (!rateLimiter.allow(envelope.sender)) {

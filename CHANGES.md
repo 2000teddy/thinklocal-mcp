@@ -8,6 +8,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-04
 
+### ADR-022 Schritt 3 / WS-2 — Accept-both + Self-Identity (Phase 0, additiv, fail-closed)
+
+Zweiter Workstream von Schritt 3 (ADR-022 Migrations-Sequenz Phase 0): Jeder Node **akzeptiert** beide SPIFFE-SAN-Formen (Legacy `host/<id>/agent/<type>` UND kanonisch `node/<PeerID>`) und **emittiert weiterhin Legacy**. Damit wird ein in Phase 1 von .94 neu auf `node/<PeerID>` ausgestelltes Cert sofort als PeerID-Beweis erkannt, bevor irgendwer den Sender-URI flippt.
+
+- **`peer-identity.ts`** — neue reine Helfer: `spiffeUrisFromSubjectAltName()` (extrahiert **alle** URI-SANs → dual-SAN-Migrationscerts), `isAttestingIssuer()` (Fingerprint-Pin, normalisiert), `attestedPeerIdFromCert()` (zentrale Attestierungs-Entscheidung), `peerIdFromCertSan()`.
+- **`agent-card.ts`** — `/message` zieht die kanonische SAN aus dem (nur bei `authorized===true` gelesenen) Peer-Cert und attestiert die PeerID **nur**, wenn das Cert von einer **gepinnten PeerID-attestierenden CA** stammt (`opts.peerIdAttestingCaFingerprints`). Kanonischer Sender ohne attestierendes Cert → 403.
+- **`mesh.ts`** — `markPeerIdVerified` loggt bei mehrdeutigem mDNS-Match jetzt die Konflikt-Peers (Diagnose).
+- **`index.ts`** — leitet die kanonische Self-Identität (`node/<PeerID>`) ab + loggt sie samt Accept-both-Posture; emittiert weiter Legacy.
+- **Scope:** Phase-0-Default setzt **keinen** CA-Pin → die kanonische Attestierung ist **echt inert** (WS-3 setzt den .94-Admin-CA-Fingerprint). Kein Emit-/Cert-Ausstellungs-Wechsel.
+- **CR gpt-5.5 (security):** 1 HIGH (CA-Konflation: jede transport-vertraute CA konnte `node/<PeerID>` attestieren) + 1 MEDIUM (mDNS-Duplikat-Sichtbarkeit) + 2 LOW (Single-SAN-Parser, mark-vor-Sigverify). HIGH+MEDIUM+1 LOW (dual-SAN) gefixt + 12 Regressionstests; Re-Review (intern) bestätigt HIGH geschlossen, 0 Restfindings. PC clean. **809 Tests grün**, tsc clean.
+
+---
+
 ### ADR-022 Schritt 3 / WS-1 — channel-gebundene HTTPS-Authz (additiv, fail-closed)
 
 Erster Implementierungs-Workstream von ADR-022 Schritt 3 (Cert-SAN-Cutover). Bindet die Autorisierung eingehender HTTPS-`/message`-Nachrichten **an den präsentierten mTLS-Client-Cert-SAN** — nie an ein globales Flag, nie an mDNS/Card (Konsensus-Kernprinzip „channel-bound authz").
