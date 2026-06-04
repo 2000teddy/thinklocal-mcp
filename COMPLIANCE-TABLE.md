@@ -481,4 +481,21 @@ Gesamtsuite 682/682 (vorher 672), 0 Regressionen.
 
 ---
 
-*Letzte Aktualisierung: 2026-05-20 11:30 — Test-Tooling SQLite-ABI-Smoke-Test.*
+## Session 2026-06-04 — ADR-022 PeerID-rooted Identity (Schritt 1 + #0 + Security-Fixes)
+
+| #   | PR                                      | Datum       | CO | CG | TS | CR | PC | DO | Findings                           |
+|-----|-----------------------------------------|-------------|----|----|----|----|----|----|----|
+| 143 | ADR-022 PeerID-rooted Identity          | 2026-06-04  | ✅ | —  | ✅ | ✅ | ✅ | ✅ | 2 HIGH + 3 MEDIUM + LOW (2× gpt-5.5) — alle gefixt |
+
+**CO:** 2 `pal:consensus`-Läufe (gpt-5.5 / gemini-2.5-pro / gemini-3.1-pro / MiniMax-M2.7) → einstimmig Option 1 (PeerID-gewurzelte Identität). ADR-022 Accepted.
+**CG:** — (kein clink gemini; Tests von Hand).
+**TS:** 784 Tests gruen, tsc clean. 4 neue Security-Regressionstests (Spoofing-blockiert, Parallel-Race→selbe PeerID, Malformed-URI abgelehnt, stale-verified-reset) + Akzeptanztest (stabile PeerID ueber Neustarts).
+**CR:** 1. Review gpt-5.3-codex, 2. + finale Bestaetigung gpt-5.5 — beide HIGH bestaetigt geschlossen, keine neuen HIGH+.
+**PC:** `pal:precommit` clean.
+**DO:** ADR-022-peerid-rooted-identity.md, CHANGES.md, TODO.md, Memory.
+
+**Scope-Hinweis:** additiv/kompatibel — aktiviert die kanonische PeerID-Aufloesung noch NICHT (fail-closed inert bis Cert-SAN-Cutover auf .94); der Live-403 wird hier noch nicht behoben.
+
+---
+
+*Letzte Aktualisierung: 2026-06-04 — ADR-022 PeerID-rooted Identity (PR #143).*
