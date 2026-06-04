@@ -37,6 +37,20 @@ describe('peer-identity — ADR-022 PeerID-rooted identity', () => {
     expect(spiffeUriToPeerId(`spiffe://evil/node/${PID}`)).toBeNull();
   });
 
+  it('M3: rejects malformed URIs — whitespace (no trim) and reserved/illegal chars', () => {
+    // no trim(): leading/trailing whitespace is NOT the same identity
+    expect(spiffeUriToPeerId(`spiffe://thinklocal/node/${PID} `)).toBeNull();
+    expect(spiffeUriToPeerId(` spiffe://thinklocal/node/${PID}`)).toBeNull();
+    expect(spiffeUriToPeerId(`spiffe://thinklocal/node/${PID}\n`)).toBeNull();
+    // reserved/illegal chars in the PeerID segment
+    expect(spiffeUriToPeerId(`spiffe://thinklocal/node/${PID}?x=1`)).toBeNull();
+    expect(spiffeUriToPeerId(`spiffe://thinklocal/node/${PID}#frag`)).toBeNull();
+    expect(spiffeUriToPeerId('spiffe://thinklocal/node/has space')).toBeNull();
+    expect(spiffeUriToPeerId('spiffe://thinklocal/node/under_score')).toBeNull();
+    // the clean canonical form still parses
+    expect(spiffeUriToPeerId(`spiffe://thinklocal/node/${PID}`)).toBe(PID);
+  });
+
   describe('checkIdentityConsistency (§Startup-Assertion)', () => {
     it('consistent when all three agree on the PeerID-derived URI', () => {
       const uri = peerIdToSpiffeUri(PID);

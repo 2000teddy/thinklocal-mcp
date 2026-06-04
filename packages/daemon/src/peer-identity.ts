@@ -29,12 +29,13 @@ export function peerIdToSpiffeUri(peerId: string): string {
  * (z.B. eine Legacy-`host/<id>`-URI während der Migration).
  */
 export function spiffeUriToPeerId(uri: string): string | null {
-  // KANONISCH = exakt `spiffe://thinklocal/node/<PeerID>` (kein Suffix). End-Anker
-  // ($), damit Alias-Varianten (z.B. `…/node/<PeerID>/extra`) NICHT dieselbe PeerID
-  // auflösen — sonst würden Identitäts-/RateLimit-Logik (die auf envelope.sender
-  // keyen) verwässert. Fail-closed (CR gpt-5.3-codex, MEDIUM). PeerID: base58btc
-  // (12D3Koo…) oder CIDv1 (k51…/bafz…), enthält selbst kein '/'.
-  const m = /^spiffe:\/\/thinklocal\/node\/([^/]+)$/.exec(uri.trim());
+  // KANONISCH = exakt `spiffe://thinklocal/node/<PeerID>` (kein Suffix, KEIN trim).
+  // M3 (CR gpt-5.5): KEIN uri.trim() in Identitätsvergleichen — sonst gälte
+  // "…/node/<PeerID> " (mit Whitespace) als dieselbe ID. PeerID-Zeichensatz strikt
+  // auf base58btc (12D3Koo…) / CIDv1-base32 (k51…/bafz…) = [A-Za-z0-9] beschränken
+  // (kein '/', kein '?'/'#', kein Whitespace) → keine Alias-Identitäten beim
+  // späteren cert-SAN-Cutover. Fail-closed.
+  const m = /^spiffe:\/\/thinklocal\/node\/([A-Za-z0-9]+)$/.exec(uri);
   return m ? (m[1] ?? null) : null;
 }
 
