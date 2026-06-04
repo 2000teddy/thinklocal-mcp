@@ -8,6 +8,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-04
 
+### ADR-022 Schritt 3 — LIVE VERIFIZIERT (TH01-Rejoin grün, 403 weg) ✅
+
+WS-1 + WS-2 + WS-3 + Loopback-Fix sind im **Live-Mesh** end-to-end verifiziert:
+
+- **TH01 (10.10.10.80)** hat per `requestNodeCert` (PoP über seinen libp2p-Ed25519-Key) von der Admin-CA **.94 (10.10.10.94)** ein Cert mit SAN `spiffe://thinklocal/node/12D3KooWKZ4…Ynb` erhalten und serviert es (SAN inkl. Eigen-Loopback `localhost`/`127.0.0.1`/`::1`).
+- **.94-Gegenprobe grün:** **kein** SKILL_ANNOUNCE-403 / „Unknown sender" mehr auf dem .94↔TH01-Link; .94 importiert TH01s Announces (Gossip), `/api/peers` zeigt TH01 `status=online`. Die kanonische `node/<PeerID>`-Attestierung läuft über das CA-validierte Cert-SAN (Empfänger-Pin `TLMCP_PEERID_ATTESTING_CA_FP` = .94-CA-Fingerprint) — genau der Grund, warum der 403 verschwindet.
+- **MCP-Proxy geheilt:** lokaler mTLS-Fetch `https://localhost:9440/health` → HTTP 200 (Hostname-Verify gegen das wieder vorhandene localhost-SAN).
+- **Daemon:** active/running, 0 Restarts, Port 9440.
+- **Stand:** authz/`envelope.sender` weiterhin Legacy `host/cf00a5…` (Phase-3-Sender-Flip bewusst noch NICHT). Die 3 Alt-Code-Nodes (68f7cd8e/b4768fe0/e7aeb01312) ohne Accept-both ignorieren TH01 erwartungsgemäß.
+
+Damit ist der ursprüngliche SKILL_ANNOUNCE-403 auf dem Admin-Link **konstruktiv behoben** (über die PeerID-gewurzelte Identität statt Legacy-Resolution).
+
+---
+
 ### ADR-022 WS-3 Fix — Eigen-Loopback im ausgestellten Cert (Live-Test-Befund)
 
 Beim TH01-Rejoin-Live-Test fiel auf: das WS-3-HIGH-Fix hatte mit dem Admin-Hostnamen versehentlich **auch `localhost`** aus dem ausgestellten `node/<PeerID>`-Cert entfernt. Der lokale mTLS-MCP-Proxy (`mcp-stdio` → `https://localhost:9440`, `rejectUnauthorized`) braucht aber ein `localhost`-SAN. `signNodeCertFromCsr` fügt jetzt das **eigene Loopback** (`localhost`/`127.0.0.1`/`::1`) wieder hinzu — kein Cross-Node-Vektor (Loopback ist stets lokal), Admin-/Fremd-Hostname bleibt ausgeschlossen, `CN=='localhost'` wird abgelehnt. gpt-5.5-CR bestätigt: WS-3-HIGH bleibt geschlossen. 831 Tests grün.
