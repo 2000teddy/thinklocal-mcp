@@ -8,6 +8,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-04
 
+### ADR-022 Schritt 3 / WS-3 — Cross-Node PoP Cert-Issuance (node/<PeerID>)
+
+Dritter Workstream von Schritt 3: der joinende Node beweist per **Proof-of-Possession** (libp2p-Ed25519-Key = PeerID-Wurzel) seine Berechtigung und erhält von der Admin-CA (.94) ein X.509-Cert mit SAN `spiffe://thinklocal/node/<PeerID>`. Code **beider Seiten** gebaut.
+
+- **`cert-pop.ts`** (shared): domain-separierter, length-präfixierter PoP-Scope (`Domain ‖ CA-Fingerprint ‖ Nonce ‖ PeerID ‖ SPIFFE-URI ‖ CSR-Public-Key-Hash`); `signCertPop`/`verifyCertPop` über den libp2p-Ed25519-Key. Der **CSR-Key-Hash im Scope** schließt Cert-Substitution aus.
+- **`cert-issuer.ts`** (Admin/.94): `NonceStore` (single-use, TTL, Kapazitäts-Limit), CSR-Verify, `signNodeCertFromCsr` (signiert den CSR-Key; SAN = kanonische URI + **nur** Antragsteller-eigener CN/IP), `CertIssuer.verifyAndIssue` (Nonce→CSR→PoP→Sign, fail-closed).
+- **`cert-request.ts`** (Client): CSR/Keypair-Erzeugung, PoP-Aufbau, HTTP-Flow `requestNodeCert` (mTLS-Dispatcher authentifiziert, privater Key bleibt lokal).
+- **`cert-issuance-api.ts`**: `POST /api/cert/nonce` + `/api/cert/sign` auf dem Haupt-mTLS-Server (Mesh-Mitgliedschaft via mTLS gated; 503 bei Nonce-Erschöpfung).
+- **`index.ts`**: Admin-only-Wiring (nur mit CA-Key); `TLMCP_PEERID_ATTESTING_CA_FP` env verdrahtet den WS-2-Attestierungs-Pin (Default leer → inert).
+- **.94-Instruktion:** `docs/runbooks/ADR-022-WS3-94-cert-issuance.md` (Endpoints, Request/PoP-Format, Verifikation, Signing, Cert-Ablage, Empfänger-Pin, TH01-Rejoin-Test).
+- **CR gpt-5.5 (security):** 1 HIGH (Admin-Hostname/localhost-DNS-SAN-Impersonation im ausgestellten Cert) + 1 MEDIUM (Nonce-DoS) + 3 LOW — alle gefixt + Regressionstests; Re-Review bestätigt HIGH geschlossen, 0 Restfindings. PC clean. **831 Tests grün** (22 neue), tsc + eslint clean.
+
+---
+
 ### ADR-022 Schritt 3 / WS-2 — Accept-both + Self-Identity (Phase 0, additiv, fail-closed)
 
 Zweiter Workstream von Schritt 3 (ADR-022 Migrations-Sequenz Phase 0): Jeder Node **akzeptiert** beide SPIFFE-SAN-Formen (Legacy `host/<id>/agent/<type>` UND kanonisch `node/<PeerID>`) und **emittiert weiterhin Legacy**. Damit wird ein in Phase 1 von .94 neu auf `node/<PeerID>` ausgestelltes Cert sofort als PeerID-Beweis erkannt, bevor irgendwer den Sender-URI flippt.

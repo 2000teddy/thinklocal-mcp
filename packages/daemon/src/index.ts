@@ -29,6 +29,8 @@ import { registerWebSocket } from './websocket.js';
 import { registerComplianceApi } from './compliance-check.js';
 import { TokenStore } from './token-store.js';
 import { registerTokenApi } from './token-api.js';
+import { CertIssuer, NonceStore } from './cert-issuer.js';
+import { registerCertIssuanceApi } from './cert-issuance-api.js';
 import { readFileSync } from 'node:fs';
 import { CredentialVault } from './vault.js';
 import { loadOrCreateVaultPassphrase } from './vault-passphrase.js';
@@ -308,6 +310,13 @@ async function main(): Promise<void> {
     skillManager,
   );
 
+  // ADR-022 WS-3: Fingerprints der CAs, die `node/<PeerID>` attestieren dürfen (.94 Admin-CA).
+  // Kommagetrennt via Env. Ungesetzt → leer → kanonische Attestierung inert (sicherer Default).
+  const peerIdAttestingCaFingerprints = (process.env['TLMCP_PEERID_ATTESTING_CA_FP'] ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
   // 8. Agent Card Server starten (HTTP oder HTTPS).
   // trustedCaBundle: aggregiert eigene CA + gepairte Peer-CAs. Hot-Reload bei
   // neuen Pairings ist Phase 2 — aktuell zaehlt der Snapshot zum Startzeitpunkt.
@@ -325,11 +334,12 @@ async function main(): Promise<void> {
     // ADR-022 §3 (channel-bound): ein CA-validierter mTLS-Cert-SAN node/<PeerID>
     // schaltet die kanonische PeerID-Auflösung für diesen Peer frei.
     onPeerCertVerified: (peerId: string) => mesh.markPeerIdVerified(peerId),
-    // ADR-022 Phase 0 (CR gpt-5.5 WS-2 HIGH): NUR von der attestierenden Admin-CA (.94)
+    // ADR-022 (CR gpt-5.5 WS-2 HIGH): NUR von der attestierenden Admin-CA (.94)
     // signierte node/<PeerID>-Certs dürfen eine PeerID attestieren — nicht jede CA im
-    // Trust-Bundle. Phase 0: noch KEIN Pin gesetzt → kanonische Attestierung inert (genau
-    // das gewollte „inert bis .94"). WS-3 setzt hier den/die Fingerprint(s) der .94-Admin-CA.
-    peerIdAttestingCaFingerprints: undefined,
+    // Trust-Bundle. WS-3: per Env `TLMCP_PEERID_ATTESTING_CA_FP` (kommagetrennte SHA-256-
+    // Fingerprints von .94s CA-Cert) scharfschaltbar. Ungesetzt → kanonische Attestierung
+    // inert (sicherer Default). Siehe .94-Instruktion / docs für die Fingerprint-Verteilung.
+    peerIdAttestingCaFingerprints: peerIdAttestingCaFingerprints,
     onMessage: async (envelope: MessageEnvelope) => {
       // Rate-Limiting prüfen
       if (!rateLimiter.allow(envelope.sender)) {
@@ -526,6 +536,22 @@ async function main(): Promise<void> {
     log,
     rateLimiter,
   });
+
+  // 8c1c. ADR-022 Schritt 3 / WS-3: PoP-basierte node/<PeerID>-Cert-Ausstellung.
+  // NUR auf Admin-Nodes (CA-Key vorhanden). Endpoints liegen auf dem HAUPT-mTLS-Server
+  // (9440) → nur Mesh-Mitglieder mit gültigem Legacy/node-Cert erreichen sie; die
+  // kryptografische Identität liefert der PoP. Stellt Certs mit SAN node/<PeerID> aus.
+  if (caBundle && caBundle.caCertPem && caBundle.caKeyPem) {
+    const nonceStore = new NonceStore();
+    const certIssuer = new CertIssuer({ ca: caBundle, nonceStore, log });
+    registerCertIssuanceApi(cardServer.getServer(), {
+      issuer: certIssuer,
+      nonceStore,
+      log,
+      rateLimiter,
+    });
+    log.info({ caFingerprint: certIssuer.fingerprint }, 'ADR-022 WS-3: PoP-Cert-Ausstellung aktiv (Admin-Node)');
+  }
 
   // Onboarding server: separate HTTPS port WITHOUT client-cert requirement.
   // New nodes don't have a cert yet, so /onboarding/join must be reachable
