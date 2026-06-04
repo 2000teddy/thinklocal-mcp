@@ -559,4 +559,18 @@ Gesamtsuite 682/682 (vorher 672), 0 Regressionen.
 
 ---
 
-*Letzte Aktualisierung: 2026-06-04 — ADR-022 WS-3 Fix (Eigen-Loopback im Cert).*
+## Session 2026-06-04 — ADR-022 Schritt 3 LIVE-VERIFIKATION (Peer-Deploy + Live-Test)
+
+Pflichtschritt #13 (Peer-Deploy + Live-Test) für WS-1/2/3 + Loopback-Fix — **grün im Live-Mesh**:
+
+- **Krypto-Flow:** TH01 → `requestNodeCert` (PoP, libp2p-Ed25519) → .94 stellt `node/<PeerID>`-Cert aus → installiert + Daemon-Restart.
+- **.94↔TH01-Link 403-frei:** .94-Gegenprobe — kein SKILL_ANNOUNCE-403 / „Unknown sender" mehr; .94 importiert TH01s Announces, `/api/peers` `status=online`. Kanonische Attestierung via Cert-SAN (Pin = .94-CA-FP `b56aa30…`).
+- **MCP-Proxy geheilt:** `https://localhost:9440/health` → HTTP 200.
+- **Daemon:** active/running, 0 Restarts, Port 9440 listen.
+- **Offen:** Phase-3-Sender-Flip (NUR auf Christians Wort); Upgrade der 3 Alt-Code-Nodes auf WS-2.
+
+Doc-only-Eintrag (Abschluss-Dokumentation Live-Test); kein Code → CO/CG/TS/CR/PC entfallen, DO ✅.
+
+---
+
+*Letzte Aktualisierung: 2026-06-04 — ADR-022 Schritt 3 LIVE verifiziert (.94↔TH01 403-frei, MCP-Proxy 200).*
