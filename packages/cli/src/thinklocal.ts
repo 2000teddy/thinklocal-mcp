@@ -23,6 +23,7 @@ import { execSync, spawn, spawnSync } from 'node:child_process';
 import { getDefaultLocalDaemonUrl, requestDaemon, requestDaemonJson } from '../../daemon/src/local-daemon-client.js';
 import { resolveRuntimeSettings, parseRuntimeMode, runtimeModeFromFlags, type RuntimeMode } from '../../daemon/src/runtime-mode.js';
 import { onboardingUrlFromAdminUrl } from '../../daemon/src/onboarding-port.js';
+import { BUILTIN_SKILL_SERVICE_DEPS, serviceUnitDependencyLines } from '../../daemon/src/service-dependencies.js';
 import { runHeartbeatCommand } from './thinklocal-heartbeat.js';
 import type { SupportedTool } from '../../daemon/src/cli-adapters.js';
 
@@ -50,6 +51,19 @@ function xmlEscape(value: string): string {
 function systemdEscape(value: string): string {
   if (/[\r\n]/.test(value)) throw new Error('Ungueltige Zeichen in systemd-Wert');
   return `"${value.replace(/(["\\])/g, '\\$1')}"`;
+}
+
+/** True, wenn eine systemd-(System-)Unit `<svc>.service` auf dem Host installiert ist. */
+function systemdUnitExists(svc: string): boolean {
+  if (!/^[a-zA-Z0-9._@-]+$/.test(svc)) return false; // defensiv gegen Injection
+  try {
+    const out = execSync(`systemctl list-unit-files ${svc}.service --no-legend 2>/dev/null`, {
+      encoding: 'utf-8',
+    });
+    return out.trim().length > 0;
+  } catch {
+    return false;
+  }
 }
 
 /** Atomisches Schreiben: temp-Datei + rename */
@@ -1338,11 +1352,18 @@ function installSystemdService(
 
   mkdirSync(serviceDir, { recursive: true });
 
+  // Boot-Race-Schutz (ADR-021 / TODO 2026-05-17): wenn ein eingebauter Skill einen
+  // externen systemd-Service braucht (z.B. influxdb) UND dessen Unit auf dem Host existiert,
+  // Ordering/Soft-Dep ergänzen, damit der Daemon erst NACH dem Service startet. Generisch
+  // aus den Skill-Manifests (BUILTIN_SKILL_SERVICE_DEPS), nicht influxdb-hartkodiert.
+  const svcDepLines = serviceUnitDependencyLines(BUILTIN_SKILL_SERVICE_DEPS, systemdUnitExists);
+  const svcDepBlock = svcDepLines.length > 0 ? `\n${svcDepLines.join('\n')}` : '';
+
   // systemd-Quoting fuer alle Pfade
   const unit = `[Unit]
 Description=thinklocal-mcp Mesh Daemon
 After=network-online.target
-Wants=network-online.target
+Wants=network-online.target${svcDepBlock}
 
 [Service]
 Type=simple
