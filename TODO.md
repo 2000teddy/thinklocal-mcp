@@ -77,6 +77,8 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 
 ## Knoten-Identität — PeerID-gewurzelt (ADR-022, entschieden 2026-06-03)
 
+> **Branch `agent/claude-code/adr022-peerid-identity` = MERGEBAR (2026-06-04).** Schritt 1 + Voraussetzung #0 + die 2 HIGH / 3 MEDIUM / LOW Security-Fixes sind drin, **2× von gpt-5.5 reviewt** (beide HIGH bestätigt geschlossen, keine neuen HIGH+), 784 Tests grün, tsc clean. Push/PR/Merge macht der Operator. **Folge-Schritt (NICHT in diesem Branch):** Cert-SAN-Cutover auf `node/<PeerID>` (admin-seitiges CSR-Signing auf .94) — erst DER setzt `peerIdVerified` über den mTLS-/Noise-Pfad und aktiviert die kanonische PeerID-Auflösung; bis dahin bleibt sie fail-closed inert.
+
 - [ ] 🔴 **Identität auf libp2p-PeerID umstellen** — Konsens (2 pal:consensus-Läufe, einstimmig Option 1),
   `docs/architecture/ADR-022-peerid-rooted-identity.md` (Accepted). Heute drei parallele Identifier
   (hostname-SAN, hashed-hardware stable-node-id, libp2p-PeerID) → Drift → SKILL_ANNOUNCE-403.

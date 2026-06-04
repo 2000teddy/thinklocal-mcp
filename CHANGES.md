@@ -6,6 +6,22 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
+## [Unreleased] — 2026-06-04
+
+### ADR-022 Security-Review-Fixes — Branch jetzt MERGEBAR (2× gpt-5.5-reviewt)
+
+Zwei unabhängige `pal:codereview`-Läufe (gpt-5.5) über den ADR-022-Branch fanden 2 HIGH + 3 MEDIUM + LOW; alle gefixt, finale gpt-5.5-Bestätigung: **beide HIGH geschlossen, keine neuen HIGH/CRITICAL**.
+
+- **HIGH 1 (Spoofing) — `mesh.ts resolvePeerPublicKey`:** kanonische `spiffe://thinklocal/node/<PeerID>`-Sender-URIs lösen jetzt **ausschließlich** über eine **kryptografisch verifizierte** PeerID-Bindung auf (`peer.libp2p.peerIdVerified`, eindeutiger Match), NIE über die exakten `agentId`/`card.spiffeUri`-Treffer (die nur Legacy-`host/…`-URIs bedienen). `peerIdVerified` ist default `false` und wird **nie** aus mDNS/Card gesetzt → Pfad faktisch aus bis zum Cert-Cutover. Schließt den verifizierten Angriff (mDNS `agent-id=node/<victimPeerId>` + eigene Card/Key) konstruktiv. Commit `f023d38`.
+- **HIGH 2 (Key-Race) — `libp2p-identity.ts`:** exklusiver Create-Lock (`openSync 'wx'`) + Re-Check unter Lock + bounded fail-loud Wait (30s) → parallele First-Starts erzeugen nicht mehr zwei divergente Keys (PeerID-Drift). Commit `cb7f14d`.
+- **MEDIUM:** stale-verified — `updateAgentCard` setzt `peerIdVerified=false` bei PeerID-Wechsel (`f023d38`); keys/-Dir `0700` erzwingen/warnen + dir-fsync-Fehler warnen (`cb7f14d`); strenger SPIFFE-Parser (kein `trim`, `[A-Za-z0-9]+`) (`8d8088c`).
+- **LOW:** `writeSync` bis volle Länge; Lock-Timeout 5s→30s (`cb7f14d`).
+- **Tests:** 4 neue Security-Regressionstests (Spoofing-blockiert, Parallel-Race→selbe PeerID, Malformed-URI-abgelehnt, stale-verified-reset). Suite **784 grün**, `tsc` clean.
+
+**Status: ADR-022-Branch mergebar.** (Push/PR/Merge durch Operator.)
+
+---
+
 ## [Unreleased] — 2026-06-03
 
 ### ADR-022 Voraussetzung #0 — libp2p-Ed25519-Key persistiert (stabile PeerID)
