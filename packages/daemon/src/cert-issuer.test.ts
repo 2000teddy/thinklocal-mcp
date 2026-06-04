@@ -73,7 +73,7 @@ describe('signNodeCertFromCsr', () => {
     expect(publicKeyDerHash(issued.publicKey)).toBe(csr.csrPublicKeyHash);
   });
 
-  it('SECURITY HIGH: issued cert carries only the requester identity — NO admin hostname, NO localhost SAN', () => {
+  it('SECURITY HIGH: issued cert carries requester identity + own loopback — NO admin/foreign hostname', () => {
     const csr = generateNodeKeypairAndCsr('th01'); // requester CN = th01
     const certPem = signNodeCertFromCsr(ca, csr.csrPem, peerIdToSpiffeUri(peerId), ['10.10.10.80']);
     const issued = forge.pki.certificateFromPem(certPem);
@@ -81,19 +81,22 @@ describe('signNodeCertFromCsr', () => {
     const san = issued.getExtension('subjectAltName') as any;
     const dnsNames = san.altNames.filter((a: { type: number }) => a.type === 2).map((a: { value: string }) => a.value);
     const ips = san.altNames.filter((a: { type: number }) => a.type === 7).map((a: { ip: string }) => a.ip);
-    expect(dnsNames).toEqual(['th01']); // only the requester's own CN
-    expect(dnsNames).not.toContain('localhost');
-    expect(ips).toEqual(['10.10.10.80']); // only the requester's own IP
+    // own loopback (localhost) + own CN (th01) — and NOTHING foreign
+    expect(dnsNames.slice().sort()).toEqual(['localhost', 'th01']);
+    expect(dnsNames).not.toContain('admin-94'); // never the admin/other host
+    expect(ips).toContain('10.10.10.80'); // own routable IP
+    expect(ips).toContain('127.0.0.1'); // own loopback
   });
 
-  it('SECURITY: a wildcard / bogus CSR CN is dropped (not used as DNS SAN)', () => {
+  it('SECURITY: a wildcard / bogus CSR CN is dropped (only own loopback DNS remains)', () => {
     const csr = generateNodeKeypairAndCsr('*.evil.example'); // invalid hostname
     const certPem = signNodeCertFromCsr(ca, csr.csrPem, peerIdToSpiffeUri(peerId));
     const issued = forge.pki.certificateFromPem(certPem);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const san = issued.getExtension('subjectAltName') as any;
     const dnsNames = san.altNames.filter((a: { type: number }) => a.type === 2).map((a: { value: string }) => a.value);
-    expect(dnsNames).toEqual([]); // bogus CN dropped → URI-SAN only
+    expect(dnsNames).toEqual(['localhost']); // bogus CN dropped → only own loopback DNS
+    expect(dnsNames).not.toContain('*.evil.example');
   });
 
   it('rejects a CSR with a broken self-signature', () => {

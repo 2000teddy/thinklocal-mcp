@@ -105,11 +105,15 @@ const HOSTNAME_RE = /^(?=.{1,253}$)([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)
  * KEIN neuer Schlüssel erzeugt — der Node behält seinen privaten Key, die CA sieht ihn nie.
  *
  * SECURITY (CR gpt-5.5 WS-3 HIGH): Das Cert trägt AUSSCHLIESSLICH die Identität des
- * ANTRAGSTELLERS — die kanonische URI-SAN (autorisierend) plus optional dessen EIGENEN
- * Hostnamen (aus dem CSR-Subject-CN) und dessen EIGENE IP. NIEMALS den Admin-Hostnamen
- * oder ein pauschales `localhost` (sonst könnte jedes PoP-Cert den Admin/localhost-
- * Dienst impersonieren — TLS autorisiert DNS-SANs automatisch). CSR-`extensionRequest`
- * wird ignoriert (nur `csr.publicKey` wird übernommen) → keine SAN-Injektion via CSR.
+ * ANTRAGSTELLERS — die kanonische URI-SAN (autorisierend), dessen EIGENEN Hostnamen
+ * (CSR-Subject-CN) und dessen EIGENE routbare IP. NIEMALS den Admin-Hostnamen oder den
+ * Namen eines anderen Nodes (sonst könnte ein PoP-Cert einen fremden Host impersonieren
+ * — TLS autorisiert DNS-SANs automatisch). CSR-`extensionRequest` wird ignoriert (nur
+ * `csr.publicKey`) → keine SAN-Injektion via CSR.
+ *
+ * Loopback (`localhost`/`127.0.0.1`/`::1`) wird IMMER hinzugefügt: das ist das EIGENE
+ * Loopback jedes Nodes (kein Cross-Node-Vektor — Loopback ist stets lokal) und für den
+ * lokalen mTLS-MCP-Proxy (`mcp-stdio` → https://localhost:9440, rejectUnauthorized) nötig.
  */
 export function signNodeCertFromCsr(
   ca: CaBundle,
@@ -142,17 +146,22 @@ export function signNodeCertFromCsr(
   ]);
   cert.setIssuer(caCert.subject.attributes);
 
-  // SANs: kanonische URI (immer) + nur die EIGENEN Namen des Antragstellers.
+  // SANs: kanonische URI (immer) + EIGENES Loopback + nur die EIGENEN Namen des Antragstellers.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const altNames: any[] = [{ type: 6, value: spiffeUri }]; // URI (kanonische SPIFFE node/<PeerID>)
+  const altNames: any[] = [
+    { type: 6, value: spiffeUri }, // URI (kanonische SPIFFE node/<PeerID>)
+    { type: 2, value: 'localhost' }, // DNS — eigenes Loopback (lokaler MCP-Proxy)
+    { type: 7, ip: '127.0.0.1' }, // IP — eigenes Loopback
+    { type: 7, ip: '::1' }, // IP — eigenes Loopback (IPv6)
+  ];
   // Eigener Hostname NUR aus dem CSR-Subject-CN (der Node hat ihn selbst gesetzt) und nur
-  // wenn er ein valider Hostname ist (kein Wildcard, keine Admin-Übernahme).
+  // wenn er ein valider Hostname ist (kein Wildcard, keine Admin-/Fremd-Host-Übernahme).
   const csrCn = csr.subject.getField('CN')?.value as string | undefined;
-  if (csrCn && csrCn !== spiffeUri && HOSTNAME_RE.test(csrCn)) {
+  if (csrCn && csrCn !== spiffeUri && csrCn !== 'localhost' && HOSTNAME_RE.test(csrCn)) {
     altNames.push({ type: 2, value: csrCn }); // DNS (eigener Hostname)
   }
   for (const ip of ipAddresses) {
-    altNames.push({ type: 7, ip }); // IP (eigene Adresse des Antragstellers)
+    altNames.push({ type: 7, ip }); // IP (eigene routbare Adresse des Antragstellers)
   }
 
   cert.setExtensions([
