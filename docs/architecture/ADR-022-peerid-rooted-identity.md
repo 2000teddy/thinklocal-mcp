@@ -107,6 +107,43 @@ Code-Zugriff da ist — am Code gesehen statt vermutet.)
 - [ ] Clone-Detection-Mechanik (Sentinel vs. machine-id-Baseline) festlegen.
 - [ ] Denylist-Format + Gossip-Verteilung für Revocation spezifizieren.
 
+## Schritt 3 — Cert-SAN-Cutover (Detail-Design, Konsens 2026-06-04)
+
+**Status:** Design accepted (Implementierung ausstehend, cross-node mit .94).
+**Konsens:** `pal:consensus` `b4e5d346-1c28-4923-8536-0e84b7b0aef6` — gpt-5.5 (against, 8/10), gemini-3.1-pro-preview (for, 9/10), MiniMax-M2.7 (neutral, 7/10): **einstimmig „sound-with-changes"**. Mittel ~8.
+
+Schritt 3 schaltet die in PR #143 gebaute, noch **inerte** kanonische PeerID-Auflösung scharf und behebt damit den SKILL_ANNOUNCE-403. Der 403 läuft über **HTTPS** (`fetch ${peer.endpoint}/message`) → er wird über **Pfad B (Cert-SAN)** behoben, NICHT über Noise.
+
+### Verbindliche Design-Korrekturen aus dem Konsens (das „with-changes")
+
+1. **Channel-gebundene Autorisierung — KEIN globales `peerIdVerified` über Transporte.** Autorisiert wird pro Ankunfts-Transport:
+   - **libp2p-Nachrichten** (Noise) → über die Noise-verifizierte PeerID (`peerIdVerified` NUR aus dem libp2p-Event-Loop / `onPeerConnect`).
+   - **HTTPS/mTLS-Nachrichten** (Fastify `/message`) → **ausschließlich** über den SAN des bei DIESER mTLS-Verbindung präsentierten Client-Certs (`node/<PeerID>`), abgeglichen gegen `envelope.sender`. Nicht über ein globales Flag, nie aus mDNS/Card.
+   - Begründung: ein Angreifer, der sich legitim per Noise als *seine eigene* PeerID verbindet, dürfte sonst über das Flag HTTPS-Envelopes mit fremder `node/<PeerID>`-Absender-URI fälschen (Confused-Deputy / Key-Substitution = das Top-Risiko aller drei Modelle).
+
+2. **Proof-of-Possession (Pfad B / Cert-Issuance auf .94) — Signatur-Scope ist nicht verhandelbar.** Der joinende Node signiert mit seinem **libp2p-Ed25519-Key** über:
+   `Domain-Separator ("thinklocal-mcp.cert-pop.v1") ‖ Mesh-ID/CA-Fingerprint ‖ frische Admin-Nonce (single-use, kurze TTL) ‖ PeerID ‖ angeforderte SPIFFE-URI (node/<PeerID>) ‖ Hash(CSR bzw. X.509-Public-Key)`.
+   Admin verifiziert: PeerID leitet sich aus dem Ed25519-Pubkey ab; Ed25519-Signatur gültig; Nonce frisch/ungebraucht; CSR-Pubkey-Hash == zu zertifizierender Key; SAN exakt `node/<PeerID>`. **Der X.509-Pubkey-Hash im Signatur-Scope ist der kritische Teil** (sonst Cert-Substitution: PoP für fremde PeerID + eigener TLS-Key). SAN-only, **kein** custom X.509-Extension (richtiger Tradeoff, außer später Key-Agilität nötig).
+
+3. **Envelope-Signing-Key an die PeerID binden.** Entweder (A, empfohlen/einfachster, gpt-5.5): Envelopes **direkt mit dem libp2p-Ed25519-Key** signieren → `sender=node/<PeerID>` self-verifying, ECDSA-Bindungsproblem entfällt (Key-Reuse domain-separieren). Oder (B): den bestehenden ECDSA-Agent-Key behalten, aber per PeerID-signierter Aussage / CA-Record an die PeerID binden. **Niemals** den Signing-Key aus unauthentifizierten Card/mDNS-Daten auflösen.
+
+### Migrations-/Rollout-Sequenz (live 5-Node-Mesh, strikt)
+- **Phase 0:** Accept-both-Code (Legacy `host/<id>` + `node/<PeerID>`) auf **ALLEN** Nodes ausrollen, weiterhin Legacy emittieren.
+- **Phase 1:** Admin-PoP + Cert-Reissue mit SAN `node/<PeerID>` (Sender bleibt Legacy).
+- **Phase 2:** channel-gebundene Authz + PeerID↔Signing-Key-Bindung überall live.
+- **Phase 3 (pro Node, in dieser Reihenfolge):** Cert-Reissue (SAN) → Propagation bestätigen → self-Identity (`envelope.sender`) flippen → **Noise-Re-Handshake mit allen Nachbarn** (refresht `peerIdVerified`, sonst stale → fail-closed 403).
+- **Phase 4:** wenn Registry keine Legacy-`host/`-Sender mehr zeigt → `TLMCP_STRICT_IDENTITY=1` + Legacy-Pfad entfernen.
+- **Cert-SAN VOR Sender-URI** (oder pro Node atomar). **Rollback:** Node auf `host/<id>` + Legacy-Cert zurück; die Accept-both-Phase ist das Sicherheitsnetz (bis Phase 4 aktiv halten).
+
+### Riskantester Schritt
+Der Per-Node-Identity-Flip (Phase 3): Fenster, in dem Sender-URI und Cert-SAN/Nachbar-Verifikation auseinanderlaufen → **fail-closed 403**. Mitigation: Reihenfolge oben + Noise-Re-Handshake + accept-both-Netz.
+
+### Verworfene Alternative
+„Node-to-node ganz über libp2p-Noise-Streams, HTTPS/mTLS für App-Traffic droppen" (vereint Transport+Identität, killt das Cross-Transport-Problem) — **abgelehnt für dieses Codebase**: Fastify-`/message`, Agent-Card und Admin-API laufen über HTTPS und brauchen einen Authz-Anker; PoP ist einmaliger Join-Kostenpunkt, nicht im Hot-Path.
+
+### Umsetzungs-Reihenfolge (CLAUDE.md)
+CO ✅ (dieser Abschnitt) → CG (optional) → Code pro Workstream je eigener Branch + TS + CR (gpt-5.5 security) + PC + PR. Reihenfolge: lokale, additive WS (Self-Identity-Ableitung, channel-gebundene Resolver-Erweiterung, Accept-both) zuerst → **cross-node .94** (PoP + CSR-SAN-Signing, Client+Admin atomar) → Per-Node-Flip → strict. Live-Test TH01↔Mesh vor strict.
+
 ## Referenzen
 
 - `pal:consensus` Lauf A (4 Modelle, TH01) + Lauf B (3 Modelle, Orchestrator, `f5715d3c-6cea-456f-8c93-4829b7497d69`), beide 2026-06-03.
