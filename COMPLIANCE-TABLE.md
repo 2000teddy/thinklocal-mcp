@@ -532,4 +532,21 @@ Gesamtsuite 682/682 (vorher 672), 0 Regressionen.
 
 ---
 
-*Letzte Aktualisierung: 2026-06-04 — ADR-022 Schritt 3 / WS-2 (Accept-both, Phase 0).*
+## Session 2026-06-04 — ADR-022 Schritt 3 / WS-3 (Cross-Node PoP Cert-Issuance)
+
+| #    | PR                                      | Datum       | CO | CG | TS | CR | PC | DO | Findings                           |
+|------|-----------------------------------------|-------------|----|----|----|----|----|----|----|
+| WS-3 | ADR-022 §3 PoP Cert-Issuance (node/<PeerID>) | 2026-06-04 | ✅ | —  | ✅ | ✅ | ✅ | ✅ | 1 HIGH + 1 MEDIUM + 3 LOW (gpt-5.5) — alle gefixt + Re-Review bestaetigt |
+
+**CO:** Schritt-3-Konsensus (PoP-Scope inkl. X.509-Pubkey-Hash, atomarer Cutover) in ADR-022 §Schritt-3 (#144).
+**CG:** — (Tests von Hand).
+**TS:** 831 Tests gruen (+22), tsc + eslint clean. cert-pop (Scope-Determinismus, length-prefix-Ambiguitaet, sign/verify-Roundtrip + Tamper/Fremd-Key/Fremd-PeerID/Fremd-CA), cert-issuer (NonceStore single-use/TTL, signNodeCertFromCsr SAN-Korrektheit + HIGH-Regression „kein Admin-Hostname/localhost", bogus-CN-drop, E2E Client↔Admin-Interop, cert-substitution/Fremd-PeerID/Fremd-CA-Abwehr).
+**CR:** `pal:codereview` gpt-5.5 (security) — 1 HIGH (Admin-Hostname/localhost-DNS-SAN-Impersonation) + 1 MEDIUM (Nonce-DoS) + 3 LOW; alle gefixt + Regressionstests; Re-Review (intern) bestaetigt HIGH geschlossen, 0 Restfindings.
+**PC:** `pal:precommit` (gpt-5.3-codex) clean — ready_for_commit.
+**DO:** CHANGES.md, COMPLIANCE-TABLE.md, `docs/runbooks/ADR-022-WS3-94-cert-issuance.md` (.94-Instruktion).
+
+**Scope-Hinweis:** Code beider Seiten (Client+Admin). `.94` rollt aus + verteilt den Empfänger-Pin (`TLMCP_PEERID_ATTESTING_CA_FP`); dann TH01-Rejoin live. Privater TLS-Key verlaesst den Node nie (nur CSR-Pubkey transitiert).
+
+---
+
+*Letzte Aktualisierung: 2026-06-04 — ADR-022 Schritt 3 / WS-3 (PoP Cert-Issuance).*
