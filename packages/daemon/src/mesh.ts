@@ -219,6 +219,28 @@ export class MeshManager {
     return undefined;
   }
 
+  /**
+   * ADR-022 Schritt 3 (channel-bound): markiert die PeerID als kryptografisch
+   * VERIFIZIERT — NUR aus einem echten Krypto-Pfad aufrufen (CA-validierter
+   * mTLS-Cert-SAN `node/<PeerID>` oder libp2p-Noise-RemotePeer), NIE aus mDNS/Card.
+   * Schaltet damit die kanonische PeerID-Auflösung für diesen Peer frei.
+   * Liefert true, wenn ein passender Peer gefunden+markiert wurde.
+   */
+  markPeerIdVerified(peerId: string): boolean {
+    // CR gpt-5.5 MEDIUM: nur bei EINDEUTIGEM Treffer markieren. Mehrere Peers mit
+    // derselben PeerID (z.B. via mDNS-Spoofing) sind ambig → nicht markieren (sonst
+    // Ambiguitäts-/Availability-Risiko), warnen.
+    const matches = [...this.peers.values()].filter((p) => p.libp2p.peerId === peerId);
+    if (matches.length !== 1) {
+      if (matches.length > 1) {
+        this.log?.warn({ peerId, matches: matches.length }, 'PeerID-Verifikation nicht eindeutig — nicht markiert');
+      }
+      return false;
+    }
+    matches[0].libp2p.peerIdVerified = true;
+    return true;
+  }
+
   get peerCount(): number {
     return this.peers.size;
   }

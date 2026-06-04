@@ -8,6 +8,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-04
 
+### ADR-022 Schritt 3 / WS-1 — channel-gebundene HTTPS-Authz (additiv, fail-closed)
+
+Erster Implementierungs-Workstream von ADR-022 Schritt 3 (Cert-SAN-Cutover). Bindet die Autorisierung eingehender HTTPS-`/message`-Nachrichten **an den präsentierten mTLS-Client-Cert-SAN** — nie an ein globales Flag, nie an mDNS/Card (Konsensus-Kernprinzip „channel-bound authz").
+
+- **`peer-identity.ts`:** `spiffeFromSubjectAltName()` (parst `URI:spiffe://` aus dem TLS-`subjectaltname`), `authorizeHttpsSender(senderUri, certSpiffe)` — kanonischer `node/<PeerID>`-Sender MUSS einen CA-validierten Cert-SAN mit **exakt derselben PeerID** präsentieren (`verifiedPeerId`); fehlt/Mismatch → Ablehnung. `isLegacyHostUri()` — **nur** das exakte `host/<id>/agent/<type>`-Schema bekommt den Migrations-Bypass (`legacy:true`), alles andere ist fail-closed.
+- **`mesh.ts`:** `markPeerIdVerified(peerId)` — schaltet die kanonische PeerID-Auflösung für einen Peer frei, **nur bei eindeutigem Treffer** (mehrdeutige PeerID → nicht markiert + Warnung).
+- **`agent-card.ts`:** `/message`-Handler liest den SAN **nur** eines TLS-validierten Sockets (`authorized===true`) und gated über `authorizeHttpsSender`; bei verifiziertem kanonischem Sender → `onPeerCertVerified`-Callback.
+- **`index.ts`:** verdrahtet `onPeerCertVerified → mesh.markPeerIdVerified`.
+- **Scope:** inert bis .94 `node/<PeerID>`-Certs ausstellt (kein Live-Verhaltenswechsel für Legacy-`host/`-Sender, kein .94-Eingriff). CR gpt-5.5: 1 HIGH (Legacy-Bypass zu breit) + 1 MEDIUM (mark-all) + 2 LOW — HIGH+MEDIUM+1 LOW gefixt (+ Regressionstests), 1 LOW (PeerID-Regex-Präfix) bewusst zurückgestellt.
+- **Tests:** 792 grün, `tsc` clean; neuer HIGH-Regressionstest (non-host non-canonical → fail-closed), unique-match-Test für `markPeerIdVerified`.
+
+---
+
 ### ADR-022 Security-Review-Fixes — Branch jetzt MERGEBAR (2× gpt-5.5-reviewt)
 
 Zwei unabhängige `pal:codereview`-Läufe (gpt-5.5) über den ADR-022-Branch fanden 2 HIGH + 3 MEDIUM + LOW; alle gefixt, finale gpt-5.5-Bestätigung: **beide HIGH geschlossen, keine neuen HIGH/CRITICAL**.

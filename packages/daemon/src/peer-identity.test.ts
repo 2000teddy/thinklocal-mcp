@@ -5,6 +5,8 @@ import {
   spiffeUriToPeerId,
   isCanonicalNodeUri,
   checkIdentityConsistency,
+  spiffeFromSubjectAltName,
+  authorizeHttpsSender,
 } from './peer-identity.js';
 
 const PID = '12D3KooWCn86Frs2pqSkffVaoFsuHA7fByGZ7rULVqGcesk2RrJF';
@@ -82,6 +84,60 @@ describe('peer-identity — ADR-022 PeerID-rooted identity', () => {
       const r = checkIdentityConsistency({ authzSpiffe: uri, certSan: null, peerId: PID });
       expect(r.consistent).toBe(false);
       expect(r.divergences.some((d) => /Cert-SAN nicht lesbar/.test(d))).toBe(true);
+    });
+  });
+
+  describe('spiffeFromSubjectAltName (mTLS peer-cert SAN parse)', () => {
+    it('extracts the URI:spiffe entry', () => {
+      expect(spiffeFromSubjectAltName(`DNS:foo, URI:${peerIdToSpiffeUri(PID)}, IP Address:10.0.0.1`)).toBe(peerIdToSpiffeUri(PID));
+    });
+    it('null when no SAN / no URI entry / empty', () => {
+      expect(spiffeFromSubjectAltName(null)).toBeNull();
+      expect(spiffeFromSubjectAltName(undefined)).toBeNull();
+      expect(spiffeFromSubjectAltName('DNS:foo, IP Address:10.0.0.1')).toBeNull();
+    });
+  });
+
+  describe('authorizeHttpsSender (ADR-022 §3 channel-bound HTTPS authz)', () => {
+    const canonical = peerIdToSpiffeUri(PID);
+
+    it('canonical sender + matching cert SAN → ok, verifiedPeerId set', () => {
+      const r = authorizeHttpsSender(canonical, canonical);
+      expect(r.ok).toBe(true);
+      expect(r.verifiedPeerId).toBe(PID);
+    });
+
+    it('canonical sender + NO cert SAN → rejected (fail-closed)', () => {
+      const r = authorizeHttpsSender(canonical, null);
+      expect(r.ok).toBe(false);
+      expect(r.verifiedPeerId).toBeUndefined();
+    });
+
+    it('SECURITY: canonical sender + cert SAN for a DIFFERENT PeerID → rejected', () => {
+      const other = peerIdToSpiffeUri('12D3KooWDifferentPeerIDxxxxxxxxxxxxxxxxxxxxxxxxxxxx');
+      const r = authorizeHttpsSender(canonical, other);
+      expect(r.ok).toBe(false);
+      expect(r.verifiedPeerId).toBeUndefined();
+    });
+
+    it('legacy host/<id> sender → ok, legacy:true, NO cert gate (migration compat)', () => {
+      const r = authorizeHttpsSender('spiffe://thinklocal/host/cf00a5/agent/claude-code', null);
+      expect(r.ok).toBe(true);
+      expect(r.legacy).toBe(true);
+      expect(r.verifiedPeerId).toBeUndefined();
+    });
+
+    it('SECURITY HIGH: non-canonical AND non-host/<id> URIs do NOT get the legacy bypass (fail-closed)', () => {
+      // canonical-with-suffix (not parsed as canonical, not host) → reject
+      expect(authorizeHttpsSender(`spiffe://thinklocal/node/${PID}/x`, null).ok).toBe(false);
+      // foreign trust domain host URI → reject
+      expect(authorizeHttpsSender('spiffe://evil/host/abc/agent/claude-code', null).ok).toBe(false);
+      // unknown path shape → reject
+      expect(authorizeHttpsSender('spiffe://thinklocal/weird/abc', null).ok).toBe(false);
+      // not a spiffe URI → reject
+      expect(authorizeHttpsSender('not-a-spiffe', null).ok).toBe(false);
+      // bare host without /agent/<type> → reject (real legacy always has /agent/)
+      expect(authorizeHttpsSender('spiffe://thinklocal/host/abc', null).ok).toBe(false);
     });
   });
 });
