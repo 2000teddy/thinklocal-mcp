@@ -573,4 +573,14 @@ Doc-only-Eintrag (Abschluss-Dokumentation Live-Test); kein Code → CO/CG/TS/CR/
 
 ---
 
-*Letzte Aktualisierung: 2026-06-04 — ADR-022 Schritt 3 LIVE verifiziert (.94↔TH01 403-frei, MCP-Proxy 200).*
+## Session 2026-06-04 — Fix v0.30.1 Token-Onboarding Port-Mismatch (thinklocal join)
+
+| #       | PR  | Datum      | CO | CG | TS | CR | PC | DO | Findings                           |
+|---------|-----|------------|----|----|----|----|----|----|----|
+| v0.30.1 | tbd | 2026-06-04 | —  | —  | ✅ | ✅ | ✅ | ✅ | Bug-Fix: certloser Join ging an mTLS-Port 9440 statt Onboarding 9441. CR gpt-5.5: 0 HIGH, 1 MEDIUM (vorbestehend → Follow-up) + 2 LOW gefixt |
+
+**Bug-Fix-PR (CO/CG entfallen).** **TS:** 842 grün (+11), tsc+eslint clean; Regressionstest `:9440→:9441` + IPv6/userinfo/default-port/protocol-Edge-Cases; CLI-Smoke live (erreicht :9441). **CR:** gpt-5.5 full — single-source-Helfer korrekt, mTLS bleibt 9440, kein HIGH; 1 MEDIUM (prozessweites NODE_TLS_REJECT_UNAUTHORIZED=0 — vorbestehend, abhängigkeitsfreier Scope → TODO-Follow-up) + 2 LOW (Helfer-Härtung + Edge-Tests) gefixt. **PC:** gpt-5.3-codex clean. **DO:** CHANGES, COMPLIANCE, TODO, package.json 0.30.1.
+
+---
+
+*Letzte Aktualisierung: 2026-06-04 — Fix v0.30.1 Onboarding-Port-Mismatch (join → :9441).*

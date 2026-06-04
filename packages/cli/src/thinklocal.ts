@@ -22,6 +22,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, statSyn
 import { execSync, spawn, spawnSync } from 'node:child_process';
 import { getDefaultLocalDaemonUrl, requestDaemon, requestDaemonJson } from '../../daemon/src/local-daemon-client.js';
 import { resolveRuntimeSettings, parseRuntimeMode, type RuntimeMode } from '../../daemon/src/runtime-mode.js';
+import { onboardingUrlFromAdminUrl } from '../../daemon/src/onboarding-port.js';
 import { runHeartbeatCommand } from './thinklocal-heartbeat.js';
 import type { SupportedTool } from '../../daemon/src/cli-adapters.js';
 
@@ -728,20 +729,32 @@ async function cmdJoin(flags: string[]): Promise<void> {
   const agentType = process.env['TLMCP_AGENT_TYPE'] ?? 'claude-code';
   const agentId = `spiffe://thinklocal/host/${localHostname}/agent/${agentType}`;
 
-  info(`Hostname:  ${localHostname}`);
-  info(`Agent-ID:  ${agentId}`);
-  info(`Admin-URL: ${adminUrl}`);
+  // Der certlose Onboarding-Server lauscht NICHT auf dem mTLS-Haupt-Port (--admin-url),
+  // sondern auf Haupt-Port + 1 (single source: onboardingUrlFromAdminUrl). --admin-url
+  // bleibt die Haupt-URL (mTLS, 9440); der Join wird auf den Onboarding-Port (9441) geleitet.
+  let onboardingOrigin: string;
+  try {
+    onboardingOrigin = onboardingUrlFromAdminUrl(adminUrl);
+  } catch {
+    fail('admin-url ist keine gültige URL');
+    return;
+  }
+
+  info(`Hostname:     ${localHostname}`);
+  info(`Agent-ID:     ${agentId}`);
+  info(`Admin-URL:    ${adminUrl}`);
+  info(`Onboarding:   ${onboardingOrigin} (certlos, Haupt-Port + 1)`);
   console.log();
 
   try {
-    // POST /onboarding/join to the admin node
+    // POST /onboarding/join to the admin node's CERTLESS onboarding server (port + 1).
     // SECURITY: The new node does NOT have a cert yet, so we MUST skip TLS
     // verification for this initial request. The Bearer token authenticates
     // the request instead. After join, all further communication uses mTLS.
     // We temporarily set NODE_TLS_REJECT_UNAUTHORIZED=0 for this one call.
     const origTls = process.env['NODE_TLS_REJECT_UNAUTHORIZED'];
     process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0';
-    const joinUrl = `${adminUrl}/onboarding/join`;
+    const joinUrl = `${onboardingOrigin}/onboarding/join`;
     let joinRes: Response;
     try {
       joinRes = await fetch(joinUrl, {

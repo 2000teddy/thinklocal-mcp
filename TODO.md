@@ -5,6 +5,10 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 
 ---
 
+## Follow-ups aus Code-Reviews :
+
+- [ ] 🟡 **CLI-Join: request-lokale TLS-Skip statt prozessweit** (CR gpt-5.5, Fix v0.30.1) — `cmdJoin` setzt für den certlosen `/onboarding/join` aktuell prozessweit `NODE_TLS_REJECT_UNAUTHORIZED=0` (im `finally` restauriert, kurzlebige CLI). Sauberer: request-lokaler undici-`Agent({connect:{rejectUnauthorized:false}})` + `dispatcher`. Erfordert `undici` als CLI-Dependency (aktuell nur in `packages/daemon`); bewusst zurückgestellt, da der Fix abhängigkeitsfrei sein sollte.
+
 ## Code-Review beim dokumentieren entdeckt :
 
 - [x] 🔴 **Unsicherer Vault-Default** — behoben: statt bekanntem Default wird die Vault-Passphrase jetzt aus `TLMCP_VAULT_PASSPHRASE`, OS-Keychain oder einem zufaellig generierten persistenten Wert geladen.

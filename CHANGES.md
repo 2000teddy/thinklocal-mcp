@@ -8,6 +8,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-04
 
+### Fix v0.30.1 — Token-Onboarding Port-Mismatch (`thinklocal join`)
+
+Der dokumentierte Join-Weg war kaputt: `thinklocal join` schickte den **certlosen** `POST /onboarding/join` an die `--admin-url` (mTLS-Haupt-Port 9440, `requestCert+rejectUnauthorized`) — der certlose Onboarding-Server lauscht aber auf **Haupt-Port + 1 (9441)**. Ein neuer Node ohne Cert scheiterte am TLS-Handshake.
+
+- **`packages/daemon/src/onboarding-port.ts`** (neu, **single source of truth**): `ONBOARDING_PORT_OFFSET`, `onboardingPort(mainPort)`, `onboardingUrlFromAdminUrl(adminUrl)` (URL-robust: nur http/https, `URL.origin`-Serialisierung (IPv6-sicher), Portbereich-Check, strippt Userinfo/Pfad/Query/Hash).
+- **`index.ts`**: Onboarding-Listen-Port nutzt jetzt `onboardingPort(config.daemon.port)` statt hartem `+1`.
+- **`thinklocal.ts` (CLI `join`)**: leitet die certlose Join-Origin via Helfer ab (Port+1) und postet dorthin; `--admin-url` bleibt die mTLS-Haupt-URL (9440). Variante A → kein Doppel-Bump, dokumentierter `:9440`-Weg funktioniert wieder.
+- **Live-verifiziert:** `join --admin-url https://10.10.10.94:9440` erreicht jetzt den Onboarding-Server auf `:9441` (App-403 „Token rejected", kein TLS-/Verbindungsfehler).
+- CR gpt-5.5: kein HIGH/CRITICAL; 1 MEDIUM (prozessweites `NODE_TLS_REJECT_UNAUTHORIZED=0` im CLI-Join — **vorbestehend**, sauberer Fix bräuchte undici-Dep in der CLI → als Follow-up in TODO.md, da Task abhängigkeitsfrei) + 2 LOW (Helfer-Härtung + Edge-Tests) gefixt. PC clean. **842 Tests grün** (+11), tsc+eslint clean. Version 0.30.0 → **0.30.1**.
+
+---
+
 ### ADR-022 Schritt 3 — LIVE VERIFIZIERT (TH01-Rejoin grün, 403 weg) ✅
 
 WS-1 + WS-2 + WS-3 + Loopback-Fix sind im **Live-Mesh** end-to-end verifiziert:
