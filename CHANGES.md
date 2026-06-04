@@ -8,6 +8,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-04
 
+### v0.31.1 — Boot-Race-Schutz im Installer (Skill-Service-Deps generisch)
+
+Spiegelt den manuell auf dem influxdb-Host (.56) angewandten Boot-Race-Fix (`After=influxdb.service`/`Wants=influxdb.service`) generisch in den Installer — ein frischer Install hat denselben Schutz, ohne influxdb-Hartkodierung.
+
+- **`service-dependencies.ts`** (neu): `collectSkillServiceDeps()` (Vereinigung der `requirements.services` über Skill-Manifests), `BUILTIN_SKILL_SERVICE_DEPS` (= `['influxdb']`, aus den Manifests abgeleitet), `serviceUnitDependencyLines(services, exists)` → `After=/Wants=`-Zeilen **nur** für Services, deren systemd-Unit auf dem Host existiert (kein hängendes `Wants=` auf Nicht-influxdb-Hosts).
+- **`thinklocal.ts`** (CLI-Bootstrap, der Pfad der die Mesh-`--user`-Units erzeugte): `systemdUnitExists()` (Injection-Regex-geschützt) + Einbau der Dep-Zeilen in die generierte Unit.
+- **`install.sh`**: generischer Shell-Loop + Presence-Check (kanonische Quelle: `service-dependencies.ts`).
+- **`build-deb.sh`** bewusst ausgenommen (Build-Zeit — Host-Presence-Check gehört nicht dorthin).
+- **CR gpt-5.5:** 0 Findings. **PC:** clean. **869 Tests grün** (+7), tsc clean, `bash -n` ok. Version 0.31.0 → **0.31.1**.
+
+---
+
 ### v0.31.0 — ADR-021 Generisches Skill-Health-Monitoring
 
 Behebt den Boot-Race von 2026-05-17 generisch: Skills mit externer Abhängigkeit werden periodisch re-evaluiert, statt nur einmal beim Daemon-Start.

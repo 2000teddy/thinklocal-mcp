@@ -629,4 +629,16 @@ Doc-only-Eintrag (Abschluss-Dokumentation Live-Test); kein Code → CO/CG/TS/CR/
 
 ---
 
-*Letzte Aktualisierung: 2026-06-04 — v0.31.0 ADR-021 Skill-Health-Monitoring.*
+## Session 2026-06-04 — v0.31.1 Boot-Race-Schutz im Installer (Skill-Service-Deps)
+
+| #       | PR  | Datum      | CO | CG | TS | CR | PC | DO | Findings                           |
+|---------|-----|------------|----|----|----|----|----|----|----|
+| v0.31.1 | tbd | 2026-06-04 | —  | —  | ✅ | ✅ | ✅ | ✅ | Spiegelt .56-Boot-Race-Fix generisch in Installer (CLI + install.sh). CR gpt-5.5: 0 Findings |
+
+**Bug-/Tech-Debt-PR (CO/CG entfallen).** **TS:** 869 grün (+7), tsc clean, `bash -n` ok; service-dependencies.test.ts (Manifest-Sammlung, Host-conditional After=/Wants=, dep-aber-absent→keine Zeilen). **CR:** gpt-5.5 — 0 Findings; generisch (aus Manifests, nicht influxdb-hartkodiert), Injection-Regex-geschützt, Presence-Check verhindert hängende Wants=. **PC:** gpt-5.3-codex clean. **DO:** CHANGES, COMPLIANCE, TODO, package.json 0.31.1.
+
+**Scope:** CLI-Bootstrap + install.sh (Install-Zeit); build-deb.sh ausgenommen (Build-Zeit). Laufender .56-Daemon nicht angefasst (nur Repo).
+
+---
+
+*Letzte Aktualisierung: 2026-06-04 — v0.31.1 Installer Boot-Race-Schutz (Skill-Service-Deps).*
