@@ -28,7 +28,7 @@ import { peerIdFromPrivateKey } from '@libp2p/peer-id';
 import type { PrivateKey } from '@libp2p/interface';
 import {
   readFileSync, existsSync, mkdirSync, renameSync, statSync, unlinkSync,
-  openSync, writeSync, fsyncSync, closeSync,
+  openSync, writeSync, fsyncSync, closeSync, chmodSync,
 } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import type { Logger } from 'pino';
@@ -50,12 +50,16 @@ export interface LoadedLibp2pKey {
  * trotz „atomischem" Rename dazu führen, dass der Key nach Reboot fehlt → PeerID
  * würde dann doch driften (genau das, was #0 verhindern soll).
  */
-function atomicWriteBinary(path: string, data: Buffer, mode: number): void {
+function atomicWriteBinary(path: string, data: Buffer, mode: number, log?: Logger): void {
   const tmp = `${path}.${process.pid}.tmp`;
   let fd: number | undefined;
   try {
     fd = openSync(tmp, 'w', mode);
-    writeSync(fd, data);
+    // LOW (CR): writeSync kann partiell schreiben → bis zur vollen Länge schleifen.
+    let off = 0;
+    while (off < data.length) {
+      off += writeSync(fd, data, off, data.length - off);
+    }
     fsyncSync(fd); // Datei-Inhalt durable
   } finally {
     if (fd !== undefined) closeSync(fd);
@@ -66,12 +70,18 @@ function atomicWriteBinary(path: string, data: Buffer, mode: number): void {
     try { unlinkSync(tmp); } catch { /* best effort */ }
     throw err;
   }
-  // Verzeichnis-Eintrag (das Rename) durable machen — best effort (manche FS/OS
-  // unterstützen dir-fsync nicht, dann ignorieren).
+  // Verzeichnis-Eintrag (das Rename) durable machen. M2 (CR): Fehler NICHT still
+  // verschlucken — warnen, weil die Crash-Durability sonst nur scheinbar garantiert ist
+  // (manche FS/OS unterstützen dir-fsync nicht).
   try {
     const dfd = openSync(dirname(path), 'r');
     try { fsyncSync(dfd); } finally { closeSync(dfd); }
-  } catch { /* best effort */ }
+  } catch (err) {
+    log?.warn(
+      { dir: dirname(path), err: err instanceof Error ? err.message : String(err) },
+      '[libp2p-identity] Directory-fsync fehlgeschlagen — Crash-Durability des Key-Writes NICHT garantiert',
+    );
+  }
 }
 
 /** PeerID-String aus einem PrivateKey ableiten (deterministisch, stabil). */
@@ -80,8 +90,95 @@ export function libp2pPeerIdString(privateKey: PrivateKey): string {
 }
 
 /**
- * Lädt den persistierten libp2p-Ed25519-Key oder erzeugt ihn beim Erststart.
- * Idempotent: jeder weitere Aufruf liefert denselben Key (⇒ dieselbe PeerID).
+ * M1 (CR): keys/-Verzeichnis owner-only (0700) anlegen UND bei existierendem, zu offenem
+ * Verzeichnis nachziehen/warnen — eine 0600-Keydatei schützt nicht, wenn das Verzeichnis
+ * für Gruppe/Andere schreibbar ist (lokaler Angreifer könnte die Datei ersetzen).
+ */
+function ensureKeyDirSecure(keyDir: string, log?: Logger): void {
+  mkdirSync(keyDir, { recursive: true, mode: 0o700 });
+  try {
+    const dirMode = statSync(keyDir).mode & 0o777;
+    if ((dirMode & 0o077) !== 0) {
+      try {
+        chmodSync(keyDir, 0o700);
+        log?.warn({ keyDir, was: dirMode.toString(8) }, '[libp2p-identity] keys/-Verzeichnis war zu offen → auf 0700 gesetzt');
+      } catch {
+        log?.warn({ keyDir, mode: dirMode.toString(8) }, '[libp2p-identity] keys/-Verzeichnis zu offen (sollte 0700) — chmod fehlgeschlagen, bitte manuell `chmod 700`');
+      }
+    }
+  } catch { /* stat-Fehler ignorieren */ }
+}
+
+/** Liest + validiert die vorhandene Key-Datei (Perms-Warnung, Korrupt-Check, Ed25519-Check). */
+function loadExistingKey(keyPath: string, log?: Logger): LoadedLibp2pKey {
+  try {
+    const mode = statSync(keyPath).mode & 0o777;
+    if ((mode & 0o077) !== 0) {
+      log?.warn(
+        { keyPath, mode: mode.toString(8) },
+        '[libp2p-identity] Key-Datei mit zu offenen Rechten (sollte 0600 sein) — bitte `chmod 600`',
+      );
+    }
+  } catch { /* stat-Fehler ignorieren, Laden trotzdem versuchen */ }
+
+  const buf = readFileSync(keyPath);
+  let privateKey: PrivateKey;
+  try {
+    privateKey = privateKeyFromProtobuf(new Uint8Array(buf));
+  } catch (cause) {
+    // Fail-loud: stilles Neugenerieren würde die Identität wechseln (wie ein Clone).
+    throw new Error(
+      `[libp2p-identity] Ungültige/korrupte libp2p-Key-Datei: ${keyPath}. ` +
+        `Restore aus Backup oder explizite Rotation nötig — KEIN stilles Neugenerieren.`,
+      { cause: cause instanceof Error ? cause : undefined },
+    );
+  }
+  if (privateKey.type !== 'Ed25519') {
+    throw new Error(
+      `[libp2p-identity] Unerwarteter Key-Typ '${privateKey.type}' in ${keyPath}; erwartet 'Ed25519'.`,
+    );
+  }
+  const peerId = libp2pPeerIdString(privateKey);
+  log?.info({ keyPath, peerId }, '[libp2p-identity] Persistierten libp2p-Key geladen (stabile PeerID)');
+  return { privateKey, generated: false, peerId };
+}
+
+/**
+ * HIGH 2 (CR): exklusiver First-Create-Lock. Verhindert, dass zwei parallel startende
+ * Prozesse (gleicher dataDir, Key fehlt) beide einen ANDEREN Key erzeugen und per
+ * last-writer-wins-rename die Identität überschreiben (→ PeerID-Drift trotz #0).
+ * Liefert den Lock-fd, oder 'key-appeared' wenn währenddessen ein anderer Prozess den
+ * Key geschrieben hat (dann laden statt generieren).
+ */
+async function acquireKeyCreateLock(
+  lockPath: string,
+  keyPath: string,
+): Promise<number | 'key-appeared'> {
+  const maxWaitMs = 30_000; // CR LOW: 30s statt 5s — langsame FS/Entropie/Key-Erzeugung
+  const stepMs = 100;
+  let waited = 0;
+  for (;;) {
+    try {
+      return openSync(lockPath, 'wx', 0o600); // atomar exklusiv anlegen (EEXIST wenn belegt)
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
+      if (existsSync(keyPath)) return 'key-appeared'; // anderer Prozess hat den Key geschrieben
+      if (waited >= maxWaitMs) {
+        throw new Error(
+          `[libp2p-identity] Key-Lock ${lockPath} seit >${maxWaitMs}ms belegt und kein Key erschienen — ` +
+            `anderer Prozess hängt oder stale lock. Bitte manuell prüfen/entfernen.`,
+        );
+      }
+      await new Promise((r) => setTimeout(r, stepMs));
+      waited += stepMs;
+    }
+  }
+}
+
+/**
+ * Lädt den persistierten libp2p-Ed25519-Key oder erzeugt ihn beim Erststart (unter
+ * exklusivem Lock). Idempotent: jeder weitere Aufruf — auch parallel — liefert denselben
+ * Key (⇒ dieselbe PeerID).
  *
  * @param dataDir  `config.daemon.data_dir` (plattformneutral aufgelöst).
  */
@@ -91,51 +188,28 @@ export async function loadOrCreateLibp2pPrivateKey(
 ): Promise<LoadedLibp2pKey> {
   const keyDir = resolve(dataDir, 'keys');
   const keyPath = resolve(keyDir, LIBP2P_KEY_FILENAME);
+  ensureKeyDirSecure(keyDir, log);
 
-  if (existsSync(keyPath)) {
-    // Dateirechte prüfen: bei zu offenen Rechten (group/other haben Bits) laut warnen.
-    try {
-      const mode = statSync(keyPath).mode & 0o777;
-      if ((mode & 0o077) !== 0) {
-        log?.warn(
-          { keyPath, mode: mode.toString(8) },
-          '[libp2p-identity] Key-Datei mit zu offenen Rechten (sollte 0600 sein) — bitte `chmod 600`',
-        );
-      }
-    } catch { /* stat-Fehler ignorieren, Laden trotzdem versuchen */ }
+  if (existsSync(keyPath)) return loadExistingKey(keyPath, log);
 
-    const buf = readFileSync(keyPath);
-    let privateKey: PrivateKey;
-    try {
-      privateKey = privateKeyFromProtobuf(new Uint8Array(buf));
-    } catch (cause) {
-      // Fail-loud (CR MEDIUM): stilles Neugenerieren würde die Identität wechseln
-      // (wie ein Clone) — schlimmer als ein lauter Abbruch.
-      throw new Error(
-        `[libp2p-identity] Ungültige/korrupte libp2p-Key-Datei: ${keyPath}. ` +
-          `Restore aus Backup oder explizite Rotation nötig — KEIN stilles Neugenerieren.`,
-        { cause: cause instanceof Error ? cause : undefined },
-      );
-    }
-    if (privateKey.type !== 'Ed25519') {
-      // ADR-022-Invariante: Ed25519 ist die Identitätsbasis (CR MEDIUM).
-      throw new Error(
-        `[libp2p-identity] Unerwarteter Key-Typ '${privateKey.type}' in ${keyPath}; erwartet 'Ed25519'.`,
-      );
-    }
-    const peerId = libp2pPeerIdString(privateKey);
-    log?.info({ keyPath, peerId }, '[libp2p-identity] Persistierten libp2p-Key geladen (stabile PeerID)');
-    return { privateKey, generated: false, peerId };
+  // First-Create: exklusiver Lock + Re-Check UNTER dem Lock (HIGH 2).
+  const lockPath = `${keyPath}.lock`;
+  const lock = await acquireKeyCreateLock(lockPath, keyPath);
+  if (lock === 'key-appeared') {
+    return loadExistingKey(keyPath, log); // anderer Prozess war schneller
   }
-
-  mkdirSync(keyDir, { recursive: true, mode: 0o700 }); // CR MEDIUM: owner-only keys/
-  const privateKey = await generateKeyPair('Ed25519');
-  const bytes = privateKeyToProtobuf(privateKey);
-  atomicWriteBinary(keyPath, Buffer.from(bytes), 0o600);
-  const peerId = libp2pPeerIdString(privateKey);
-  log?.info(
-    { keyPath, peerId },
-    '[libp2p-identity] Neuer libp2p-Ed25519-Key generiert + persistiert (0600) — PeerID ab jetzt stabil',
-  );
-  return { privateKey, generated: true, peerId };
+  try {
+    if (existsSync(keyPath)) return loadExistingKey(keyPath, log); // Re-Check unter Lock
+    const privateKey = await generateKeyPair('Ed25519');
+    atomicWriteBinary(keyPath, Buffer.from(privateKeyToProtobuf(privateKey)), 0o600, log);
+    const peerId = libp2pPeerIdString(privateKey);
+    log?.info(
+      { keyPath, peerId },
+      '[libp2p-identity] Neuer libp2p-Ed25519-Key generiert + persistiert (0600) — PeerID ab jetzt stabil',
+    );
+    return { privateKey, generated: true, peerId };
+  } finally {
+    try { closeSync(lock); } catch { /* best effort */ }
+    try { unlinkSync(lockPath); } catch { /* best effort */ }
+  }
 }

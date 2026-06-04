@@ -54,4 +54,20 @@ describe('libp2p-identity — ADR-022 #0 persisted, stable PeerID', () => {
     writeFileSync(join(dir, 'keys', LIBP2P_KEY_FILENAME), Buffer.from('not-a-valid-protobuf'));
     await expect(loadOrCreateLibp2pPrivateKey(dir)).rejects.toThrow(/[Kk]orrupte|Ungültige/);
   });
+
+  it('HIGH 2: two PARALLEL loads on the same empty dataDir converge to ONE PeerID (no overwrite race)', async () => {
+    const dir = mkTmp();
+    const [a, b] = await Promise.all([
+      loadOrCreateLibp2pPrivateKey(dir),
+      loadOrCreateLibp2pPrivateKey(dir),
+    ]);
+    // Both must end up with the SAME identity (not two divergent keys).
+    expect(a.peerId).toBe(b.peerId);
+    // Exactly one actually generated; the other loaded the winner's key.
+    expect([a.generated, b.generated].filter(Boolean).length).toBe(1);
+    // A subsequent (restart) load is stable too.
+    const c = await loadOrCreateLibp2pPrivateKey(dir);
+    expect(c.generated).toBe(false);
+    expect(c.peerId).toBe(a.peerId);
+  });
 });
