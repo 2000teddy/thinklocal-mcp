@@ -172,9 +172,11 @@ export async function influxdbWrite(
 /**
  * Prueft ob InfluxDB erreichbar ist.
  */
-export async function influxdbHealthCheck(): Promise<boolean> {
+export async function influxdbHealthCheck(signal?: AbortSignal): Promise<boolean> {
   try {
-    const res = await fetch(`${INFLUXDB_URL}/health`, { signal: AbortSignal.timeout(3_000) });
+    // ADR-021: nutzt das vom SkillHealthMonitor übergebene AbortSignal (Timeout);
+    // Fallback auf eigenes 3s-Timeout, wenn standalone (Boot-Check) aufgerufen.
+    const res = await fetch(`${INFLUXDB_URL}/health`, { signal: signal ?? AbortSignal.timeout(3_000) });
     return res.ok;
   } catch {
     return false;

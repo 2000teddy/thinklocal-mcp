@@ -45,6 +45,7 @@ import type { SecretRequestPayload, SecretResponsePayload, AgentMessagePayload, 
 import { AgentInbox } from './agent-inbox.js';
 import { SYSTEM_MONITOR_MANIFEST } from './builtin-skills/system-monitor.js';
 import { INFLUXDB_MANIFEST, influxdbHealthCheck } from './builtin-skills/influxdb.js';
+import { SkillHealthMonitor } from './skill-health-monitor.js';
 import { TelegramGateway } from './telegram-gateway.js';
 import type { AgentCard } from './agent-card.js';
 import { seedBuiltinSkills } from './builtin-skill-seed.js';
@@ -177,14 +178,15 @@ async function main(): Promise<void> {
   // Eingebaute Skills registrieren
   skillManager.registerLocal({ ...SYSTEM_MONITOR_MANIFEST, author: identity.spiffeUri });
 
-  // InfluxDB Skill nur registrieren wenn InfluxDB erreichbar ist
+  // ADR-021: InfluxDB-Skill IMMER registrieren — `availability` spiegelt den Health-State
+  // (initial aus einem Boot-Check). Der SkillHealthMonitor re-evaluiert periodisch und
+  // toggelt availability bei Service-Ausfall/-Erholung (heilt den Boot-Race von 2026-05-17).
   const influxAvailable = await influxdbHealthCheck();
-  if (influxAvailable) {
-    skillManager.registerLocal({ ...INFLUXDB_MANIFEST, author: identity.spiffeUri });
-    log.info('InfluxDB Skill registriert — Datenbank erreichbar');
-  } else {
-    log.info('InfluxDB nicht erreichbar — Skill nicht registriert');
-  }
+  skillManager.registerLocal(
+    { ...INFLUXDB_MANIFEST, author: identity.spiffeUri },
+    influxAvailable ? 'healthy' : 'unhealthy',
+  );
+  log.info({ influxAvailable }, 'InfluxDB Skill registriert (Health-Monitor übernimmt Re-Evaluierung)');
 
   // Neutral builtin skills aus skills/builtin/ in das Runtime-Verzeichnis
   // seeden (Codex Ollama-Skill Pattern). Die Skills werden beim nächsten
@@ -202,6 +204,31 @@ async function main(): Promise<void> {
   // und libp2p. Hooks werden vor runtime.start() registriert, damit die
   // ersten peer:connect-Events bereits am Coordinator landen.
   const registrySync = wireRegistrySync({ registry, log });
+
+  // ADR-021: zentraler Skill-Health-Monitor. Skills mit externer Abhängigkeit melden
+  // nur ihre healthcheck-fn; der Monitor schedult, debounced (Hysterese), timeoutet und
+  // toggelt bei einem State-Flip die `availability` der EIGENEN Capability + Audit + Push.
+  const skillHealthMonitor = new SkillHealthMonitor({
+    log,
+    onTransition: (t) => {
+      const availability = t.to === 'healthy' ? 'healthy' : 'unhealthy';
+      registry.setAvailability(identity.spiffeUri, t.skillId, availability, t.consecutiveFailures, new Date().toISOString());
+      audit.append(
+        'SKILL_HEALTH_TRANSITION',
+        identity.spiffeUri,
+        `${t.skillId}:${t.from}->${t.to} fails=${t.consecutiveFailures}${t.lastError ? ` err=${t.lastError}` : ''}`,
+        'skill',
+        t.skillId,
+      );
+      // Sofortiger Registry-Push, damit das Mesh den State-Flip schnell sieht (ADR-020 Resync).
+      void registrySync.coordinator
+        .republish()
+        .catch((err) => log.warn({ err, skillId: t.skillId }, '[skill-health] republish nach Transition fehlgeschlagen'));
+    },
+  });
+  // Skills mit externer Abhängigkeit registrieren (generisch erweiterbar: Ollama, Telegram, …).
+  skillHealthMonitor.register('influxdb', (signal) => influxdbHealthCheck(signal));
+  skillHealthMonitor.start();
 
   // ADR-022 #0: persistierten libp2p-Ed25519-Key laden/erzeugen → stabile PeerID
   // über Neustarts. NUR wenn libp2p aktiv ist (CR HIGH): im local-Modus ist libp2p
@@ -779,6 +806,7 @@ async function main(): Promise<void> {
     executor: taskExecutor,
     registrySyncRepublish: () => registrySync.coordinator.republish(),
     getRegistrySyncStatus: () => registrySync.coordinator.getStatus(),
+    getSkillHealth: () => skillHealthMonitor.getStatus(),
   });
 
   await cardServer.start();
@@ -944,6 +972,7 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string): Promise<void> => {
     log.info({ signal }, 'Shutdown eingeleitet...');
     telegramGateway?.stop();
+    skillHealthMonitor.stop();
     gossip.stop();
     mesh.stopHeartbeatLoop();
     taskManager.stop();

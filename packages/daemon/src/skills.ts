@@ -130,11 +130,13 @@ export class SkillManager {
   /**
    * Registriert einen lokalen Skill und meldet ihn in der Capability Registry an.
    */
-  registerLocal(manifest: SkillManifest): void {
+  registerLocal(manifest: SkillManifest, availability: 'healthy' | 'unhealthy' = 'healthy'): void {
     this.localSkills.set(manifest.id, manifest);
     this.saveInstalled();
 
-    // In der Capability Registry als Capability registrieren
+    // In der Capability Registry als Capability registrieren.
+    // ADR-021: `availability` reflektiert den Skill-Health-State; der Skill bleibt
+    // registriert (kein Remove) — Routing filtert auf availability==='healthy'.
     this.registry.register({
       skill_id: manifest.id,
       version: manifest.version,
@@ -145,9 +147,12 @@ export class SkillManager {
       updated_at: new Date().toISOString(),
       category: manifest.category,
       permissions: manifest.permissions,
+      availability,
+      last_checked_at: new Date().toISOString(),
+      consecutive_failures: availability === 'healthy' ? 0 : 1,
     });
 
-    this.log?.info({ skillId: manifest.id, version: manifest.version }, 'Lokaler Skill registriert');
+    this.log?.info({ skillId: manifest.id, version: manifest.version, availability }, 'Lokaler Skill registriert');
   }
 
   /**

@@ -1,6 +1,6 @@
 # ADR-021: Skill Health & Lifecycle Monitoring
 
-- **Status:** Proposed
+- **Status:** Accepted (implementiert 2026-06-04, PR siehe COMPLIANCE-TABLE)
 - **Datum:** 2026-05-18
 - **Autor:** claude-code (Opus 4.7, 1M context)
 - **Konsens:** `pal:consensus` mit `gpt-5.2` (8/10) + `gemini-3-pro-preview`

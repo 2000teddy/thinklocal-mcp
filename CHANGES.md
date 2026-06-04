@@ -8,6 +8,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-04
 
+### v0.31.0 — ADR-021 Generisches Skill-Health-Monitoring
+
+Behebt den Boot-Race von 2026-05-17 generisch: Skills mit externer Abhängigkeit werden periodisch re-evaluiert, statt nur einmal beim Daemon-Start.
+
+- **`skill-health-monitor.ts`** (neu): zentraler `SkillHealthMonitor`. Skills liefern nur ihre `healthcheck.fn(signal)`; der Monitor schedult (linear 30s healthy / 60s unhealthy, Jitter ±20%), debounced per Hysterese (2 Erfolge → healthy, 3 Fehlschläge → unhealthy, binäre State-Machine, kein DEGRADED), single-flight, kooperatives AbortController-Timeout, `stop()` cancelt alles.
+- **Registry (`registry.ts`)**: Capability bekommt `availability`/`last_checked_at`/`consecutive_failures` (ADR-021 §4: Attribut statt Remove). `setAvailability()` schreibt **nur die eigene** Capability (Owner-only) und nur bei echtem Flip (minimaler Hash-Churn; `availability` ist im Capability-Hash). **Routing-Lookups (`findBySkill`/`findByCategory`) filtern `availability==='unhealthy'`** — ausgefallene Skills werden nicht mehr geroutet (back-compat: fehlendes Feld = verfügbar).
+- **`index.ts`**: InfluxDB-Skill wird jetzt IMMER registriert (initial-availability aus Boot-Check); Monitor verdrahtet (`influxdb`-Check) — bei Flip: `setAvailability` + Audit `SKILL_HEALTH_TRANSITION` + Registry-Republish; graceful stop im Shutdown.
+- **`/api/status`**: neuer `skills`-Block (State, last/next_check, consecutive_failures, last_error pro Skill).
+- **CR gpt-5.5:** 1 HIGH (Routing ignorierte availability) + 2 MEDIUM (Shutdown-Race, Hash ohne availability) + 2 LOW (idempotenz, stale re-register) — alle gefixt + Regressionstests; Re-Review bestätigt HIGH geschlossen. PC clean. **862 Tests grün** (+11), tsc clean. ADR-021 → Accepted. Version 0.30.3 → **0.31.0**.
+
+Voraussetzung-Hinweis (ADR-021 §8): Owner-wins im CRDT-Layer (ADR-020 v2.2) ist am Write-Site (`setAvailability` nur eigener Key) adressiert, im CRDT-Layer aber noch nicht erzwungen — offene Flanke, ADR-acknowledged.
+
+---
+
 ### v0.30.3 — Registry-Republish-Endpoint: Test-Abdeckung + Live-Verifikation
 
 `POST /api/registry/republish` (ADR-020 v1 Safety-Valve, manueller Force-Push des Registry-Resyncs) existierte bereits (`dashboard-api.ts`, wired via `registrySyncRepublish`), war aber **untestet**. Verify-First: live bestätigt (authentifiziert → `{status:ok}` + Audit-Event `REGISTRY_REPUBLISH`, `audit_events` 36→37). Neuer Regressionstest `dashboard-api.test.ts` (Fastify-`inject`, 4 Fälle: ok / 503 unwired / 500 throws / 429 rate-limited). AuthZ = mTLS-Handshake (Mesh-Member) auf dem Hauptserver; LAN-only. **851 Tests grün** (+4), tsc+eslint clean. Version 0.30.2 → **0.30.3**.

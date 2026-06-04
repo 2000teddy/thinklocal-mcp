@@ -21,6 +21,7 @@ import type { DaemonConfig } from './config.js';
 import type { RateLimiter } from './ratelimit.js';
 import type { CredentialVault } from './vault.js';
 import type { TaskExecutor } from './task-executor.js';
+import type { SkillHealthStatus } from './skill-health-monitor.js';
 
 export interface DashboardApiDeps {
   mesh: MeshManager;
@@ -37,6 +38,8 @@ export interface DashboardApiDeps {
    * Optional — wenn nicht gesetzt, ist der Endpoint deaktiviert.
    */
   registrySyncRepublish?: () => Promise<void>;
+  /** ADR-021: Per-Skill Health-Status fuer /api/status. */
+  getSkillHealth?: () => SkillHealthStatus[];
   /** ADR-020 v1: Per-Peer Sync-Status fuer /api/status libp2p-Block. */
   getRegistrySyncStatus?: () => Record<string, {
     rounds: number;
@@ -82,6 +85,7 @@ export function registerDashboardApi(server: FastifyInstance, deps: DashboardApi
       active_tasks: tasks.getActiveTasks().length,
       audit_events: audit.count(),
       registry_sync: deps.getRegistrySyncStatus?.() ?? {},
+      skills: deps.getSkillHealth?.() ?? [],
     };
   });
 
