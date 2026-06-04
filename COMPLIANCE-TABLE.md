@@ -549,4 +549,14 @@ Gesamtsuite 682/682 (vorher 672), 0 Regressionen.
 
 ---
 
-*Letzte Aktualisierung: 2026-06-04 — ADR-022 Schritt 3 / WS-3 (PoP Cert-Issuance).*
+## Session 2026-06-04 — ADR-022 WS-3 Fix (Eigen-Loopback im Cert, Live-Test-Befund)
+
+| #     | PR                                      | Datum       | CO | CG | TS | CR | PC | DO | Findings                           |
+|-------|-----------------------------------------|-------------|----|----|----|----|----|----|----|
+| WS-3a | ADR-022 §3 Loopback-SAN-Fix             | 2026-06-04  | —  | —  | ✅ | ✅ | ✅ | ✅ | Live-Test-Befund: localhost-SAN versehentlich entfernt (MCP-Proxy); Eigen-Loopback wieder rein, HIGH bleibt zu |
+
+**Bug-Fix-PR (CO/CG entfallen).** **TS:** 831 grün, tsc+eslint clean; SAN-Regressionstests aktualisiert (`['localhost','th01']`, bogus-CN→`['localhost']`). **CR:** gpt-5.5 (security, intern) — Eigen-Loopback kein Cross-Node-Vektor, WS-3-HIGH (Admin-Host-Impersonation) bleibt geschlossen, 0 Findings. **PC:** gpt-5.3-codex clean. **DO:** CHANGES.md, COMPLIANCE-TABLE.md.
+
+---
+
+*Letzte Aktualisierung: 2026-06-04 — ADR-022 WS-3 Fix (Eigen-Loopback im Cert).*

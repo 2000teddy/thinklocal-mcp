@@ -8,6 +8,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-04
 
+### ADR-022 WS-3 Fix — Eigen-Loopback im ausgestellten Cert (Live-Test-Befund)
+
+Beim TH01-Rejoin-Live-Test fiel auf: das WS-3-HIGH-Fix hatte mit dem Admin-Hostnamen versehentlich **auch `localhost`** aus dem ausgestellten `node/<PeerID>`-Cert entfernt. Der lokale mTLS-MCP-Proxy (`mcp-stdio` → `https://localhost:9440`, `rejectUnauthorized`) braucht aber ein `localhost`-SAN. `signNodeCertFromCsr` fügt jetzt das **eigene Loopback** (`localhost`/`127.0.0.1`/`::1`) wieder hinzu — kein Cross-Node-Vektor (Loopback ist stets lokal), Admin-/Fremd-Hostname bleibt ausgeschlossen, `CN=='localhost'` wird abgelehnt. gpt-5.5-CR bestätigt: WS-3-HIGH bleibt geschlossen. 831 Tests grün.
+
+---
+
 ### ADR-022 Schritt 3 / WS-3 — Cross-Node PoP Cert-Issuance (node/<PeerID>)
 
 Dritter Workstream von Schritt 3: der joinende Node beweist per **Proof-of-Possession** (libp2p-Ed25519-Key = PeerID-Wurzel) seine Berechtigung und erhält von der Admin-CA (.94) ein X.509-Cert mit SAN `spiffe://thinklocal/node/<PeerID>`. Code **beider Seiten** gebaut.
