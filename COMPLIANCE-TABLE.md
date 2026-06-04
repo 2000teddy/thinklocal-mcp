@@ -617,4 +617,16 @@ Doc-only-Eintrag (Abschluss-Dokumentation Live-Test); kein Code → CO/CG/TS/CR/
 
 ---
 
-*Letzte Aktualisierung: 2026-06-04 — v0.30.3 Registry-Republish-Endpoint (Test + Verifikation).*
+## Session 2026-06-04 — v0.31.0 ADR-021 Generisches Skill-Health-Monitoring
+
+| #       | PR  | Datum      | CO | CG | TS | CR | PC | DO | Findings                           |
+|---------|-----|------------|----|----|----|----|----|----|----|
+| v0.31.0 | tbd | 2026-06-04 | ✅ | —  | ✅ | ✅ | ✅ | ✅ | ADR-021 SkillHealthMonitor + availability-Attribut. CR gpt-5.5: 1 HIGH (Routing-Filter) + 2 MEDIUM + 2 LOW — alle gefixt + Re-Review |
+
+**CO:** Konsens 2026-05-18 in ADR-021 (gpt-5.2 8/10 + gemini-3-pro 9/10). **CG:** — (Tests von Hand). **TS:** 862 grün (+11), tsc clean; skill-health-monitor.test.ts (Hysterese 2-up/3-down, Timeout, Single-Flight, Intervall-Switch, Jitter, stop(), Shutdown-Race) + registry.test.ts (availability-Routing-Filter HIGH-Regression, setAvailability owner-only/idempotent/Hash-Flip). **CR:** `pal:codereview` gpt-5.5 — 1 HIGH (findBySkill/findByCategory ignorierten availability) + 2 MEDIUM (Shutdown-Race onTransition, Hash ohne availability) + 2 LOW (idempotenz, stale re-register) gefixt; Re-Review bestätigt HIGH geschlossen, 0 Restfindings. **PC:** gpt-5.3-codex clean. **DO:** ADR-021 (Accepted), CHANGES, COMPLIANCE, TODO, package.json 0.31.0.
+
+**Voraussetzung-Hinweis:** ADR-020 v2.2 (Owner-wins CRDT) am Write-Site adressiert (setAvailability nur eigener Key), CRDT-Layer-Enforcement offen (ADR-acknowledged).
+
+---
+
+*Letzte Aktualisierung: 2026-06-04 — v0.31.0 ADR-021 Skill-Health-Monitoring.*

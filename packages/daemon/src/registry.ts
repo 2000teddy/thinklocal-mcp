@@ -36,6 +36,16 @@ export interface Capability {
   category: string;
   /** Benötigte Berechtigungen */
   permissions: string[];
+  /**
+   * ADR-021: Routing-relevante Verfügbarkeit aus dem Skill-Health-Monitor.
+   * Optional (Back-Compat mit älteren CRDT-Dokumenten). Routing filtert standardmäßig
+   * auf `availability !== 'unhealthy'`. NUR der Owner-Daemon schreibt sein eigenes Feld.
+   */
+  availability?: 'healthy' | 'unhealthy';
+  /** ADR-021: Zeitpunkt des letzten Health-Checks (ISO 8601). */
+  last_checked_at?: string;
+  /** ADR-021: aufeinanderfolgende Fehlschläge (Debug/Ops-Sicht). */
+  consecutive_failures?: number;
 }
 
 /** Automerge-Dokument-Schema für die Registry */
@@ -183,6 +193,42 @@ export class CapabilityRegistry {
   }
 
   /**
+   * ADR-021: Setzt das `availability`-Attribut einer EIGENEN Capability (Skill-Health).
+   * Owner-only by construction: der Aufrufer übergibt seine eigene `agentId`; es wird
+   * ausschließlich der exakte Key (agentId+skillId) angefasst — kein Fremd-Namespace.
+   * Liefert true, wenn die Capability existierte und aktualisiert wurde. Schreibt nur
+   * bei einem echten State-Flip (Aufrufer = onTransition) → minimaler CRDT-Hash-Churn.
+   */
+  setAvailability(
+    agentId: string,
+    skillId: string,
+    availability: 'healthy' | 'unhealthy',
+    consecutiveFailures: number,
+    lastCheckedAt: string,
+  ): boolean {
+    const key = this.makeKey(agentId, skillId);
+    let updated = false;
+    this.doc = Automerge.change(this.doc, (d) => {
+      const cap = d.capabilities[key];
+      if (!cap) return;
+      // CR gpt-5.5 LOW: idempotent — kein CRDT-Write (kein updated_at-Churn), wenn der
+      // routing-relevante State unverändert ist. last_checked_at allein triggert nichts.
+      if (cap.availability === availability && cap.consecutive_failures === consecutiveFailures) {
+        return;
+      }
+      cap.availability = availability;
+      cap.consecutive_failures = consecutiveFailures;
+      cap.last_checked_at = lastCheckedAt;
+      cap.updated_at = new Date().toISOString();
+      updated = true;
+    });
+    if (updated) {
+      this.log?.info({ skill: skillId, agent: agentId, availability }, '[skill-health] Capability-availability aktualisiert');
+    }
+    return updated;
+  }
+
+  /**
    * Markiert alle Capabilities eines Agents als offline.
    */
   markAgentOffline(agentId: string): void {
@@ -197,20 +243,24 @@ export class CapabilityRegistry {
   }
 
   /**
-   * Sucht Capabilities nach skill_id.
+   * Sucht (routing-relevant) Capabilities nach skill_id.
+   * ADR-021 (CR gpt-5.5 HIGH): filtert `availability === 'unhealthy'` heraus — sonst
+   * würde ein registrierter-aber-ausgefallener Skill weiter geroutet (genau das, was das
+   * availability-Attribut statt Remove verhindern soll). Back-Compat: fehlendes Feld
+   * (alte Capabilities) gilt als verfügbar.
    */
   findBySkill(skillId: string): Capability[] {
     return Object.values(this.doc.capabilities).filter(
-      (c) => c.skill_id === skillId && c.health !== 'offline',
+      (c) => c.skill_id === skillId && c.health !== 'offline' && c.availability !== 'unhealthy',
     );
   }
 
   /**
-   * Sucht Capabilities nach Kategorie.
+   * Sucht (routing-relevant) Capabilities nach Kategorie. Filtert unhealthy heraus (s.o.).
    */
   findByCategory(category: string): Capability[] {
     return Object.values(this.doc.capabilities).filter(
-      (c) => c.category === category && c.health !== 'offline',
+      (c) => c.category === category && c.health !== 'offline' && c.availability !== 'unhealthy',
     );
   }
 
@@ -250,8 +300,11 @@ export class CapabilityRegistry {
    * Wird vom Gossip genutzt um nur eigene Capabilities zu hashen.
    */
   hashCapabilities(capabilities: Capability[]): string {
+    // ADR-021 (CR gpt-5.5 MEDIUM): `availability` ist routing-relevant und muss in den
+    // Hash, damit ein healthy↔unhealthy-Flip als Capability-Change sichtbar ist. NICHT
+    // `last_checked_at` aufnehmen (würde bei jedem Check churnen) — nur der semantische State.
     const keys = capabilities
-      .map((c) => `${c.agent_id}::${c.skill_id}:${c.version}:${c.health}`)
+      .map((c) => `${c.agent_id}::${c.skill_id}:${c.version}:${c.health}:${c.availability ?? 'healthy'}`)
       .sort();
     return createHash('sha256').update(keys.join('|')).digest('hex').slice(0, 16);
   }

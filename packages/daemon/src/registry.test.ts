@@ -129,3 +129,38 @@ describe('CapabilityRegistry — CRDT-basierte verteilte Registry', () => {
     expect(loaded.findBySkill('persistent-skill')).toHaveLength(1);
   });
 });
+
+describe('CapabilityRegistry — ADR-021 availability (Skill-Health)', () => {
+  const agentA = 'spiffe://thinklocal/host/a/agent/claude-code';
+  const agentB = 'spiffe://thinklocal/host/b/agent/gemini-cli';
+
+  it('SECURITY/ROUTING HIGH: findBySkill/findByCategory filtern availability=unhealthy heraus', () => {
+    const r = new CapabilityRegistry();
+    r.register(makeCap(agentA, 'influxdb.read', { availability: 'healthy' }));
+    r.register(makeCap(agentB, 'influxdb.read', { availability: 'unhealthy' }));
+    const bySkill = r.findBySkill('influxdb.read');
+    expect(bySkill).toHaveLength(1);
+    expect(bySkill[0]!.agent_id).toBe(agentA);
+    expect(r.findByCategory('database').every((c) => c.availability !== 'unhealthy')).toBe(true);
+  });
+
+  it('Back-Compat: fehlendes availability (alte Capability) gilt als verfügbar', () => {
+    const r = new CapabilityRegistry();
+    r.register(makeCap(agentA, 's')); // kein availability-Feld
+    expect(r.findBySkill('s')).toHaveLength(1);
+  });
+
+  it('setAvailability ändert NUR die eigene Capability, flippt den Hash, ist idempotent', () => {
+    const r = new CapabilityRegistry();
+    r.register(makeCap(agentA, 'influxdb', { availability: 'healthy' }));
+    r.register(makeCap(agentB, 'influxdb', { availability: 'healthy' }));
+    const h0 = r.getCapabilityHash();
+    expect(r.setAvailability(agentA, 'influxdb', 'unhealthy', 3, new Date().toISOString())).toBe(true);
+    expect(r.getCapabilityHash()).not.toBe(h0); // availability ist im Hash
+    expect(r.findBySkill('influxdb').map((c) => c.agent_id)).toEqual([agentB]); // nur A weggefiltert
+    // idempotent: gleicher State → kein Write
+    expect(r.setAvailability(agentA, 'influxdb', 'unhealthy', 3, new Date().toISOString())).toBe(false);
+    // unbekannte Capability → false
+    expect(r.setAvailability(agentA, 'nope', 'unhealthy', 1, new Date().toISOString())).toBe(false);
+  });
+});
