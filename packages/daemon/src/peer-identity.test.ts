@@ -11,6 +11,7 @@ import {
   spiffeUrisFromSubjectAltName,
   isAttestingIssuer,
   attestedPeerIdFromCert,
+  resolveSelfIdentity,
 } from './peer-identity.js';
 
 const PID = '12D3KooWCn86Frs2pqSkffVaoFsuHA7fByGZ7rULVqGcesk2RrJF';
@@ -239,6 +240,67 @@ describe('peer-identity — ADR-022 PeerID-rooted identity', () => {
 
     it('dual-SAN cert (legacy first) + attesting issuer → still attests the canonical PeerID', () => {
       expect(attestedPeerIdFromCert([legacy, canonical], PIN, [PIN])).toBe(PID);
+    });
+  });
+
+  describe('resolveSelfIdentity (ADR-022 Schritt 3 — Per-Node-Sender-Flip)', () => {
+    const legacy = `spiffe://${TRUST_DOMAIN}/host/cf00a5bab06832c1/agent/claude-code`;
+    const canonical = peerIdToSpiffeUri(PID); // spiffe://thinklocal/node/<PID>
+
+    it('Flag aus → bleibt Legacy, kein blockedReason (Default-Pfad)', () => {
+      const d = resolveSelfIdentity({ emitCanonicalFlag: false, legacyUri: legacy, peerId: PID, certSans: [canonical] });
+      expect(d.emitCanonical).toBe(false);
+      expect(d.selfIdentityUri).toBe(legacy);
+      expect(d.blockedReason).toBeUndefined();
+    });
+
+    it('Flag an + PeerID + EIGENE kanonische SAN → flippt auf node/<PeerID>', () => {
+      const d = resolveSelfIdentity({ emitCanonicalFlag: true, legacyUri: legacy, peerId: PID, certSans: [canonical] });
+      expect(d.emitCanonical).toBe(true);
+      expect(d.selfIdentityUri).toBe(canonical);
+      expect(d.canonicalSelfUri).toBe(canonical);
+      expect(d.certSanIsCanonical).toBe(true);
+      expect(d.blockedReason).toBeUndefined();
+    });
+
+    it('Dual-SAN-Cert (Legacy zuerst) das die eigene kanonische SAN enthält → flippt trotzdem', () => {
+      const d = resolveSelfIdentity({ emitCanonicalFlag: true, legacyUri: legacy, peerId: PID, certSans: [legacy, canonical] });
+      expect(d.emitCanonical).toBe(true);
+      expect(d.selfIdentityUri).toBe(canonical);
+    });
+
+    it('SECURITY-INTERLOCK: Flag an, aber Cert-SAN noch LEGACY → Fail-safe Legacy (Cert-SAN VOR Sender-URI)', () => {
+      // Würde der Node hier kanonisch emittieren, lehnte die Empfangsseite (authorizeHttpsSender)
+      // den eigenen Sender gegen den Legacy-Cert-SAN mit 403 ab → Mesh-Bruch.
+      const d = resolveSelfIdentity({ emitCanonicalFlag: true, legacyUri: legacy, peerId: PID, certSans: [legacy] });
+      expect(d.emitCanonical).toBe(false);
+      expect(d.selfIdentityUri).toBe(legacy);
+      expect(d.certSanIsCanonical).toBe(false);
+      expect(d.blockedReason).toBe('cert_san_not_canonical');
+    });
+
+    it('SECURITY-INTERLOCK (CR-HIGH): kanonische SAN für ANDERE PeerID → KEIN Flip (Fail-safe Legacy)', () => {
+      // Das Cert trägt node/<andere-PeerID>. Würden wir auf UNSERE node/<PID> flippen,
+      // stimmte der emittierte Sender nicht mit dem präsentierten Cert-SAN überein → 403.
+      const otherCanonical = peerIdToSpiffeUri('12D3KooWOtherPeerIdAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
+      const d = resolveSelfIdentity({ emitCanonicalFlag: true, legacyUri: legacy, peerId: PID, certSans: [otherCanonical] });
+      expect(d.emitCanonical).toBe(false);
+      expect(d.selfIdentityUri).toBe(legacy);
+      expect(d.certSanIsCanonical).toBe(false);
+      expect(d.blockedReason).toBe('cert_san_not_canonical');
+    });
+
+    it('SECURITY-INTERLOCK: Flag an, aber kein Cert (leere SAN-Liste) → Fail-safe Legacy', () => {
+      const d = resolveSelfIdentity({ emitCanonicalFlag: true, legacyUri: legacy, peerId: PID, certSans: [] });
+      expect(d.emitCanonical).toBe(false);
+      expect(d.blockedReason).toBe('cert_san_not_canonical');
+    });
+
+    it('Flag an, aber libp2p aus (peerId null, local-Modus) → Fail-safe Legacy', () => {
+      const d = resolveSelfIdentity({ emitCanonicalFlag: true, legacyUri: legacy, peerId: null, certSans: [canonical] });
+      expect(d.emitCanonical).toBe(false);
+      expect(d.canonicalSelfUri).toBeNull();
+      expect(d.blockedReason).toBe('libp2p_disabled_no_peerid');
     });
   });
 });

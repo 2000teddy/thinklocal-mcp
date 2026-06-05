@@ -97,10 +97,12 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
   **Umsetzung (Schritt 1 erledigt — Commit `1683396`, s. CHANGES 2026-06-03):**
   - [x] 🔴 **VORAUSSETZUNG: libp2p-Ed25519-Key PERSISTIEREN** — ✅ ERLEDIGT (Commit `8718f0b`, `libp2p-identity.ts`): PeerID stabil über Neustarts, Akzeptanztest grün, crash-durable+0600. `@libp2p/crypto`+`@libp2p/peer-id` (v5, gepinnt).
   - [ ] Ed25519-Key → CSR mit SAN `spiffe://thinklocal/node/<PeerID>` → Mesh-CA signiert → Cert ersetzen. (BLOCKER: admin-seitiges CSR-Signing auf .94, cross-node.)
-  - [~] Startup-Assertion (Divergenz PeerID/SAN/authz, laut; strict via `TLMCP_STRICT_IDENTITY`) — ✅ ERLEDIGT. authz-Checks VOLLSTÄNDIG auf PeerID umstellen — OFFEN (braucht stabile PeerID, s. Voraussetzung).
+  - [~] Startup-Assertion (Divergenz PeerID/SAN/authz, laut; strict via `TLMCP_STRICT_IDENTITY`) — ✅ ERLEDIGT.
+  - [x] **Phase-3-Sender-Flip (envelope.sender → `node/<PeerID>`) code-seitig** — ✅ ERLEDIGT (v0.34.0, flag `daemon.emit_canonical_sender`, default OFF, Interlock „Cert-SAN VOR Sender-URI", `resolveSelfIdentity()`). CR gpt-5.5: 3 HIGH + 2 MEDIUM gefixt. **OFFEN (Ops):** Per-Node-Live-Flip + Noise-Re-Handshake + Mesh-Gegenprobe; danach `TLMCP_STRICT_IDENTITY=1` + Legacy-Pfad entfernen.
+  - [ ] **Follow-up (CR-MEDIUM 2):** Pairing-Store ist URI-gekeyt → nach einem Flip werden gepairte Peers nicht erkannt (fail-closed). Auf pubkey-/fingerprint-basiertes Pairing bzw. Legacy↔Canonical-Alias umstellen, BEVOR der Live-Flip auf Nodes mit aktiven Pairings läuft.
   - [x] `getPeerPublicKey` aus verifizierten Agent-Cards **auf die kanonische PeerID keyen** (fail-closed) + `SKILL_ANNOUNCE`-Retry bei „Unknown sender" (Timing-Baustelle b) — ✅ ERLEDIGT (`mesh.resolvePeerPublicKey` + `index.ts`).
   - [ ] Clone-Detection (VM/Pi-Golden-Image dupliziert Key) als Launch-Blocker.
-  - [ ] Dual-Accept-Fenster beim Cutover (alt `host/…` + neu `node/<PeerID>`), damit das laufende Mesh nicht bricht.
+  - [x] Dual-Accept-Fenster beim Cutover (alt `host/…` + neu `node/<PeerID>`) — ✅ ERLEDIGT (WS-1/2/3, Empfangsseite akzeptiert beide Formen).
   - Gehört zu PR #74/#139 (Legacy-Hostname-URI-Migration).
 
 ## Phase 1 — Fundament: Identität, Verschlüsselung, Discovery (Wochen 1-3)

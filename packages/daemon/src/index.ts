@@ -4,7 +4,7 @@ import { Agent as UndiciAgent, fetch } from 'undici';
 import { loadConfig } from './config.js';
 import { createLogger } from './logger.js';
 import { loadOrCreateIdentity } from './identity.js';
-import { loadOrCreateTlsBundle, getCertDaysLeft, extractSpiffeUri, type NodeCertBundle } from './tls.js';
+import { loadOrCreateTlsBundle, getCertDaysLeft, extractSpiffeUris, type NodeCertBundle } from './tls.js';
 import { AuditLog } from './audit.js';
 import { MdnsDiscovery } from './discovery.js';
 import { AgentCardServer } from './agent-card.js';
@@ -38,7 +38,7 @@ import { loadOrCreateVaultPassphrase } from './vault-passphrase.js';
 import { isLoopbackHost } from './runtime-mode.js';
 import { TaskExecutor } from './task-executor.js';
 import { createLibp2pRuntime } from './libp2p-runtime.js';
-import { checkIdentityConsistency } from './peer-identity.js';
+import { checkIdentityConsistency, resolveSelfIdentity } from './peer-identity.js';
 import { loadOrCreateLibp2pPrivateKey } from './libp2p-identity.js';
 import { wireRegistrySync } from './registry-sync-libp2p-adapter.js';
 import type { SecretRequestPayload, SecretResponsePayload, AgentMessagePayload, AgentMessageAckPayload } from './messages.js';
@@ -158,12 +158,57 @@ async function main(): Promise<void> {
       })
     : undefined;
 
+  // ADR-022 #0/Phase 3: persistierten libp2p-Ed25519-Key laden/erzeugen → stabile
+  // PeerID über Neustarts. NUR wenn libp2p aktiv ist (CR HIGH): im local-Modus ist
+  // libp2p deaktiviert → kein Key-Laden, eine korrupte Datei darf den Boot dann nicht
+  // blocken. Früh geladen, weil die kanonische Self-Identität davon abhängt (siehe unten).
+  const libp2pKey = config.libp2p.enabled
+    ? await loadOrCreateLibp2pPrivateKey(config.daemon.data_dir, log)
+    : undefined;
+
+  // ADR-022 Phase 3 — Per-Node-Sender-Flip (Self-Identity-Ableitung):
+  // `selfIdentityUri` ist die URI, die der Node als `envelope.sender` / agent_id /
+  // Skill-Author / Inbox-Adresse / Audit-Identität verwendet. Sie flippt von Legacy
+  // `host/<stableNodeId>` auf kanonisch `node/<PeerID>` GENAU DANN, wenn:
+  //   (1) der Operator es explizit aktiviert (config/env TLMCP_EMIT_CANONICAL_SENDER), UND
+  //   (2) libp2p aktiv ist → eine stabile PeerID existiert, UND
+  //   (3) der laufende mTLS-Cert-SAN BEREITS kanonisch ist (`node/<PeerID>`).
+  // (3) ist der Sicherheits-Interlock „Cert-SAN VOR Sender-URI" (ADR-022 Schritt 3):
+  // emittierten wir kanonisch, während das Cert noch Legacy-SAN trägt, würde die
+  // empfangsseitige channel-gebundene Authz (authorizeHttpsSender) den eigenen Sender
+  // gegen den Cert-SAN abgleichen und mit 403 ablehnen → Mesh-Bruch. Der Signing-Key
+  // bleibt der ECDSA-Agent-Key (Option B, ADR-022 §3): Peers lösen ihn über die
+  // verifizierte, auf die PeerID gekeyte Agent-Card auf (resolvePeerPublicKey). Der Flip
+  // ist rein additiv + per Flag reversibel (Flag aus → sofort wieder Legacy).
+  const certSansAtBoot = tlsBundle ? extractSpiffeUris(tlsBundle.certPem) : [];
+  const idDecision = resolveSelfIdentity({
+    emitCanonicalFlag: config.daemon.emit_canonical_sender,
+    legacyUri: identity.spiffeUri,
+    peerId: libp2pKey?.peerId ?? null,
+    certSans: certSansAtBoot,
+  });
+  const { selfIdentityUri, emitCanonical, canonicalSelfUri } = idDecision;
+  if (idDecision.blockedReason) {
+    // Flag explizit gesetzt, aber Vorbedingung nicht erfüllt → Fail-safe: Legacy emittieren
+    // und LAUT warnen (Fehlkonfiguration: Flip ohne kanonisches Cert würde 403 erzeugen).
+    log.warn(
+      { reason: idDecision.blockedReason, certSans: certSansAtBoot, canonicalSelfUri },
+      '[identity] ADR-022 Phase 3: emit_canonical_sender gesetzt, aber Vorbedingung nicht erfüllt → bleibe bei Legacy-Sender (Fail-safe)',
+    );
+  }
+  if (emitCanonical) {
+    log.info(
+      { canonicalSelfUri: selfIdentityUri, legacy: identity.spiffeUri },
+      '[identity] ADR-022 Phase 3 AKTIV: emittiere kanonische node/<PeerID>-Identität',
+    );
+  }
+
   // 3. Audit-Log initialisieren
-  const audit = new AuditLog(config.daemon.data_dir, identity.privateKeyPem, identity.spiffeUri, log);
+  const audit = new AuditLog(config.daemon.data_dir, identity.privateKeyPem, selfIdentityUri, log);
 
   // 4. Event-Bus fuer Echtzeit-Events
   const eventBus = new MeshEventBus();
-  eventBus.emit('system:startup', { agentId: identity.spiffeUri, port: config.daemon.port });
+  eventBus.emit('system:startup', { agentId: selfIdentityUri, port: config.daemon.port });
 
   // 4b. Credential Vault initialisieren
   const vaultPassphrase = loadOrCreateVaultPassphrase(
@@ -178,17 +223,17 @@ async function main(): Promise<void> {
 
   // 5. Capability Registry + Skill-Manager initialisieren
   const registry = new CapabilityRegistry(log);
-  const skillManager = new SkillManager(config.daemon.data_dir, identity.spiffeUri, registry, log);
+  const skillManager = new SkillManager(config.daemon.data_dir, selfIdentityUri, registry, log);
 
   // Eingebaute Skills registrieren
-  skillManager.registerLocal({ ...SYSTEM_MONITOR_MANIFEST, author: identity.spiffeUri });
+  skillManager.registerLocal({ ...SYSTEM_MONITOR_MANIFEST, author: selfIdentityUri });
 
   // ADR-021: InfluxDB-Skill IMMER registrieren — `availability` spiegelt den Health-State
   // (initial aus einem Boot-Check). Der SkillHealthMonitor re-evaluiert periodisch und
   // toggelt availability bei Service-Ausfall/-Erholung (heilt den Boot-Race von 2026-05-17).
   const influxAvailable = await influxdbHealthCheck();
   skillManager.registerLocal(
-    { ...INFLUXDB_MANIFEST, author: identity.spiffeUri },
+    { ...INFLUXDB_MANIFEST, author: selfIdentityUri },
     influxAvailable ? 'healthy' : 'unhealthy',
   );
   log.info({ influxAvailable }, 'InfluxDB Skill registriert (Health-Monitor übernimmt Re-Evaluierung)');
@@ -198,7 +243,7 @@ async function main(): Promise<void> {
   // SkillDiscovery-Startup automatisch entdeckt und registriert.
   const seededSkills = seedBuiltinSkills({
     dataDir: config.daemon.data_dir,
-    ownAgentId: identity.spiffeUri,
+    ownAgentId: selfIdentityUri,
     log,
   });
   if (seededSkills.installed.length > 0) {
@@ -217,10 +262,10 @@ async function main(): Promise<void> {
     log,
     onTransition: (t) => {
       const availability = t.to === 'healthy' ? 'healthy' : 'unhealthy';
-      registry.setAvailability(identity.spiffeUri, t.skillId, availability, t.consecutiveFailures, new Date().toISOString());
+      registry.setAvailability(selfIdentityUri, t.skillId, availability, t.consecutiveFailures, new Date().toISOString());
       audit.append(
         'SKILL_HEALTH_TRANSITION',
-        identity.spiffeUri,
+        selfIdentityUri,
         `${t.skillId}:${t.from}->${t.to} fails=${t.consecutiveFailures}${t.lastError ? ` err=${t.lastError}` : ''}`,
         'skill',
         t.skillId,
@@ -235,13 +280,7 @@ async function main(): Promise<void> {
   skillHealthMonitor.register('influxdb', (signal) => influxdbHealthCheck(signal));
   skillHealthMonitor.start();
 
-  // ADR-022 #0: persistierten libp2p-Ed25519-Key laden/erzeugen → stabile PeerID
-  // über Neustarts. NUR wenn libp2p aktiv ist (CR HIGH): im local-Modus ist libp2p
-  // deaktiviert → kein Key-Laden, eine korrupte Datei darf den Boot dann nicht blocken.
-  const libp2pKey = config.libp2p.enabled
-    ? await loadOrCreateLibp2pPrivateKey(config.daemon.data_dir, log)
-    : undefined;
-
+  // libp2p-Key wird bereits oben geladen (ADR-022 Phase 3 — die Self-Identität hängt davon ab).
   const libp2pRuntime = await createLibp2pRuntime({
     enabled: config.libp2p.enabled,
     bindHost: config.daemon.bind_host,
@@ -272,22 +311,40 @@ async function main(): Promise<void> {
   // + Cert-SAN auf node/<PeerID> umgestellt sind, wird TLMCP_STRICT_IDENTITY=1 gefahrlos
   // — die Scharfschaltung bleibt aber bewusst Christians Entscheidung (nicht automatisch).
   {
-    const certSan = tlsBundle ? extractSpiffeUri(tlsBundle.certPem) : null;
     const peerId = libp2pRuntime.getState().peerId;
-    const idCheck = checkIdentityConsistency({ authzSpiffe: identity.spiffeUri, certSan, peerId });
+    // CR gpt-5.5 HIGH: Der Flip wurde gegen die persistierte Key-PeerID entschieden
+    // (libp2pKey.peerId), BEVOR die Runtime startete. Weicht die TATSÄCHLICH laufende
+    // Runtime-PeerID davon ab (degraded/Noop-Runtime, ignorierter privateKey, Dep-Fallback),
+    // emittierten wir kanonisch eine PeerID, die die Runtime/Card gar nicht meldet →
+    // Empfänger können den Key nicht eindeutig auflösen → 403. Fail-closed: harter Abbruch,
+    // da die kanonische Identität zu diesem Zeitpunkt bereits überall verdrahtet ist.
+    if (emitCanonical && peerId !== libp2pKey?.peerId) {
+      log.error(
+        { keyPeerId: libp2pKey?.peerId, runtimePeerId: peerId },
+        '[identity] ADR-022 Phase 3: laufende libp2p-Runtime-PeerID weicht vom persistierten Key ab — kanonischer Sender wäre nicht auflösbar',
+      );
+      throw new Error(
+        '[identity] ADR-022 Phase 3 Abbruch: Runtime-PeerID != Key-PeerID bei aktivem canonical-sender-Flip (fail-closed)',
+      );
+    }
+    // certSan für die Assertion: die eigene kanonische SAN, falls vorhanden, sonst die erste.
+    const certSan = (canonicalSelfUri && certSansAtBoot.includes(canonicalSelfUri))
+      ? canonicalSelfUri
+      : (certSansAtBoot[0] ?? null);
+    // authzSpiffe = die TATSÄCHLICH emittierte Self-Identität (Phase-3-Flip berücksichtigt):
+    // flippt sie auf kanonisch, soll die Konsistenzprüfung sie auch kanonisch sehen.
+    const idCheck = checkIdentityConsistency({ authzSpiffe: selfIdentityUri, certSan, peerId });
     log.info(
-      { authzSpiffe: identity.spiffeUri, certSan, peerId, expected: idCheck.expected },
+      { authzSpiffe: selfIdentityUri, certSan, peerId, expected: idCheck.expected, emitCanonical },
       '[identity] ADR-022 Identitäts-Triple',
     );
-    // ADR-022 Phase 0 (Accept-both / Self-Identity-Ableitung): Der Node KENNT seine
+    // ADR-022: Solange NICHT geflippt (Phase 0/Accept-both) KENNT der Node seine
     // kanonische node/<PeerID>-Identität (idCheck.expected), EMITTIERT aber weiterhin
-    // Legacy (authzSpiffe + Cert-SAN = host/<id>) bis zum Cert-SAN-Cutover. Eingehend
-    // werden beide SAN-Formen akzeptiert (peer-identity.authorizeHttpsSender +
-    // peerIdFromCertSan-Brücke). Die kanonische Self-URI ist hiermit für den späteren
-    // Phase-3-Flip abgeleitet und sichtbar.
-    if (idCheck.expected) {
+    // Legacy. Eingehend werden beide SAN-Formen akzeptiert (authorizeHttpsSender +
+    // peerIdFromCertSan-Brücke). Nach dem Flip (emitCanonical) emittiert er kanonisch.
+    if (idCheck.expected && !emitCanonical) {
       log.info(
-        { canonicalSelfUri: idCheck.expected, emitting: identity.spiffeUri },
+        { canonicalSelfUri: idCheck.expected, emitting: selfIdentityUri },
         '[identity] ADR-022 Accept-both aktiv: kanonische Self-Identität abgeleitet, emittiere weiter Legacy',
       );
     }
@@ -335,7 +392,7 @@ async function main(): Promise<void> {
   const gossip = new GossipSync(
     registry,
     mesh,
-    identity.spiffeUri,
+    selfIdentityUri,
     identity.privateKeyPem,
     log,
     tlsDispatcher,
@@ -355,6 +412,7 @@ async function main(): Promise<void> {
   // neuen Pairings ist Phase 2 — aktuell zaehlt der Snapshot zum Startzeitpunkt.
   const cardServer = new AgentCardServer({
     identity,
+    selfIdentityUri,
     config,
     buildInfo,
     tls: tlsBundle,
@@ -387,7 +445,7 @@ async function main(): Promise<void> {
           const response = gossip.handleSyncMessage(envelope);
           const responseEnvelope = createEnvelope(
             MessageType.REGISTRY_SYNC_RESPONSE,
-            identity.spiffeUri,
+            selfIdentityUri,
             response,
             { correlation_id: envelope.correlation_id },
           );
@@ -433,7 +491,7 @@ async function main(): Promise<void> {
             responsePayload = { credential_name: secretReq.credential_name, status: 'pending', sealed_value: null, reason: 'Awaiting human approval' };
           }
 
-          const secretResp = createEnvelope(MessageType.SECRET_RESPONSE, identity.spiffeUri, responsePayload, { correlation_id: envelope.correlation_id });
+          const secretResp = createEnvelope(MessageType.SECRET_RESPONSE, selfIdentityUri, responsePayload, { correlation_id: envelope.correlation_id });
           return encodeAndSign(secretResp, identity.privateKeyPem);
         }
         case MessageType.AGENT_MESSAGE: {
@@ -443,7 +501,7 @@ async function main(): Promise<void> {
           const msg = envelope.payload as AgentMessagePayload;
           let ack: AgentMessageAckPayload;
 
-          if (msg.to !== identity.spiffeUri) {
+          if (msg.to !== selfIdentityUri) {
             ack = {
               message_id: msg.message_id,
               received_at: new Date().toISOString(),
@@ -499,7 +557,7 @@ async function main(): Promise<void> {
                   from: envelope.sender,
                   message_id: msg.message_id,
                   subject: msg.subject ?? null,
-                  to: identity.spiffeUri,
+                  to: selfIdentityUri,
                 });
               }
             }
@@ -507,7 +565,7 @@ async function main(): Promise<void> {
 
           const ackEnvelope = createEnvelope(
             MessageType.AGENT_MESSAGE_ACK,
-            identity.spiffeUri,
+            selfIdentityUri,
             ack,
             { correlation_id: envelope.correlation_id },
           );
@@ -528,7 +586,7 @@ async function main(): Promise<void> {
     skills: skillManager,
     audit,
     eventBus,
-    agentId: identity.spiffeUri,
+    agentId: selfIdentityUri,
     log,
   });
 
@@ -536,7 +594,7 @@ async function main(): Promise<void> {
   // damit der Trust-Store die bestehenden CAs beim Start kennt).
   registerPairingRoutes(cardServer.getServer(), {
     store: pairingStore,
-    agentId: identity.spiffeUri,
+    agentId: selfIdentityUri,
     hostname: config.daemon.hostname,
     publicKeyPem: identity.publicKeyPem,
     caCertPem: tlsBundle?.caCertPem ?? '',
@@ -566,7 +624,7 @@ async function main(): Promise<void> {
     trustStoreNotifier,
     audit,
     caBundle,
-    ownAgentId: identity.spiffeUri,
+    ownAgentId: selfIdentityUri,
     log,
     rateLimiter,
   });
@@ -609,7 +667,7 @@ async function main(): Promise<void> {
       trustStoreNotifier,
       audit,
       caBundle,
-      ownAgentId: identity.spiffeUri,
+      ownAgentId: selfIdentityUri,
       log,
       rateLimiter,
     });
@@ -631,7 +689,7 @@ async function main(): Promise<void> {
   registerAgentApi(cardServer.getServer(), {
     registry: agentRegistry,
     audit,
-    daemonSpiffeUri: identity.spiffeUri,
+    daemonSpiffeUri: selfIdentityUri,
     inboxSchemaVersion: 1,
     log,
   });
@@ -640,7 +698,7 @@ async function main(): Promise<void> {
   registerInboxApi(cardServer.getServer(), {
     inbox: agentInbox,
     mesh,
-    ownAgentId: identity.spiffeUri,
+    ownAgentId: selfIdentityUri,
     ownPublicKeyPem: identity.publicKeyPem,
     ownPrivateKeyPem: identity.privateKeyPem,
     tlsDispatcher,
@@ -665,7 +723,7 @@ async function main(): Promise<void> {
   const capActivation = new CapabilityActivationStore(config.daemon.data_dir, log);
   const skillDiscovery = new SkillDiscovery({
     dataDir: config.daemon.data_dir,
-    ownAgentId: identity.spiffeUri,
+    ownAgentId: selfIdentityUri,
     activation: capActivation,
     eventBus,
     log,
@@ -698,7 +756,7 @@ async function main(): Promise<void> {
         id: s.name,
         version: s.version,
         description: s.description,
-        author: identity.spiffeUri,
+        author: selfIdentityUri,
         integrity: '',
         runtime: 'node',
         entrypoint: '',
@@ -722,7 +780,7 @@ async function main(): Promise<void> {
 
     const envelope = createEnvelope(
       MessageType.SKILL_ANNOUNCE,
-      identity.spiffeUri,
+      selfIdentityUri,
       wirePayload as unknown as Record<string, unknown>,
       { ttl_ms: 60_000 },
     );
@@ -806,6 +864,7 @@ async function main(): Promise<void> {
     tasks: taskManager,
     audit,
     identity,
+    selfIdentityUri,
     config,
     rateLimiter,
     vault,
@@ -855,7 +914,7 @@ async function main(): Promise<void> {
     `${config.daemon.hostname}-${config.daemon.agent_type}`,
     config.daemon.port,
     {
-      agentId: identity.spiffeUri,
+      agentId: selfIdentityUri,
       p2pPeerId: libp2pRuntime.getState().peerId ?? undefined,
       capabilityHash: '',
       certFingerprint: identity.fingerprint,
@@ -865,7 +924,7 @@ async function main(): Promise<void> {
 
   discovery.browse({
     onPeerFound: async (discovered) => {
-      if (discovered.agentId === identity.spiffeUri) return;
+      if (discovered.agentId === selfIdentityUri) return;
 
       mesh.addPeer(discovered);
 
@@ -992,7 +1051,7 @@ async function main(): Promise<void> {
     await registrySync.coordinator.stop();
     await libp2pRuntime.stop();
     await cardServer.stop();
-    audit.append('PEER_LEAVE', identity.spiffeUri, 'graceful shutdown');
+    audit.append('PEER_LEAVE', selfIdentityUri, 'graceful shutdown');
     audit.close();
     log.info('Daemon gestoppt.');
     process.exit(0);

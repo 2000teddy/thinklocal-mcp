@@ -102,6 +102,14 @@ export type MessageHandler = (
 
 export interface AgentCardServerOptions {
   identity: AgentIdentity;
+  /**
+   * ADR-022 Phase 3: die TATSÄCHLICH emittierte Self-Identität (`node/<PeerID>`
+   * nach dem Flip, sonst Legacy). Die Agent-Card MUSS diese ausgeben — sonst
+   * weicht `card.spiffeUri` von der per mDNS annoncierten `agentId` ab, Peers
+   * verwerfen die Card und können den Public-Key des kanonischen Senders nicht
+   * auflösen (→ 403/Unknown sender). Fällt auf `identity.spiffeUri` zurück.
+   */
+  selfIdentityUri?: string;
   config: DaemonConfig;
   /** Build-/Versions-Stempel dieses Daemons (für agent_card.build + /api/status). */
   buildInfo?: BuildInfo;
@@ -441,7 +449,7 @@ export class AgentCardServer {
       hostname: this.opts.config.daemon.hostname,
       endpoint: `${this.protocol}://${this.opts.config.daemon.hostname}:${this.opts.config.daemon.port}`,
       publicKey: this.opts.identity.publicKeyPem,
-      spiffeUri: this.opts.identity.spiffeUri,
+      spiffeUri: this.opts.selfIdentityUri ?? this.opts.identity.spiffeUri,
       capabilities: {
         agents: [this.opts.config.daemon.agent_type],
         skills: [],
