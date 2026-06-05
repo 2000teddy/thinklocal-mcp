@@ -8,6 +8,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-05
 
+### v0.32.1 — Auth-Modell: mTLS-only (toter JWT-Hook entfernt) [Architektur-Flanke 1]
+
+`pal:consensus` (3 Modelle, einstimmig) → **Option A „mTLS-only"**. Die Zugangsgrenze des LAN-Mesh ist mTLS + Mesh-CA + .94-Issuer-Pin; ein JWT-`onRequest`-Hook existierte als **toter, nie verdrahteter Code** (`api-auth.ts`/`registerApiAuth` — keine Aufrufstelle) und täuschte in der Doku eine nicht vorhandene Kontrolle vor.
+
+- **Entfernt:** `packages/daemon/src/api-auth.ts` (vollständig tot — kein Import, kein Test, kein Client erwartet `/api/auth/token`).
+- **Doku korrigiert auf Realität:** SECURITY.md (neuer Auth-Modell-Absatz + korrigierte Limitierungs-Zeile) + THREAT-MODEL.md (JWT-Zeile → mTLS-only). `localhost` (CLI/MCP) ist bewusst exempt.
+- **Roadmap:** Bei Internet-Exposure JWT/Session-Auth **vorher** aktivieren (`@fastify/jwt` bleibt als Dependency verfügbar).
+- CR gpt-5.5: 0 Findings. PC clean. **873 Tests grün** (kein Test betroffen — der Code war tot), tsc clean. Version 0.32.0 → **0.32.1**.
+
+---
+
 ### v0.32.0 — Build-/Versions-Stempel im Mesh sichtbar
 
 Beim 5-Node-Rollout war nicht erkennbar, welcher Node welchen Build fährt (das agent_card meldete hartkodiert `version:'0.2.0'`). Jetzt trägt jeder Daemon einen echten Build-Stempel ins Mesh.

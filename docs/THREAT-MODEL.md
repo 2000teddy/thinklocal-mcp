@@ -59,7 +59,7 @@ Sicherheitsdesign-Dokument fuer das Mesh-Netzwerk.
 | Vektor | Angriff | Mitigation | Status |
 |--------|---------|-----------|--------|
 | PIN Brute-Force | SPAKE2 PIN erraten | 3-Versuch-Lockout pro Session | ✅ |
-| Token-Theft | JWT stehlen | Localhost-only Generation, 24h TTL, Keychain | ✅ |
+| Unbefugter /api-Zugriff | REST-/WebSocket-API abfragen | **mTLS-only** (entschieden 2026-06-05): nur Mesh-Member mit CA-signiertem Cert erreichen `/api/*`; `localhost` exempt für lokale CLI/MCP. JWT bewusst NICHT aktiv (toter Hook entfernt) | ✅ |
 | Cert-Forgery | Falsches Zertifikat | CA-Signatur-Pruefung | ✅ |
 
 ### 3.3 Daten
@@ -106,7 +106,7 @@ Sicherheitsdesign-Dokument fuer das Mesh-Netzwerk.
         |  localhost (vertraut)
 +---------------------------------------------+
 |  Lokaler Prozess (CLI, MCP, Dashboard)       |
-|  → Kein JWT noetig von localhost             |
+|  → Loopback-exempt (mTLS-only, kein JWT)     |
 +---------------------------------------------+
 ```
 

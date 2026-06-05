@@ -7,6 +7,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 
 ## Follow-ups aus Code-Reviews :
 
+- [x] 🟠 **JWT-on-mTLS-Flanke (Architektur-Entscheid)** — **ENTSCHIEDEN + UMGESETZT 2026-06-05 (v0.32.1)**: `pal:consensus` (3 Modelle, einstimmig) → **Option A „mTLS-only"**. Der tote, nie verdrahtete JWT-Hook (`api-auth.ts`/`registerApiAuth`) wurde entfernt; SECURITY.md + THREAT-MODEL.md auf das gelebte mTLS-only-Modell korrigiert (Doku≠Realität war die Schuld). Roadmap-Notiz: bei Internet-Exposure JWT VORHER aktivieren (`@fastify/jwt` bleibt als Dep verfügbar).
 - [ ] 🟡 **CLI-Join: request-lokale TLS-Skip statt prozessweit** (CR gpt-5.5, Fix v0.30.1) — `cmdJoin` setzt für den certlosen `/onboarding/join` aktuell prozessweit `NODE_TLS_REJECT_UNAUTHORIZED=0` (im `finally` restauriert, kurzlebige CLI). Sauberer: request-lokaler undici-`Agent({connect:{rejectUnauthorized:false}})` + `dispatcher`. Erfordert `undici` als CLI-Dependency (aktuell nur in `packages/daemon`); bewusst zurückgestellt, da der Fix abhängigkeitsfrei sein sollte.
 
 ## Code-Review beim dokumentieren entdeckt :
