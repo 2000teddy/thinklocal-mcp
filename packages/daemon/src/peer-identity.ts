@@ -44,6 +44,69 @@ export function isCanonicalNodeUri(uri: string): boolean {
   return spiffeUriToPeerId(uri) !== null;
 }
 
+/** Eingabe der Phase-3-Sender-Flip-Entscheidung (ADR-022 Schritt 3). */
+export interface SelfIdentityInput {
+  /** Operator-Flag (config/env): kanonisch emittieren wollen. */
+  emitCanonicalFlag: boolean;
+  /** Legacy-Self-URI (`host/<stableNodeId>/agent/<type>`), immer vorhanden. */
+  legacyUri: string;
+  /** Stabile libp2p-PeerID; null wenn libp2p deaktiviert (local-Modus). */
+  peerId: string | null;
+  /**
+   * ALLE SPIFFE-URI-SANs des laufenden mTLS-Node-Certs (Dual-SAN-Migrations-Certs
+   * tragen Legacy + kanonisch). Der Flip greift nur, wenn die EIGENE kanonische URI
+   * hier enthalten ist — nicht „irgendeine kanonische SAN" (sonst node/<andere-PeerID>
+   * → emittierter Sender ≠ präsentiertes Cert → 403).
+   */
+  certSans: string[];
+}
+
+/** Ergebnis der Phase-3-Sender-Flip-Entscheidung. */
+export interface SelfIdentityDecision {
+  /** Die TATSÄCHLICH zu emittierende Self-Identität (Sender/agent_id/author/…). */
+  selfIdentityUri: string;
+  /** True, wenn auf kanonisch geflippt wurde. */
+  emitCanonical: boolean;
+  /** Die ableitbare kanonische URI (null wenn keine PeerID). */
+  canonicalSelfUri: string | null;
+  /** True, wenn die EIGENE kanonische URI unter den laufenden Cert-SANs ist. */
+  certSanIsCanonical: boolean;
+  /** Grund, WARUM das gesetzte Flag NICHT griff (sonst undefined). */
+  blockedReason?: 'libp2p_disabled_no_peerid' | 'cert_san_not_canonical';
+}
+
+/**
+ * ADR-022 Schritt 3 — Per-Node-Sender-Flip-Entscheidung (rein, seiteneffektfrei).
+ *
+ * Flippt die Self-Identität von Legacy `host/<id>` auf kanonisch `node/<PeerID>`
+ * GENAU DANN, wenn (1) der Operator es aktiviert hat, (2) eine PeerID existiert UND
+ * (3) der laufende mTLS-Cert-SAN BEREITS kanonisch ist. (3) ist der Sicherheits-
+ * Interlock „Cert-SAN VOR Sender-URI": ein kanonischer Sender bei noch Legacy-Cert
+ * würde empfangsseitig (authorizeHttpsSender) gegen den Cert-SAN mismatchen → 403.
+ * Fail-safe: ist das Flag gesetzt aber eine Bedingung unerfüllt, bleibt es bei Legacy
+ * und `blockedReason` nennt den Grund (für eine laute Warnung beim Aufrufer).
+ */
+export function resolveSelfIdentity(input: SelfIdentityInput): SelfIdentityDecision {
+  const canonicalSelfUri = input.peerId ? peerIdToSpiffeUri(input.peerId) : null;
+  // EXAKT: die eigene kanonische URI muss unter den Cert-SANs sein (nicht nur
+  // „irgendeine kanonische SAN"). Schließt node/<andere-PeerID>-Certs aus.
+  const certSanIsCanonical = canonicalSelfUri !== null && input.certSans.includes(canonicalSelfUri);
+  const emitCanonical = input.emitCanonicalFlag && certSanIsCanonical;
+
+  let blockedReason: SelfIdentityDecision['blockedReason'];
+  if (input.emitCanonicalFlag && !emitCanonical) {
+    blockedReason = !canonicalSelfUri ? 'libp2p_disabled_no_peerid' : 'cert_san_not_canonical';
+  }
+
+  return {
+    selfIdentityUri: emitCanonical ? canonicalSelfUri! : input.legacyUri,
+    emitCanonical,
+    canonicalSelfUri,
+    certSanIsCanonical,
+    blockedReason,
+  };
+}
+
 /** Die drei Identitäts-Sichten, die zur Boot-Zeit übereinstimmen MÜSSEN. */
 export interface IdentityTriple {
   /** Identität, mit der wir Envelopes signieren und gegen die authz prüft. */

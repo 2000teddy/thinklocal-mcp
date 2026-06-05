@@ -8,6 +8,24 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-05
 
+### v0.34.0 — Per-Node-Sender-Flip: kanonische node/<PeerID>-Identität (ADR-022 Schritt 3, Phase 3)
+
+Schließt den ADR-022-Identitäts-Cutover code-seitig ab: der Daemon kann seine kanonische `spiffe://thinklocal/node/<PeerID>`-Identität als `envelope.sender` / agent_id / Skill-Author / Audit-Identität / Inbox-Adresse emittieren — statt Legacy `host/<stableNodeId>/agent/<type>`. **Flag-gegatet, default OFF, per Flag reversibel.** Die Empfangsseite (WS-1/2/3) akzeptiert beide Formen bereits.
+
+- **Neues Flag `daemon.emit_canonical_sender`** (env `TLMCP_EMIT_CANONICAL_SENDER=1`), default `false`. Default-Pfad ist verhaltens-identisch (`selfIdentityUri === identity.spiffeUri`).
+- **Option B (ADR-022 §3):** der **ECDSA-Agent-Signing-Key bleibt** — nur die Self-Identitäts-URI flippt. Peers lösen den Key über die verifizierte, PeerID-gekeyte Agent-Card auf (`resolvePeerPublicKey`).
+- **Sicherheits-Interlock „Cert-SAN VOR Sender-URI":** der Flip greift NUR, wenn (1) Flag gesetzt, (2) libp2p aktiv → stabile PeerID, UND (3) das laufende mTLS-Cert die **EIGENE** `node/<PeerID>`-SAN trägt. Fail-safe → Legacy + laute Warnung sonst. Reine Helfer-Funktion `resolveSelfIdentity()` (testbar).
+- **CR gpt-5.5 (security):** 3 HIGH + 2 MEDIUM gefunden, alle gefixt + re-reviewt (0 Residual):
+  - **HIGH 1:** Agent-Card gab Legacy-`spiffeUri` aus, während mDNS kanonisch annoncierte → Card verworfen → 403. Card gibt jetzt `selfIdentityUri` aus.
+  - **HIGH 2:** Interlock prüfte nur „SAN ist kanonisch", nicht „ist UNSERE kanonische URI" → `node/<andere-PeerID>`-Cert hätte geflippt → 403. Jetzt exakte Mitgliedschaft `certSans.includes(canonicalSelfUri)` (faltet zugleich Dual-SAN-Cert-Handling, ex-LOW 1). +Regression-Test.
+  - **HIGH 3:** Flip wurde gegen die persistierte Key-PeerID entschieden, bevor die Runtime startete → fail-closed Guard nach `start()` (Runtime-PeerID ≠ Key-PeerID + aktiver Flip → harter Abbruch).
+  - **MEDIUM 1:** `/api/status.agent_id` + REGISTRY_REPUBLISH-Audit blieben Legacy → jetzt `selfIdentityUri`.
+  - **MEDIUM 2 (dokumentiert, fail-closed):** Pairing-Store ist URI-gekeyt; nach einem Flip werden gepairte Peers über die alte URI nicht erkannt → SECRET_REQUEST/AGENT_MESSAGE werden **fail-closed abgelehnt** (kein Spoof). Tritt nur beim operator-gesteuerten Live-Flip auf. Follow-up: pubkey-/fingerprint-basiertes Pairing bzw. Legacy↔Canonical-Alias (TODO).
+  - **LOW 2 (kein Code):** stale Legacy-Self-Caps — Registry wird pro Boot frisch konstruiert (kein `load()` von Disk) + Flank-2-Owner-Gate verhindert fremde Injektion eigener Caps → keine lokalen stale Caps; transientes Peer-seitiges Artefakt im Accept-both-Fenster, altert via `markAgentOffline` aus.
+- **PC:** clean. **884 Tests grün** (+7 resolveSelfIdentity inkl. Interlock/Dual-SAN/other-PeerID/libp2p-aus), 6 Integration grün, tsc clean. Version 0.33.0 → **0.34.0**.
+
+**Live-Flip bleibt ein separater, kontrollierter Ops-Schritt** (Flag scharf + Noise-Re-Handshake + Mesh-Gegenprobe), NICHT Teil dieser PR. `TLMCP_STRICT_IDENTITY=1` (Legacy-Pfad entfernen) erst danach.
+
 ### v0.33.0 — Owner-wins für availability: direct-only (ADR-020 v2.2) [Architektur-Flanke 2]
 
 `pal:consensus` (3 Modelle, einstimmig) → **HYBRID**: JETZT direct-only, signierte Provenance als Phase-2. Schließt die latente Korrektheitslücke „relay-witness-wins" — ein Peer kann nicht mehr die `availability` eines Dritten setzen.

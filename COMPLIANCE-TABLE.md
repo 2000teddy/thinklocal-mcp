@@ -675,4 +675,16 @@ Doc-only-Eintrag (Abschluss-Dokumentation Live-Test); kein Code → CO/CG/TS/CR/
 
 ---
 
-*Letzte Aktualisierung: 2026-06-05 — v0.33.0 Owner-wins availability direct-only (Flanke 2).*
+## Session 2026-06-05 — v0.34.0 ADR-022 Phase 3: Per-Node-Sender-Flip (kanonische node/<PeerID>-Identität)
+
+| #       | PR  | Datum      | CO | CG | TS | CR | PC | DO | Findings                           |
+|---------|-----|------------|----|----|----|----|----|----|----|
+| v0.34.0 | tbd | 2026-06-05 | ✅ | —  | ✅ | ✅ | ✅ | ✅ | Flag-gegateter Canonical-Sender-Emit (default OFF) + Cert-SAN-Interlock — 3 HIGH + 2 MEDIUM (CR gpt-5.5) gefixt |
+
+**CO:** ADR-022 Schritt 3 (`pal:consensus` `b4e5d346`, einstimmig sound-with-changes) — Design lag vor. **CG:** —. **TS:** 884 grün (+7 `resolveSelfIdentity`: Flip/Interlock/Dual-SAN/other-PeerID/libp2p-aus), 6 Integration grün, tsc clean. **CR:** `pal:codereview` gpt-5.5 (security) — HIGH 1 (Card-Legacy-spiffeUri→403), HIGH 2 (Interlock „eigene" kanonische URI), HIGH 3 (Runtime-PeerID-Guard), MEDIUM 1 (dashboard agent_id), MEDIUM 2 (Pairing URI-keyed, fail-closed → Follow-up), LOW 2 (kein Code nötig). Re-review: 0 Residual. **PC:** gpt-5.3-codex clean. **DO:** ADR-022 Status, CHANGES, COMPLIANCE, TODO, config/daemon.toml, package.json 0.34.0.
+
+**Ops-Schritt offen (nicht in dieser PR):** Per-Node-Live-Flip + Noise-Re-Handshake + Mesh-Gegenprobe; danach `TLMCP_STRICT_IDENTITY=1`. **Follow-up vor Live-Flip:** pubkey-basiertes Pairing (CR-MEDIUM 2).
+
+---
+
+*Letzte Aktualisierung: 2026-06-05 — v0.34.0 ADR-022 Phase 3 Per-Node-Sender-Flip (flag-gegatet).*

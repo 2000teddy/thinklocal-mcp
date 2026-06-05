@@ -37,6 +37,14 @@ export interface DaemonConfig {
     tls_enabled: boolean;
     agent_type: string;
     data_dir: string;
+    /**
+     * ADR-022 Phase 3: Wenn true, emittiert der Daemon seine kanonische
+     * `spiffe://thinklocal/node/<PeerID>`-Identität als `envelope.sender` /
+     * agent_id (statt Legacy `host/<id>`). Greift NUR, wenn libp2p aktiv ist
+     * UND der laufende mTLS-Cert-SAN bereits kanonisch ist (Cert-SAN VOR
+     * Sender-URI, ADR-022). Andernfalls Fail-safe → Legacy. Default: false.
+     */
+    emit_canonical_sender: boolean;
   };
   mesh: {
     heartbeat_interval_ms: number;
@@ -80,6 +88,7 @@ const DEFAULTS: DaemonConfig = {
     tls_enabled: true,
     agent_type: 'claude-code',
     data_dir: resolve(homedir(), '.thinklocal'),
+    emit_canonical_sender: false,
   },
   mesh: {
     heartbeat_interval_ms: 10_000,
@@ -146,6 +155,8 @@ export function loadConfig(configPath?: string): DaemonConfig {
   if (env['TLMCP_HEARTBEAT_MS'])
     cfg.mesh.heartbeat_interval_ms = readPositiveInt('TLMCP_HEARTBEAT_MS', cfg.mesh.heartbeat_interval_ms);
   if (env['TLMCP_NO_TLS']) cfg.daemon.tls_enabled = env['TLMCP_NO_TLS'] !== '1';
+  // ADR-022 Phase 3: kanonischen node/<PeerID>-Sender emittieren (Per-Node-Flip).
+  if (env['TLMCP_EMIT_CANONICAL_SENDER']) cfg.daemon.emit_canonical_sender = env['TLMCP_EMIT_CANONICAL_SENDER'] === '1';
 
   // 2b. Statische Peers aus TLMCP_STATIC_PEERS (komma-separiert: "host:port,host2:port2")
   if (env['TLMCP_STATIC_PEERS']) {

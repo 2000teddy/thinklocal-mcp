@@ -397,19 +397,27 @@ export function verifyPeerCert(caCertPem: string, peerCertPem: string): boolean 
  * Extrahiert den SPIFFE-URI aus einem Zertifikat (SAN Extension).
  */
 export function extractSpiffeUri(certPem: string): string | null {
+  return extractSpiffeUris(certPem)[0] ?? null;
+}
+
+/**
+ * ALLE SPIFFE-URI-SANs eines Cert-PEM (z.B. ein Migrations-Cert mit Legacy- UND
+ * kanonischer SAN). Reihenfolge wie im Cert. Leeres Array bei Fehler/kein SAN.
+ * ADR-022 Phase 3: die Self-Flip-Entscheidung muss prüfen, ob die EIGENE kanonische
+ * URI unter den Cert-SANs ist (nicht nur „die erste SAN ist kanonisch").
+ */
+export function extractSpiffeUris(certPem: string): string[] {
   try {
     const cert = forge.pki.certificateFromPem(certPem);
     const san = cert.getExtension('subjectAltName') as
       | { altNames: Array<{ type: number; value: string }> }
       | undefined;
-    if (!san) return null;
-
-    const uriEntry = san.altNames.find(
-      (an) => an.type === 6 && an.value.startsWith('spiffe://thinklocal/'),
-    );
-    return uriEntry?.value ?? null;
+    if (!san) return [];
+    return san.altNames
+      .filter((an) => an.type === 6 && an.value.startsWith('spiffe://thinklocal/'))
+      .map((an) => an.value);
   } catch {
-    return null;
+    return [];
   }
 }
 

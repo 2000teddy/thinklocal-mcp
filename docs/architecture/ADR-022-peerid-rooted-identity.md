@@ -109,7 +109,7 @@ Code-Zugriff da ist — am Code gesehen statt vermutet.)
 
 ## Schritt 3 — Cert-SAN-Cutover (Detail-Design, Konsens 2026-06-04)
 
-**Status:** Design accepted (Implementierung ausstehend, cross-node mit .94).
+**Status:** Design accepted. WS-1/2/3 (Empfangsseite + .94-PoP-Cert-Issuance) implementiert + live. **Phase-3-Sender-Flip code-seitig implementiert (v0.34.0, flag-gegatet `daemon.emit_canonical_sender`, default OFF)** — der eigentliche Per-Node-Live-Flip + Noise-Re-Handshake + `TLMCP_STRICT_IDENTITY=1` bleiben kontrollierte Ops-Schritte.
 **Konsens:** `pal:consensus` `b4e5d346-1c28-4923-8536-0e84b7b0aef6` — gpt-5.5 (against, 8/10), gemini-3.1-pro-preview (for, 9/10), MiniMax-M2.7 (neutral, 7/10): **einstimmig „sound-with-changes"**. Mittel ~8.
 
 Schritt 3 schaltet die in PR #143 gebaute, noch **inerte** kanonische PeerID-Auflösung scharf und behebt damit den SKILL_ANNOUNCE-403. Der 403 läuft über **HTTPS** (`fetch ${peer.endpoint}/message`) → er wird über **Pfad B (Cert-SAN)** behoben, NICHT über Noise.

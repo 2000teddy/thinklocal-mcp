@@ -30,6 +30,8 @@ export interface DashboardApiDeps {
   tasks: TaskManager;
   audit: AuditLog;
   identity: AgentIdentity;
+  /** ADR-022 Phase 3: tatsächlich emittierte Self-Identität (kanonisch nach Flip). */
+  selfIdentityUri?: string;
   config: DaemonConfig;
   rateLimiter?: RateLimiter;
   vault?: CredentialVault;
@@ -59,6 +61,9 @@ export interface DashboardApiDeps {
  */
 export function registerDashboardApi(server: FastifyInstance, deps: DashboardApiDeps): void {
   const { mesh, registry, tasks, audit, identity, config, rateLimiter } = deps;
+  // ADR-022 Phase 3: für die nach außen sichtbare agent_id / Audit-Identität die
+  // tatsächlich emittierte Self-Identität verwenden (kein Split-Brain zu Mesh/Caps).
+  const ownAgentId = deps.selfIdentityUri ?? identity.spiffeUri;
 
   // Rate-Limiting Middleware für alle /api/* Routen
   const checkRateLimit = (request: FastifyRequest, reply: FastifyReply): boolean => {
@@ -73,7 +78,7 @@ export function registerDashboardApi(server: FastifyInstance, deps: DashboardApi
   server.get('/api/status', async (request: FastifyRequest, reply: FastifyReply) => {
     if (!checkRateLimit(request, reply)) return;
     return {
-      agent_id: identity.spiffeUri,
+      agent_id: ownAgentId,
       build_version: deps.buildInfo?.build_version ?? 'unknown',
       build_number: deps.buildInfo?.build_number ?? 'unknown',
       build_node: deps.buildInfo?.build_node ?? config.daemon.hostname,
@@ -104,7 +109,7 @@ export function registerDashboardApi(server: FastifyInstance, deps: DashboardApi
     if (!deps.registrySyncRepublish) {
       return reply.code(503).send({ error: 'Registry sync not initialised' });
     }
-    audit.append('REGISTRY_REPUBLISH', identity.spiffeUri, request.ip);
+    audit.append('REGISTRY_REPUBLISH', ownAgentId, request.ip);
     try {
       await deps.registrySyncRepublish();
       return { status: 'ok', message: 'Registry republish triggered' };
