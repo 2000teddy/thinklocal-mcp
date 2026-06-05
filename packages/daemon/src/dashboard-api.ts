@@ -22,6 +22,7 @@ import type { RateLimiter } from './ratelimit.js';
 import type { CredentialVault } from './vault.js';
 import type { TaskExecutor } from './task-executor.js';
 import type { SkillHealthStatus } from './skill-health-monitor.js';
+import type { BuildInfo } from './build-info.js';
 
 export interface DashboardApiDeps {
   mesh: MeshManager;
@@ -38,6 +39,8 @@ export interface DashboardApiDeps {
    * Optional — wenn nicht gesetzt, ist der Endpoint deaktiviert.
    */
   registrySyncRepublish?: () => Promise<void>;
+  /** Build-/Versions-Stempel dieses Daemons (fuer /api/status). */
+  buildInfo?: BuildInfo;
   /** ADR-021: Per-Skill Health-Status fuer /api/status. */
   getSkillHealth?: () => SkillHealthStatus[];
   /** ADR-020 v1: Per-Peer Sync-Status fuer /api/status libp2p-Block. */
@@ -71,6 +74,10 @@ export function registerDashboardApi(server: FastifyInstance, deps: DashboardApi
     if (!checkRateLimit(request, reply)) return;
     return {
       agent_id: identity.spiffeUri,
+      build_version: deps.buildInfo?.build_version ?? 'unknown',
+      build_number: deps.buildInfo?.build_number ?? 'unknown',
+      build_node: deps.buildInfo?.build_node ?? config.daemon.hostname,
+      build_date: deps.buildInfo?.build_date ?? null,
       hostname: config.daemon.hostname,
       port: config.daemon.port,
       bind_host: config.daemon.bind_host,
@@ -121,6 +128,7 @@ export function registerDashboardApi(server: FastifyInstance, deps: DashboardApi
         ? {
             name: p.agentCard.name,
             version: p.agentCard.version,
+            build: p.agentCard.build ?? null,
             capabilities: p.agentCard.capabilities,
             health: p.agentCard.health,
           }

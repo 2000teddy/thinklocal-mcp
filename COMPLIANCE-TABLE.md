@@ -641,4 +641,14 @@ Doc-only-Eintrag (Abschluss-Dokumentation Live-Test); kein Code → CO/CG/TS/CR/
 
 ---
 
-*Letzte Aktualisierung: 2026-06-04 — v0.31.1 Installer Boot-Race-Schutz (Skill-Service-Deps).*
+## Session 2026-06-05 — v0.32.0 Build-/Versions-Stempel im Mesh
+
+| #       | PR  | Datum      | CO | CG | TS | CR | PC | DO | Findings                           |
+|---------|-----|------------|----|----|----|----|----|----|----|
+| v0.32.0 | tbd | 2026-06-05 | —  | —  | ✅ | ✅ | ✅ | ✅ | build-info.ts → agent_card.build + /api/status + MCP-Tools. CR gpt-5.5: 0 Findings |
+
+**Feature-PR (CO/CG entfallen — kleine isolierte Änderung, kein Architektur-Entscheid; ADR bewusst übersprungen).** **TS:** 873 grün (+4), tsc + lint clean; build-info.test.ts (Datei-Vorrang, git-Fallback, all-absent→unknown/null, hostname). **CR:** gpt-5.5 — 0 Findings; git via execSync mit fixen Literalen + intern abgeleitetem repoRoot (keine Injection-Fläche), fail-safe Fallbacks. **PC:** gpt-5.3-codex clean. **DO:** CHANGES, COMPLIANCE, TODO, package.json 0.32.0.
+
+---
+
+*Letzte Aktualisierung: 2026-06-05 — v0.32.0 Build-/Versions-Stempel im Mesh.*

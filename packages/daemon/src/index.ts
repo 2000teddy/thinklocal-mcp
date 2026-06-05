@@ -46,6 +46,7 @@ import { AgentInbox } from './agent-inbox.js';
 import { SYSTEM_MONITOR_MANIFEST } from './builtin-skills/system-monitor.js';
 import { INFLUXDB_MANIFEST, influxdbHealthCheck } from './builtin-skills/influxdb.js';
 import { SkillHealthMonitor } from './skill-health-monitor.js';
+import { loadBuildInfo } from './build-info.js';
 import { TelegramGateway } from './telegram-gateway.js';
 import type { AgentCard } from './agent-card.js';
 import { seedBuiltinSkills } from './builtin-skill-seed.js';
@@ -68,6 +69,10 @@ async function main(): Promise<void> {
     },
     'Starte Daemon...',
   );
+
+  // Build-/Versions-Stempel einmal beim Start lesen (im Mesh sichtbar via agent_card + /api/status).
+  const buildInfo = loadBuildInfo();
+  log.info(buildInfo, '[build] Build-Stempel dieses Daemons');
 
   // 1. Identität laden oder generieren.
   //
@@ -351,6 +356,7 @@ async function main(): Promise<void> {
   const cardServer = new AgentCardServer({
     identity,
     config,
+    buildInfo,
     tls: tlsBundle,
     trustedCaBundle: trustStoreNotifier?.current(),
     log,
@@ -807,6 +813,7 @@ async function main(): Promise<void> {
     registrySyncRepublish: () => registrySync.coordinator.republish(),
     getRegistrySyncStatus: () => registrySync.coordinator.getStatus(),
     getSkillHealth: () => skillHealthMonitor.getStatus(),
+    buildInfo,
   });
 
   await cardServer.start();
