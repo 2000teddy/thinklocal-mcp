@@ -663,4 +663,16 @@ Doc-only-Eintrag (Abschluss-Dokumentation Live-Test); kein Code → CO/CG/TS/CR/
 
 ---
 
-*Letzte Aktualisierung: 2026-06-05 — v0.32.1 Auth-Modell mTLS-only (Flanke 1).*
+## Session 2026-06-05 — v0.33.0 Architektur-Flanke 2: Owner-wins availability (direct-only)
+
+| #       | PR  | Datum      | CO | CG | TS | CR | PC | DO | Findings                           |
+|---------|-----|------------|----|----|----|----|----|----|----|
+| v0.33.0 | tbd | 2026-06-05 | ✅ | —  | ✅ | ✅ | ✅ | ✅ | ADR-020 v2.2 HYBRID direct-only — availability raus aus CRDT, owner-gated Side-Map + Guardrail |
+
+**CO:** `pal:consensus` (3 Modelle, einstimmig) → HYBRID (direct-only jetzt, Provenance Phase-2) — Orchestrator-Entscheidung. Topologie vorab geklärt (transitiv → direct-only via Side-Map). **CG:** —. **TS:** 874 grün (+1 Guardrail-Test: relayte availability writer!=owner → verworfen + Metrik), tsc clean. **CR:** `pal:codereview` gpt-5.5 (security). **PC:** gpt-5.3-codex clean. **DO:** ADR-020 v2.2, CHANGES, COMPLIANCE, TODO, messages.ts (Phase-2 provenance-Feld reserviert), package.json 0.33.0.
+
+**Phase-2 vorgemerkt:** signierte Per-Key-Origin-Provenance (Schema reserviert, Krypto später). Verworfen: relay-witness-wins.
+
+---
+
+*Letzte Aktualisierung: 2026-06-05 — v0.33.0 Owner-wins availability direct-only (Flanke 2).*

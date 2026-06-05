@@ -36,16 +36,18 @@ export interface Capability {
   category: string;
   /** Benötigte Berechtigungen */
   permissions: string[];
-  /**
-   * ADR-021: Routing-relevante Verfügbarkeit aus dem Skill-Health-Monitor.
-   * Optional (Back-Compat mit älteren CRDT-Dokumenten). Routing filtert standardmäßig
-   * auf `availability !== 'unhealthy'`. NUR der Owner-Daemon schreibt sein eigenes Feld.
-   */
-  availability?: 'healthy' | 'unhealthy';
-  /** ADR-021: Zeitpunkt des letzten Health-Checks (ISO 8601). */
-  last_checked_at?: string;
-  /** ADR-021: aufeinanderfolgende Fehlschläge (Debug/Ops-Sicht). */
-  consecutive_failures?: number;
+  // ADR-021/ADR-020 v2.2: `availability` ist NICHT mehr Teil der Capability im
+  // Automerge-Doc. Es ist ein routing-relevantes, owner-autoritatives Signal, das NICHT
+  // transitiv gegossipt werden darf (sonst „relay-witness-wins" statt „owner-wins").
+  // Stattdessen lebt es in einer separaten, NICHT-replizierten, owner-gegateten Side-Map
+  // (siehe `availability`-Map + setAvailability/getAvailability). Direct-only by construction.
+}
+
+/** ADR-021: Per-(agentId,skillId) Health-Verfügbarkeit (NICHT im Automerge-CRDT). */
+export interface AvailabilityRecord {
+  availability: 'healthy' | 'unhealthy';
+  last_checked_at: string;
+  consecutive_failures: number;
 }
 
 /** Automerge-Dokument-Schema für die Registry */
@@ -159,12 +161,45 @@ function isEmptyRecord(value: unknown): value is Record<string, unknown> {
   );
 }
 
+/** Entfernt Side-Map-/Nicht-CRDT-Felder aus einem Capability-Objekt (vor dem Doc-Write). */
+function stripNonCrdtFields(cap: Capability): Capability {
+  const { availability: _a, last_checked_at: _l, consecutive_failures: _c, provenance: _p, ...rest } =
+    cap as Capability & Record<string, unknown>;
+  void _a; void _l; void _c; void _p;
+  return rest as Capability;
+}
+
 export class CapabilityRegistry {
   private doc: Automerge.Doc<RegistryDoc>;
+
+  /**
+   * ADR-020 v2.2 / ADR-021: Health-Verfügbarkeit pro `agentId::skillId` — NICHT-replizierte
+   * Side-Map (kein Automerge → kein transitiver Relay). Geschrieben NUR aus owner-gegateten
+   * Direkt-Quellen: setAvailability (eigene Skills) + importPeerCapabilities mit
+   * writer===owner (direkt vom Owner). „Direct-only by construction" (HYBRID-Konsens).
+   */
+  private availability = new Map<string, AvailabilityRecord>();
+  /** ADR-020 v2.2: Zähler verworfener fremd-owner availability-Writes (Metrik/Observability). */
+  private rejectedForeignWrites = 0;
 
   constructor(private log?: Logger) {
     this.doc = loadGenesisDoc();
     this.log?.debug('Capability Registry initialisiert (aus Genesis)');
+  }
+
+  /** Anzahl verworfener fremd-owner availability-Writes (`rejected_foreign_availability_write`). */
+  getRejectedForeignWrites(): number {
+    return this.rejectedForeignWrites;
+  }
+
+  /** Routing-relevante Verfügbarkeit eines (agentId,skillId) — Default 'healthy', wenn unbekannt. */
+  getAvailability(agentId: string, skillId: string): 'healthy' | 'unhealthy' {
+    return this.availability.get(`${agentId}::${skillId}`)?.availability ?? 'healthy';
+  }
+
+  /** Vollständiger Availability-Record (für /api/status), oder undefined. */
+  getAvailabilityRecord(agentId: string, skillId: string): AvailabilityRecord | undefined {
+    return this.availability.get(`${agentId}::${skillId}`);
   }
 
   /**
@@ -172,11 +207,12 @@ export class CapabilityRegistry {
    */
   register(capability: Capability): void {
     const key = this.makeKey(capability.agent_id, capability.skill_id);
+    // CR gpt-5.5 MEDIUM: zur Laufzeit explizit die Nicht-CRDT-Felder strippen — TypeScript
+    // verhindert availability/health-Side-Map-Felder nur statisch; ein Spread eines
+    // erweiterten Objekts dürfte sie sonst ins Automerge-Doc tragen (Invariante: nie im CRDT).
+    const clean = stripNonCrdtFields(capability);
     this.doc = Automerge.change(this.doc, (d) => {
-      d.capabilities[key] = {
-        ...capability,
-        updated_at: new Date().toISOString(),
-      };
+      d.capabilities[key] = { ...clean, updated_at: new Date().toISOString() };
     });
     this.log?.info({ skill: capability.skill_id, agent: capability.agent_id }, 'Capability registriert');
   }
@@ -189,15 +225,16 @@ export class CapabilityRegistry {
     this.doc = Automerge.change(this.doc, (d) => {
       delete d.capabilities[key];
     });
+    this.availability.delete(key); // CR gpt-5.5 MEDIUM: kein stale availability bei Re-Register
     this.log?.info({ skill: skillId, agent: agentId }, 'Capability entfernt');
   }
 
   /**
-   * ADR-021: Setzt das `availability`-Attribut einer EIGENEN Capability (Skill-Health).
-   * Owner-only by construction: der Aufrufer übergibt seine eigene `agentId`; es wird
-   * ausschließlich der exakte Key (agentId+skillId) angefasst — kein Fremd-Namespace.
-   * Liefert true, wenn die Capability existierte und aktualisiert wurde. Schreibt nur
-   * bei einem echten State-Flip (Aufrufer = onTransition) → minimaler CRDT-Hash-Churn.
+   * ADR-021/ADR-020 v2.2: Setzt die `availability` in der NICHT-replizierten Side-Map.
+   * Owner-gated by construction: der Aufrufer übergibt seine eigene `agentId` (eigener
+   * Skill-Health) ODER importPeerCapabilities mit writer===owner (direkt vom Owner). Wird
+   * NIE transitiv gegossipt (kein Automerge) → kein „relay-witness-wins". Idempotent.
+   * Liefert true, wenn sich der routing-relevante State (availability) geändert hat.
    */
   setAvailability(
     agentId: string,
@@ -207,25 +244,13 @@ export class CapabilityRegistry {
     lastCheckedAt: string,
   ): boolean {
     const key = this.makeKey(agentId, skillId);
-    let updated = false;
-    this.doc = Automerge.change(this.doc, (d) => {
-      const cap = d.capabilities[key];
-      if (!cap) return;
-      // CR gpt-5.5 LOW: idempotent — kein CRDT-Write (kein updated_at-Churn), wenn der
-      // routing-relevante State unverändert ist. last_checked_at allein triggert nichts.
-      if (cap.availability === availability && cap.consecutive_failures === consecutiveFailures) {
-        return;
-      }
-      cap.availability = availability;
-      cap.consecutive_failures = consecutiveFailures;
-      cap.last_checked_at = lastCheckedAt;
-      cap.updated_at = new Date().toISOString();
-      updated = true;
-    });
-    if (updated) {
-      this.log?.info({ skill: skillId, agent: agentId, availability }, '[skill-health] Capability-availability aktualisiert');
+    const prev = this.availability.get(key);
+    const changed = !prev || prev.availability !== availability;
+    this.availability.set(key, { availability, consecutive_failures: consecutiveFailures, last_checked_at: lastCheckedAt });
+    if (changed) {
+      this.log?.info({ skill: skillId, agent: agentId, availability }, '[skill-health] availability aktualisiert (Side-Map, direct-only)');
     }
-    return updated;
+    return changed;
   }
 
   /**
@@ -251,7 +276,7 @@ export class CapabilityRegistry {
    */
   findBySkill(skillId: string): Capability[] {
     return Object.values(this.doc.capabilities).filter(
-      (c) => c.skill_id === skillId && c.health !== 'offline' && c.availability !== 'unhealthy',
+      (c) => c.skill_id === skillId && c.health !== 'offline' && this.getAvailability(c.agent_id, c.skill_id) !== 'unhealthy',
     );
   }
 
@@ -260,7 +285,7 @@ export class CapabilityRegistry {
    */
   findByCategory(category: string): Capability[] {
     return Object.values(this.doc.capabilities).filter(
-      (c) => c.category === category && c.health !== 'offline' && c.availability !== 'unhealthy',
+      (c) => c.category === category && c.health !== 'offline' && this.getAvailability(c.agent_id, c.skill_id) !== 'unhealthy',
     );
   }
 
@@ -300,11 +325,11 @@ export class CapabilityRegistry {
    * Wird vom Gossip genutzt um nur eigene Capabilities zu hashen.
    */
   hashCapabilities(capabilities: Capability[]): string {
-    // ADR-021 (CR gpt-5.5 MEDIUM): `availability` ist routing-relevant und muss in den
-    // Hash, damit ein healthy↔unhealthy-Flip als Capability-Change sichtbar ist. NICHT
-    // `last_checked_at` aufnehmen (würde bei jedem Check churnen) — nur der semantische State.
+    // ADR-020 v2.2: `availability` ist NICHT mehr im Automerge-Doc (direct-only Side-Map)
+    // → gehört auch NICHT in den CRDT-Existenz-Hash. Hash deckt nur die replizierte
+    // Capability-Existenz/Metadaten ab.
     const keys = capabilities
-      .map((c) => `${c.agent_id}::${c.skill_id}:${c.version}:${c.health}:${c.availability ?? 'healthy'}`)
+      .map((c) => `${c.agent_id}::${c.skill_id}:${c.version}:${c.health}`)
       .sort();
     return createHash('sha256').update(keys.join('|')).digest('hex').slice(0, 16);
   }
@@ -323,6 +348,7 @@ export class CapabilityRegistry {
    */
   load(data: Uint8Array): void {
     this.doc = Automerge.load<RegistryDoc>(data);
+    this.normalizeCrdtSchema(); // CR gpt-5.5 HIGH: Alt-Dokumente können availability im Doc haben
     this.log?.debug('Registry aus gespeichertem Zustand geladen');
   }
 
@@ -343,8 +369,29 @@ export class CapabilityRegistry {
   ): [Automerge.SyncState] {
     const [newDoc, newSyncState] = Automerge.receiveSyncMessage(this.doc, peerState, message);
     this.doc = newDoc;
+    // CR gpt-5.5 HIGH: der rohe Automerge-Merge kann von alten/bösartigen Peers ein
+    // availability-Feld im Doc mitbringen. Routing liest zwar aus der Side-Map (ignoriert
+    // Doc-availability), aber wir halten die Invariante „availability nie im CRDT" sauber
+    // und verhindern transitives Weitertragen des Feldes.
+    this.normalizeCrdtSchema();
     this.log?.debug('Registry-Sync-Nachricht empfangen');
     return [newSyncState];
+  }
+
+  /** Entfernt Nicht-CRDT-Felder (availability/health-Side-Map) aus dem Automerge-Doc. */
+  private normalizeCrdtSchema(): void {
+    let dirty = false;
+    this.doc = Automerge.change(this.doc, (d) => {
+      for (const cap of Object.values(d.capabilities) as unknown as Array<Record<string, unknown>>) {
+        for (const f of ['availability', 'last_checked_at', 'consecutive_failures', 'provenance']) {
+          if (f in cap) {
+            delete cap[f];
+            dirty = true;
+          }
+        }
+      }
+    });
+    if (dirty) this.log?.debug('[crdt] Nicht-CRDT-Felder (availability) aus Doc normalisiert');
   }
 
   /**
@@ -355,13 +402,47 @@ export class CapabilityRegistry {
   }
 
   /**
-   * Importiert Capabilities aus einem Peer-Registry-Export.
-   * Übernimmt alle Capabilities, die lokal nicht existieren oder neuer sind.
+   * Importiert Capabilities aus einem DIREKTEN Peer-Sync (ADR-020 v2.2, direct-only).
+   *
+   * `writer` ist die AUTHENTIFIZIERTE Identität des direkten Peers (mTLS `envelope.sender`
+   * bzw. Noise-PeerID) — NICHT aus dem Payload. Owner-Gate: eine Capability/availability
+   * wird NUR übernommen, wenn `cap.agent_id === writer` (der Peer verkündet seine EIGENEN
+   * Caps direkt). Fremde (relayte/gespoofte) Einträge → HARD reject + Metrik
+   * `rejected_foreign_availability_write`. So kann kein Peer für einen Dritten availability
+   * setzen („owner-wins", nicht „relay-witness-wins"). `availability` landet in der
+   * NICHT-replizierten Side-Map; nur Capability-Metadaten gehen ins Automerge-Doc.
    */
-  importPeerCapabilities(capabilities: Capability[]): number {
+  importPeerCapabilities(capabilities: Array<Capability & Partial<AvailabilityRecord>>, writer: string): number {
     let imported = 0;
+    const accepted: Array<{ cap: Capability; avail?: AvailabilityRecord }> = [];
+    for (const incoming of capabilities) {
+      if (incoming.agent_id !== writer) {
+        this.rejectedForeignWrites++;
+        this.log?.warn(
+          { writer, owner: incoming.agent_id, key: `${incoming.agent_id}::${incoming.skill_id}` },
+          'rejected_foreign_availability_write',
+        );
+        continue; // direct-only: kein Relay fremder Owner
+      }
+      const { availability, last_checked_at, consecutive_failures, ...rest } = incoming;
+      // CR gpt-5.5 MEDIUM: Wire-Payload ist untyped — nur die zwei erlaubten Werte
+      // übernehmen (sonst würde z.B. "degraded" als routbar durchrutschen, da der Filter
+      // nur exakt 'unhealthy' ausschließt).
+      const validAvail = availability === 'healthy' || availability === 'unhealthy' ? availability : undefined;
+      const avail: AvailabilityRecord | undefined = validAvail
+        ? {
+            availability: validAvail,
+            last_checked_at: typeof last_checked_at === 'string' ? last_checked_at : new Date().toISOString(),
+            consecutive_failures:
+              typeof consecutive_failures === 'number' && Number.isFinite(consecutive_failures) && consecutive_failures >= 0
+                ? consecutive_failures
+                : validAvail === 'unhealthy' ? 1 : 0,
+          }
+        : undefined;
+      accepted.push({ cap: stripNonCrdtFields(rest as Capability), avail });
+    }
     this.doc = Automerge.change(this.doc, (d) => {
-      for (const cap of capabilities) {
+      for (const { cap } of accepted) {
         const key = `${cap.agent_id}::${cap.skill_id}`;
         const existing = d.capabilities[key];
         if (!existing || new Date(cap.updated_at) > new Date(existing.updated_at)) {
@@ -370,8 +451,13 @@ export class CapabilityRegistry {
         }
       }
     });
+    // availability owner-gated in die Side-Map (writer===owner garantiert) — auch wenn die
+    // Metadaten nicht „neuer" sind (availability flippt häufiger als updated_at).
+    for (const { cap, avail } of accepted) {
+      if (avail) this.setAvailability(cap.agent_id, cap.skill_id, avail.availability, avail.consecutive_failures, avail.last_checked_at);
+    }
     if (imported > 0) {
-      this.log?.info({ imported }, 'Peer-Capabilities importiert');
+      this.log?.info({ imported, from: writer }, 'Peer-Capabilities importiert (owner-gated)');
     }
     return imported;
   }
@@ -390,6 +476,10 @@ export class CapabilityRegistry {
         }
       }
     });
+    // Side-Map miträumen (kein Stale-availability für einen offline Peer).
+    for (const key of [...this.availability.keys()]) {
+      if (key.startsWith(`${agentId}::`)) this.availability.delete(key);
+    }
     if (removed > 0) {
       this.log?.info({ agentId, removed }, 'Peer-Capabilities entfernt (Peer offline)');
     }
