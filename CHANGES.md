@@ -6,6 +6,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
+## [Unreleased] — 2026-06-05
+
+### v0.32.0 — Build-/Versions-Stempel im Mesh sichtbar
+
+Beim 5-Node-Rollout war nicht erkennbar, welcher Node welchen Build fährt (das agent_card meldete hartkodiert `version:'0.2.0'`). Jetzt trägt jeder Daemon einen echten Build-Stempel ins Mesh.
+
+- **`build-info.ts`** (neu): `loadBuildInfo()` → `build_version` (VERSION-Datei → `package.json`), `build_number` (BUILD-Datei → `git rev-parse --short HEAD`), `build_date` (`git log -1 --format=%cI`), `build_node` (hostname). Fallbacks (`unknown`/`null`), nie crashend; git-Quellen + Pfad intern (keine externe Eingabe → keine Injection-Fläche). Reine Funktion, injizierbare Quellen → unit-getestet.
+- **`agent_card.build`** + **`/api/status`** (`build_version`/`number`/`node`/`date`) + **`/api/peers`** (Peer-`build`) → die MCP-Tools `mesh_status`/`discover_peers` zeigen es automatisch. Ersetzt das stale `version:'0.2.0'`.
+- **CR gpt-5.5:** 0 Findings. **PC:** clean. **873 Tests grün** (+4), tsc + lint clean. Version 0.31.1 → **0.32.0** (= ab jetzt der gemeldete `build_version`). Voraussetzung für den Auto-Update-Mechanismus ist damit erfüllt.
+
+---
+
 ## [Unreleased] — 2026-06-04
 
 ### v0.31.1 — Boot-Race-Schutz im Installer (Skill-Service-Deps generisch)

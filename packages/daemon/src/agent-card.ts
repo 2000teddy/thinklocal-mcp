@@ -15,10 +15,18 @@ import { RateLimiter } from './ratelimit.js';
 import type { Logger } from 'pino';
 import type { Libp2pRuntimeState } from './libp2p-runtime.js';
 import { authorizeHttpsSender, spiffeUrisFromSubjectAltName, attestedPeerIdFromCert } from './peer-identity.js';
+import type { BuildInfo } from './build-info.js';
 
 export interface AgentCard {
   name: string;
   version: string;
+  /** Build-/Versions-Stempel (welcher Build laeuft auf diesem Node) — siehe build-info.ts. */
+  build?: {
+    version: string;
+    number: string;
+    node: string;
+    date: string | null;
+  };
   hostname: string;
   endpoint: string;
   publicKey: string;
@@ -95,6 +103,8 @@ export type MessageHandler = (
 export interface AgentCardServerOptions {
   identity: AgentIdentity;
   config: DaemonConfig;
+  /** Build-/Versions-Stempel dieses Daemons (für agent_card.build + /api/status). */
+  buildInfo?: BuildInfo;
   tls?: NodeCertBundle;
   /**
    * Aggregierte CA-Bundle-Liste fuer den Fastify-HTTPS-`ca`-Parameter.
@@ -419,7 +429,15 @@ export class AgentCardServer {
 
     return {
       name: `${this.opts.config.daemon.hostname}-${this.opts.config.daemon.agent_type}`,
-      version: '0.2.0',
+      version: this.opts.buildInfo?.build_version ?? 'unknown',
+      build: this.opts.buildInfo
+        ? {
+            version: this.opts.buildInfo.build_version,
+            number: this.opts.buildInfo.build_number,
+            node: this.opts.buildInfo.build_node,
+            date: this.opts.buildInfo.build_date,
+          }
+        : undefined,
       hostname: this.opts.config.daemon.hostname,
       endpoint: `${this.protocol}://${this.opts.config.daemon.hostname}:${this.opts.config.daemon.port}`,
       publicKey: this.opts.identity.publicKeyPem,
