@@ -134,9 +134,7 @@ export class SkillManager {
     this.localSkills.set(manifest.id, manifest);
     this.saveInstalled();
 
-    // In der Capability Registry als Capability registrieren.
-    // ADR-021: `availability` reflektiert den Skill-Health-State; der Skill bleibt
-    // registriert (kein Remove) — Routing filtert auf availability==='healthy'.
+    // In der Capability Registry als Capability registrieren (Metadaten ins CRDT-Doc).
     this.registry.register({
       skill_id: manifest.id,
       version: manifest.version,
@@ -147,10 +145,16 @@ export class SkillManager {
       updated_at: new Date().toISOString(),
       category: manifest.category,
       permissions: manifest.permissions,
-      availability,
-      last_checked_at: new Date().toISOString(),
-      consecutive_failures: availability === 'healthy' ? 0 : 1,
     });
+    // ADR-021/ADR-020 v2.2: `availability` in die owner-gated Side-Map (NICHT ins CRDT,
+    // direct-only). Routing filtert auf availability!=='unhealthy'; Skill bleibt registriert.
+    this.registry.setAvailability(
+      this.agentId,
+      manifest.id,
+      availability,
+      availability === 'healthy' ? 0 : 1,
+      new Date().toISOString(),
+    );
 
     this.log?.info({ skillId: manifest.id, version: manifest.version, availability }, 'Lokaler Skill registriert');
   }

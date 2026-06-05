@@ -166,18 +166,47 @@ beschrieben. Status-Metadaten liefert der `RegistrySyncCoordinator` ueber
 seinen internen state — exponiert via `getStatus()` und
 `getSloViolations()`.
 
-#### v2.2 Owner-wins-Semantik erzwingen — **Verschoben in eigene ADR-022**
+#### v2.2 Owner-wins für `availability` — **IMPLEMENTIERT 2026-06-05 (HYBRID, v0.33.0)** ✅
 
-`markAgentOffline()` (Z. 91-99) und `removePeerCapabilities()` (Z. 223-237)
-mutieren fremde Agent-Namespaces im CRDT. Das ist semantisch falsch:
-Resurrection durch konkurrente Syncs, false deletions, Last-Writer-Wins-
-Konflikte. Umbau auf strikt: **nur Owner schreibt eigene Caps**, Fremdstatus
-landet im separaten Observation-Layer.
+**Konsens (`pal:consensus`, 3 Modelle, einstimmig — gpt-5.5 9/10, MiniMax 8/10):**
+**HYBRID** — JETZT **direct-only**, signierte Provenance als **Phase-2**.
 
-**Verschoben in ADR-022:** Owner-wins ist ein architektonischer Schritt mit
-weitreichenden Folgen (Refactor von `mesh.ts`, `agent-card.ts`, Capability-
-Routing-Filter, Migration der bestehenden CRDT-Inhalte). Das verdient eine
-eigene ADR mit klarer Migrationsstrategie und Test-Plan.
+**Topologie-Befund (Vorab-Klärung, ausschlaggebend):** Die Registry repliziert über
+**Automerge Anti-Entropy** (`receiveSyncMessage` merged den Vollzustand transitiv) →
+`availability` würde **store-and-forward** über Dritt-Nodes weitergereicht (origin != last
+hop). mTLS bürgt nur für den last hop → der Payload-`agent_id` ist relay-/spoofbar. Naive
+„writer-from-mTLS == owner"-Gate würde legitim relayte Writes fälschlich verwerfen.
+
+**Implementierung (direct-only):**
+- `availability` ist **NICHT mehr Teil der Capability im Automerge-Doc** — es lebt in einer
+  separaten, **nicht-replizierten, owner-gegateten Side-Map** (`registry.availability`,
+  `setAvailability`/`getAvailability`). Damit reist es **nie transitiv** mit dem CRDT.
+- Geschrieben NUR aus owner-gegateten Direkt-Quellen: `setAvailability` (eigene Skills) +
+  `importPeerCapabilities(caps, writer)` mit **`cap.agent_id === writer`** (writer = der
+  authentifizierte Direkt-Peer aus `envelope.sender`, NICHT aus dem Payload). Fremde
+  (relayte/gespoofte) Einträge → **HARD reject** + Metrik `rejected_foreign_availability_write{writer,owner,key}`.
+- Propagation: über den bereits owner-gegateten **direkten GossipSync-Pfad** (HTTPS,
+  `envelope.sender`-authentifiziert), der availability jetzt im Payload trägt; Existenz/
+  Metadaten gossippen weiter via Automerge (Discovery, unkritisch).
+- Routing-Filter (`findBySkill`/`findByCategory`) liest availability aus der Side-Map.
+- **Guardrail-Test** beweist: relayte availability (writer != owner) wird beim Merge verworfen
+  (verhindert versehentliches Wieder-Einschleichen von Relay). „direct-only ist Absicht, kein Bug."
+
+**Voraussetzung erfüllt:** Heim-LAN ist dense/voll-vermascht → jeder Node lernt jede Peer-
+availability direkt. (Bei bewusst sparse/partitioniertem Mesh wäre direct-only ungeeignet →
+dann direkt Phase-2; für Heim-LAN unzutreffend.)
+
+**Phase-2 (vorgemerkt, additiv, Schema bereits reserviert):** signierte Per-Key-Origin-
+Provenance — der Origin signiert `{agent_id, skill_id, availability, counter}`; der Merge
+verifiziert die Signatur, Relays reichen sie **unverändert** durch (echtes „owner-wins" auch
+über Relays). Das Envelope-Schema hat dafür bereits ein optionales `provenance`-Feld
+(`messages.ts`), damit Phase-2 ohne Retrofit kommt. **Krypto noch NICHT gebaut.**
+**Verworfen (Konsens-Warnung):** Relay-Ingress-Attestation („relay-witness-wins") ist KEIN
+gültiger Phase-2-Weg.
+
+> **Hinweis:** `markAgentOffline()`/`removePeerCapabilities()` mutieren weiterhin fremde
+> Namespaces für die *Existenz/health*-Sicht (Discovery-Layer, unkritisch). Owner-wins gilt
+> hier gezielt für das routing-relevante `availability`-Signal.
 
 #### v2.3 Konvergenz-Garantie an libp2p-connected koppeln ✅
 

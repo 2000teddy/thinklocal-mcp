@@ -127,6 +127,17 @@ export interface RegistrySyncPayload {
     updated_at: string;
     category: string;
     permissions: string[];
+    /** ADR-020 v2.2: Health-Verfügbarkeit (direct-only, owner-gated beim Import). */
+    availability?: 'healthy' | 'unhealthy';
+    last_checked_at?: string;
+    consecutive_failures?: number;
+    /**
+     * ADR-020 v2.2 Phase-2 (reserviert, JETZT leer/ungenutzt): signierte Per-Key-Origin-
+     * Provenance. Origin signiert {agent_id, skill_id, availability, counter}; der Merge
+     * verifiziert die Signatur und Relays reichen sie unverändert durch. Schema hier vorab
+     * reserviert, damit Phase-2 ohne Retrofit kommt — KRYPTO noch NICHT implementiert.
+     */
+    provenance?: { origin_sig?: string; counter?: number };
   }>;
 }
 

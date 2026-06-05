@@ -8,6 +8,28 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-05
 
+### v0.33.0 — Owner-wins für availability: direct-only (ADR-020 v2.2) [Architektur-Flanke 2]
+
+`pal:consensus` (3 Modelle, einstimmig) → **HYBRID**: JETZT direct-only, signierte Provenance als Phase-2. Schließt die latente Korrektheitslücke „relay-witness-wins" — ein Peer kann nicht mehr die `availability` eines Dritten setzen.
+
+**Topologie-Befund (ausschlaggebend):** Die Registry repliziert via Automerge Anti-Entropy **transitiv** (store-and-forward) → `availability` würde über Dritt-Nodes relayed (origin != last hop), mTLS bürgt nur für den last hop. Naive „writer==owner"-Gate würde legitime Relays verwerfen.
+
+- **`availability` raus aus dem Automerge-CRDT** → eigene **nicht-replizierte, owner-gegatete Side-Map** (`registry.ts`: `availability`-Map, `setAvailability`/`getAvailability`). Reist nie transitiv mit.
+- **Owner-Gate im Merge:** `importPeerCapabilities(caps, writer)` — `writer` = authentifizierter Direkt-Peer (`envelope.sender`), NICHT aus dem Payload. `cap.agent_id !== writer` → **HARD reject** + Metrik `rejected_foreign_availability_write` (`getRejectedForeignWrites()`).
+- **Propagation:** über den owner-gegateten direkten GossipSync-Pfad (trägt jetzt availability im Payload); Existenz/Metadaten gossippen weiter via Automerge (Discovery, unkritisch). Routing-Filter liest aus der Side-Map.
+- **Guardrail-Test (Pflicht):** beweist, dass relayte availability (writer != owner) beim Merge verworfen wird → „direct-only ist Absicht, kein Bug".
+- **Phase-2 reserviert (additiv, kein Krypto jetzt):** optionales `provenance`-Feld im RegistrySync-Payload (`messages.ts`) für spätere signierte Per-Key-Origin-Provenance — kein Schema-Retrofit nötig. Verworfen: Relay-Ingress-Attestation („relay-witness-wins").
+- **CR gpt-5.5 (security):** 3 HIGH + 3 MEDIUM gefunden, alle gefixt + re-reviewt (0 Residual):
+  - **HIGH 2** — Hash-Short-Circuit übersprang availability-only-Updates (availability ist nicht im Metadaten-Hash) → `handleSyncMessage` importiert jetzt **vor** dem Hash-Vergleich; der Hash steuert nur noch die Metadaten-Rückantwort. (+Regression-Test)
+  - **HIGH 3** — roher Automerge-Merge konnte availability in das replizierte Doc tragen → `normalizeCrdtSchema()` strippt availability/provenance nach `receiveSyncMessage` **und** in `load()` (Migration alter Nodes).
+  - **MEDIUM 1/3/4** — `register()` strippt Nicht-CRDT-Felder vor dem Doc-Write; `unregister()` räumt die Side-Map; `importPeerCapabilities` akzeptiert nur `'healthy'|'unhealthy'` + `consecutive_failures` finite≥0. (+2 Regression-Tests)
+  - **HIGH 1 (Disposition, gemeldet)** — `envelope.sender` ist **nicht** an den literalen mTLS-Direkt-Hop gebunden. Bewusst NICHT der vorgeschlagene Cert-SAN-Bind angewandt: während der Legacy-Migration ist Cert-SAN (`host/<hostname>` bzw. `node/<PeerID>` für rejoined Nodes) ≠ `envelope.sender` (`host/<stableNodeId>`) → ein striktes Binding würde **alle** REGISTRY_SYNC ablehnen und das Live-Mesh brechen. Begründung: `envelope.sender` ist **signatur-authentifiziert** (Envelope mit Sender-Key signiert, in `agent-card.ts` gegen den aufgelösten Sender-Key geprüft) ⇒ `sender == Signer == Owner`. Das Owner-Gate (`cap.agent_id===sender`) erzwingt damit, dass nur die **eigenen signierten** Caps/availability des Owners akzeptiert werden — ein Relay liefert nur owner-signierte, manipulationssichere Daten (60s-TTL + replayGuard). Owner-wins **hält** via Signatur-Auth (effektiv leichtgewichtige signierte Provenance). Echtes Direkt-Hop-Binding wird erst **post-Phase-3** möglich (wenn `sender == cert-SAN`).
+- **PC:** clean. **877 Tests grün** (+3: HIGH-2-Import-trotz-gleichem-Hash, MEDIUM-3-unregister-clear, MEDIUM-4-Wert-Validierung; +1 Guardrail), tsc clean. ADR-020 v2.2 → implementiert. Version 0.32.1 → **0.33.0**.
+
+Voraussetzung (Konsens): Heim-LAN voll-vermascht → jeder Node lernt jede Peer-availability direkt. Bei bewusst sparse Mesh wäre direct-only ungeeignet (dann Phase-2 direkt) — für Heim-LAN unzutreffend.
+
+---
+
 ### v0.32.1 — Auth-Modell: mTLS-only (toter JWT-Hook entfernt) [Architektur-Flanke 1]
 
 `pal:consensus` (3 Modelle, einstimmig) → **Option A „mTLS-only"**. Die Zugangsgrenze des LAN-Mesh ist mTLS + Mesh-CA + .94-Issuer-Pin; ein JWT-`onRequest`-Hook existierte als **toter, nie verdrahteter Code** (`api-auth.ts`/`registerApiAuth` — keine Aufrufstelle) und täuschte in der Doku eine nicht vorhandene Kontrolle vor.

@@ -110,6 +110,27 @@ describe('GossipSync — Registry-Synchronisation', () => {
     expect(response.capabilities).toHaveLength(0);
   });
 
+  it('CR-HIGH: availability-only-Update wird trotz gleichem Metadaten-Hash importiert (kein Short-Circuit-Skip)', () => {
+    const registry = new CapabilityRegistry();
+    // agentB's Cap ist lokal bekannt (z.B. aus vorherigem Sync) → zählt in den Hash.
+    registry.register(makeCap(agentB, 'skill-b'));
+    const hash = registry.getCapabilityHash(); // availability NICHT im Hash
+    const mesh = new MeshManager(10_000, 3, { onPeerOnline: () => {}, onPeerOffline: () => {} });
+    const gossip = new GossipSync(registry, mesh, agentA, 'dummy');
+
+    const envelope: MessageEnvelope = {
+      id: 't-avail', type: MessageType.REGISTRY_SYNC, sender: agentB, correlation_id: 't-avail',
+      timestamp: new Date().toISOString(), ttl_ms: 60_000, idempotency_key: 't-avail',
+      payload: {
+        capability_hash: hash, // GLEICHER Metadaten-Hash → früher Short-Circuit
+        capabilities: [{ ...makeCap(agentB, 'skill-b'), availability: 'unhealthy', last_checked_at: new Date().toISOString(), consecutive_failures: 3 }],
+      } as unknown as RegistrySyncPayload,
+    };
+    gossip.handleSyncMessage(envelope);
+    // Trotz gleichem Hash MUSS die availability (owner-gated, sender=B==owner) übernommen sein.
+    expect(registry.getAvailability(agentB, 'skill-b')).toBe('unhealthy');
+  });
+
   it('lehnt Capabilities mit gefälschter agent_id ab', () => {
     const registry = new CapabilityRegistry();
     const mesh = new MeshManager(10_000, 3, {

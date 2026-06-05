@@ -93,9 +93,9 @@ describe('CapabilityRegistry — CRDT-basierte verteilte Registry', () => {
     registryA.register(makeCap(agentA, 'skill-from-a'));
     registryB.register(makeCap(agentB, 'skill-from-b'));
 
-    // B importiert A's Capabilities
+    // B importiert A's Capabilities DIREKT von A (writer = agentA, owner-gated).
     const capsFromA = registryA.exportCapabilities();
-    const imported = registryB.importPeerCapabilities(capsFromA);
+    const imported = registryB.importPeerCapabilities(capsFromA, agentA);
 
     expect(imported).toBe(1);
     expect(registryB.getAllCapabilities()).toHaveLength(2);
@@ -112,7 +112,7 @@ describe('CapabilityRegistry — CRDT-basierte verteilte Registry', () => {
       version: '0.9.0',
       updated_at: '2020-01-01T00:00:00Z',
     });
-    const imported = registry.importPeerCapabilities([olderCap]);
+    const imported = registry.importPeerCapabilities([olderCap], agentA);
     expect(imported).toBe(0);
     expect(registry.findBySkill('skill-1')[0].version).toBe('1.0.0');
   });
@@ -130,37 +130,70 @@ describe('CapabilityRegistry — CRDT-basierte verteilte Registry', () => {
   });
 });
 
-describe('CapabilityRegistry — ADR-021 availability (Skill-Health)', () => {
+describe('CapabilityRegistry — ADR-020 v2.2 availability (direct-only, owner-gated)', () => {
   const agentA = 'spiffe://thinklocal/host/a/agent/claude-code';
   const agentB = 'spiffe://thinklocal/host/b/agent/gemini-cli';
+  const ts = '2026-06-05T10:00:00Z';
 
-  it('SECURITY/ROUTING HIGH: findBySkill/findByCategory filtern availability=unhealthy heraus', () => {
+  it('ROUTING: findBySkill/findByCategory filtern availability=unhealthy (aus der Side-Map) heraus', () => {
     const r = new CapabilityRegistry();
-    r.register(makeCap(agentA, 'influxdb.read', { availability: 'healthy' }));
-    r.register(makeCap(agentB, 'influxdb.read', { availability: 'unhealthy' }));
+    r.register(makeCap(agentA, 'influxdb.read'));
+    r.register(makeCap(agentB, 'influxdb.read'));
+    r.setAvailability(agentB, 'influxdb.read', 'unhealthy', 3, ts); // B (Owner) markiert sich unhealthy
     const bySkill = r.findBySkill('influxdb.read');
-    expect(bySkill).toHaveLength(1);
-    expect(bySkill[0]!.agent_id).toBe(agentA);
-    expect(r.findByCategory('database').every((c) => c.availability !== 'unhealthy')).toBe(true);
+    expect(bySkill.map((c) => c.agent_id)).toEqual([agentA]); // nur B weggefiltert
+    expect(r.findByCategory('database').every((c) => r.getAvailability(c.agent_id, c.skill_id) !== 'unhealthy')).toBe(true);
   });
 
-  it('Back-Compat: fehlendes availability (alte Capability) gilt als verfügbar', () => {
+  it('Default: ohne setAvailability gilt eine Capability als verfügbar (healthy)', () => {
     const r = new CapabilityRegistry();
-    r.register(makeCap(agentA, 's')); // kein availability-Feld
+    r.register(makeCap(agentA, 's'));
+    expect(r.getAvailability(agentA, 's')).toBe('healthy');
     expect(r.findBySkill('s')).toHaveLength(1);
   });
 
-  it('setAvailability ändert NUR die eigene Capability, flippt den Hash, ist idempotent', () => {
+  it('setAvailability ist owner-gekeyt + idempotent (Side-Map, NICHT im CRDT-Hash)', () => {
     const r = new CapabilityRegistry();
-    r.register(makeCap(agentA, 'influxdb', { availability: 'healthy' }));
-    r.register(makeCap(agentB, 'influxdb', { availability: 'healthy' }));
+    r.register(makeCap(agentA, 'influxdb'));
     const h0 = r.getCapabilityHash();
-    expect(r.setAvailability(agentA, 'influxdb', 'unhealthy', 3, new Date().toISOString())).toBe(true);
-    expect(r.getCapabilityHash()).not.toBe(h0); // availability ist im Hash
-    expect(r.findBySkill('influxdb').map((c) => c.agent_id)).toEqual([agentB]); // nur A weggefiltert
-    // idempotent: gleicher State → kein Write
-    expect(r.setAvailability(agentA, 'influxdb', 'unhealthy', 3, new Date().toISOString())).toBe(false);
-    // unbekannte Capability → false
-    expect(r.setAvailability(agentA, 'nope', 'unhealthy', 1, new Date().toISOString())).toBe(false);
+    expect(r.setAvailability(agentA, 'influxdb', 'unhealthy', 3, ts)).toBe(true);
+    expect(r.getAvailability(agentA, 'influxdb')).toBe('unhealthy');
+    // availability ist NICHT im CRDT-Existenz-Hash (direct-only Side-Map, kein Relay)
+    expect(r.getCapabilityHash()).toBe(h0);
+    // idempotent: gleicher availability-State → kein Change
+    expect(r.setAvailability(agentA, 'influxdb', 'unhealthy', 9, ts)).toBe(false);
+  });
+
+  it('GUARDRAIL (Pflicht): RELAYTE availability (writer != owner) wird VERWORFEN — owner-wins', () => {
+    const r = new CapabilityRegistry();
+    // B (writer) versucht, A's Capability MIT availability=unhealthy einzuschleusen (Relay/Spoof).
+    const relayed = { ...makeCap(agentA, 'influxdb'), availability: 'unhealthy' as const, last_checked_at: ts, consecutive_failures: 5 };
+    const imported = r.importPeerCapabilities([relayed], agentB); // writer=B != owner=A
+    expect(imported).toBe(0); // fremde Capability komplett verworfen
+    expect(r.getRejectedForeignWrites()).toBe(1); // Metrik erhöht
+    expect(r.getAvailability(agentA, 'influxdb')).toBe('healthy'); // KEINE relayte availability übernommen
+
+    // Gegenprobe: derselbe Eintrag DIREKT vom Owner (writer=A) → akzeptiert + availability gesetzt.
+    const direct = { ...makeCap(agentA, 'influxdb'), availability: 'unhealthy' as const, last_checked_at: ts, consecutive_failures: 5 };
+    expect(r.importPeerCapabilities([direct], agentA)).toBe(1);
+    expect(r.getAvailability(agentA, 'influxdb')).toBe('unhealthy');
+  });
+
+  it('CR-MEDIUM: ungültiger availability-Wert (z.B. "degraded") wird NICHT übernommen (→ healthy)', () => {
+    const r = new CapabilityRegistry();
+    const bogus = { ...makeCap(agentA, 's'), availability: 'degraded', last_checked_at: ts, consecutive_failures: 2 };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    r.importPeerCapabilities([bogus as any], agentA);
+    expect(r.getAvailability(agentA, 's')).toBe('healthy'); // nur 'healthy'|'unhealthy' erlaubt
+  });
+
+  it('CR-MEDIUM: unregister räumt die availability-Side-Map (kein stale bei Re-Register)', () => {
+    const r = new CapabilityRegistry();
+    r.register(makeCap(agentA, 's'));
+    r.setAvailability(agentA, 's', 'unhealthy', 3, ts);
+    expect(r.getAvailability(agentA, 's')).toBe('unhealthy');
+    r.unregister(agentA, 's');
+    r.register(makeCap(agentA, 's')); // Re-Register
+    expect(r.getAvailability(agentA, 's')).toBe('healthy'); // kein stale 'unhealthy'
   });
 });

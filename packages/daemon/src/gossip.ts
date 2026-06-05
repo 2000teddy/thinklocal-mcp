@@ -112,17 +112,24 @@ export class GossipSync {
     // REGISTRY_SYNC-Nachricht erstellen
     const payload: RegistrySyncPayload = {
       capability_hash: hash,
-      capabilities: capabilities.map((c) => ({
-        skill_id: c.skill_id,
-        version: c.version,
-        description: c.description,
-        agent_id: c.agent_id,
-        health: c.health,
-        trust_level: c.trust_level,
-        updated_at: c.updated_at,
-        category: c.category,
-        permissions: c.permissions,
-      })),
+      capabilities: capabilities.map((c) => {
+        const rec = this.registry.getAvailabilityRecord(c.agent_id, c.skill_id);
+        return {
+          skill_id: c.skill_id,
+          version: c.version,
+          description: c.description,
+          agent_id: c.agent_id,
+          health: c.health,
+          trust_level: c.trust_level,
+          updated_at: c.updated_at,
+          category: c.category,
+          permissions: c.permissions,
+          // ADR-020 v2.2: eigene availability mitsenden (Empfänger gated owner===writer).
+          ...(rec
+            ? { availability: rec.availability, last_checked_at: rec.last_checked_at, consecutive_failures: rec.consecutive_failures }
+            : {}),
+        };
+      }),
     };
 
     const envelope = createEnvelope(
@@ -167,29 +174,26 @@ export class GossipSync {
   handleSyncMessage(envelope: MessageEnvelope): RegistrySyncResponsePayload {
     const payload = envelope.payload as RegistrySyncPayload;
 
-    // Prüfe ob Sync nötig ist (Hash-Vergleich)
+    // ADR-020 v2.2 (direct-only owner-gate): writer := envelope.sender — kryptografisch
+    // SIGNATUR-authentifiziert (Envelope-Sig-Prüfung in agent-card.ts == Owner/Signer).
+    // Owner-Gate (cap.agent_id===writer, sonst HARD reject + Metrik) liegt zentral in
+    // importPeerCapabilities. availability → owner-gegatete Side-Map.
+    // CR gpt-5.5 HIGH: VOR dem Hash-Short-Circuit importieren — `availability` ist NICHT
+    // im Capability-Hash; ein availability-only-Update hätte sonst denselben Hash und würde
+    // übersprungen → stale Routing. Der Hash entscheidet nur über die Metadaten-Rückantwort.
+    const imported = this.registry.importPeerCapabilities(
+      payload.capabilities as Array<Capability & { availability?: 'healthy' | 'unhealthy'; last_checked_at?: string; consecutive_failures?: number }>,
+      envelope.sender,
+    );
+
     const localHash = this.registry.getCapabilityHash();
     if (localHash === payload.capability_hash) {
       return {
         capability_hash: localHash,
-        imported: 0,
+        imported,
         capabilities: [],
       };
     }
-
-    // Capabilities importieren — NUR Capabilities des tatsächlichen Senders akzeptieren
-    // Verhindert dass ein Peer Capabilities für fremde Agents fälschen kann
-    const sanitizedCaps = (payload.capabilities as Capability[]).filter((c) => {
-      if (c.agent_id !== envelope.sender) {
-        this.log?.warn(
-          { claimed: c.agent_id, sender: envelope.sender, skill: c.skill_id },
-          'Gossip: Capability mit fremder agent_id abgelehnt',
-        );
-        return false;
-      }
-      return true;
-    });
-    const imported = this.registry.importPeerCapabilities(sanitizedCaps);
 
     this.log?.info(
       { from: envelope.sender, imported, peerHash: payload.capability_hash },
@@ -202,17 +206,23 @@ export class GossipSync {
     return {
       capability_hash: this.registry.hashCapabilities(ownCapabilities),
       imported,
-      capabilities: ownCapabilities.map((c) => ({
-        skill_id: c.skill_id,
-        version: c.version,
-        description: c.description,
-        agent_id: c.agent_id,
-        health: c.health,
-        trust_level: c.trust_level,
-        updated_at: c.updated_at,
-        category: c.category,
-        permissions: c.permissions,
-      })),
+      capabilities: ownCapabilities.map((c) => {
+        const rec = this.registry.getAvailabilityRecord(c.agent_id, c.skill_id);
+        return {
+          skill_id: c.skill_id,
+          version: c.version,
+          description: c.description,
+          agent_id: c.agent_id,
+          health: c.health,
+          trust_level: c.trust_level,
+          updated_at: c.updated_at,
+          category: c.category,
+          permissions: c.permissions,
+          ...(rec
+            ? { availability: rec.availability, last_checked_at: rec.last_checked_at, consecutive_failures: rec.consecutive_failures }
+            : {}),
+        };
+      }),
     };
   }
 
