@@ -230,9 +230,12 @@ spiffe://thinklocal/host/<stableNodeId>/agent/<agentType>/instance/<instanceId>
 
 > Diese Items sind dokumentiert und werden in zukuenftigen Releases adressiert.
 
+**Auth-Modell der REST-/WebSocket-API (entschieden 2026-06-05, `pal:consensus` 3 Modelle einstimmig — Option A „mTLS-only"):**
+Die Zugangs-/Identitätsgrenze des LAN-Mesh ist **mTLS + Mesh-CA + .94-Issuer-Pin**, NICHT JWT. `/api/*` auf dem Haupt-Port (9440) ist per `requestCert + rejectUnauthorized` gated — nur ein Node mit CA-signiertem Mesh-Cert erreicht die Handler; `localhost` (lokale CLI/MCP) ist bewusst exempt. Ein JWT-`onRequest`-Hook existierte als toter, nie verdrahteter Code und wurde 2026-06-05 entfernt (Doku≠Realität war die eigentliche Schuld). **Roadmap:** Sollte thinklocal je internet-facing werden, muss JWT-/Session-Auth **vorher** aktiviert werden (nicht als Nachgedanke) — `@fastify/jwt` bleibt dafür als Dependency verfügbar.
+
 | Limitierung | Risiko | Geplante Mitigation |
 |------------|--------|---------------------|
-| REST-API + WebSocket ohne Authentifizierung | Jeder im LAN kann Mesh-Status lesen | JWT/Session-Auth aus Pairing-Zeremonie |
+| REST-API/WebSocket-AuthZ = mTLS-only (kein JWT) | Bei Internet-Exposure unzureichend (im LAN ok: nur Mesh-Member mit CA-Cert) | JWT-/Session-Auth **vor** jeglichem Internet-Exposure aktivieren (s. Auth-Modell oben) |
 | Dashboard Vault-CRUD ohne Autorisierung | Jeder kann Credentials speichern/loeschen | Role-based Access Control |
 | MCP-Tools ohne Auth | stdio-Zugriff = voller Mesh-Zugriff | Nur lokaler Prozess, kein Netzwerk-Exposure |
 | Task-Delegation ohne Autorisierung | Jeder kann Tasks erstellen | Task-Policy + Capability-Matching |

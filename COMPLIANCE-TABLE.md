@@ -651,4 +651,16 @@ Doc-only-Eintrag (Abschluss-Dokumentation Live-Test); kein Code → CO/CG/TS/CR/
 
 ---
 
-*Letzte Aktualisierung: 2026-06-05 — v0.32.0 Build-/Versions-Stempel im Mesh.*
+## Session 2026-06-05 — v0.32.1 Architektur-Flanke 1: Auth-Modell mTLS-only
+
+| #       | PR  | Datum      | CO | CG | TS | CR | PC | DO | Findings                           |
+|---------|-----|------------|----|----|----|----|----|----|----|
+| v0.32.1 | tbd | 2026-06-05 | ✅ | —  | ✅ | ✅ | ✅ | ✅ | mTLS-only (pal:consensus 3 Modelle) — toten JWT-Hook entfernt + Doku korrigiert. CR gpt-5.5: 0 Findings |
+
+**CO:** `pal:consensus` (3 Modelle, einstimmig) → Option A mTLS-only — Orchestrator-Entscheidung. **CG:** —. **TS:** 873 grün (kein Test betroffen, Code war tot), tsc clean. **CR:** gpt-5.5 — 0 Findings (kein Importer/Test/Client von api-auth; Doku≠Realität behoben). **PC:** gpt-5.3-codex clean. **DO:** SECURITY.md, THREAT-MODEL.md, CHANGES, COMPLIANCE, TODO, package.json 0.32.1.
+
+**Roadmap:** JWT bei Internet-Exposure VORHER aktivieren (`@fastify/jwt` bleibt Dep).
+
+---
+
+*Letzte Aktualisierung: 2026-06-05 — v0.32.1 Auth-Modell mTLS-only (Flanke 1).*
