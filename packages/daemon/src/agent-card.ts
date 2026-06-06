@@ -130,7 +130,7 @@ export interface AgentCardServerOptions {
    * mTLS-Cert-SAN eine kanonische `node/<PeerID>` kryptografisch bestätigt — der
    * Aufrufer markiert die PeerID dann als verifiziert (mesh.markPeerIdVerified).
    */
-  onPeerCertVerified?: (peerId: string) => void;
+  onPeerCertVerified?: (peerId: string, senderUri: string) => void;
   /**
    * ADR-022 (CR gpt-5.5 WS-2 HIGH): SHA-256-Fingerprints der CAs, die berechtigt sind,
    * eine `node/<PeerID>`-PoP-Attestierung auszustellen (die Admin-/Mesh-CA auf .94).
@@ -285,7 +285,7 @@ export class AgentCardServer {
         // Krypto-attestierte PeerID → Auflösung für diesen Peer freischalten (auch wenn der
         // Sender noch Legacy ist: Phase-1-Fall, Cert reissued vor Sender-Flip).
         if (attestedPeerId) {
-          opts.onPeerCertVerified?.(attestedPeerId);
+          opts.onPeerCertVerified?.(attestedPeerId, rawEnvelope.sender);
         }
 
         // Public Key des Senders nachschlagen

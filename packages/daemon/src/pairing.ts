@@ -18,6 +18,7 @@ import { randomInt, createHash, createCipheriv, createDecipheriv, randomBytes } 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Logger } from 'pino';
+import { isCanonicalNodeUri } from './peer-identity.js';
 
 // --- PIN-Generierung ---
 
@@ -88,9 +89,26 @@ export class PairingStore {
     this.log?.info({ agentId: peer.agentId, hostname: peer.hostname }, 'Peer gepaart und gespeichert');
   }
 
-  /** Prüft ob ein Peer bereits gepaart ist */
+  /** Prüft ob ein Peer bereits gepaart ist (nach SPIFFE-URI). */
   isPaired(agentId: string): boolean {
     return this.peers.has(agentId);
+  }
+
+  /**
+   * CR-MEDIUM (#159): Prüft Pairing anhand des (stabilen) Public-Key-Fingerprints
+   * statt der SPIFFE-URI. Nötig für ADR-022 Phase 3: nach einem Identity-Flip
+   * (`host/<id>` → `node/<PeerID>`) ändert sich die URI eines gepairten Peers, sein
+   * Signing-Key (und damit der Fingerprint) bleibt aber gleich — URI-gekeytes Pairing
+   * würde ihn sonst fälschlich als nicht-gepairt fail-closed ablehnen. Der Aufrufer
+   * übergibt den BEREITS signatur-verifizierten senderPublicKey.
+   */
+  isPairedByPublicKey(publicKeyPem: string): boolean {
+    if (!publicKeyPem) return false;
+    const fp = createHash('sha256').update(publicKeyPem).digest('hex');
+    for (const peer of this.peers.values()) {
+      if (peer.fingerprint === fp) return true;
+    }
+    return false;
   }
 
   /** Gibt einen gepaarten Peer zurück */
@@ -133,7 +151,8 @@ export class PairingStore {
       // von Peers, die mittlerweile Host-ID-basierte URIs benutzen.
       const legacyUris = peers
         .map((p) => p.agentId)
-        .filter((uri) => !isHostIdSpiffeUri(uri));
+        // ADR-022 (CR-LOW): kanonische node/<PeerID>-URIs sind KEINE Legacy — nicht warnen.
+        .filter((uri) => !isHostIdSpiffeUri(uri) && !isCanonicalNodeUri(uri));
       if (legacyUris.length > 0) {
         this.log?.warn(
           { legacyCount: legacyUris.length, legacyUris },

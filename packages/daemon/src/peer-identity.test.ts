@@ -246,16 +246,18 @@ describe('peer-identity — ADR-022 PeerID-rooted identity', () => {
   describe('resolveSelfIdentity (ADR-022 Schritt 3 — Per-Node-Sender-Flip)', () => {
     const legacy = `spiffe://${TRUST_DOMAIN}/host/cf00a5bab06832c1/agent/claude-code`;
     const canonical = peerIdToSpiffeUri(PID); // spiffe://thinklocal/node/<PID>
+    // Default: Issuer ist eine gepinnte Attesting-CA (CR-HIGH #159) — sonst nie Flip.
+    const A = true;
 
     it('Flag aus → bleibt Legacy, kein blockedReason (Default-Pfad)', () => {
-      const d = resolveSelfIdentity({ emitCanonicalFlag: false, legacyUri: legacy, peerId: PID, certSans: [canonical] });
+      const d = resolveSelfIdentity({ emitCanonicalFlag: false, legacyUri: legacy, peerId: PID, certSans: [canonical], certIssuerIsAttesting: A });
       expect(d.emitCanonical).toBe(false);
       expect(d.selfIdentityUri).toBe(legacy);
       expect(d.blockedReason).toBeUndefined();
     });
 
-    it('Flag an + PeerID + EIGENE kanonische SAN → flippt auf node/<PeerID>', () => {
-      const d = resolveSelfIdentity({ emitCanonicalFlag: true, legacyUri: legacy, peerId: PID, certSans: [canonical] });
+    it('Flag an + PeerID + EIGENE kanonische SAN + Attesting-Issuer → flippt auf node/<PeerID>', () => {
+      const d = resolveSelfIdentity({ emitCanonicalFlag: true, legacyUri: legacy, peerId: PID, certSans: [canonical], certIssuerIsAttesting: A });
       expect(d.emitCanonical).toBe(true);
       expect(d.selfIdentityUri).toBe(canonical);
       expect(d.canonicalSelfUri).toBe(canonical);
@@ -264,15 +266,25 @@ describe('peer-identity — ADR-022 PeerID-rooted identity', () => {
     });
 
     it('Dual-SAN-Cert (Legacy zuerst) das die eigene kanonische SAN enthält → flippt trotzdem', () => {
-      const d = resolveSelfIdentity({ emitCanonicalFlag: true, legacyUri: legacy, peerId: PID, certSans: [legacy, canonical] });
+      const d = resolveSelfIdentity({ emitCanonicalFlag: true, legacyUri: legacy, peerId: PID, certSans: [legacy, canonical], certIssuerIsAttesting: A });
       expect(d.emitCanonical).toBe(true);
       expect(d.selfIdentityUri).toBe(canonical);
+    });
+
+    it('SECURITY-INTERLOCK (CR-HIGH #159): Flag an + kanonische SAN, aber Issuer NICHT gepinnt → Fail-safe Legacy', () => {
+      // Cert ist kanonisch, aber von einer nicht-attestierenden CA. Würden wir flippen,
+      // lehnten Peers (die nur gepinnte Issuer attestieren) den kanonischen Sender mit 403 ab.
+      const d = resolveSelfIdentity({ emitCanonicalFlag: true, legacyUri: legacy, peerId: PID, certSans: [canonical], certIssuerIsAttesting: false });
+      expect(d.emitCanonical).toBe(false);
+      expect(d.selfIdentityUri).toBe(legacy);
+      expect(d.certSanIsCanonical).toBe(true);
+      expect(d.blockedReason).toBe('cert_issuer_not_attesting');
     });
 
     it('SECURITY-INTERLOCK: Flag an, aber Cert-SAN noch LEGACY → Fail-safe Legacy (Cert-SAN VOR Sender-URI)', () => {
       // Würde der Node hier kanonisch emittieren, lehnte die Empfangsseite (authorizeHttpsSender)
       // den eigenen Sender gegen den Legacy-Cert-SAN mit 403 ab → Mesh-Bruch.
-      const d = resolveSelfIdentity({ emitCanonicalFlag: true, legacyUri: legacy, peerId: PID, certSans: [legacy] });
+      const d = resolveSelfIdentity({ emitCanonicalFlag: true, legacyUri: legacy, peerId: PID, certSans: [legacy], certIssuerIsAttesting: A });
       expect(d.emitCanonical).toBe(false);
       expect(d.selfIdentityUri).toBe(legacy);
       expect(d.certSanIsCanonical).toBe(false);
@@ -283,7 +295,7 @@ describe('peer-identity — ADR-022 PeerID-rooted identity', () => {
       // Das Cert trägt node/<andere-PeerID>. Würden wir auf UNSERE node/<PID> flippen,
       // stimmte der emittierte Sender nicht mit dem präsentierten Cert-SAN überein → 403.
       const otherCanonical = peerIdToSpiffeUri('12D3KooWOtherPeerIdAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
-      const d = resolveSelfIdentity({ emitCanonicalFlag: true, legacyUri: legacy, peerId: PID, certSans: [otherCanonical] });
+      const d = resolveSelfIdentity({ emitCanonicalFlag: true, legacyUri: legacy, peerId: PID, certSans: [otherCanonical], certIssuerIsAttesting: A });
       expect(d.emitCanonical).toBe(false);
       expect(d.selfIdentityUri).toBe(legacy);
       expect(d.certSanIsCanonical).toBe(false);
@@ -291,13 +303,13 @@ describe('peer-identity — ADR-022 PeerID-rooted identity', () => {
     });
 
     it('SECURITY-INTERLOCK: Flag an, aber kein Cert (leere SAN-Liste) → Fail-safe Legacy', () => {
-      const d = resolveSelfIdentity({ emitCanonicalFlag: true, legacyUri: legacy, peerId: PID, certSans: [] });
+      const d = resolveSelfIdentity({ emitCanonicalFlag: true, legacyUri: legacy, peerId: PID, certSans: [], certIssuerIsAttesting: A });
       expect(d.emitCanonical).toBe(false);
       expect(d.blockedReason).toBe('cert_san_not_canonical');
     });
 
     it('Flag an, aber libp2p aus (peerId null, local-Modus) → Fail-safe Legacy', () => {
-      const d = resolveSelfIdentity({ emitCanonicalFlag: true, legacyUri: legacy, peerId: null, certSans: [canonical] });
+      const d = resolveSelfIdentity({ emitCanonicalFlag: true, legacyUri: legacy, peerId: null, certSans: [canonical], certIssuerIsAttesting: A });
       expect(d.emitCanonical).toBe(false);
       expect(d.canonicalSelfUri).toBeNull();
       expect(d.blockedReason).toBe('libp2p_disabled_no_peerid');

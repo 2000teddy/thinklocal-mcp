@@ -58,6 +58,27 @@ export class MeshManager {
       return existing;
     }
 
+    // ADR-022 Phase-3 (Card-Re-Fetch/Identity-Supersession): Derselbe Node (stabile
+    // libp2p-PeerID) kündigt sich unter einer NEUEN, KANONISCHEN agentId an — der
+    // Sender-Flip `host/<id>` → `node/<PeerID>`. CR gpt-5.5 HIGH: HIER wird NICHT
+    // destruktiv entfernt — `discovered.*` stammt aus UNAUTHENTIFIZIERTEM mDNS, ein
+    // LAN-Angreifer könnte sonst mit einer selbstkonsistenten `node/<victimPeerId>`-
+    // Ankündigung einen legitimen Peer evicten (Availability-DoS). Wir loggen nur; die
+    // tatsächliche Supersession passiert erst nach issuer-gepinnter Cert-Attestierung
+    // in `markPeerIdVerified(peerId, senderUri)`.
+    const incomingPeerId = spiffeUriToPeerId(discovered.agentId);
+    if (incomingPeerId && incomingPeerId === discovered.p2pPeerId) {
+      const duplicates = [...this.peers.values()].filter(
+        (p) => p.agentId !== discovered.agentId && p.libp2p.peerId === incomingPeerId,
+      );
+      if (duplicates.length > 0) {
+        this.log?.warn(
+          { newAgentId: discovered.agentId, peerId: incomingPeerId, duplicates: duplicates.map((p) => p.agentId) },
+          'Kanonische PeerID-Duplikate gesehen (mDNS) — Supersession wird bis zur Krypto-Attestierung verzögert',
+        );
+      }
+    }
+
     const peer: MeshPeer = {
       name: discovered.name,
       host: discovered.host,
@@ -221,22 +242,52 @@ export class MeshManager {
 
   /**
    * ADR-022 Schritt 3 (channel-bound): markiert die PeerID als kryptografisch
-   * VERIFIZIERT — NUR aus einem echten Krypto-Pfad aufrufen (CA-validierter
-   * mTLS-Cert-SAN `node/<PeerID>` oder libp2p-Noise-RemotePeer), NIE aus mDNS/Card.
+   * VERIFIZIERT — NUR aus einem echten Krypto-Pfad aufrufen (CA-validierter, issuer-
+   * gepinnter mTLS-Cert-SAN `node/<PeerID>` oder libp2p-Noise-RemotePeer), NIE aus mDNS/Card.
    * Schaltet damit die kanonische PeerID-Auflösung für diesen Peer frei.
+   *
+   * `senderUri` (CR gpt-5.5 HIGH): die TLS-/Envelope-attestierte Sender-URI. Wenn gesetzt,
+   * wird (a) der exakt darunter gekeyte Eintrag eindeutig markiert (löst die mDNS-Duplikat-
+   * Ambiguität) und (b) — NUR wenn `senderUri` selbst kanonisch ist (Identity-Flip) —
+   * werden ALTE Duplikate mit derselben PeerID superseded. Diese destruktive Supersession
+   * ist damit an die issuer-gepinnte Cert-Attestierung gebunden, NICHT an rohes mDNS.
    * Liefert true, wenn ein passender Peer gefunden+markiert wurde.
    */
-  markPeerIdVerified(peerId: string): boolean {
-    // CR gpt-5.5 MEDIUM: nur bei EINDEUTIGEM Treffer markieren. Mehrere Peers mit
-    // derselben PeerID (z.B. via mDNS-Spoofing) sind ambig → nicht markieren (sonst
-    // Ambiguitäts-/Availability-Risiko), warnen.
+  markPeerIdVerified(peerId: string, senderUri?: string): boolean {
+    if (senderUri) {
+      // Bevorzugt den exakt durch das attestierte Cert benannten Sender-Eintrag (eindeutig).
+      let target = this.peers.get(senderUri);
+      // Discovery-Lag-Fallback: existiert (noch) kein Eintrag unter der kanonischen Sender-URI,
+      // aber GENAU EIN Peer trägt diese PeerID (z.B. der Legacy-Eintrag mit gleicher Card/Key),
+      // dann diesen markieren — bricht den 403-Deadlock ohne auf die mDNS-Ankündigung zu warten.
+      if (!target) {
+        const byPeerId = [...this.peers.values()].filter((p) => p.libp2p.peerId === peerId);
+        if (byPeerId.length === 1) target = byPeerId[0];
+      }
+      if (!target || target.libp2p.peerId !== peerId) return false;
+      target.libp2p.peerIdVerified = true;
+      // Krypto-attestierte Supersession: nur wenn der attestierte Sender SELBST kanonisch ist
+      // (echter Identity-Flip), alte Duplikate derselben PeerID entfernen (Registry/Rate-Limit-
+      // Cleanup via onPeerOffline). Spoof-sicher, weil an die issuer-gepinnte Attestierung gebunden.
+      if (spiffeUriToPeerId(senderUri) === peerId) {
+        for (const [id, p] of [...this.peers.entries()]) {
+          if (p !== target && p.libp2p.peerId === peerId) {
+            this.log?.info(
+              { superseded: id, by: senderUri, peerId },
+              'ADR-022 Flip: altes PeerID-Duplikat nach Cert-Attestierung superseded',
+            );
+            this.removePeer(id);
+          }
+        }
+      }
+      return true;
+    }
+
+    // Fallback (kein senderUri): nur bei EINDEUTIGEM Treffer markieren. Mehrere Peers mit
+    // derselben PeerID (z.B. via mDNS-Spoofing) sind ambig → nicht markieren, warnen.
     const matches = [...this.peers.values()].filter((p) => p.libp2p.peerId === peerId);
     if (matches.length !== 1) {
       if (matches.length > 1) {
-        // CR gpt-5.5 WS-2 MEDIUM: Ein LAN-Angreifer kann per mDNS denselben p2pPeerId wie
-        // ein legitimer Peer annoncieren → matches>1 → die echte Attestierung wird (fail-closed)
-        // nicht markiert. Kein Sicherheits-, aber ein Availability-Risiko für den Cutover.
-        // Detail-Logging, damit der Konflikt operativ sichtbar + bereinigbar ist.
         this.log?.warn(
           { peerId, matches: matches.map((p) => ({ agentId: p.agentId, host: p.host, endpoint: p.endpoint })) },
           'PeerID-Verifikation nicht eindeutig (mDNS-Duplikat?) — nicht markiert',
@@ -246,6 +297,24 @@ export class MeshManager {
     }
     matches[0].libp2p.peerIdVerified = true;
     return true;
+  }
+
+  /**
+   * MEDIUM (CR gpt-5.5): aktualisiert Endpoint/Host/Port eines bekannten Peers — NUR nach
+   * erfolgreicher Card-/TLS-Validierung im Discovery-Handler aufrufen (nicht im rohen
+   * mDNS-`addPeer`-Pfad), sonst bliebe ein zuerst angekündigter (evtl. gefälschter) Endpoint
+   * sticky. Verhindert Endpoint-Hijacking durch mDNS-Preemption.
+   */
+  confirmPeerDiscovery(agentId: string, discovered: DiscoveredPeer): void {
+    const peer = this.peers.get(agentId);
+    if (!peer) return;
+    peer.name = discovered.name;
+    peer.host = discovered.host;
+    peer.port = discovered.port;
+    peer.endpoint = discovered.endpoint;
+    peer.lastSeen = Date.now();
+    peer.missedBeats = 0;
+    peer.status = 'online';
   }
 
   get peerCount(): number {

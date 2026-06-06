@@ -687,4 +687,16 @@ Doc-only-Eintrag (Abschluss-Dokumentation Live-Test); kein Code → CO/CG/TS/CR/
 
 ---
 
-*Letzte Aktualisierung: 2026-06-05 — v0.34.0 ADR-022 Phase 3 Per-Node-Sender-Flip (flag-gegatet).*
+## Session 2026-06-06 — v0.34.1 ADR-022 Phase-3-Härtung (TH02-Live-Flip-Befunde)
+
+| #       | PR  | Datum      | CO  | CG | TS | CR | PC | DO | Findings                           |
+|---------|-----|------------|-----|----|----|----|----|----|----|
+| v0.34.1 | tbd | 2026-06-06 | n/a | —  | ✅ | ✅ | ✅ | ✅ | Card-Re-Fetch/Supersession + Issuer-Pin-Symmetrie + Guard-Reihenfolge + Pairing pubkey — CR-HIGH/MEDIUM/LOW gefixt |
+
+**CO:** entfällt (Härtung nach TH02-Test; Design aus ADR-022 §3 + #159-Review). **CG:** —. **TS:** 892 grün (+8: Supersession attestiert/Lag-Fallback/no-evict, Issuer-Pin `cert_issuer_not_attesting`, pubkey-Pairing, confirmPeerDiscovery), 6 Integration grün, tsc clean. **CR:** `pal:codereview` gpt-5.5 — fand HIGH (mDNS-getriebene Eviction-DoS) + MEDIUM (sticky endpoint) + LOW (canonical-Warnung); alle gefixt (Supersession hinter issuer-gepinnte Cert-Attestierung verschoben), Re-review 0 Residual. **PC:** clean. **DO:** CHANGES, COMPLIANCE, TODO, package.json 0.34.1.
+
+**Gate:** Produktiv-Flip bleibt gestoppt bis Merge + TH02-Live-Re-Verifikation (sauberer Flip, Announces 200 statt 403).
+
+---
+
+*Letzte Aktualisierung: 2026-06-06 — v0.34.1 Phase-3-Härtung (Card-Re-Fetch + Issuer-Pin + pubkey-Pairing).*

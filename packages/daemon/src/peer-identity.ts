@@ -59,6 +59,14 @@ export interface SelfIdentityInput {
    * → emittierter Sender ≠ präsentiertes Cert → 403).
    */
   certSans: string[];
+  /**
+   * CR gpt-5.5 HIGH (#159): true, wenn der Issuer des EIGENEN Serving-Certs in der
+   * gepinnten Attesting-CA-Menge (`TLMCP_PEERID_ATTESTING_CA_FP`) liegt. Symmetrie zur
+   * Empfangsseite: Peers attestieren `node/<PeerID>` NUR von einer gepinnten CA. Würde
+   * man flippen, obwohl das eigene Cert von einer nicht-gepinnten CA stammt, lehnten die
+   * Peers den kanonischen Sender mit 403 ab → Mesh-Break. Default false ⇒ kein Flip.
+   */
+  certIssuerIsAttesting: boolean;
 }
 
 /** Ergebnis der Phase-3-Sender-Flip-Entscheidung. */
@@ -72,15 +80,16 @@ export interface SelfIdentityDecision {
   /** True, wenn die EIGENE kanonische URI unter den laufenden Cert-SANs ist. */
   certSanIsCanonical: boolean;
   /** Grund, WARUM das gesetzte Flag NICHT griff (sonst undefined). */
-  blockedReason?: 'libp2p_disabled_no_peerid' | 'cert_san_not_canonical';
+  blockedReason?: 'libp2p_disabled_no_peerid' | 'cert_san_not_canonical' | 'cert_issuer_not_attesting';
 }
 
 /**
  * ADR-022 Schritt 3 — Per-Node-Sender-Flip-Entscheidung (rein, seiteneffektfrei).
  *
  * Flippt die Self-Identität von Legacy `host/<id>` auf kanonisch `node/<PeerID>`
- * GENAU DANN, wenn (1) der Operator es aktiviert hat, (2) eine PeerID existiert UND
- * (3) der laufende mTLS-Cert-SAN BEREITS kanonisch ist. (3) ist der Sicherheits-
+ * GENAU DANN, wenn (1) der Operator es aktiviert hat, (2) eine PeerID existiert,
+ * (3) der laufende mTLS-Cert-SAN BEREITS kanonisch ist UND (4) dessen Issuer eine
+ * gepinnte Attesting-CA ist (Symmetrie zur Empfangsseite). (3) ist der Sicherheits-
  * Interlock „Cert-SAN VOR Sender-URI": ein kanonischer Sender bei noch Legacy-Cert
  * würde empfangsseitig (authorizeHttpsSender) gegen den Cert-SAN mismatchen → 403.
  * Fail-safe: ist das Flag gesetzt aber eine Bedingung unerfüllt, bleibt es bei Legacy
@@ -91,11 +100,15 @@ export function resolveSelfIdentity(input: SelfIdentityInput): SelfIdentityDecis
   // EXAKT: die eigene kanonische URI muss unter den Cert-SANs sein (nicht nur
   // „irgendeine kanonische SAN"). Schließt node/<andere-PeerID>-Certs aus.
   const certSanIsCanonical = canonicalSelfUri !== null && input.certSans.includes(canonicalSelfUri);
-  const emitCanonical = input.emitCanonicalFlag && certSanIsCanonical;
+  // CR-HIGH (#159): zusätzlich Issuer-Pin-Symmetrie — nur flippen, wenn das eigene Cert
+  // von einer attestierenden CA stammt (sonst lehnen Peers den kanonischen Sender ab).
+  const emitCanonical = input.emitCanonicalFlag && certSanIsCanonical && input.certIssuerIsAttesting;
 
   let blockedReason: SelfIdentityDecision['blockedReason'];
   if (input.emitCanonicalFlag && !emitCanonical) {
-    blockedReason = !canonicalSelfUri ? 'libp2p_disabled_no_peerid' : 'cert_san_not_canonical';
+    if (!canonicalSelfUri) blockedReason = 'libp2p_disabled_no_peerid';
+    else if (!certSanIsCanonical) blockedReason = 'cert_san_not_canonical';
+    else blockedReason = 'cert_issuer_not_attesting';
   }
 
   return {

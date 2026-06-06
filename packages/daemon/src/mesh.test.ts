@@ -150,3 +150,56 @@ describe('MeshManager.resolvePeerPublicKey — ADR-022 tolerant resolution', () 
     expect(mesh.markPeerIdVerified('12D3KooWNoSuchPeer')).toBe(false);
   });
 });
+
+describe('MeshManager — ADR-022 Phase-3 Identity-Supersession (CR gpt-5.5 HIGH: nur nach Cert-Attestierung)', () => {
+  const canonical = peerIdToSpiffeUri(PID);
+  const mkOffline = () => {
+    const offline: string[] = [];
+    const mesh = new MeshManager(10_000, 3, { onPeerOnline: () => {}, onPeerOffline: (p) => offline.push(p.agentId) });
+    return { mesh, offline };
+  };
+
+  it('addPeer evictet NICHT bei rohem mDNS (auch selbstkonsistente node/<PeerID>-Ankündigung) — DoS-sicher', () => {
+    const { mesh, offline } = mkOffline();
+    mesh.addPeer(disc({ agentId: LEGACY, p2pPeerId: PID }));
+    // Selbstkonsistente kanonische Ankündigung (eingebettete PeerID == TXT p2pPeerId) — aber NUR mDNS.
+    mesh.addPeer(disc({ agentId: canonical, p2pPeerId: PID, host: '10.10.10.9' }));
+    // KEIN destruktives Evict im mDNS-Pfad → der Legacy-Peer bleibt (nur Warn-Log).
+    expect(offline).not.toContain(LEGACY);
+    expect(mesh.getPeer(LEGACY)).toBeDefined();
+  });
+
+  it('markPeerIdVerified(peerId, canonicalSender) supersedet alte Duplikate NACH Cert-Attestierung', () => {
+    const { mesh, offline } = mkOffline();
+    mesh.addPeer(disc({ agentId: LEGACY, p2pPeerId: PID }));
+    mesh.updateAgentCard(LEGACY, card('OLD', LEGACY));
+    mesh.addPeer(disc({ agentId: canonical, p2pPeerId: PID, host: '10.10.10.9' }));
+    mesh.updateAgentCard(canonical, card('NEW', canonical));
+    // Cert-attestierter Flip: senderUri = kanonisch → markiert kanonischen Eintrag + supersedet Legacy.
+    expect(mesh.markPeerIdVerified(PID, canonical)).toBe(true);
+    expect(offline).toContain(LEGACY);
+    expect(mesh.getPeer(LEGACY)).toBeUndefined();
+    expect(mesh.getPeer(canonical)!.libp2p.peerIdVerified).toBe(true);
+    expect(mesh.resolvePeerPublicKey(canonical)).toBe('NEW');
+  });
+
+  it('Discovery-Lag-Fallback: kanonischer Eintrag fehlt → der EINDEUTIGE Legacy-Eintrag mit der PeerID wird attestiert (bricht 403-Deadlock)', () => {
+    const mesh = mkMesh();
+    // Nur der Legacy-Eintrag existiert (kanonische mDNS-Ankündigung noch nicht eingetroffen).
+    mesh.addPeer(disc({ agentId: LEGACY, p2pPeerId: PID }));
+    mesh.updateAgentCard(LEGACY, card('KEY-V', LEGACY));
+    // Cert attestiert die kanonische Sender-URI; kein Eintrag darunter → Fallback auf eindeutige PeerID.
+    expect(mesh.markPeerIdVerified(PID, canonical)).toBe(true);
+    // Kanonische Auflösung klappt jetzt (Resolver matcht über peerId + verified, Card-Key bleibt gleich).
+    expect(mesh.resolvePeerPublicKey(canonical)).toBe('KEY-V');
+  });
+
+  it('Fallback ohne senderUri bleibt fail-closed bei Ambiguität (Rückwärtskompatibilität)', () => {
+    const mesh = mkMesh();
+    const aaa = 'spiffe://thinklocal/host/aaa/agent/claude-code';
+    const bbb = 'spiffe://thinklocal/host/bbb/agent/claude-code';
+    mesh.addPeer(disc({ agentId: aaa, p2pPeerId: PID }));
+    mesh.addPeer(disc({ agentId: bbb, p2pPeerId: PID, host: '10.10.10.10' }));
+    expect(mesh.markPeerIdVerified(PID)).toBe(false); // zwei Treffer → nicht markiert
+  });
+});

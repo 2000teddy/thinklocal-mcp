@@ -6,7 +6,24 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-06-05
+## [Unreleased] — 2026-06-06
+
+### v0.34.1 — Phase-3-Härtung (TH02-Live-Flip-Test-Befunde) — Pflicht vor Produktiv-Flip
+
+Der TH02-Live-Flip (2026-06-06) deckte echte Härtungs-Punkte auf — genau dafür wurde TH02 zuerst getestet. Fixes flag-unabhängig (Default OFF unverändert), reversibel:
+
+- **Card-Re-Fetch / Identity-Supersession (TH02-Deadlock-Root-Cause):** Flippt ein verbundener Node `host/<id>` → `node/<PeerID>`, blieb beim Nachbarn der alte Legacy-Eintrag mit derselben (mDNS-)PeerID stehen → `markPeerIdVerified` sah **zwei** Treffer → Ambiguität → kanonischer Sender nicht auflösbar → **403-Deadlock**. **Fix:** `markPeerIdVerified(peerId, senderUri)` ist jetzt sender-gekeyt — markiert den exakt cert-attestierten Eintrag eindeutig und supersedet (nur bei kanonischem attestiertem Sender = echter Flip) alte PeerID-Duplikate; Discovery-Lag-Fallback markiert den eindeutigen Legacy-Eintrag, falls der kanonische noch nicht entdeckt ist.
+- **CR gpt-5.5 (security) — HIGH + MEDIUM + LOW, alle gefixt + re-reviewt (0 Residual):**
+  - **HIGH:** Die Supersession lag zuerst im **mDNS-getriebenen `addPeer`** → LAN-Angreifer hätte mit selbstkonsistenter `node/<victimPeerId>`-Ankündigung einen legitimen Peer evicten können (DoS). **Fix:** `addPeer` entfernt nichts mehr (nur Warn-Log); destruktive Supersession strikt an **issuer-gepinnte Cert-Attestierung** gebunden (`onPeerCertVerified(peerId, senderUri)`), nie an rohes mDNS.
+  - **MEDIUM:** Sticky Endpoint bei Re-Announcement (mDNS-Preemption). **Fix:** `confirmPeerDiscovery()` aktualisiert host/port/endpoint **erst nach** dem Card-Identitäts-Check.
+  - **LOW:** Kanonische `node/<PeerID>`-Pairings wurden als „Legacy" gewarnt → `isCanonicalNodeUri` aus dem Warn-Filter ausgenommen.
+- **#159-HIGH (Issuer-Pin-Symmetrie):** `resolveSelfIdentity` flippt nur, wenn der **eigene Cert-Issuer** in `TLMCP_PEERID_ATTESTING_CA_FP` gepinnt ist (Symmetrie zur Empfangsseite). Neuer `blockedReason 'cert_issuer_not_attesting'`.
+- **#159-MEDIUM (Guard-Reihenfolge):** `skillHealthMonitor`/`registrySync.coordinator` starten erst **nach** dem fail-closed Runtime-vs-Key-PeerID-Guard.
+- **CR-MEDIUM-2 (Pairing URI→pubkey):** `PairingStore.isPairedByPublicKey()` erkennt einen gepairten Peer über seinen stabilen, signatur-verifizierten Public-Key-Fingerprint — ein geflippter Peer (neue URI, gleicher Key) bleibt gepairt (vorher fail-closed abgelehnt).
+
+**TS:** 892 Tests grün (+8), 6 Integration grün, tsc clean. **CR:** gpt-5.5 (HIGH+MEDIUM+LOW gefixt, 0 Residual). **PC:** clean. Version 0.34.0 → **0.34.1**.
+
+**Produktiv-Flip bleibt gestoppt**, bis diese Härtung gemergt UND auf TH02 live re-verifiziert ist (sauberer Flip ohne 403).
 
 ### v0.34.0 — Per-Node-Sender-Flip: kanonische node/<PeerID>-Identität (ADR-022 Schritt 3, Phase 3)
 
