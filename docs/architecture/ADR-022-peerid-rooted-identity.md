@@ -144,6 +144,15 @@ Der Per-Node-Identity-Flip (Phase 3): Fenster, in dem Sender-URI und Cert-SAN/Na
 ### Umsetzungs-Reihenfolge (CLAUDE.md)
 CO ✅ (dieser Abschnitt) → CG (optional) → Code pro Workstream je eigener Branch + TS + CR (gpt-5.5 security) + PC + PR. Reihenfolge: lokale, additive WS (Self-Identity-Ableitung, channel-gebundene Resolver-Erweiterung, Accept-both) zuerst → **cross-node .94** (PoP + CSR-SAN-Signing, Client+Admin atomar) → Per-Node-Flip → strict. Live-Test TH01↔Mesh vor strict.
 
+## Attesting-CA-Pin: Auto-Derive (Entscheidung pal:consensus 2026-06-06, v0.34.2)
+
+**Status:** Accepted + implementiert (v0.34.2).
+**Konsens:** `pal:consensus` (gpt-5.5 adversarial; gemini-2.5-pro billing-capped) → **auto-derive + env-override + Guards**, unter der Singleton-Mesh-CA-Invariante.
+
+`TLMCP_PEERID_ATTESTING_CA_FP` (welche CA `node/<PeerID>` attestieren darf) wird **standardmäßig aus der eigenen `ca.crt.pem` abgeleitet** (`resolveAttestingCaFingerprints`), statt pro Node hart verdrahtet zu werden. Begründung: die eigene Mesh-CA IST per Konstruktion die legitime attestierende CA (sie validiert den mTLS-Join), und Node-Certs werden **direkt** von ihr signiert (kein Intermediate) → der empfangsseitige Issuer-Fingerprint == die abgeleitete CA. **Guards** (gpt-5.5): nur aus der **eigenen** `ca.crt.pem` ableiten (nie aus dem gemergten Trust-Bundle / gepairten CAs), **nur bei genau EINEM Zertifikat** (Bundle/defekt → fail-closed), Env überschreibt explizit, `none` deaktiviert (Staged-Rollout). Net: kanonische Attestierung wechselt von opt-in (leer/inert) zu **automatisch aktiv für die eigene Mesh-CA**; der Malicious-Paired-CA-Schutz (WS-2) bleibt zu (Fremd-CAs = andere Fingerprints). **CA-Rotation:** Pin folgt automatisch der neuen `ca.crt.pem` (gewünscht).
+
+Offene Follow-ups (nicht-blockierend): token-onboarded TLS-Bundle beim Laden gegen die CA validieren (tls.ts, pre-existing); dedizierter mTLS-Integrationstest `peerCert.issuerCertificate.fingerprint256 === certFingerprint(ca.crt.pem)` (live via TH01↔TH02 bereits bestätigt).
+
 ## Referenzen
 
 - `pal:consensus` Lauf A (4 Modelle, TH01) + Lauf B (3 Modelle, Orchestrator, `f5715d3c-6cea-456f-8c93-4829b7497d69`), beide 2026-06-03.

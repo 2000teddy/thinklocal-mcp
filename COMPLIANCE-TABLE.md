@@ -699,4 +699,16 @@ Doc-only-Eintrag (Abschluss-Dokumentation Live-Test); kein Code → CO/CG/TS/CR/
 
 ---
 
-*Letzte Aktualisierung: 2026-06-06 — v0.34.1 Phase-3-Härtung (Card-Re-Fetch + Issuer-Pin + pubkey-Pairing).*
+## Session 2026-06-06 — v0.34.2 Attesting-CA-Pin Auto-Derive (Fleet-Voraussetzung)
+
+| #       | PR  | Datum      | CO  | CG | TS | CR | PC | DO | Findings                           |
+|---------|-----|------------|-----|----|----|----|----|----|----|
+| v0.34.2 | tbd | 2026-06-06 | ✅  | —  | ✅ | ✅ | ✅ | ✅ | Pin aus eigener Mesh-CA ableiten (env-override + `none` + Single-Cert-Guard) — CR MEDIUM+LOW gefixt |
+
+**CO:** `pal:consensus` (gpt-5.5 adversarial; gemini billing-capped) → auto-derive + env-override + Guards, Singleton-Mesh-CA-Invariante. **CG:** —. **TS:** 898 grün (+6 Resolver: env/derived/none/bundle-guard/null/broken-PEM), 6 Integration grün, tsc clean. **CR:** `pal:codereview` gpt-5.5 (security) — kein HIGH/CRITICAL; MEDIUM (defektes PEM → Boot-Crash) gefixt (try/catch+Test), LOW (Env-Format-Warnung, stale Kommentar) gefixt; 2 MEDIUM als Follow-up dokumentiert (token-onboard-Validierung pre-existing; mTLS-Integrationstest, live bereits bewiesen). **PC:** clean. **DO:** ADR-022-Sektion, CHANGES, COMPLIANCE, TODO, package.json 0.34.2.
+
+**Live (2026-06-06):** TH01+TH02 auf v0.34.1, TH02-Flip gegen v0.34.1-Nachbar grün. Produktiv-Flip (.56/.52/.222) gestoppt bis Christians Wort.
+
+---
+
+*Letzte Aktualisierung: 2026-06-06 — v0.34.2 Attesting-CA-Pin Auto-Derive.*

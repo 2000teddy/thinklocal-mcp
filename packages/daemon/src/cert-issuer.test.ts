@@ -11,6 +11,7 @@ import {
   signNodeCertFromCsr,
   publicKeyDerHash,
   certFingerprint,
+  resolveAttestingCaFingerprints,
 } from './cert-issuer.js';
 import { generateNodeKeypairAndCsr, buildCertSignRequest } from './cert-request.js';
 
@@ -37,6 +38,45 @@ beforeAll(async () => {
   ca = makeCa();
   key = await generateKeyPair('Ed25519');
   peerId = libp2pPeerIdString(key);
+});
+
+describe('resolveAttestingCaFingerprints (ADR-022 Pin-Auto-Derive, pal:consensus 2026-06-06)', () => {
+  it('Env GESETZT → explizit (gewinnt, kommagetrennt)', () => {
+    const r = resolveAttestingCaFingerprints('AA:BB , ccdd', ca.caCertPem);
+    expect(r.source).toBe('env');
+    expect(r.fingerprints).toEqual(['AA:BB', 'ccdd']);
+  });
+
+  it('Env UNGESETZT → aus eigener Mesh-CA abgeleitet (= certFingerprint)', () => {
+    const r = resolveAttestingCaFingerprints(undefined, ca.caCertPem);
+    expect(r.source).toBe('derived');
+    expect(r.fingerprints).toEqual([certFingerprint(ca.caCertPem)]);
+  });
+
+  it('Env == "none" → bewusst deaktiviert (fail-closed leer)', () => {
+    const r = resolveAttestingCaFingerprints('none', ca.caCertPem);
+    expect(r.source).toBe('disabled');
+    expect(r.fingerprints).toEqual([]);
+  });
+
+  it('GUARD: CA-Bundle (>1 Zertifikat) → KEIN Auto-Derive (fail-closed)', () => {
+    const bundle = ca.caCertPem + '\n' + makeCa().caCertPem; // zwei Certs
+    const r = resolveAttestingCaFingerprints(undefined, bundle);
+    expect(r.source).toBe('no-ca');
+    expect(r.fingerprints).toEqual([]);
+  });
+
+  it('kein CA-Cert (null) → leer (fail-closed)', () => {
+    expect(resolveAttestingCaFingerprints(undefined, null).fingerprints).toEqual([]);
+    expect(resolveAttestingCaFingerprints('', null).source).toBe('no-ca');
+  });
+
+  it('GUARD (CR-MEDIUM): defektes Single-Cert-PEM → fail-closed statt Crash', () => {
+    const broken = '-----BEGIN CERTIFICATE-----\nNOT-VALID-BASE64-DER\n-----END CERTIFICATE-----';
+    const r = resolveAttestingCaFingerprints(undefined, broken);
+    expect(r.source).toBe('no-ca');
+    expect(r.fingerprints).toEqual([]);
+  });
 });
 
 describe('NonceStore', () => {
