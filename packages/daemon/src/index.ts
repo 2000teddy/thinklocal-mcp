@@ -30,7 +30,7 @@ import { registerComplianceApi } from './compliance-check.js';
 import { TokenStore } from './token-store.js';
 import { registerTokenApi } from './token-api.js';
 import { onboardingPort } from './onboarding-port.js';
-import { CertIssuer, NonceStore } from './cert-issuer.js';
+import { CertIssuer, NonceStore, certFingerprint } from './cert-issuer.js';
 import { registerCertIssuanceApi } from './cert-issuance-api.js';
 import { readFileSync } from 'node:fs';
 import { CredentialVault } from './vault.js';
@@ -38,7 +38,7 @@ import { loadOrCreateVaultPassphrase } from './vault-passphrase.js';
 import { isLoopbackHost } from './runtime-mode.js';
 import { TaskExecutor } from './task-executor.js';
 import { createLibp2pRuntime } from './libp2p-runtime.js';
-import { checkIdentityConsistency, resolveSelfIdentity } from './peer-identity.js';
+import { checkIdentityConsistency, resolveSelfIdentity, isAttestingIssuer } from './peer-identity.js';
 import { loadOrCreateLibp2pPrivateKey } from './libp2p-identity.js';
 import { wireRegistrySync } from './registry-sync-libp2p-adapter.js';
 import type { SecretRequestPayload, SecretResponsePayload, AgentMessagePayload, AgentMessageAckPayload } from './messages.js';
@@ -180,12 +180,24 @@ async function main(): Promise<void> {
   // bleibt der ECDSA-Agent-Key (Option B, ADR-022 §3): Peers lösen ihn über die
   // verifizierte, auf die PeerID gekeyte Agent-Card auf (resolvePeerPublicKey). Der Flip
   // ist rein additiv + per Flag reversibel (Flag aus → sofort wieder Legacy).
+  // ADR-022 WS-3: Fingerprints der CAs, die `node/<PeerID>` attestieren dürfen (.94 Admin-CA).
+  // Früh berechnet, weil die Flip-Entscheidung (CR-HIGH #159: Issuer-Pin-Symmetrie) sie braucht.
+  const peerIdAttestingCaFingerprints = (process.env['TLMCP_PEERID_ATTESTING_CA_FP'] ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
   const certSansAtBoot = tlsBundle ? extractSpiffeUris(tlsBundle.certPem) : [];
+  // Issuer unseres Serving-Certs = unsere Mesh-CA (caCertPem). CR-HIGH (#159): nur flippen,
+  // wenn dieser Issuer in der gepinnten Attesting-Menge liegt (Symmetrie zur Empfangsseite).
+  const certIssuerIsAttesting = tlsBundle
+    ? isAttestingIssuer(certFingerprint(tlsBundle.caCertPem), peerIdAttestingCaFingerprints)
+    : false;
   const idDecision = resolveSelfIdentity({
     emitCanonicalFlag: config.daemon.emit_canonical_sender,
     legacyUri: identity.spiffeUri,
     peerId: libp2pKey?.peerId ?? null,
     certSans: certSansAtBoot,
+    certIssuerIsAttesting,
   });
   const { selfIdentityUri, emitCanonical, canonicalSelfUri } = idDecision;
   if (idDecision.blockedReason) {
@@ -277,8 +289,10 @@ async function main(): Promise<void> {
     },
   });
   // Skills mit externer Abhängigkeit registrieren (generisch erweiterbar: Ollama, Telegram, …).
+  // CR-MEDIUM (#159): Background-Loops (skillHealthMonitor, registrySync.coordinator) werden
+  // erst NACH dem fail-closed Identitäts-Guard gestartet (s.u.) — bei einem Sicherheits-Abbruch
+  // soll nichts vorher anlaufen. Hier nur registrieren, NICHT starten.
   skillHealthMonitor.register('influxdb', (signal) => influxdbHealthCheck(signal));
-  skillHealthMonitor.start();
 
   // libp2p-Key wird bereits oben geladen (ADR-022 Phase 3 — die Self-Identität hängt davon ab).
   const libp2pRuntime = await createLibp2pRuntime({
@@ -297,10 +311,6 @@ async function main(): Promise<void> {
   });
   registrySync.setRuntime(libp2pRuntime);
   await libp2pRuntime.start();
-  if (config.libp2p.enabled) {
-    registrySync.coordinator.start();
-    log.info('RegistrySyncCoordinator gestartet (ADR-020 v1)');
-  }
 
   // ADR-022 §Startup-Assertion: PeerID / Cert-SAN / authz-Identität müssen
   // übereinstimmen. Während der Migration (Legacy `host/<stableNodeId>` + admin-
@@ -365,6 +375,15 @@ async function main(): Promise<void> {
     }
   }
 
+  // CR-MEDIUM (#159): Background-Loops ERST JETZT starten — nach dem fail-closed
+  // Identitäts-Guard, damit bei einem Sicherheits-Abbruch keine Timer/Healthchecks/
+  // Sync-Logik mehr anlaufen.
+  skillHealthMonitor.start();
+  if (config.libp2p.enabled) {
+    registrySync.coordinator.start();
+    log.info('RegistrySyncCoordinator gestartet (ADR-020 v1)');
+  }
+
   // 6. Mesh-Manager starten
   const mesh = new MeshManager(
     config.mesh.heartbeat_interval_ms,
@@ -400,12 +419,7 @@ async function main(): Promise<void> {
     skillManager,
   );
 
-  // ADR-022 WS-3: Fingerprints der CAs, die `node/<PeerID>` attestieren dürfen (.94 Admin-CA).
-  // Kommagetrennt via Env. Ungesetzt → leer → kanonische Attestierung inert (sicherer Default).
-  const peerIdAttestingCaFingerprints = (process.env['TLMCP_PEERID_ATTESTING_CA_FP'] ?? '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
+  // peerIdAttestingCaFingerprints wird bereits oben (Phase-3-Flip-Gate) berechnet.
 
   // 8. Agent Card Server starten (HTTP oder HTTPS).
   // trustedCaBundle: aggregiert eigene CA + gepairte Peer-CAs. Hot-Reload bei
@@ -425,14 +439,19 @@ async function main(): Promise<void> {
     getPeerPublicKey: (agentId: string) => mesh.resolvePeerPublicKey(agentId),
     // ADR-022 §3 (channel-bound): ein CA-validierter mTLS-Cert-SAN node/<PeerID>
     // schaltet die kanonische PeerID-Auflösung für diesen Peer frei.
-    onPeerCertVerified: (peerId: string) => mesh.markPeerIdVerified(peerId),
+    onPeerCertVerified: (peerId: string, senderUri: string) => mesh.markPeerIdVerified(peerId, senderUri),
     // ADR-022 (CR gpt-5.5 WS-2 HIGH): NUR von der attestierenden Admin-CA (.94)
     // signierte node/<PeerID>-Certs dürfen eine PeerID attestieren — nicht jede CA im
     // Trust-Bundle. WS-3: per Env `TLMCP_PEERID_ATTESTING_CA_FP` (kommagetrennte SHA-256-
     // Fingerprints von .94s CA-Cert) scharfschaltbar. Ungesetzt → kanonische Attestierung
     // inert (sicherer Default). Siehe .94-Instruktion / docs für die Fingerprint-Verteilung.
     peerIdAttestingCaFingerprints: peerIdAttestingCaFingerprints,
-    onMessage: async (envelope: MessageEnvelope) => {
+    onMessage: async (envelope: MessageEnvelope, senderPublicKey: string) => {
+      // ADR-022 Phase 3 / CR-MEDIUM (#159): ein gepairter Peer wird nach einem Identity-Flip
+      // unter neuer URI über seinen (stabilen, bereits verifizierten) Public-Key als gepairt
+      // erkannt — URI-gekeytes Pairing allein bräche sonst nach dem Flip fail-closed.
+      const senderIsPaired =
+        pairingStore.isPaired(envelope.sender) || pairingStore.isPairedByPublicKey(senderPublicKey);
       // Rate-Limiting prüfen
       if (!rateLimiter.allow(envelope.sender)) {
         log.warn({ sender: envelope.sender }, 'Rate-Limited — Nachricht abgelehnt');
@@ -482,7 +501,7 @@ async function main(): Promise<void> {
 
           if (!cred) {
             responsePayload = { credential_name: secretReq.credential_name, status: 'denied', sealed_value: null, reason: 'Credential not found' };
-          } else if (pairingStore.isPaired(envelope.sender)) {
+          } else if (senderIsPaired) {
             vault.approveRequest(approval.id);
             const sealed = vault.sealForPeer(cred.value, secretReq.requester_public_key);
             responsePayload = { credential_name: secretReq.credential_name, status: 'approved', sealed_value: sealed, reason: null };
@@ -508,7 +527,7 @@ async function main(): Promise<void> {
               status: 'rejected',
               reason: 'recipient mismatch',
             };
-          } else if (!pairingStore.isPaired(envelope.sender)) {
+          } else if (!senderIsPaired) {
             // SECURITY (PR #79 GPT-5.4 retro MEDIUM): Pruefen ob Sender
             // in unserem Trust-Perimeter ist. Signaturpruefung durch
             // agent-card.ts beweist nur "kommt von einem Cert mit bekannter
@@ -947,6 +966,9 @@ async function main(): Promise<void> {
           }
 
           mesh.updateAgentCard(discovered.agentId, card);
+          // CR-MEDIUM (#159): Endpoint/Host/Port erst JETZT (nach Card-Identitäts-Check)
+          // verifiziert aktualisieren — nicht im rohen mDNS-addPeer-Pfad (Endpoint-Hijacking).
+          mesh.confirmPeerDiscovery(discovered.agentId, discovered);
           log.info({ peer: card.name }, 'Agent Card verifiziert und akzeptiert');
         }
       } catch (err) {

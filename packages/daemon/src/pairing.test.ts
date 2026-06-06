@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
@@ -110,6 +111,42 @@ describe('PairingStore — Persistenz gepaarter Peers', () => {
   });
 
   // Cleanup
+  it('cleanup', () => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+});
+
+describe('PairingStore.isPairedByPublicKey — CR-MEDIUM (#159): pubkey-basiertes Pairing (ADR-022 Flip)', () => {
+  const tmpDir = mkdtempSync(resolve(tmpdir(), 'tlmcp-pairing-fp-'));
+  const pubkeyPem = '-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZ...stable-signing-key...\n-----END PUBLIC KEY-----';
+  const fp = createHash('sha256').update(pubkeyPem).digest('hex');
+
+  const peer: PairedPeer = {
+    agentId: 'spiffe://thinklocal/host/cf00a5bab06832c1/agent/claude-code', // Legacy-URI beim Pairing
+    publicKeyPem: pubkeyPem,
+    caCertPem: '-----BEGIN CERTIFICATE-----\nca\n-----END CERTIFICATE-----',
+    fingerprint: fp,
+    pairedAt: new Date().toISOString(),
+    hostname: 'th02',
+  };
+
+  it('erkennt einen gepairten Peer über seinen Public-Key — auch wenn die URI sich (durch Flip) ändert', () => {
+    const store = new PairingStore(tmpDir);
+    store.addPeer(peer);
+    // Nach dem Flip kommt der Peer unter der KANONISCHEN URI — URI-Lookup schlägt fehl,
+    // aber der (stabile) Public-Key matcht → weiterhin als gepairt erkannt.
+    const canonicalUri = 'spiffe://thinklocal/node/12D3KooWMu7EkUK2XNB1jaWr7JGKDueNgTiVcCHG78VU23DdkrJV';
+    expect(store.isPaired(canonicalUri)).toBe(false); // URI-gekeyt: nein
+    expect(store.isPairedByPublicKey(pubkeyPem)).toBe(true); // pubkey-gekeyt: ja
+  });
+
+  it('lehnt einen fremden Public-Key ab (fail-closed)', () => {
+    const store = new PairingStore(tmpDir);
+    store.addPeer(peer);
+    expect(store.isPairedByPublicKey('-----BEGIN PUBLIC KEY-----\nUNKNOWN\n-----END PUBLIC KEY-----')).toBe(false);
+    expect(store.isPairedByPublicKey('')).toBe(false);
+  });
+
   it('cleanup', () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
