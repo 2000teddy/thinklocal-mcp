@@ -8,6 +8,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-06
 
+### v0.34.2 — Attesting-CA-Pin Auto-Derive (Fleet-Voraussetzung, kein Hardcode)
+
+Fleet-Voraussetzung für den Produktiv-Flip: jeder Node bekommt den `TLMCP_PEERID_ATTESTING_CA_FP`-Pin automatisch, sonst fail-safe-blockt der Flip (`cert_issuer_not_attesting`, live auf TH02 beobachtet). Statt den Fingerprint pro Node hart zu verdrahten, wird er **aus der eigenen Mesh-CA abgeleitet**.
+
+- **`resolveAttestingCaFingerprints(env, caCertPem)`** (cert-issuer.ts, rein/testbar): Env gesetzt → explizit (gewinnt); `none` → deaktiviert (Staged-Rollout-Escape, fail-closed); **Env ungesetzt → aus der eigenen `ca.crt.pem` abgeleitet** (`certFingerprint`), **NUR wenn diese genau EIN Zertifikat enthält** (Bundle/defekt/leer → fail-closed). Leitet **nie** aus dem gemergten Trust-Bundle / gepairten CAs ab → Malicious-Paired-CA-Schutz (WS-2) bleibt zu. Quelle wird laut geloggt.
+- **CO:** `pal:consensus` (gpt-5.5 adversarial; gemini billing-capped) → auto-derive + env-override + Guards, unter der Singleton-Mesh-CA-Invariante (direkte Issuance, kein Intermediate — im Code verifiziert: `cert.sign(caKey)`). Net: kanonische Attestierung wechselt von opt-in (leer/inert) zu **automatisch aktiv für die EIGENE Mesh-CA** — supersediert das manuelle Verdrahten der Env in Unit/Installer (Zero-Config).
+- **CR gpt-5.5 (security):** kein HIGH/CRITICAL. MEDIUM (defektes Single-Cert-PEM → Boot-Crash) **gefixt** (try/catch → fail-closed + Test). LOW (Env-Pin-Format-Warnung, stale Kommentar) **gefixt**. Offene MEDIUM als Follow-up dokumentiert: (a) token-onboarded TLS-Bundle ohne Validierung laden (pre-existing, tls.ts); (b) Integrationstest, dass `peerCert.issuerCertificate.fingerprint256 === certFingerprint(ca.crt.pem)` unter echtem mTLS (live bereits via TH01↔TH02-Flip bewiesen).
+- **PC:** clean. **898 Tests grün** (+6 Resolver: env/derived/none/bundle-guard/null/broken-PEM), 6 Integration grün, tsc clean. Version 0.34.1 → **0.34.2**.
+
+**Live verifiziert (2026-06-06):** TH01-Hub + TH02 auf v0.34.1; TH02-Flip gegen den v0.34.1-Nachbarn TH01 **grün** (Announces 200, TH02 kanonisch, Härtung greift). Produktiv-Flotten-Flip (.56/.52/.222) bleibt bis Christians Wort gestoppt.
+
 ### v0.34.1 — Phase-3-Härtung (TH02-Live-Flip-Test-Befunde) — Pflicht vor Produktiv-Flip
 
 Der TH02-Live-Flip (2026-06-06) deckte echte Härtungs-Punkte auf — genau dafür wurde TH02 zuerst getestet. Fixes flag-unabhängig (Default OFF unverändert), reversibel:

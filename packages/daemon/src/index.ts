@@ -30,7 +30,7 @@ import { registerComplianceApi } from './compliance-check.js';
 import { TokenStore } from './token-store.js';
 import { registerTokenApi } from './token-api.js';
 import { onboardingPort } from './onboarding-port.js';
-import { CertIssuer, NonceStore, certFingerprint } from './cert-issuer.js';
+import { CertIssuer, NonceStore, certFingerprint, resolveAttestingCaFingerprints } from './cert-issuer.js';
 import { registerCertIssuanceApi } from './cert-issuance-api.js';
 import { readFileSync } from 'node:fs';
 import { CredentialVault } from './vault.js';
@@ -180,12 +180,28 @@ async function main(): Promise<void> {
   // bleibt der ECDSA-Agent-Key (Option B, ADR-022 §3): Peers lösen ihn über die
   // verifizierte, auf die PeerID gekeyte Agent-Card auf (resolvePeerPublicKey). Der Flip
   // ist rein additiv + per Flag reversibel (Flag aus → sofort wieder Legacy).
-  // ADR-022 WS-3: Fingerprints der CAs, die `node/<PeerID>` attestieren dürfen (.94 Admin-CA).
-  // Früh berechnet, weil die Flip-Entscheidung (CR-HIGH #159: Issuer-Pin-Symmetrie) sie braucht.
-  const peerIdAttestingCaFingerprints = (process.env['TLMCP_PEERID_ATTESTING_CA_FP'] ?? '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
+  // ADR-022 WS-3 / Pin-Auto-Derive (pal:consensus 2026-06-06): Fingerprints der CAs, die
+  // `node/<PeerID>` attestieren dürfen. Default: aus der EIGENEN Mesh-CA abgeleitet
+  // (`caCertPem`, Guard: genau 1 Cert), env `TLMCP_PEERID_ATTESTING_CA_FP` überschreibt,
+  // `none` deaktiviert. Früh berechnet (die Flip-Entscheidung #159 braucht sie). Laut geloggt.
+  const attestingPin = resolveAttestingCaFingerprints(
+    process.env['TLMCP_PEERID_ATTESTING_CA_FP'],
+    tlsBundle?.caCertPem ?? null,
+  );
+  const peerIdAttestingCaFingerprints = attestingPin.fingerprints;
+  log.info(
+    { source: attestingPin.source, fingerprints: peerIdAttestingCaFingerprints },
+    '[identity] ADR-022 Attesting-CA-Pin aufgelöst',
+  );
+  // CR-LOW: explizit gesetzte Env-Pins auf Format prüfen (SHA-256 = 64 Hex nach ':'-Strip).
+  // Ein Tippfehler bliebe sonst still in der Liste und führte zu schwer diagnostizierbarem
+  // Fail-closed (Sender/Cert würde nie attestiert). Nur warnen, nicht abbrechen.
+  if (attestingPin.source === 'env') {
+    const invalidPins = peerIdAttestingCaFingerprints.filter((fp) => !/^[0-9a-fA-F]{64}$/.test(fp.replace(/:/g, '')));
+    if (invalidPins.length > 0) {
+      log.warn({ invalidPins }, '[identity] ADR-022: Attesting-CA-Pin-Einträge mit ungültigem Format (kein SHA-256-Hex)');
+    }
+  }
   const certSansAtBoot = tlsBundle ? extractSpiffeUris(tlsBundle.certPem) : [];
   // Issuer unseres Serving-Certs = unsere Mesh-CA (caCertPem). CR-HIGH (#159): nur flippen,
   // wenn dieser Issuer in der gepinnten Attesting-Menge liegt (Symmetrie zur Empfangsseite).
@@ -440,11 +456,11 @@ async function main(): Promise<void> {
     // ADR-022 §3 (channel-bound): ein CA-validierter mTLS-Cert-SAN node/<PeerID>
     // schaltet die kanonische PeerID-Auflösung für diesen Peer frei.
     onPeerCertVerified: (peerId: string, senderUri: string) => mesh.markPeerIdVerified(peerId, senderUri),
-    // ADR-022 (CR gpt-5.5 WS-2 HIGH): NUR von der attestierenden Admin-CA (.94)
+    // ADR-022 (CR gpt-5.5 WS-2 HIGH): NUR von der attestierenden Mesh-/Admin-CA (.94)
     // signierte node/<PeerID>-Certs dürfen eine PeerID attestieren — nicht jede CA im
-    // Trust-Bundle. WS-3: per Env `TLMCP_PEERID_ATTESTING_CA_FP` (kommagetrennte SHA-256-
-    // Fingerprints von .94s CA-Cert) scharfschaltbar. Ungesetzt → kanonische Attestierung
-    // inert (sicherer Default). Siehe .94-Instruktion / docs für die Fingerprint-Verteilung.
+    // Trust-Bundle. Pin wird oben aufgelöst (resolveAttestingCaFingerprints): Default =
+    // aus der EIGENEN Single-Cert-`ca.crt.pem` abgeleitet; Env `TLMCP_PEERID_ATTESTING_CA_FP`
+    // überschreibt; `none` deaktiviert (fail-closed). Paired-Fremd-CAs bleiben ausgeschlossen.
     peerIdAttestingCaFingerprints: peerIdAttestingCaFingerprints,
     onMessage: async (envelope: MessageEnvelope, senderPublicKey: string) => {
       // ADR-022 Phase 3 / CR-MEDIUM (#159): ein gepairter Peer wird nach einem Identity-Flip

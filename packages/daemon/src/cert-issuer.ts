@@ -96,6 +96,49 @@ export function certFingerprint(certPem: string): string {
   return createHash('sha256').update(Buffer.from(der, 'binary')).digest('hex');
 }
 
+/** Ergebnis der Attesting-CA-Pin-Auflösung (ADR-022, pal:consensus 2026-06-06). */
+export interface AttestingPinResult {
+  fingerprints: string[];
+  /** `env` = explizit gesetzt; `derived` = aus eigener Mesh-CA abgeleitet; `disabled` = per
+   *  `none` deaktiviert; `no-ca` = kein/kein eindeutiges CA-Cert → leer (fail-closed). */
+  source: 'env' | 'derived' | 'disabled' | 'no-ca';
+}
+
+/**
+ * Löst die Menge der CA-Fingerprints auf, die `node/<PeerID>` attestieren dürfen
+ * (ADR-022 §3, Entscheidung pal:consensus 2026-06-06: auto-derive + env-override + Guards).
+ *
+ * - Env `TLMCP_PEERID_ATTESTING_CA_FP` GESETZT (nicht leer, ≠ "none") → explizit, gewinnt.
+ * - Env == "none" → bewusst DEAKTIVIERT (Staged-Rollout-Escape, fail-closed → leer).
+ * - Env UNGESETZT → aus der EIGENEN Mesh-CA (`caCertPem`) ableiten — aber NUR wenn diese
+ *   GENAU EIN Zertifikat enthält (Bundle/leere → kein Derive, fail-closed). NIE aus dem
+ *   gemergten Trust-Bundle/gepairten CAs (das würde den Malicious-Paired-CA-Schutz brechen).
+ *
+ * Single-Mesh-CA + DIREKTE Issuance (kein Intermediate) ist invariant in diesem Codebase:
+ * der Empfangs-Issuer-Fingerprint == diese Mesh-CA == der abgeleitete Wert.
+ */
+export function resolveAttestingCaFingerprints(
+  envValue: string | undefined,
+  caCertPem: string | null,
+): AttestingPinResult {
+  const env = (envValue ?? '').trim();
+  if (env.toLowerCase() === 'none') return { fingerprints: [], source: 'disabled' };
+  if (env.length > 0) {
+    return { fingerprints: env.split(',').map((s) => s.trim()).filter(Boolean), source: 'env' };
+  }
+  // Auto-derive — Guard: genau EIN Zertifikat in der eigenen ca.crt.pem (kein Bundle).
+  if (!caCertPem) return { fingerprints: [], source: 'no-ca' };
+  const certCount = (caCertPem.match(/-----BEGIN CERTIFICATE-----/g) ?? []).length;
+  if (certCount !== 1) return { fingerprints: [], source: 'no-ca' };
+  // CR-MEDIUM (gpt-5.5): ein defektes/unparsebares Single-Cert-PEM darf den Boot NICHT
+  // crashen — fail-closed (kein Pin) statt Exception aus certFingerprint.
+  try {
+    return { fingerprints: [certFingerprint(caCertPem)], source: 'derived' };
+  } catch {
+    return { fingerprints: [], source: 'no-ca' };
+  }
+}
+
 /** Strenge RFC-1123-Hostname-Prüfung (Buchstaben/Ziffern/Bindestrich/Punkt). */
 const HOSTNAME_RE = /^(?=.{1,253}$)([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
 
