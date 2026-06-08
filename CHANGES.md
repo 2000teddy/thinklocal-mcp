@@ -56,9 +56,14 @@ diese periodische interface-gescopte Multicast-Aktivität auf dem Mesh-NIC re-ve
   `static_peer`/HTTPS. Default (Flag aus): libp2p-mDNS bleibt aktiv (Linux/Standard-Nodes unverändert).
 - **Tests:** +4 (resolveLibp2pMdnsEnabled, createInitialLibp2pState `mdns:false`, Runtime-Test dass
   `start()` `services.mdns` weglässt + `deps.mdns()` NIE aufruft wenn geflaggt + Positiv-Pfad). 913 grün.
-- **Offen (Operator/sudo):** der schon vor dem Start gesetzte `!`-REJECT auf `10.10.10/24` heilt nicht
-  von selbst — einmaliger `sudo route`-Heal nötig; danach Re-Test ob der flag-Daemon **dauerhaft** ohne
-  Re-Vergiftung läuft (Akzeptanz: `node connect .94` bleibt OK auch nach Minuten + static_peer joint).
+- **Live-Re-Test (beide mDNS-Quellen aus): RE-VERGIFTUNG BLEIBT → dritte, HOST-SEITIGE Quelle bestätigt.**
+  Daemon stop → sudo Route-Heal → flag-Daemon → connect OK → ~30s später wieder EHOSTUNREACH. Ursache:
+  der laufende Daemon macht ausgehende `connectx`-Dials auf einem Host mit ZWEI Default-Routes
+  (en10→10.10.10.1 + en0→10.10.25.1) + IFSCOPE; ein fehlschlagender gescopter Dial lässt macOS einen
+  negativen/REJECT-Eintrag auf `10.10.10/24` installieren. **Keine Code-, sondern Host-Routing-Fehlkonfig.**
+- **Konsequenz:** dieser Fix **lindert** den .55-Fall (beide mDNS-Beiträge + mDNS-Breakage weg), ist aber
+  **kein vollständiger Fix**. Die **durable Lösung ist host-seitig** (en10 als einzige/primäre
+  Default-Route bzw. persistenter Route-Heal) und liegt beim Operator — kein weiterer Daemon-Code hilft.
 
 Siehe `docs/architecture/ADR-019-multi-interface-discovery.md` (Abschnitt „.55 connectx-Vergiftung“).
 

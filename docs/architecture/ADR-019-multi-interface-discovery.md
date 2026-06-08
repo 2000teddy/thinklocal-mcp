@@ -376,10 +376,23 @@ entfällt. Auf diesen Hosts ist libp2p ohnehin EHOSTUNREACH; das Mesh läuft üb
 `static_peer`/HTTPS. Default (Flag aus): libp2p-mDNS bleibt aktiv.
 
 **Restschaden / offen:** ein bereits gesetzter `!`-REJECT auf `10.10.10/24`
-heilt nicht von selbst — einmaliger `sudo route`-Heal durch den Operator nötig;
-danach Re-Test, ob der flag-Daemon dauerhaft ohne Re-Vergiftung connectet.
-(Hypothese, falls dann noch Re-Vergiftung: connectx-Negative-Route-Cache aus
-fehlschlagenden gescopten Dials — wäre dann eine dritte, host-seitige Quelle.)
+heilt nicht von selbst — einmaliger `sudo route`-Heal durch den Operator nötig.
+
+**Ergebnis des Live-Re-Tests (2026-06-08, beide mDNS-Quellen aus, flag=true,
+commit 0aa72bc): RE-VERGIFTUNG BLEIBT.** Ablauf: Daemon stop → sudo Route-Heal →
+flag-Daemon → direkt `connect .94` OK → ~30s später wieder `EHOSTUNREACH`, 0 Peers.
+Damit ist die **dritte Quelle host-seitig bestätigt:** der laufende Daemon macht
+ausgehende `connectx`-Dials (static_peer/HTTPS-Mesh, libp2p-Listen/Dial,
+Heartbeat) auf einem Host mit **zwei Default-Routes** (en10→10.10.10.1 UND
+en0→10.10.25.1) + IFSCOPE; ein fehlschlagender gescopter Dial lässt macOS einen
+negativen/REJECT-Eintrag auf `10.10.10/24` installieren. Das ist **keine Code-,
+sondern eine Host-Routing-Fehlkonfiguration.**
+
+**Konsequenz:** `disable_mdns_interface_pin` (beide mDNS-Quellen) **lindert** den
+Fall (entfernt die mDNS-Beiträge + die mDNS-bezogene Breakage), ist aber **kein
+vollständiger Fix** für dual-default-route-macOS. Die **durable Lösung ist
+host-seitig** (en10 als einzige/primäre Default-Route bzw. persistenter
+Route-Heal) und liegt beim Operator — kein weiterer Daemon-Code adressiert das.
 
 ### Verbleibend (Phase 2)
 
