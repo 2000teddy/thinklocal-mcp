@@ -316,3 +316,14 @@ alle gefixt mit Regression-Tests vor dem Commit. Suite: **690/690 gruen**, 0 Reg
 - Reconcile-Loop (Hot-Plug NIC handling) — bereits in Phase 1 als TODO markiert
 - IPv6 support — `disableIPv6: true` aktiv, AAAA bleibt gefiltert
 - Pluggable Native-Backend (Avahi/DNS-SD) — Option F aus Konsens-2026-05-17
+
+### Klarstellung (v0.34.3): Interface-Pinning betrifft NUR den mDNS-Socket
+
+Das hier beschriebene Interface-Pinning (`meshIp` → `setMulticastInterface`/bonjour-`interface`)
+gilt ausschließlich für den **mDNS-Multicast-Socket** (`discovery.ts`). Der **ausgehende
+mTLS-HTTP-Connect** zu Peers (undici-Dispatcher) setzt **KEIN `localAddress`** — die Source-IP
+wählt das OS via Routing. Bei einem `EHOSTUNREACH` mit „Local (…)" ist „Local" daher die
+OS-gewählte Source, nicht ein Daemon-Bind. Für Diagnose/Behebung solcher Fälle (z.B.
+dual-homed macOS): `TLMCP_DEBUG_CONNECT=1` (exakte Connect-Parameter + Socket-Fehler) und
+`TLMCP_DISABLE_OUTBOUND_PINNING=1` (Default-Source-Connect, `autoSelectFamily=false`) — siehe
+`mesh-connect.ts` / CHANGES v0.34.3.

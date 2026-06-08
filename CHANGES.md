@@ -6,7 +6,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-06-06
+## [Unreleased] — 2026-06-08
+
+### v0.34.3 — Outbound-Connect: Debug-Instrumentierung + Escape-Hatch (dual-homed macOS EHOSTUNREACH)
+
+Phase-3-Restbug: auf dem dual-homed macOS-Node .55 scheitert der ausgehende mTLS-Connect zu Peers konsistent mit `EHOSTUNREACH` (Source 10.10.10.55), obwohl `nc`/`ping` zur selben Peer-IP funktionieren. Neues Modul `mesh-connect.ts` liefert Diagnose + opt-in-Fix; **Default-Verhalten unverändert**.
+
+- **`TLMCP_DEBUG_CONNECT=1`** → loggt pro Outbound-Connect die **exakten Parameter** (host/port/servername/autoSelectFamily) und im Callback **Erfolg** (localAddress/localPort/remoteAddress/family) bzw. den **vollständigen Socket-Fehler** (code/errno/syscall/address/port/localAddress). Macht sichtbar, was der Daemon-Connect anders macht als `nc`.
+- **`TLMCP_DISABLE_OUTBOUND_PINNING=1`** (Escape-Hatch) → Connector ohne Source-Bind (kein `localAddress`) + `autoSelectFamily=false` → sauberer Default-Source-Connect wie `nc` ohne `-s`. Wahrscheinlicher Fix für .55. Reversibel, opt-in.
+- **Befund (am Code belegt):** der HTTP-Outbound-Dispatcher setzt **selbst KEIN `localAddress`** — das ADR-019-Interface-Pinning betrifft nur den mDNS-Multicast-Socket, nicht diesen Pfad. „Local (…)" im Fehler ist die OS-gewählte Source. Der Default-Pfad (beide Flags aus) ist **byte-äquivalent** zum bisherigen Inline-Connector.
+- **CR gpt-5.5 (security):** kein CRITICAL/HIGH/MEDIUM (mTLS unverändert scharf — `rejectUnauthorized:true` in allen Pfaden, keine Key-Leakage im Log). 2× LOW gefixt: Debug-Passthrough jetzt real getestet (Base injizierbar, Fehler/Erfolg genau einmal weitergereicht), `ConnectorOptions` getypt.
+- **PC:** clean. **908 Tests grün** (+10 mesh-connect), 6 Integration grün, tsc clean. Version 0.34.2 → **0.34.3**.
+
+Deploy/Loop: .94 (Orchestrator) deployt auf .55 und testet `TLMCP_DEBUG_CONNECT=1` (Logs `/tmp/nopinning.log` + `~/.thinklocal/logs/daemon.log`) + `TLMCP_DISABLE_OUTBOUND_PINNING=1`; Debug-Logs zurück an Claude bis gefixt.
 
 ### v0.34.2 — Attesting-CA-Pin Auto-Derive (Fleet-Voraussetzung, kein Hardcode)
 

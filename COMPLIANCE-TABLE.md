@@ -711,4 +711,16 @@ Doc-only-Eintrag (Abschluss-Dokumentation Live-Test); kein Code → CO/CG/TS/CR/
 
 ---
 
-*Letzte Aktualisierung: 2026-06-06 — v0.34.2 Attesting-CA-Pin Auto-Derive.*
+## Session 2026-06-08 — v0.34.3 Outbound-Connect Debug + Escape-Hatch (.55 EHOSTUNREACH)
+
+| #       | PR  | Datum      | CO  | CG | TS | CR | PC | DO | Findings                           |
+|---------|-----|------------|-----|----|----|----|----|----|----|
+| v0.34.3 | tbd | 2026-06-08 | n/a | —  | ✅ | ✅ | ✅ | ✅ | mesh-connect.ts: TLMCP_DEBUG_CONNECT + TLMCP_DISABLE_OUTBOUND_PINNING — CR kein HIGH, 2 LOW gefixt |
+
+**CO:** entfällt (Bug-Fix/Diagnose, keine Architektur-Weiche; Default-Verhalten unverändert). **CG:** —. **TS:** 908 grün (+10 mesh-connect: Policy-Parse, Connector-Optionen ±disablePinning, Debug-Passthrough Fehler/Erfolg genau einmal), 6 Integration grün, tsc clean. **CR:** `pal:codereview` gpt-5.5 (security) — kein CRITICAL/HIGH/MEDIUM (mTLS scharf, keine Key-Leakage); 2× LOW gefixt (Passthrough-Test, getypte Optionen). **PC:** clean. **DO:** CHANGES, COMPLIANCE, TODO, ADR-019-Notiz, package.json 0.34.3.
+
+**Loop:** .94 deployt auf .55 + testet Debug/Disable-Flag, Logs zurück an Claude bis gefixt. TABU nichts extern.
+
+---
+
+*Letzte Aktualisierung: 2026-06-08 — v0.34.3 Outbound-Connect Debug + Escape-Hatch.*
