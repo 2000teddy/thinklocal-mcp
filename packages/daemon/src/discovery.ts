@@ -28,6 +28,22 @@ export interface DiscoveryEvents {
   onPeerLeft: (name: string) => void;
 }
 
+/**
+ * Bestimmt die bonjour-service-Optionen (rein, testbar). Ohne meshIp: Default (kein Pin).
+ * Mit meshIp + Pin: `{ interface, bind:'0.0.0.0' }` (Outbound auf das Mesh-NIC, Receive auf
+ * allen). `disableInterfacePin` (dual-homed macOS, .55-Bug): KEIN `interface` → multicast-dns
+ * ruft kein setMulticastInterface auf → vergiftet macOS connectx-scoped-routing NICHT;
+ * `bind:'0.0.0.0'` bleibt für Receive. A-Record-Hygiene läuft separat über meshIp.
+ */
+export function resolveBonjourOptions(
+  meshIp: string | undefined,
+  disableInterfacePin: boolean,
+): Record<string, unknown> {
+  if (!meshIp) return {};
+  if (disableInterfacePin) return { bind: '0.0.0.0' };
+  return { interface: meshIp, bind: '0.0.0.0' };
+}
+
 export class MdnsDiscovery {
   private bonjour: Bonjour;
   private browser: Browser | null = null;
@@ -69,15 +85,26 @@ export class MdnsDiscovery {
     // werden Multicast-Pakete an 224.0.0.251 vom Kernel nicht mehr an den
     // Socket geliefert — wir senden raus, empfangen aber nichts.
     // Gegenmittel: bind: '0.0.0.0' fuer Receive (multicast-dns Zeile 65),
-    // interface: meshIp bleibt fuer setMulticastInterface() (Zeile 153)
-    // = Outbound auf das richtige NIC. Plus Service.records()-Patch fuer
-    // die A-Record-Hygiene bleibt unangetastet.
-    const bonjourOpts = this.meshIp
-      ? { interface: this.meshIp, bind: '0.0.0.0' }
-      : {};
+    // interface: meshIp bleibt fuer setMulticastInterface() = Outbound auf das richtige NIC.
+    //
+    // BUG (.55, dual-homed macOS, 2026-06-08): das `interface`-Pinning ruft
+    // setMulticastInterface(meshIp) auf dem mDNS-Socket → vergiftet auf macOS den
+    // connectx-scoped-routing-Zustand PROZESSWEIT (10.10.10/24 wird zur REJECT-Route,
+    // EHOSTUNREACH für ALLE ausgehenden Connects, auch plain `node net.connect`).
+    // `disable_mdns_interface_pin` schaltet NUR den Socket-Interface-Pin ab (kein
+    // setMulticastInterface) — die A-Record-Hygiene (restrictServiceToIp, unten) bleibt
+    // erhalten. Outbound-mDNS geht dann über das Default-IF; Mesh-Konnektivität via
+    // static_peer. Default false (Linux/Standard-Nodes pinnen wie bisher).
+    const disablePin = policy.disable_mdns_interface_pin === true;
+    const bonjourOpts = resolveBonjourOptions(this.meshIp, disablePin);
     this.bonjour = new Bonjour(bonjourOpts as object);
 
-    if (this.meshIp) {
+    if (this.meshIp && disablePin) {
+      this.log?.warn(
+        { meshIp: this.meshIp, bind: '0.0.0.0' },
+        '[discovery] mDNS-Interface-Pin DEAKTIVIERT (dual-homed-macOS-Workaround) — Outbound-mDNS via Default-IF, Mesh via static_peer; A-Record-Hygiene bleibt aktiv',
+      );
+    } else if (this.meshIp) {
       this.log?.info(
         { meshIp: this.meshIp, bind: '0.0.0.0', allowedCidrs: policy.allowed_mesh_cidrs },
         '[discovery] Interface-Pinning aktiv (outbound), receive auf 0.0.0.0',
