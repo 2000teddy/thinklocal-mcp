@@ -942,6 +942,7 @@ async function main(): Promise<void> {
         config.discovery.exclude_interface_patterns.length > 0
           ? config.discovery.exclude_interface_patterns
           : undefined,
+      disable_mdns_interface_pin: config.discovery.disable_mdns_interface_pin,
     },
   );
 

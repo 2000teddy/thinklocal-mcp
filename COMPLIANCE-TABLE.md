@@ -711,4 +711,21 @@ Doc-only-Eintrag (Abschluss-Dokumentation Live-Test); kein Code → CO/CG/TS/CR/
 
 ---
 
-*Letzte Aktualisierung: 2026-06-06 — v0.34.2 Attesting-CA-Pin Auto-Derive.*
+---
+
+## Session 2026-06-08 — v0.34.5 mDNS-Interface-Pin abschaltbar (.55 connectx-Fix)
+
+| #   | PR                                      | Datum       | CO | CG | TS | CR | PC | DO | Findings                           |
+|-----|-----------------------------------------|-------------|----|----|----|----|----|----|----|
+| tbd | mDNS-Interface-Pin-Disable (.55-Bug)    | 2026-06-08  | —  | —  | ✅ | ✅ | ✅ | ✅ | CR gpt-5.5: 0 HIGH/CRITICAL, 1 MEDIUM + 2 LOW — alle gefixt + Regression-Tests |
+
+**CO:** entfällt — reiner Bug-Fix (Root-Cause war eindeutig: einzige Interface-Scoping-Op = mDNS-Pin; keine Architektur-Frage offen).
+**CG:** entfällt — Tests von Hand.
+**TS:** 909 Tests grün (80 Dateien), tsc clean, Integration 6/6 grün. Neu: `discovery.test.ts` Block „mDNS-Interface-Pin-Disable" (resolveBonjourOptions rein, Ctor-Wiring, publish()-Pfad-Filter, Fail-Closed unter Pin-Disable) + `config-mdns-pin.test.ts` (Default/Env). Live-Verifikation (.55 Route-Heal + Daemon mit/ohne Flag) folgt im PR-Body — wird vom Orchestrator (lokal, sudo) ausgeführt.
+**CR:** `pal:codereview` gpt-5.5 (security): 0 CRITICAL/HIGH. 1 MEDIUM (publish()-Pfad nicht getestet) + LOW (Config-/Env-Plumbing untested, Fail-Closed-unter-Pin untested) — alle mit Tests geschlossen, LOW-2 (Empfehlung Pin-Disable + CIDR) in Doku.
+**PC:** `pal:precommit`.
+**DO:** ADR-019 (Abschnitt „.55 connectx-Vergiftung"), CHANGES.md (v0.34.5), config/daemon.toml (Flag-Doku), TODO.md, Memory.
+
+---
+
+*Letzte Aktualisierung: 2026-06-08 — v0.34.5 mDNS-Interface-Pin abschaltbar (.55 connectx-Fix).*

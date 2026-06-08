@@ -6,7 +6,43 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-06-06
+## [Unreleased] — 2026-06-08
+
+### v0.34.5 — mDNS-Interface-Pin abschaltbar (.55 dual-homed-macOS connectx-Fix)
+
+**Befund (2026-06-08, .55 / MacBook, dual-homed: en10=10.10.10.55 Mesh + zweite Default-Route-NIC):**
+Die blosse **Anwesenheit** des laufenden Daemons brach macOS-`connectx`-scoped-routing
+**prozessweit** — die 10.10.10/24-Route kippte in **REJECT**, und **jeder** ausgehende Connect
+(auch ein nacktes `node net.connect`) bekam `EHOSTUNREACH`. Route heilte bei gestopptem Daemon,
+brach beim Neustart sofort wieder. Der Daemon ruft **kein** `route`/`IP_BOUND_IF` auf — die
+**einzige** Interface-Scoping-Operation im ganzen Daemon ist der mDNS-Socket-Interface-Pin:
+`bonjour-service` wird mit `{ interface: meshIp }` konstruiert → `multicast-dns` ruft
+`setMulticastInterface(meshIp)` auf dem UDP-Socket auf → das vergiftet auf macOS den
+connectx-scoped-routing-Zustand. (#162-Escape-Hatch — Outbound-Pinning — half **nicht**, weil
+das Problem im mDNS-Socket sitzt, nicht im Outbound-Connect.)
+
+**Fix:** neues Opt-out-Flag `disable_mdns_interface_pin` (Default **false** → Linux/Standard-Nodes
+pinnen exakt wie bisher). Aktiv (`TLMCP_DISABLE_MDNS_INTERFACE_PIN=1` oder
+`[discovery] disable_mdns_interface_pin = true`) wird `bonjour-service` **ohne** `interface`-Key
+gebaut (nur `bind: '0.0.0.0'` für Multicast-Receive) → **kein** `setMulticastInterface` → Routing
+bleibt heil. Outbound-mDNS läuft dann über das Default-IF; Mesh-Konnektivität via `static_peer`.
+
+- **`resolveBonjourOptions(meshIp, disableInterfacePin)`** (discovery.ts, rein/testbar):
+  ohne meshIp → `{}`; Pin an → `{ interface, bind:'0.0.0.0' }`; Pin aus → `{ bind:'0.0.0.0' }`.
+- **A-Record-Hygiene bleibt aktiv** (`restrictServiceToIp` hängt an `this.meshIp`, nicht am Pin) —
+  der Service annonciert weiterhin **nur** die Mesh-IP. Auch der Fail-Closed-Pfad
+  (`allowed_mesh_cidrs` gesetzt, kein Match → Ctor wirft) ist unabhängig vom Flag.
+- **Empfehlung:** Pin-Disable **immer** mit `allowed_mesh_cidrs` kombinieren — ohne Pin können
+  mDNS-Pakete (Hostname + Mesh-IP im A-Record) auf dem Default-IF sichtbar werden; die
+  CIDR-Policy + A-Record-Hygiene begrenzen den Restschaden auf Paket-Sichtbarkeit (keine
+  routbare Exposition, fremde Peers werden weiter abgewiesen).
+- **CR (gpt-5.5, security):** 0 CRITICAL/HIGH. 1 MEDIUM + 2 LOW (alle Test-/Doku-Lücken) gefixt:
+  publish()-Pfad-Test (A-Record-Filter unter Pin-Disable), Fail-Closed-unter-Pin-Disable-Test,
+  Config-/Env-Plumbing-Regressionstest.
+- **Tests:** +12 (discovery.test.ts: resolveBonjourOptions-Pure + Ctor-Wiring + publish()-Pfad +
+  Fail-Closed; config-mdns-pin.test.ts: Default/Env). Full Suite 909 grün, tsc clean.
+
+Siehe `docs/architecture/ADR-019-multi-interface-discovery.md` (Abschnitt „.55 connectx-Vergiftung“).
 
 ### v0.34.2 — Attesting-CA-Pin Auto-Derive (Fleet-Voraussetzung, kein Hardcode)
 

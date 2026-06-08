@@ -64,6 +64,11 @@ export interface DaemonConfig {
      * Default deckt typische virtuelle Interfaces ab (Docker, VPN, Bridges).
      */
     exclude_interface_patterns: string[];
+    /**
+     * Dual-homed-macOS-Workaround (.55): mDNS-Socket-Interface-Pin abschalten
+     * (vergiftet sonst macOS connectx-scoped-routing → EHOSTUNREACH). Default false.
+     */
+    disable_mdns_interface_pin: boolean;
   };
   libp2p: {
     enabled: boolean;
@@ -99,6 +104,7 @@ const DEFAULTS: DaemonConfig = {
     static_peers: [],
     allowed_mesh_cidrs: [],
     exclude_interface_patterns: [],
+    disable_mdns_interface_pin: false,
   },
   libp2p: {
     enabled: true,
@@ -182,6 +188,10 @@ export function loadConfig(configPath?: string): DaemonConfig {
       .split(',')
       .map((p) => p.trim())
       .filter(Boolean);
+  }
+  // Dual-homed-macOS-Workaround (.55): mDNS-Interface-Pin abschalten.
+  if (env['TLMCP_DISABLE_MDNS_INTERFACE_PIN']) {
+    cfg.discovery.disable_mdns_interface_pin = env['TLMCP_DISABLE_MDNS_INTERFACE_PIN'] === '1';
   }
 
   // LOW-FIX (CR-Review): CIDRs validieren — fail fast statt silent.
