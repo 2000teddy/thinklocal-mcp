@@ -85,3 +85,65 @@ describe('Bug #3 Regression: createLibp2p wird mit connectionEncrypters aufgeruf
     expect(capturedOptions.connectionEncryption).toBeUndefined();
   });
 });
+
+describe('.55-Fix: @libp2p/mdns wird bei disableMdnsInterfacePin nicht registriert', () => {
+  function harness(config: Libp2pRuntimeConfig) {
+    let capturedOptions: Record<string, unknown> | null = null;
+    let mdnsCalls = 0;
+    const fakeNode = {
+      peerId: { toString: () => 'self' },
+      getMultiaddrs: () => [],
+      addEventListener: () => {},
+      handle: () => {},
+      start: () => {},
+      stop: () => {},
+      peerStore: {},
+    };
+    const runtime = new ActiveLibp2pRuntime(createInitialLibp2pState(config), config, {
+      createLibp2p: async (opts: Record<string, unknown>) => {
+        capturedOptions = opts;
+        return fakeNode;
+      },
+      identify: () => ({}),
+      mdns: () => {
+        mdnsCalls += 1;
+        return { __mdns: true };
+      },
+      noise: () => ({}),
+      ping: () => ({}),
+      tcp: () => ({}),
+      yamux: () => ({}),
+    });
+    return { runtime, getOptions: () => capturedOptions, getMdnsCalls: () => mdnsCalls };
+  }
+
+  const baseConfig = {
+    enabled: true,
+    bindHost: '127.0.0.1',
+    listenPort: 9540,
+    mdnsServiceTag: 'test',
+    natTraversalEnabled: false,
+    relayTransportEnabled: false,
+    relayServiceEnabled: false,
+    announceMultiaddrs: [],
+  } as const;
+
+  it('disableMdnsInterfacePin=true → services.mdns fehlt + deps.mdns() NIE aufgerufen', async () => {
+    const h = harness({ ...baseConfig, disableMdnsInterfacePin: true });
+    await h.runtime.start();
+    const services = (h.getOptions()?.['services'] ?? {}) as Record<string, unknown>;
+    expect(services.mdns).toBeUndefined();
+    expect(h.getMdnsCalls()).toBe(0);
+    // libp2p startet trotzdem (identify/ping bleiben)
+    expect(services.identify).toBeDefined();
+    expect(services.ping).toBeDefined();
+  });
+
+  it('ohne Flag (Default) → services.mdns vorhanden + deps.mdns() einmal aufgerufen', async () => {
+    const h = harness({ ...baseConfig });
+    await h.runtime.start();
+    const services = (h.getOptions()?.['services'] ?? {}) as Record<string, unknown>;
+    expect(services.mdns).toBeDefined();
+    expect(h.getMdnsCalls()).toBe(1);
+  });
+});

@@ -355,6 +355,32 @@ meshIp), Ctor-Wiring, **publish()-Pfad** (A-Record-Filter bleibt unter
 Pin-Disable), **Fail-Closed unter Pin-Disable**, Config-/Env-Default + Override.
 CR gpt-5.5 (security): 0 HIGH/CRITICAL.
 
+**Zweite Vergiftungsquelle: libp2p-mDNS (Nachtrag v0.34.5, Live .55).**
+Der Bonjour-Pin-Fix oben beseitigt nur die **Startup**-Vergiftung. Live auf .55
+zeigte sich ~27s nach Start eine erneute REJECT-Route. Ursache: `@libp2p/mdns`
+(`libp2p-runtime.ts`, `interval: 20_000`) ist eine **zweite, unabhängige
+multicast-dns-Instanz** (eigener UDP-Socket, 20s-Query-Loop), die der
+Bonjour-Pin nicht erfasst. `multicast-dns` ruft intern `update()` beim Bind
+**und alle 5s** auf — `addMembership` je Interface (inkl. Mesh-NIC en10) +
+`setMulticastInterface(opts.interface || defaultInterface())`. Auf .55 liefert
+`defaultInterface()` zwar en0/10.10.25.90 (nicht die Mesh-IP) — die Re-Vergiftung
+kommt also nicht von einem Mesh-gepinnten `setMulticastInterface`, sondern von
+der periodischen interface-gescopten Multicast-Aktivität / mDNS-getriggerten
+Peer-Dials dieser zweiten Instanz auf dem Mesh-NIC.
+
+**Entscheidung:** derselbe Flag `disable_mdns_interface_pin` lässt auf
+dual-homed macOS auch den `@libp2p/mdns`-Service weg (`resolveLibp2pMdnsEnabled()`,
+reine Predicate; gleiche `...(cond ? {svc} : {})`-Mechanik wie autoNAT). libp2p
+startet weiter (identify/ping/Transports bleiben) — nur die mDNS-Peer-Discovery
+entfällt. Auf diesen Hosts ist libp2p ohnehin EHOSTUNREACH; das Mesh läuft über
+`static_peer`/HTTPS. Default (Flag aus): libp2p-mDNS bleibt aktiv.
+
+**Restschaden / offen:** ein bereits gesetzter `!`-REJECT auf `10.10.10/24`
+heilt nicht von selbst — einmaliger `sudo route`-Heal durch den Operator nötig;
+danach Re-Test, ob der flag-Daemon dauerhaft ohne Re-Vergiftung connectet.
+(Hypothese, falls dann noch Re-Vergiftung: connectx-Negative-Route-Cache aus
+fehlschlagenden gescopten Dials — wäre dann eine dritte, host-seitige Quelle.)
+
 ### Verbleibend (Phase 2)
 
 - Reconcile-Loop (Hot-Plug NIC handling) — bereits in Phase 1 als TODO markiert

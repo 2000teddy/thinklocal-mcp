@@ -41,10 +41,13 @@ exclude_interface_patterns = []
 # Dual-homed-macOS-Workaround (.55-Bug, ADR-019, v0.34.5): Auf manchen dual-homed
 # macOS-Hosts vergiftet der mDNS-Socket-Interface-Pin (setMulticastInterface) den
 # connectx-scoped-routing-Zustand PROZESSWEIT — die Mesh-Route kippt in REJECT und
-# ALLE ausgehenden Connects bekommen EHOSTUNREACH. Dieses Flag schaltet NUR den
-# Socket-Interface-Pin ab (mDNS bindet dann 0.0.0.0, Outbound via Default-IF); die
-# A-Record-Hygiene bleibt aktiv. NUR auf betroffenen macOS-Nodes setzen und IMMER
-# mit allowed_mesh_cidrs + static_peers kombinieren. Env: TLMCP_DISABLE_MDNS_INTERFACE_PIN=1.
+# ALLE ausgehenden Connects bekommen EHOSTUNREACH. Es gibt ZWEI Quellen: (1) der
+# bonjour-Socket-Interface-Pin (Startup) und (2) @libp2p/mdns als zweite multicast-
+# dns-Instanz (~27s nach Start). Dieses Flag deaktiviert BEIDE: bonjour ohne
+# interface-Pin (bindet 0.0.0.0) UND der libp2p-mDNS-Peer-Discovery-Service wird
+# weggelassen. A-Record-Hygiene bleibt aktiv; libp2p startet weiter, Peers via
+# static_peer/HTTPS-Mesh. NUR auf betroffenen macOS-Nodes setzen und IMMER mit
+# allowed_mesh_cidrs + static_peers kombinieren. Env: TLMCP_DISABLE_MDNS_INTERFACE_PIN=1.
 # disable_mdns_interface_pin = true
 disable_mdns_interface_pin = false
 

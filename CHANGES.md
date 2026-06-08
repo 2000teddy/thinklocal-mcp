@@ -42,6 +42,24 @@ bleibt heil. Outbound-mDNS läuft dann über das Default-IF; Mesh-Konnektivität
 - **Tests:** +12 (discovery.test.ts: resolveBonjourOptions-Pure + Ctor-Wiring + publish()-Pfad +
   Fail-Closed; config-mdns-pin.test.ts: Default/Env). Full Suite 909 grün, tsc clean.
 
+**Nachtrag (Live-Verifikation .55, 2026-06-08): ZWEITE Vergiftungsquelle — libp2p-mDNS.**
+Der Operator bestätigte: der Pin-Fix entfernt die **Startup**-Vergiftung (Route geheilt → flag-Daemon
+→ connect OK), aber **~27s nach Start** kippte `10.10.10/24` wieder in REJECT. Ursache: `@libp2p/mdns`
+(`libp2p-runtime.ts`, `interval: 20_000`) ist eine **zweite, unabhängige multicast-dns-Instanz** (eigener
+Socket, 20s-LAN-Query-Loop) — vom bonjour-Pin (oben) gar nicht erfasst. multicast-dns ruft `update()`
+beim Bind **und alle 5s** auf (`addMembership` je Interface inkl. Mesh-NIC + `setMulticastInterface`);
+diese periodische interface-gescopte Multicast-Aktivität auf dem Mesh-NIC re-vergiftet die connectx-Route.
+- **Fix:** der **gleiche Flag** `disable_mdns_interface_pin` lässt jetzt auch den `@libp2p/mdns`-Service
+  weg (`resolveLibp2pMdnsEnabled()`, reine testbare Predicate; gleiche `...(cond ? {svc} : {})`-Mechanik
+  wie autoNAT/circuitRelay). libp2p startet weiter (identify/ping/transports bleiben) — nur die
+  mDNS-Peer-Discovery entfällt. Auf dual-homed macOS ist libp2p ohnehin EHOSTUNREACH; Mesh läuft via
+  `static_peer`/HTTPS. Default (Flag aus): libp2p-mDNS bleibt aktiv (Linux/Standard-Nodes unverändert).
+- **Tests:** +4 (resolveLibp2pMdnsEnabled, createInitialLibp2pState `mdns:false`, Runtime-Test dass
+  `start()` `services.mdns` weglässt + `deps.mdns()` NIE aufruft wenn geflaggt + Positiv-Pfad). 913 grün.
+- **Offen (Operator/sudo):** der schon vor dem Start gesetzte `!`-REJECT auf `10.10.10/24` heilt nicht
+  von selbst — einmaliger `sudo route`-Heal nötig; danach Re-Test ob der flag-Daemon **dauerhaft** ohne
+  Re-Vergiftung läuft (Akzeptanz: `node connect .94` bleibt OK auch nach Minuten + static_peer joint).
+
 Siehe `docs/architecture/ADR-019-multi-interface-discovery.md` (Abschnitt „.55 connectx-Vergiftung“).
 
 ### v0.34.2 — Attesting-CA-Pin Auto-Derive (Fleet-Voraussetzung, kein Hardcode)

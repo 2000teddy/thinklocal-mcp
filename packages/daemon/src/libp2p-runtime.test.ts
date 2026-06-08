@@ -6,6 +6,7 @@ import {
   resolveNatReachability,
   resolveLibp2pEnabled,
   resolveLibp2pListenPort,
+  resolveLibp2pMdnsEnabled,
 } from './libp2p-runtime.js';
 
 describe('libp2p-runtime', () => {
@@ -54,6 +55,30 @@ describe('libp2p-runtime', () => {
     expect(state.multiplexer.openStreams).toBe(0);
     expect(state.nat.enabled).toBe(true);
     expect(state.nat.strategy).toBe('hybrid');
+  });
+
+  it('resolveLibp2pMdnsEnabled: default an, bei disableMdnsInterfacePin aus (.55-Fix)', () => {
+    expect(resolveLibp2pMdnsEnabled({})).toBe(true);
+    expect(resolveLibp2pMdnsEnabled({ disableMdnsInterfacePin: false })).toBe(true);
+    expect(resolveLibp2pMdnsEnabled({ disableMdnsInterfacePin: true })).toBe(false);
+  });
+
+  it('createInitialLibp2pState meldet mdns:false wenn disableMdnsInterfacePin (.55-Fix)', () => {
+    const state = createInitialLibp2pState({
+      enabled: true,
+      bindHost: '0.0.0.0',
+      listenPort: 9540,
+      mdnsServiceTag: 'thinklocal-mcp',
+      natTraversalEnabled: true,
+      relayTransportEnabled: true,
+      relayServiceEnabled: false,
+      announceMultiaddrs: [],
+      disableMdnsInterfacePin: true,
+    });
+    expect(state.mdns).toBe(false);
+    // libp2p selbst bleibt aktiv (degraded bootstrap) — nur die mDNS-Discovery ist aus.
+    expect(state.enabled).toBe(true);
+    expect(state.noise).toBe(true);
   });
 
   it('aktiviert libp2p standardmaessig nur im lan mode', () => {
