@@ -23,7 +23,8 @@ export interface MeshPeer {
      * KRYPTOGRAFISCHEN Pfad bestätigt wurde (mTLS cert-SAN=node/<PeerID> oder
      * libp2p-Noise-RemotePeer) — NIE aus mDNS-TXT oder einem Agent-Card-Feld.
      * Nur dann darf `peerId` in resolvePeerPublicKey als Identitätsschlüssel zählen.
-     * Aktuell existiert noch kein solcher Krypto-Pfad → bleibt false (Fallback faktisch aus).
+     * Gesetzt via markPeerIdVerified aus dem issuer-gepinnten mTLS-cert-SAN-Pfad
+     * (agent-card.ts onPeerCertVerified) — NIE aus mDNS-TXT / Agent-Card-Feld.
      */
     peerIdVerified: boolean;
     listenMultiaddrs: string[];
@@ -35,6 +36,26 @@ export interface MeshPeer {
 export interface MeshEvents {
   onPeerOnline: (peer: MeshPeer) => void;
   onPeerOffline: (peer: MeshPeer) => void;
+}
+
+/**
+ * Normalisiert eine Host/IP für Vergleiche: strippt das IPv6-mapped-IPv4-Präfix (`::ffff:`)
+ * und eine IPv6-Zone-ID (`%en10`). Für den Host-Bind-Fallback in markPeerIdVerified.
+ */
+function normHost(h: string | null | undefined): string {
+  return (h ?? '').replace(/^::ffff:/i, '').replace(/%.*$/, '');
+}
+
+/**
+ * Ergebnis von `markPeerIdVerified` (CR gpt-5.5 HIGH, Bug #2): TRANSAKTIONAL. `ok` zeigt,
+ * ob eine Bindung/Verifikation erfolgte; `rollback()` macht die Mutation (PeerID-Bindung,
+ * verified-Flag, supersedete Duplikate) rückgängig. Der Aufrufer (agent-card.ts) committet
+ * implizit durch Nicht-Rollback NUR, wenn die nachfolgende Envelope-Signaturprüfung gelingt —
+ * sonst Rollback, damit eine fehlgeschlagene Nachricht keine persistente Fehlbindung hinterlässt.
+ */
+export interface PeerIdVerifyResult {
+  ok: boolean;
+  rollback: () => void;
 }
 
 export class MeshManager {
@@ -246,41 +267,84 @@ export class MeshManager {
    * gepinnter mTLS-Cert-SAN `node/<PeerID>` oder libp2p-Noise-RemotePeer), NIE aus mDNS/Card.
    * Schaltet damit die kanonische PeerID-Auflösung für diesen Peer frei.
    *
+   * `remoteHost` (Bug #2): die TLS-authentifizierte Source-IP der attestierten Verbindung.
+   * Bindet die attestierte PeerID an den eindeutigen card-gestützten Host-Eintrag, falls die
+   * beiden URI/PeerID-Lookups leer bleiben (Empfänger ohne vorab-gelernte PeerID, z.B. .56/.222).
+   *
    * `senderUri` (CR gpt-5.5 HIGH): die TLS-/Envelope-attestierte Sender-URI. Wenn gesetzt,
    * wird (a) der exakt darunter gekeyte Eintrag eindeutig markiert (löst die mDNS-Duplikat-
    * Ambiguität) und (b) — NUR wenn `senderUri` selbst kanonisch ist (Identity-Flip) —
    * werden ALTE Duplikate mit derselben PeerID superseded. Diese destruktive Supersession
    * ist damit an die issuer-gepinnte Cert-Attestierung gebunden, NICHT an rohes mDNS.
-   * Liefert true, wenn ein passender Peer gefunden+markiert wurde.
+   * Liefert ein {ok, rollback} — TRANSAKTIONAL: der Aufrufer committet implizit durch
+   * Nicht-Rollback nur nach erfolgreicher Envelope-Signaturprüfung (CR gpt-5.5 HIGH).
    */
-  markPeerIdVerified(peerId: string, senderUri?: string): boolean {
+  markPeerIdVerified(peerId: string, senderUri?: string, remoteHost?: string): PeerIdVerifyResult {
+    const NOOP: PeerIdVerifyResult = { ok: false, rollback: () => {} };
     if (senderUri) {
-      // Bevorzugt den exakt durch das attestierte Cert benannten Sender-Eintrag (eindeutig).
-      let target = this.peers.get(senderUri);
-      // Discovery-Lag-Fallback: existiert (noch) kein Eintrag unter der kanonischen Sender-URI,
-      // aber GENAU EIN Peer trägt diese PeerID (z.B. der Legacy-Eintrag mit gleicher Card/Key),
-      // dann diesen markieren — bricht den 403-Deadlock ohne auf die mDNS-Ankündigung zu warten.
+      // (1) Exakter Sender-Eintrag (kanonische mDNS-Entdeckung). (2) sonst Discovery-Lag-Fallback:
+      // genau EIN Peer trägt diese PeerID (Legacy-Eintrag mit gleicher Card/Key).
+      let target = this.peers.get(senderUri) ?? null;
       if (!target) {
         const byPeerId = [...this.peers.values()].filter((p) => p.libp2p.peerId === peerId);
-        if (byPeerId.length === 1) target = byPeerId[0];
+        if (byPeerId.length === 1) target = byPeerId[0] ?? null;
       }
-      if (!target || target.libp2p.peerId !== peerId) return false;
-      target.libp2p.peerIdVerified = true;
-      // Krypto-attestierte Supersession: nur wenn der attestierte Sender SELBST kanonisch ist
-      // (echter Identity-Flip), alte Duplikate derselben PeerID entfernen (Registry/Rate-Limit-
-      // Cleanup via onPeerOffline). Spoof-sicher, weil an die issuer-gepinnte Attestierung gebunden.
+      // (3) Bug #2 (.56/.222): Empfänger ohne gelernte PeerID (kein mDNS-TXT/static_peer, stale
+      // Card) → (1)/(2) greifen nicht. Die Cert-Attestierung BEWEIST die PeerID kryptografisch;
+      // `remoteHost` ist die TLS-authentifizierte Source-IP DIESER Verbindung. Binde an den
+      // EINDEUTIGEN card-gestützten Eintrag mit genau diesem Host (gleicher Signing-Key über
+      // den Flip — Option B). Spoof-sicher: nur EIN Kandidat, Host == attestierte Verbindung,
+      // kein bereits anders verifizierter Eintrag; falscher Key ⇒ Signaturprüfung fail-closed.
+      if (!target && remoteHost) {
+        const rh = normHost(remoteHost);
+        if (rh) {
+          const cands = [...this.peers.values()].filter(
+            (p) =>
+              !!p.agentCard?.publicKey &&
+              normHost(p.host) === rh &&
+              (p.libp2p.peerId === null || p.libp2p.peerId === peerId) &&
+              !(p.libp2p.peerIdVerified && p.libp2p.peerId !== peerId),
+          );
+          if (cands.length === 1) target = cands[0] ?? null;
+        }
+      }
+      if (!target) return NOOP;
+      // Niemals einen bereits an eine ANDERE PeerID gebundenen Eintrag kapern (Spoof-Schutz).
+      if (target.libp2p.peerId !== null && target.libp2p.peerId !== peerId) return NOOP;
+
+      // CR gpt-5.5 HIGH (transaktional): Vorzustand sichern, Bindung tentativ setzen — der
+      // Aufrufer committet durch Nicht-Rollback NUR nach erfolgreicher Envelope-Signaturprüfung.
+      const t = target;
+      const prior = { peerId: t.libp2p.peerId, verified: t.libp2p.peerIdVerified };
+      if (t.libp2p.peerId !== peerId) {
+        this.log?.info(
+          { agentId: t.agentId, host: t.host, peerId },
+          'ADR-022 Flip: attestierte PeerID an Eintrag gebunden (tentativ, Bug-#2-Fix)',
+        );
+        t.libp2p.peerId = peerId;
+      }
+      t.libp2p.peerIdVerified = true;
+
+      // Krypto-attestierte Supersession (nur bei kanonischem Sender = echter Flip): alte
+      // Duplikate derselben PeerID entfernen. Entfernte Einträge werden für Rollback gesichert.
+      const removed: Array<[string, MeshPeer]> = [];
       if (spiffeUriToPeerId(senderUri) === peerId) {
         for (const [id, p] of [...this.peers.entries()]) {
-          if (p !== target && p.libp2p.peerId === peerId) {
-            this.log?.info(
-              { superseded: id, by: senderUri, peerId },
-              'ADR-022 Flip: altes PeerID-Duplikat nach Cert-Attestierung superseded',
-            );
+          if (p !== t && p.libp2p.peerId === peerId) {
+            this.log?.info({ superseded: id, by: senderUri, peerId }, 'ADR-022 Flip: altes PeerID-Duplikat superseded');
+            removed.push([id, p]);
             this.removePeer(id);
           }
         }
       }
-      return true;
+      return {
+        ok: true,
+        rollback: () => {
+          t.libp2p.peerId = prior.peerId;
+          t.libp2p.peerIdVerified = prior.verified;
+          for (const [id, p] of removed) if (!this.peers.has(id)) this.peers.set(id, p);
+        },
+      };
     }
 
     // Fallback (kein senderUri): nur bei EINDEUTIGEM Treffer markieren. Mehrere Peers mit
@@ -293,10 +357,12 @@ export class MeshManager {
           'PeerID-Verifikation nicht eindeutig (mDNS-Duplikat?) — nicht markiert',
         );
       }
-      return false;
+      return NOOP;
     }
-    matches[0].libp2p.peerIdVerified = true;
-    return true;
+    const m = matches[0]!;
+    const priorVerified = m.libp2p.peerIdVerified;
+    m.libp2p.peerIdVerified = true;
+    return { ok: true, rollback: () => { m.libp2p.peerIdVerified = priorVerified; } };
   }
 
   /**

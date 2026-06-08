@@ -143,11 +143,11 @@ describe('MeshManager.resolvePeerPublicKey — ADR-022 tolerant resolution', () 
     // Before: unverified → canonical resolution off.
     expect(mesh.resolvePeerPublicKey(peerIdToSpiffeUri(PID))).toBeUndefined();
     // The crypto path (CA-validated cert SAN / Noise) marks it.
-    expect(mesh.markPeerIdVerified(PID)).toBe(true);
+    expect(mesh.markPeerIdVerified(PID).ok).toBe(true);
     expect(mesh.getPeer(LEGACY)!.libp2p.peerIdVerified).toBe(true);
     expect(mesh.resolvePeerPublicKey(peerIdToSpiffeUri(PID))).toBe('PUBKEY-V');
     // Unknown PeerID → no-op.
-    expect(mesh.markPeerIdVerified('12D3KooWNoSuchPeer')).toBe(false);
+    expect(mesh.markPeerIdVerified('12D3KooWNoSuchPeer').ok).toBe(false);
   });
 });
 
@@ -176,7 +176,7 @@ describe('MeshManager — ADR-022 Phase-3 Identity-Supersession (CR gpt-5.5 HIGH
     mesh.addPeer(disc({ agentId: canonical, p2pPeerId: PID, host: '10.10.10.9' }));
     mesh.updateAgentCard(canonical, card('NEW', canonical));
     // Cert-attestierter Flip: senderUri = kanonisch → markiert kanonischen Eintrag + supersedet Legacy.
-    expect(mesh.markPeerIdVerified(PID, canonical)).toBe(true);
+    expect(mesh.markPeerIdVerified(PID, canonical).ok).toBe(true);
     expect(offline).toContain(LEGACY);
     expect(mesh.getPeer(LEGACY)).toBeUndefined();
     expect(mesh.getPeer(canonical)!.libp2p.peerIdVerified).toBe(true);
@@ -189,7 +189,7 @@ describe('MeshManager — ADR-022 Phase-3 Identity-Supersession (CR gpt-5.5 HIGH
     mesh.addPeer(disc({ agentId: LEGACY, p2pPeerId: PID }));
     mesh.updateAgentCard(LEGACY, card('KEY-V', LEGACY));
     // Cert attestiert die kanonische Sender-URI; kein Eintrag darunter → Fallback auf eindeutige PeerID.
-    expect(mesh.markPeerIdVerified(PID, canonical)).toBe(true);
+    expect(mesh.markPeerIdVerified(PID, canonical).ok).toBe(true);
     // Kanonische Auflösung klappt jetzt (Resolver matcht über peerId + verified, Card-Key bleibt gleich).
     expect(mesh.resolvePeerPublicKey(canonical)).toBe('KEY-V');
   });
@@ -200,6 +200,81 @@ describe('MeshManager — ADR-022 Phase-3 Identity-Supersession (CR gpt-5.5 HIGH
     const bbb = 'spiffe://thinklocal/host/bbb/agent/claude-code';
     mesh.addPeer(disc({ agentId: aaa, p2pPeerId: PID }));
     mesh.addPeer(disc({ agentId: bbb, p2pPeerId: PID, host: '10.10.10.10' }));
-    expect(mesh.markPeerIdVerified(PID)).toBe(false); // zwei Treffer → nicht markiert
+    expect(mesh.markPeerIdVerified(PID).ok).toBe(false); // zwei Treffer → nicht markiert
+  });
+});
+
+describe('MeshManager.markPeerIdVerified — Bug #2: Host-Bind der attestierten PeerID (.56/.222)', () => {
+  const canonical = peerIdToSpiffeUri(PID);
+
+  it('Legacy-Eintrag OHNE gelernte PeerID wird über remoteHost gebunden → kanonisch auflösbar', () => {
+    const mesh = mkMesh();
+    // Empfänger-Zustand wie .56/.222: Legacy-Eintrag mit Card+Key, aber libp2p.peerId NIE gelernt.
+    mesh.addPeer(disc({ agentId: LEGACY, host: '10.10.10.80' })); // KEIN p2pPeerId
+    mesh.updateAgentCard(LEGACY, card('TH01-KEY', LEGACY));
+    expect(mesh.getPeer(LEGACY)!.libp2p.peerId).toBeNull();
+    // Ohne remoteHost: weder senderUri- noch peerId-Lookup greift → fail-closed.
+    expect(mesh.markPeerIdVerified(PID, canonical).ok).toBe(false);
+    // MIT remoteHost (TLS-Source des attestierten Connects) → Bind an den Host-Eintrag.
+    expect(mesh.markPeerIdVerified(PID, canonical, '10.10.10.80').ok).toBe(true);
+    expect(mesh.getPeer(LEGACY)!.libp2p.peerId).toBe(PID);
+    expect(mesh.getPeer(LEGACY)!.libp2p.peerIdVerified).toBe(true);
+    expect(mesh.resolvePeerPublicKey(canonical)).toBe('TH01-KEY'); // Announce jetzt akzeptiert
+  });
+
+  it('IPv6-mapped remoteHost (::ffff:10.10.10.80) matcht den IPv4-Host-Eintrag', () => {
+    const mesh = mkMesh();
+    mesh.addPeer(disc({ agentId: LEGACY, host: '10.10.10.80' }));
+    mesh.updateAgentCard(LEGACY, card('K', LEGACY));
+    expect(mesh.markPeerIdVerified(PID, canonical, '::ffff:10.10.10.80').ok).toBe(true);
+    expect(mesh.resolvePeerPublicKey(canonical)).toBe('K');
+  });
+
+  it('spoof-sicher: remoteHost matcht KEINEN Eintrag → kein Bind (fail-closed)', () => {
+    const mesh = mkMesh();
+    mesh.addPeer(disc({ agentId: LEGACY, host: '10.10.10.80' }));
+    mesh.updateAgentCard(LEGACY, card('K', LEGACY));
+    expect(mesh.markPeerIdVerified(PID, canonical, '10.10.10.99').ok).toBe(false);
+    expect(mesh.getPeer(LEGACY)!.libp2p.peerId).toBeNull();
+  });
+
+  it('spoof-sicher: bereits mit ANDERER PeerID verifizierter Host-Eintrag wird NICHT umgebunden', () => {
+    const mesh = mkMesh();
+    const OTHER = '12D3KooWOtherPeerIdAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+    mesh.addPeer(disc({ agentId: LEGACY, host: '10.10.10.80', p2pPeerId: OTHER }));
+    mesh.updateAgentCard(LEGACY, card('K', LEGACY));
+    mesh.markPeerIdVerified(OTHER, peerIdToSpiffeUri(OTHER), '10.10.10.80'); // erst auf OTHER verifiziert
+    // Versuch, denselben Host-Eintrag auf eine FREMDE PeerID umzubinden → abgelehnt.
+    expect(mesh.markPeerIdVerified(PID, canonical, '10.10.10.80').ok).toBe(false);
+    expect(mesh.getPeer(LEGACY)!.libp2p.peerId).toBe(OTHER);
+  });
+
+  it('CR-HIGH transaktional: rollback() macht Host-Bind + Supersession rückgängig (Sig-Fehler-Pfad)', () => {
+    const offline: string[] = [];
+    const mesh = new MeshManager(10_000, 3, { onPeerOnline: () => {}, onPeerOffline: (p) => offline.push(p.agentId) });
+    // Host-Eintrag ohne gelernte PeerID + ein altes Duplikat unter kanonischer ID (würde superseded).
+    mesh.addPeer(disc({ agentId: LEGACY, host: '10.10.10.80' }));
+    mesh.updateAgentCard(LEGACY, card('K', LEGACY));
+    mesh.addPeer(disc({ agentId: canonical, host: '10.10.10.81', p2pPeerId: PID }));
+    mesh.updateAgentCard(canonical, card('K2', canonical));
+    const res = mesh.markPeerIdVerified(PID, canonical, '10.10.10.80');
+    expect(res.ok).toBe(true);
+    // ... bei fehlgeschlagener Signatur ruft agent-card.ts rollback():
+    res.rollback();
+    expect(mesh.getPeer(LEGACY)!.libp2p.peerId).toBeNull(); // Bindung zurückgenommen
+    expect(mesh.getPeer(LEGACY)!.libp2p.peerIdVerified).toBe(false);
+    expect(mesh.getPeer(canonical)).toBeDefined(); // supersedeter Eintrag wiederhergestellt
+    expect(mesh.resolvePeerPublicKey(canonical)).toBeUndefined(); // keine persistente Fehlbindung
+  });
+
+  it('CR-HIGH: exakter senderUri-Eintrag mit peerId=null wird nach Attestierung gebunden', () => {
+    const mesh = mkMesh();
+    // Empfänger hat bereits einen Eintrag UNTER der kanonischen URI, aber ohne gelernte PeerID.
+    mesh.addPeer(disc({ agentId: canonical, host: '10.10.10.80' })); // kein p2pPeerId → peerId=null
+    mesh.updateAgentCard(canonical, card('K', canonical));
+    expect(mesh.getPeer(canonical)!.libp2p.peerId).toBeNull();
+    expect(mesh.markPeerIdVerified(PID, canonical).ok).toBe(true); // ohne remoteHost, exakter Treffer
+    expect(mesh.getPeer(canonical)!.libp2p.peerId).toBe(PID);
+    expect(mesh.resolvePeerPublicKey(canonical)).toBe('K');
   });
 });
