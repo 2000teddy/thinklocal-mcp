@@ -8,18 +8,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-08
 
-### v0.34.3 — Outbound-Connect: Debug-Instrumentierung + Escape-Hatch (dual-homed macOS EHOSTUNREACH)
+### v0.34.4 — Bug #2: Canonical-Sender-Akzeptanz auf allen v0.34.2-Nachbarn (Host-Bind nach Cert-Attestierung)
 
-Phase-3-Restbug: auf dem dual-homed macOS-Node .55 scheitert der ausgehende mTLS-Connect zu Peers konsistent mit `EHOSTUNREACH` (Source 10.10.10.55), obwohl `nc`/`ping` zur selben Peer-IP funktionieren. Neues Modul `mesh-connect.ts` liefert Diagnose + opt-in-Fix; **Default-Verhalten unverändert**.
+Beim Flip eines Nodes (`emit_canonical_sender=true`) akzeptierten **nicht alle** v0.34.2-Nachbarn den neuen `node/<PeerID>`-Sender: .52/.94 ✅, **.56/.222 ❌** („Peer kennt unseren Sender-Key nicht", kein Retry, heilt nicht). Blockierte den fleet-weiten Sender-Flip. (Hinweis: v0.34.3 = #162 Outbound-Debug/Escape, separater offener Branch.)
 
-- **`TLMCP_DEBUG_CONNECT=1`** → loggt pro Outbound-Connect die **exakten Parameter** (host/port/servername/autoSelectFamily) und im Callback **Erfolg** (localAddress/localPort/remoteAddress/family) bzw. den **vollständigen Socket-Fehler** (code/errno/syscall/address/port/localAddress). Macht sichtbar, was der Daemon-Connect anders macht als `nc`.
-- **`TLMCP_DISABLE_OUTBOUND_PINNING=1`** (Escape-Hatch) → Connector ohne Source-Bind (kein `localAddress`) + `autoSelectFamily=false` → sauberer Default-Source-Connect wie `nc` ohne `-s`. Reversibel, opt-in.
-- **WICHTIG — diese Escape-Hatch fixt .55 NICHT** (per SSH auf .55 verifiziert 2026-06-08): der EHOSTUNREACH ist ein **macOS-Host-Routing-Problem**, kein Daemon-Bug. Plain `node net.connect` (ohne Daemon) reproduziert EHOSTUNREACH zu allen 10.10.10.x; `nc` geht. Auch `localAddress`/`family=4`/`autoSelectFamily=false` helfen NICHT (libuv `connectx` + Dual-Default-Route + IFSCOPE/REJECT-Routen + utun-Tunnel). **Fix ist host-seitig** (Network-Service-Order/zweite Default-Route/Reject-Route auf .55) — Node exponiert `IP_BOUND_IF` nicht. Diese PR liefert dennoch die **Debug-Instrumentierung** (Root-Cause-Beweis) + die generische Escape-Hatch für ANDERE (nicht-.55) Source-Bind-Fälle.
-- **Befund (am Code belegt):** der HTTP-Outbound-Dispatcher setzt **selbst KEIN `localAddress`** — das ADR-019-Interface-Pinning betrifft nur den mDNS-Multicast-Socket, nicht diesen Pfad. „Local (…)" im Fehler ist die OS-gewählte Source. Der Default-Pfad (beide Flags aus) ist **byte-äquivalent** zum bisherigen Inline-Connector.
-- **CR gpt-5.5 (security):** kein CRITICAL/HIGH/MEDIUM (mTLS unverändert scharf — `rejectUnauthorized:true` in allen Pfaden, keine Key-Leakage im Log). 2× LOW gefixt: Debug-Passthrough jetzt real getestet (Base injizierbar, Fehler/Erfolg genau einmal weitergereicht), `ConnectorOptions` getypt.
-- **PC:** clean. **908 Tests grün** (+10 mesh-connect), 6 Integration grün, tsc clean. Version 0.34.2 → **0.34.3**.
+- **Root-Cause:** `markPeerIdVerified(peerId, senderUri)` band/verifizierte nur, wenn ein Eintrag unter der kanonischen `senderUri` existiert (kanonische mDNS-Entdeckung) ODER genau ein Bestands-Eintrag bereits `libp2p.peerId===peerId` trug. Auf .56/.222 hatte der Legacy-Eintrag des flippenden Nodes die PeerID **nie gelernt** (kein mDNS-TXT/static_peer, stale Card) → kein Treffer → kanonischer Sender unauflösbar → 403.
+- **Fix:** Die issuer-gepinnte **Cert-Attestierung beweist die PeerID kryptografisch**; `agent-card.ts` reicht die TLS-authentifizierte Source-IP (`socket.remoteAddress`) durch. `markPeerIdVerified` bindet die attestierte PeerID an den **eindeutigen card-gestützten Host-Eintrag** dieser Source-IP (gleicher ECDSA-Signing-Key über den Flip — Option B). Zusätzlich werden exakte `senderUri`-Treffer mit `peerId===null` jetzt gebunden.
+- **CR gpt-5.5 (security):** 2 HIGH + 1 MEDIUM + 2 LOW gefunden, alle gefixt + re-reviewt (0 Residual):
+  - **HIGH 1:** Trust-State wurde vor der Envelope-Signaturprüfung mutiert → `markPeerIdVerified` ist jetzt **transaktional** (`{ ok, rollback }`); `agent-card.ts` rollbackt bei „Unknown sender"/ungültiger Signatur (sichert Vorzustand + stellt supersedete Einträge wieder her) → keine persistente Fehlbindung.
+  - **HIGH 2:** exakter `senderUri`-Treffer mit `peerId===null` wurde nicht gebunden → jetzt gebunden.
+  - **MEDIUM** (Shared-IP-Fehlbindung) durch den HIGH-1-Rollback abgedeckt. **LOW:** stale Kommentar + zentrale Host-Normalisierung (`normHost`: `::ffff:`/Zone-ID).
+- **Spoof-Sicherheit:** Bindung erfordert ein issuer-gepinntes attestiertes Cert für PeerID P (nicht fälschbar) UND eine echte mTLS-Verbindung von der passenden Host-IP; nur genau EIN Kandidat; nie Umbinden eines bereits anders verifizierten Eintrags; falscher Key ⇒ Signaturprüfung fail-closed.
+- **PC:** clean. **904 Tests grün** (+6 mesh: Host-Bind/IPv6-mapped/no-match/no-rebind/Rollback/peerId-null), 6 Integration grün, tsc clean. Version → **0.34.4**.
 
-Diagnose-Ergebnis (.55, 2026-06-08): EHOSTUNREACH ist host-seitig (macOS Dual-Default-Route + IFSCOPE/REJECT-Routen + utun), nicht durch Daemon-Connect-Optionen behebbar → .55 wird host-seitig gefixt (Christian). Die Debug-Flags bleiben als generisches Diagnose-/Escape-Werkzeug im Code.
+**Akzeptanz:** nach Deploy auf alle v0.34.2-Nachbarn muss ein TH01-Flip SKILL_ANNOUNCE 5/5 erfolgreich liefern (auch .56/.222). Live-Gegenprobe durch .94.
 
 ### v0.34.2 — Attesting-CA-Pin Auto-Derive (Fleet-Voraussetzung, kein Hardcode)
 

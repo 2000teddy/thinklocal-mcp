@@ -724,3 +724,16 @@ Doc-only-Eintrag (Abschluss-Dokumentation Live-Test); kein Code → CO/CG/TS/CR/
 ---
 
 *Letzte Aktualisierung: 2026-06-08 — v0.34.3 Outbound-Connect Debug + Escape-Hatch.*
+## Session 2026-06-08 — v0.34.4 Bug #2: Canonical-Sender-Akzeptanz (Host-Bind nach Cert-Attestierung)
+
+| #       | PR  | Datum      | CO  | CG | TS | CR | PC | DO | Findings                           |
+|---------|-----|------------|-----|----|----|----|----|----|----|
+| v0.34.4 | tbd | 2026-06-08 | n/a | —  | ✅ | ✅ | ✅ | ✅ | markPeerIdVerified bindet attestierte PeerID an TLS-Source-Host — 2 HIGH + MEDIUM + LOW gefixt |
+
+**CO:** entfällt (Bug-Fix; Root-Cause am Code). **CG:** —. **TS:** 904 grün (+6 mesh: Host-Bind/IPv6-mapped/no-match/no-rebind/transaktionaler-Rollback/peerId-null), 6 Integration grün, tsc clean. **CR:** `pal:codereview` gpt-5.5 (security) — 2 HIGH (Trust-State vor Sig-Prüfung → transaktional+Rollback; peerId=null-Treffer binden) + MEDIUM (Shared-IP, durch Rollback gedeckt) + 2 LOW gefixt; Re-review 0 Residual. **PC:** gpt-5.3-codex clean. **DO:** ADR-022-Sektion, CHANGES, COMPLIANCE, TODO, package.json 0.34.4.
+
+**Akzeptanz-Gate:** TH01-Flip → SKILL_ANNOUNCE 5/5 (auch .56/.222) nach Deploy auf alle v0.34.2-Nachbarn. Live-Gegenprobe .94.
+
+---
+
+*Letzte Aktualisierung: 2026-06-08 — v0.34.4 Bug #2 Canonical-Sender Host-Bind.*
