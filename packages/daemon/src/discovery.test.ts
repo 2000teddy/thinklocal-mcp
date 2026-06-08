@@ -10,7 +10,7 @@
  * Echte Multicast-Tests stehen im PoC-Script (scripts/discovery-poc.ts).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { MdnsDiscovery } from './discovery.js';
+import { MdnsDiscovery, resolveBonjourOptions } from './discovery.js';
 import {
   ipInCidr,
   isPeerIpAllowed,
@@ -24,13 +24,24 @@ const bonjourCtorSpy = vi.fn();
 const browserStopSpy = vi.fn();
 const unpublishAllSpy = vi.fn();
 const destroySpy = vi.fn();
+// Konfigurierbarer publish()-Service: Tests koennen `publishHolder.records` mit
+// gemischten A/AAAA-Records vorbelegen und nach discovery.publish() ueber
+// `publishHolder.service` die gefilterten Records inspizieren. vi.hoisted, weil
+// die vi.mock-Factory ueber die Imports gehoben wird.
+const publishHolder = vi.hoisted(() => ({
+  records: [] as Array<{ type: string; data: unknown }>,
+  service: null as { records: () => Array<{ type: string; data: unknown }> } | null,
+}));
 vi.mock('bonjour-service', () => {
   class FakeBonjour {
     constructor(opts: object) {
       bonjourCtorSpy(opts);
     }
     publish() {
-      return { records: () => [] };
+      const initial = [...publishHolder.records];
+      const svc = { records: () => initial };
+      publishHolder.service = svc;
+      return svc;
     }
     find() {
       return { stop: browserStopSpy };
@@ -271,6 +282,168 @@ describe('Discovery-Policy-Integration', () => {
       expect(browserStopSpy).toHaveBeenCalledTimes(1);
       expect(unpublishAllSpy).toHaveBeenCalledTimes(1);
       expect(destroySpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('mDNS-Interface-Pin-Disable (.55 connectx-Bug, 2026-06-08)', () => {
+    const fakeMeshInterface = () => ({
+      en10: [
+        {
+          address: '10.10.10.55',
+          netmask: '255.255.255.0',
+          family: 'IPv4' as const,
+          mac: '00:00:00:00:00:00',
+          internal: false,
+          cidr: '10.10.10.55/24',
+          scopeid: 0,
+        },
+      ],
+    });
+
+    beforeEach(() => {
+      bonjourCtorSpy.mockClear();
+    });
+    afterEach(() => {
+      bonjourCtorSpy.mockClear();
+    });
+
+    // --- Pure-Function-Tests: resolveBonjourOptions ---
+
+    it('resolveBonjourOptions: ohne meshIp → leere Opts (kein Pin moeglich)', () => {
+      expect(resolveBonjourOptions(undefined, false)).toEqual({});
+      expect(resolveBonjourOptions(undefined, true)).toEqual({});
+    });
+
+    it('resolveBonjourOptions: meshIp + Pin AN → interface + bind (Default-Pfad)', () => {
+      expect(resolveBonjourOptions('10.10.10.55', false)).toEqual({
+        interface: '10.10.10.55',
+        bind: '0.0.0.0',
+      });
+    });
+
+    it('resolveBonjourOptions: meshIp + Pin AUS → NUR bind (kein interface → kein setMulticastInterface)', () => {
+      const opts = resolveBonjourOptions('10.10.10.55', true);
+      expect(opts).toEqual({ bind: '0.0.0.0' });
+      // Kern-Invariante des .55-Fixes: KEIN interface-Key → multicast-dns ruft
+      // setMulticastInterface() NICHT auf → macOS connectx-scoped-routing bleibt heil.
+      expect(opts).not.toHaveProperty('interface');
+    });
+
+    // --- Integration: Ctor verdrahtet das Flag korrekt nach Bonjour ---
+
+    it('Ctor mit disable_mdns_interface_pin=true → Bonjour ohne interface-Pin', () => {
+      const discovery = new MdnsDiscovery(
+        '_thinklocal._tcp',
+        undefined,
+        true,
+        { disable_mdns_interface_pin: true },
+        fakeMeshInterface,
+      );
+      expect(bonjourCtorSpy).toHaveBeenCalledTimes(1);
+      expect(bonjourCtorSpy).toHaveBeenCalledWith({ bind: '0.0.0.0' });
+      const opts = bonjourCtorSpy.mock.calls[0]?.[0] as { interface?: string };
+      expect(opts.interface).toBeUndefined();
+      discovery.stop();
+    });
+
+    it('Ctor mit disable_mdns_interface_pin=false → Pin bleibt aktiv (Default-Verhalten)', () => {
+      const discovery = new MdnsDiscovery(
+        '_thinklocal._tcp',
+        undefined,
+        true,
+        { disable_mdns_interface_pin: false },
+        fakeMeshInterface,
+      );
+      expect(bonjourCtorSpy).toHaveBeenCalledWith({
+        interface: '10.10.10.55',
+        bind: '0.0.0.0',
+      });
+      discovery.stop();
+    });
+
+    it('Ctor ohne Flag → identisch zum Pin-Default (Backward-Compat)', () => {
+      const discovery = new MdnsDiscovery(
+        '_thinklocal._tcp',
+        undefined,
+        true,
+        {},
+        fakeMeshInterface,
+      );
+      expect(bonjourCtorSpy).toHaveBeenCalledWith({
+        interface: '10.10.10.55',
+        bind: '0.0.0.0',
+      });
+      discovery.stop();
+    });
+
+    it('Pin-Disable + publish() filtert A-Records weiterhin auf meshIp (CR-MEDIUM)', () => {
+      // CR-MEDIUM (gpt-5.5): die A-Record-Hygiene-Garantie haengt am publish()-Pfad
+      // (restrictServiceToIp), nicht nur an den Ctor-Opts. Dieser Test geht WIRKLICH
+      // durch discovery.publish() und prueft, dass bei abgeschaltetem Pin nur die
+      // Mesh-IP als A-Record uebrig bleibt und AAAA verschwindet — sonst wuerde der
+      // No-Pin-Pfad fremde IPs leaken.
+      publishHolder.records = [
+        { type: 'A', data: '10.10.10.55' }, // Mesh
+        { type: 'A', data: '192.168.1.20' }, // fremdes Subnet — muss raus
+        { type: 'AAAA', data: 'fe80::1' }, // IPv6 — Phase 2, muss raus
+        { type: 'TXT', data: { 'agent-id': 'test' } },
+      ];
+      const discovery = new MdnsDiscovery(
+        '_thinklocal._tcp',
+        undefined,
+        true,
+        { disable_mdns_interface_pin: true, allowed_mesh_cidrs: ['10.10.10.0/24'] },
+        fakeMeshInterface,
+      );
+      expect(bonjourCtorSpy).toHaveBeenCalledWith({ bind: '0.0.0.0' });
+
+      discovery.publish('node', 9440, {
+        agentId: 'spiffe://thinklocal/host/test/agent/claude-code',
+        capabilityHash: '',
+        certFingerprint: '',
+        proto: 'https',
+      });
+
+      const filtered = publishHolder.service?.records() ?? [];
+      expect(filtered.filter((r) => r.type === 'A')).toEqual([
+        { type: 'A', data: '10.10.10.55' },
+      ]);
+      expect(filtered.some((r) => r.type === 'AAAA')).toBe(false);
+      // Nicht-Adress-Records bleiben unberuehrt.
+      expect(filtered.some((r) => r.type === 'TXT')).toBe(true);
+
+      publishHolder.records = [];
+      publishHolder.service = null;
+      discovery.stop();
+    });
+
+    it('Fail-Closed bleibt unter Pin-Disable aktiv: CIDR-Policy ohne Match wirft (CR-LOW)', () => {
+      // CR-LOW (gpt-5.5): die zentrale Sicherheitsbehauptung ist "Pin-Disable laesst
+      // Fail-Closed unveraendert". Mit allowed_mesh_cidrs gesetzt, aber KEINEM
+      // passenden Interface, MUSS der Ctor werfen — auch (gerade) mit disable_mdns_interface_pin.
+      const noMatchingInterface = () => ({
+        en5: [
+          {
+            address: '192.168.1.20',
+            netmask: '255.255.255.0',
+            family: 'IPv4' as const,
+            mac: '00:00:00:00:00:00',
+            internal: false,
+            cidr: '192.168.1.20/24',
+            scopeid: 0,
+          },
+        ],
+      });
+      expect(
+        () =>
+          new MdnsDiscovery(
+            '_thinklocal._tcp',
+            undefined,
+            true,
+            { disable_mdns_interface_pin: true, allowed_mesh_cidrs: ['10.10.10.0/24'] },
+            noMatchingInterface,
+          ),
+      ).toThrow(/allowed_mesh_cidrs/);
     });
   });
 

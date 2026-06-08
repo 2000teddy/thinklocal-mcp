@@ -711,6 +711,26 @@ Doc-only-Eintrag (Abschluss-Dokumentation Live-Test); kein Code → CO/CG/TS/CR/
 
 ---
 
+---
+
+## Session 2026-06-08 — v0.34.5 mDNS-Interface-Pin abschaltbar (.55 connectx-Fix)
+
+| #   | PR                                      | Datum       | CO | CG | TS | CR | PC | DO | Findings                           |
+|-----|-----------------------------------------|-------------|----|----|----|----|----|----|----|
+| #164 | mDNS-Interface-Pin-Disable (.55-Bug)   | 2026-06-08  | —  | —  | ✅ | ✅ | ✅ | ✅ | CR gpt-5.5 (2 Runden): 0 HIGH/CRITICAL; R1 1 MEDIUM+2 LOW, R2 1 MEDIUM+2 LOW — alle gefixt + Regression-Tests. Live-verifiziert auf .55. |
+
+**Scope:** zwei Vergiftungsquellen auf dual-homed macOS .55, ein Flag `disable_mdns_interface_pin`:
+(1) bonjour-Socket-Interface-Pin (Startup) — Commit `5ffdd5d`; (2) `@libp2p/mdns` zweite multicast-dns-Instanz (~27s, Live-Befund Operator) — Folge-Commit.
+**CO:** entfällt — reiner Bug-Fix (Root-Causes eindeutig: die zwei mDNS-Multicast-Stacks; keine Architektur-Frage offen).
+**CG:** entfällt — Tests von Hand.
+**TS:** 913 Tests grün (80 Dateien), tsc clean, Integration 6/6 grün. Neu: `discovery.test.ts` Block „mDNS-Interface-Pin-Disable" + `config-mdns-pin.test.ts` (Quelle 1); `libp2p-runtime.test.ts` (resolveLibp2pMdnsEnabled, state mdns:false) + `libp2p-runtime-config.test.ts` (Runtime-Test: `start()` lässt `services.mdns` weg + ruft `deps.mdns()` nie auf wenn geflaggt; Positiv-Pfad) (Quelle 2). **Live-verifiziert auf .55:** Pin-Fix entfernt Startup-Vergiftung bestätigt (Operator); libp2p-mDNS-Quelle root-caused; Final-Heal/Re-Test (sudo) offen beim Operator.
+**CR:** `pal:codereview` gpt-5.5 (security), 2 Runden (je 0 CRITICAL/HIGH): R1 (bonjour) MEDIUM publish()-Pfad + 2 LOW; R2 (libp2p) MEDIUM Runtime-Test + 2 LOW — alle mit Tests/Doku geschlossen.
+**PC:** `pal:precommit` gpt-5.3-codex: 0 Blocker.
+**DO:** ADR-019 (Abschnitt „.55 connectx-Vergiftung" + Nachtrag libp2p-mDNS), CHANGES.md (v0.34.5 + Nachtrag), config/daemon.toml (Flag-Doku), TODO.md, Memory.
+
+---
+
+*Letzte Aktualisierung: 2026-06-08 — v0.34.5 mDNS-Interface-Pin abschaltbar (.55 connectx-Fix).*
 ## Session 2026-06-08 — v0.34.4 Bug #2: Canonical-Sender-Akzeptanz (Host-Bind nach Cert-Attestierung)
 
 | #       | PR  | Datum      | CO  | CG | TS | CR | PC | DO | Findings                           |

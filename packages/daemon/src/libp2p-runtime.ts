@@ -12,6 +12,17 @@ export interface Libp2pRuntimeConfig {
   relayServiceEnabled: boolean;
   announceMultiaddrs: string[];
   /**
+   * Dual-homed-macOS-Workaround (.55-Bug, v0.34.5). Wenn true, wird der
+   * @libp2p/mdns-Peer-Discovery-Service NICHT registriert. Grund: @libp2p/mdns
+   * fährt eine ZWEITE multicast-dns-Instanz (eigener Socket, 20s-Query-Intervall),
+   * die — unabhängig vom bonjour-Pin (discovery.ts) — periodische interface-
+   * gescopte Multicast-Ops auf dem Mesh-NIC macht und so den macOS-connectx-
+   * scoped-routing-Zustand re-vergiftet (10.10.10/24 → REJECT, ~27s nach Start).
+   * Auf dual-homed macOS ist libp2p ohnehin EHOSTUNREACH; Mesh läuft via
+   * static_peer (HTTPS). Default (undefined/false): libp2p-mDNS bleibt aktiv.
+   */
+  disableMdnsInterfacePin?: boolean;
+  /**
    * ADR-022 #0: persistierter libp2p-Ed25519-PrivateKey. Wird an createLibp2p
    * durchgereicht, damit die PeerID über Neustarts STABIL bleibt. Lose typisiert
    * (unknown), um die harte @libp2p/interface-Typabhängigkeit in diesem Modul zu
@@ -189,6 +200,17 @@ export function resolveNatReachability(args: {
   return 'unknown';
 }
 
+/**
+ * Ob der @libp2p/mdns-Peer-Discovery-Service registriert wird (rein, testbar).
+ * Auf dual-homed macOS (disableMdnsInterfacePin) wird er abgeschaltet — siehe
+ * Doku am Feld in Libp2pRuntimeConfig (.55 connectx-Re-Vergiftung, v0.34.5).
+ */
+export function resolveLibp2pMdnsEnabled(
+  config: Pick<Libp2pRuntimeConfig, 'disableMdnsInterfacePin'>,
+): boolean {
+  return config.disableMdnsInterfacePin !== true;
+}
+
 export function createInitialLibp2pState(config: Libp2pRuntimeConfig): Libp2pRuntimeState {
   if (!config.enabled) {
     return {
@@ -220,7 +242,7 @@ export function createInitialLibp2pState(config: Libp2pRuntimeConfig): Libp2pRun
     listenMultiaddrs: getLibp2pListenMultiaddrs(config.bindHost, config.listenPort),
     connectedPeers: 0,
     noise: true,
-    mdns: true,
+    mdns: resolveLibp2pMdnsEnabled(config),
     multiplexer: {
       enabled: true,
       name: 'yamux',
@@ -347,6 +369,11 @@ export class ActiveLibp2pRuntime implements Libp2pRuntime {
   }
 
   async start(): Promise<void> {
+    if (!resolveLibp2pMdnsEnabled(this.config)) {
+      this.log?.warn(
+        'libp2p-mDNS DEAKTIVIERT (disable_mdns_interface_pin) — zweite multicast-dns-Instanz aus (.55 connectx-Re-Vergiftung vermieden). Bonjour-mDNS (discovery.ts) bleibt aktiv, nur de-pinned; libp2p-Peers via static_peer/HTTPS-Mesh',
+      );
+    }
     this.node = await this.deps.createLibp2p({
       // ADR-022 #0: persistierter Key → stabile PeerID. Ohne privateKey generiert
       // libp2p (wie früher) einen ephemeren Key bei jedem Start.
@@ -373,7 +400,14 @@ export class ActiveLibp2pRuntime implements Libp2pRuntime {
       services: {
         identify: this.deps.identify(),
         ping: this.deps.ping(),
-        mdns: this.deps.mdns({ interval: 20_000, serviceTag: this.config.mdnsServiceTag }),
+        // .55-Fix (v0.34.5): @libp2p/mdns ist eine ZWEITE multicast-dns-Instanz
+        // (eigener Socket, 20s-Intervall), die auf dual-homed macOS die
+        // connectx-Route re-vergiftet (~27s nach Start) — unabhängig vom
+        // bonjour-Pin (discovery.ts). Bei disableMdnsInterfacePin weglassen;
+        // Mesh läuft dort via static_peer (HTTPS).
+        ...(resolveLibp2pMdnsEnabled(this.config)
+          ? { mdns: this.deps.mdns({ interval: 20_000, serviceTag: this.config.mdnsServiceTag }) }
+          : {}),
         ...(this.config.natTraversalEnabled && this.deps.autoNAT ? { autoNAT: this.deps.autoNAT() } : {}),
         ...(this.config.relayServiceEnabled && this.deps.circuitRelayServer ? { circuitRelay: this.deps.circuitRelayServer() } : {}),
       },

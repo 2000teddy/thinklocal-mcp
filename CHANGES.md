@@ -8,6 +8,64 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-08
 
+### v0.34.5 — mDNS-Interface-Pin abschaltbar (.55 dual-homed-macOS connectx-Fix)
+
+**Befund (2026-06-08, .55 / MacBook, dual-homed: en10=10.10.10.55 Mesh + zweite Default-Route-NIC):**
+Die blosse **Anwesenheit** des laufenden Daemons brach macOS-`connectx`-scoped-routing
+**prozessweit** — die 10.10.10/24-Route kippte in **REJECT**, und **jeder** ausgehende Connect
+(auch ein nacktes `node net.connect`) bekam `EHOSTUNREACH`. Route heilte bei gestopptem Daemon,
+brach beim Neustart sofort wieder. Der Daemon ruft **kein** `route`/`IP_BOUND_IF` auf — die
+**einzige** Interface-Scoping-Operation im ganzen Daemon ist der mDNS-Socket-Interface-Pin:
+`bonjour-service` wird mit `{ interface: meshIp }` konstruiert → `multicast-dns` ruft
+`setMulticastInterface(meshIp)` auf dem UDP-Socket auf → das vergiftet auf macOS den
+connectx-scoped-routing-Zustand. (#162-Escape-Hatch — Outbound-Pinning — half **nicht**, weil
+das Problem im mDNS-Socket sitzt, nicht im Outbound-Connect.)
+
+**Fix:** neues Opt-out-Flag `disable_mdns_interface_pin` (Default **false** → Linux/Standard-Nodes
+pinnen exakt wie bisher). Aktiv (`TLMCP_DISABLE_MDNS_INTERFACE_PIN=1` oder
+`[discovery] disable_mdns_interface_pin = true`) wird `bonjour-service` **ohne** `interface`-Key
+gebaut (nur `bind: '0.0.0.0'` für Multicast-Receive) → **kein** `setMulticastInterface` → Routing
+bleibt heil. Outbound-mDNS läuft dann über das Default-IF; Mesh-Konnektivität via `static_peer`.
+
+- **`resolveBonjourOptions(meshIp, disableInterfacePin)`** (discovery.ts, rein/testbar):
+  ohne meshIp → `{}`; Pin an → `{ interface, bind:'0.0.0.0' }`; Pin aus → `{ bind:'0.0.0.0' }`.
+- **A-Record-Hygiene bleibt aktiv** (`restrictServiceToIp` hängt an `this.meshIp`, nicht am Pin) —
+  der Service annonciert weiterhin **nur** die Mesh-IP. Auch der Fail-Closed-Pfad
+  (`allowed_mesh_cidrs` gesetzt, kein Match → Ctor wirft) ist unabhängig vom Flag.
+- **Empfehlung:** Pin-Disable **immer** mit `allowed_mesh_cidrs` kombinieren — ohne Pin können
+  mDNS-Pakete (Hostname + Mesh-IP im A-Record) auf dem Default-IF sichtbar werden; die
+  CIDR-Policy + A-Record-Hygiene begrenzen den Restschaden auf Paket-Sichtbarkeit (keine
+  routbare Exposition, fremde Peers werden weiter abgewiesen).
+- **CR (gpt-5.5, security):** 0 CRITICAL/HIGH. 1 MEDIUM + 2 LOW (alle Test-/Doku-Lücken) gefixt:
+  publish()-Pfad-Test (A-Record-Filter unter Pin-Disable), Fail-Closed-unter-Pin-Disable-Test,
+  Config-/Env-Plumbing-Regressionstest.
+- **Tests:** +12 (discovery.test.ts: resolveBonjourOptions-Pure + Ctor-Wiring + publish()-Pfad +
+  Fail-Closed; config-mdns-pin.test.ts: Default/Env). Full Suite 909 grün, tsc clean.
+
+**Nachtrag (Live-Verifikation .55, 2026-06-08): ZWEITE Vergiftungsquelle — libp2p-mDNS.**
+Der Operator bestätigte: der Pin-Fix entfernt die **Startup**-Vergiftung (Route geheilt → flag-Daemon
+→ connect OK), aber **~27s nach Start** kippte `10.10.10/24` wieder in REJECT. Ursache: `@libp2p/mdns`
+(`libp2p-runtime.ts`, `interval: 20_000`) ist eine **zweite, unabhängige multicast-dns-Instanz** (eigener
+Socket, 20s-LAN-Query-Loop) — vom bonjour-Pin (oben) gar nicht erfasst. multicast-dns ruft `update()`
+beim Bind **und alle 5s** auf (`addMembership` je Interface inkl. Mesh-NIC + `setMulticastInterface`);
+diese periodische interface-gescopte Multicast-Aktivität auf dem Mesh-NIC re-vergiftet die connectx-Route.
+- **Fix:** der **gleiche Flag** `disable_mdns_interface_pin` lässt jetzt auch den `@libp2p/mdns`-Service
+  weg (`resolveLibp2pMdnsEnabled()`, reine testbare Predicate; gleiche `...(cond ? {svc} : {})`-Mechanik
+  wie autoNAT/circuitRelay). libp2p startet weiter (identify/ping/transports bleiben) — nur die
+  mDNS-Peer-Discovery entfällt. Auf dual-homed macOS ist libp2p ohnehin EHOSTUNREACH; Mesh läuft via
+  `static_peer`/HTTPS. Default (Flag aus): libp2p-mDNS bleibt aktiv (Linux/Standard-Nodes unverändert).
+- **Tests:** +4 (resolveLibp2pMdnsEnabled, createInitialLibp2pState `mdns:false`, Runtime-Test dass
+  `start()` `services.mdns` weglässt + `deps.mdns()` NIE aufruft wenn geflaggt + Positiv-Pfad). 913 grün.
+- **Live-Re-Test (beide mDNS-Quellen aus): RE-VERGIFTUNG BLEIBT → dritte, HOST-SEITIGE Quelle bestätigt.**
+  Daemon stop → sudo Route-Heal → flag-Daemon → connect OK → ~30s später wieder EHOSTUNREACH. Ursache:
+  der laufende Daemon macht ausgehende `connectx`-Dials auf einem Host mit ZWEI Default-Routes
+  (en10→10.10.10.1 + en0→10.10.25.1) + IFSCOPE; ein fehlschlagender gescopter Dial lässt macOS einen
+  negativen/REJECT-Eintrag auf `10.10.10/24` installieren. **Keine Code-, sondern Host-Routing-Fehlkonfig.**
+- **Konsequenz:** dieser Fix **lindert** den .55-Fall (beide mDNS-Beiträge + mDNS-Breakage weg), ist aber
+  **kein vollständiger Fix**. Die **durable Lösung ist host-seitig** (en10 als einzige/primäre
+  Default-Route bzw. persistenter Route-Heal) und liegt beim Operator — kein weiterer Daemon-Code hilft.
+
+Siehe `docs/architecture/ADR-019-multi-interface-discovery.md` (Abschnitt „.55 connectx-Vergiftung“).
 ### v0.34.4 — Bug #2: Canonical-Sender-Akzeptanz auf allen v0.34.2-Nachbarn (Host-Bind nach Cert-Attestierung)
 
 Beim Flip eines Nodes (`emit_canonical_sender=true`) akzeptierten **nicht alle** v0.34.2-Nachbarn den neuen `node/<PeerID>`-Sender: .52/.94 ✅, **.56/.222 ❌** („Peer kennt unseren Sender-Key nicht", kein Retry, heilt nicht). Blockierte den fleet-weiten Sender-Flip. (Hinweis: v0.34.3 = #162 Outbound-Debug/Escape, separater offener Branch.)

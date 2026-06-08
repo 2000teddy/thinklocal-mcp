@@ -38,6 +38,15 @@ export interface DiscoveryPolicyConfig {
    * Default schliesst typische virtuelle Interfaces aus.
    */
   exclude_interface_patterns?: string[];
+
+  /**
+   * Dual-homed-macOS-Workaround (.55-Bug, 2026-06-08): schaltet den mDNS-Socket-
+   * Interface-Pin (`setMulticastInterface`) ab — der vergiftet auf macOS den
+   * connectx-scoped-routing-Zustand prozessweit (10.10.10/24 → REJECT, EHOSTUNREACH
+   * für ALLE Connects, auch plain node). A-Record-Hygiene bleibt aktiv; Outbound-mDNS
+   * via Default-IF, Mesh via static_peer. Default false. Env: TLMCP_DISABLE_MDNS_INTERFACE_PIN=1.
+   */
+  disable_mdns_interface_pin?: boolean;
 }
 
 export const DEFAULT_EXCLUDE_PATTERNS = [

@@ -320,6 +320,9 @@ async function main(): Promise<void> {
     relayTransportEnabled: config.libp2p.relay_transport_enabled,
     relayServiceEnabled: config.libp2p.relay_service_enabled,
     announceMultiaddrs: config.libp2p.announce_multiaddrs,
+    // .55-Fix (v0.34.5): auf dual-homed macOS auch die libp2p-mDNS-Instanz
+    // abschalten (zweite multicast-dns-Quelle der connectx-Re-Vergiftung).
+    disableMdnsInterfacePin: config.discovery.disable_mdns_interface_pin,
     privateKey: libp2pKey?.privateKey,
   }, log, {
     protocolHandlers: registrySync.protocolHandlers,
@@ -943,6 +946,7 @@ async function main(): Promise<void> {
         config.discovery.exclude_interface_patterns.length > 0
           ? config.discovery.exclude_interface_patterns
           : undefined,
+      disable_mdns_interface_pin: config.discovery.disable_mdns_interface_pin,
     },
   );
 

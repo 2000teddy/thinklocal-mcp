@@ -311,6 +311,89 @@ Code: `packages/daemon/src/discovery.ts` Konstruktor. Eine Zeile geaendert.
 Code-Review (GPT-5.4): 0 HIGH/CRITICAL, 1 MEDIUM (conditional guard) + 2 LOW —
 alle gefixt mit Regression-Tests vor dem Commit. Suite: **690/690 gruen**, 0 Regressionen.
 
+### .55 connectx-Vergiftung — Interface-Pin abschaltbar (v0.34.5, 2026-06-08)
+
+**Problem.** Auf dem dual-homed macOS-Node 10.10.10.55 (en10 = Mesh-NIC +
+zweite Default-Route-NIC) brach die **blosse Anwesenheit** des laufenden
+Daemons das macOS-`connectx`-scoped-routing **prozessweit**: die
+10.10.10/24-Route kippte in **REJECT**, jeder ausgehende Connect — auch ein
+nacktes `node net.connect` ausserhalb des Daemons — bekam `EHOSTUNREACH`.
+Route heilte bei gestopptem Daemon, brach beim Neustart sofort wieder.
+
+**Ursache.** Der Daemon ruft **kein** `route`/`IP_BOUND_IF` auf. Die
+**einzige** Interface-Scoping-Operation im gesamten Daemon ist der oben
+beschriebene mDNS-Socket-Interface-Pin: `bonjour-service` mit
+`{ interface: meshIp }` → `multicast-dns` ruft `setMulticastInterface(meshIp)`
+auf dem UDP-Socket. Auf dieser dual-homed-macOS-Konstellation vergiftet genau
+das den connectx-scoped-routing-Zustand. (Die #162-Escape-Hatch — Outbound-
+Connect-Pinning — half **nicht**, weil das Problem im mDNS-Socket sitzt.)
+
+**Entscheidung.** Den Socket-Interface-Pin **entkoppeln** von der
+A-Record-Hygiene über ein Opt-out-Flag `disable_mdns_interface_pin`
+(Default **false** → alle bestehenden Nodes pinnen unveraendert):
+
+- Pin an (Default): `resolveBonjourOptions` → `{ interface, bind:'0.0.0.0' }`.
+- Pin aus (`TLMCP_DISABLE_MDNS_INTERFACE_PIN=1` /
+  `[discovery] disable_mdns_interface_pin = true`): `{ bind:'0.0.0.0' }` —
+  **kein** `setMulticastInterface` → Routing bleibt heil. Outbound-mDNS über
+  Default-IF, Mesh-Konnektivität via `static_peer`.
+
+**Was NICHT verloren geht:** `restrictServiceToIp()` (A-Record-Hygiene) und der
+Fail-Closed-Pfad (`allowed_mesh_cidrs` ohne Match → Ctor wirft) haengen an
+`this.meshIp`, **nicht** am Pin — beide bleiben unter Pin-Disable voll aktiv.
+
+**Restschaden + Empfehlung.** Ohne Pin kann das OS mDNS-Pakete (Mesh-Hostname +
+Mesh-IP im A-Record) auf dem Default-IF emittieren. Das ist Paket-Sichtbarkeit
+auf dem fremden Segment, **keine** routbare Exposition (annonciert wird nur die
+10.10.10/24-IP, fremde Peers werden im browse-Pfad weiter abgewiesen). Deshalb:
+**Pin-Disable nur zusammen mit `allowed_mesh_cidrs` einsetzen.** Scope: genau
+die betroffenen dual-homed-macOS-Nodes; Standard-Nodes bleiben beim Pin.
+
+**Tests** (`discovery.test.ts` Block „mDNS-Interface-Pin-Disable", plus
+`config-mdns-pin.test.ts`): `resolveBonjourOptions` rein (Pin an/aus/ohne
+meshIp), Ctor-Wiring, **publish()-Pfad** (A-Record-Filter bleibt unter
+Pin-Disable), **Fail-Closed unter Pin-Disable**, Config-/Env-Default + Override.
+CR gpt-5.5 (security): 0 HIGH/CRITICAL.
+
+**Zweite Vergiftungsquelle: libp2p-mDNS (Nachtrag v0.34.5, Live .55).**
+Der Bonjour-Pin-Fix oben beseitigt nur die **Startup**-Vergiftung. Live auf .55
+zeigte sich ~27s nach Start eine erneute REJECT-Route. Ursache: `@libp2p/mdns`
+(`libp2p-runtime.ts`, `interval: 20_000`) ist eine **zweite, unabhängige
+multicast-dns-Instanz** (eigener UDP-Socket, 20s-Query-Loop), die der
+Bonjour-Pin nicht erfasst. `multicast-dns` ruft intern `update()` beim Bind
+**und alle 5s** auf — `addMembership` je Interface (inkl. Mesh-NIC en10) +
+`setMulticastInterface(opts.interface || defaultInterface())`. Auf .55 liefert
+`defaultInterface()` zwar en0/10.10.25.90 (nicht die Mesh-IP) — die Re-Vergiftung
+kommt also nicht von einem Mesh-gepinnten `setMulticastInterface`, sondern von
+der periodischen interface-gescopten Multicast-Aktivität / mDNS-getriggerten
+Peer-Dials dieser zweiten Instanz auf dem Mesh-NIC.
+
+**Entscheidung:** derselbe Flag `disable_mdns_interface_pin` lässt auf
+dual-homed macOS auch den `@libp2p/mdns`-Service weg (`resolveLibp2pMdnsEnabled()`,
+reine Predicate; gleiche `...(cond ? {svc} : {})`-Mechanik wie autoNAT). libp2p
+startet weiter (identify/ping/Transports bleiben) — nur die mDNS-Peer-Discovery
+entfällt. Auf diesen Hosts ist libp2p ohnehin EHOSTUNREACH; das Mesh läuft über
+`static_peer`/HTTPS. Default (Flag aus): libp2p-mDNS bleibt aktiv.
+
+**Restschaden / offen:** ein bereits gesetzter `!`-REJECT auf `10.10.10/24`
+heilt nicht von selbst — einmaliger `sudo route`-Heal durch den Operator nötig.
+
+**Ergebnis des Live-Re-Tests (2026-06-08, beide mDNS-Quellen aus, flag=true,
+commit 0aa72bc): RE-VERGIFTUNG BLEIBT.** Ablauf: Daemon stop → sudo Route-Heal →
+flag-Daemon → direkt `connect .94` OK → ~30s später wieder `EHOSTUNREACH`, 0 Peers.
+Damit ist die **dritte Quelle host-seitig bestätigt:** der laufende Daemon macht
+ausgehende `connectx`-Dials (static_peer/HTTPS-Mesh, libp2p-Listen/Dial,
+Heartbeat) auf einem Host mit **zwei Default-Routes** (en10→10.10.10.1 UND
+en0→10.10.25.1) + IFSCOPE; ein fehlschlagender gescopter Dial lässt macOS einen
+negativen/REJECT-Eintrag auf `10.10.10/24` installieren. Das ist **keine Code-,
+sondern eine Host-Routing-Fehlkonfiguration.**
+
+**Konsequenz:** `disable_mdns_interface_pin` (beide mDNS-Quellen) **lindert** den
+Fall (entfernt die mDNS-Beiträge + die mDNS-bezogene Breakage), ist aber **kein
+vollständiger Fix** für dual-default-route-macOS. Die **durable Lösung ist
+host-seitig** (en10 als einzige/primäre Default-Route bzw. persistenter
+Route-Heal) und liegt beim Operator — kein weiterer Daemon-Code adressiert das.
+
 ### Verbleibend (Phase 2)
 
 - Reconcile-Loop (Hot-Plug NIC handling) — bereits in Phase 1 als TODO markiert
