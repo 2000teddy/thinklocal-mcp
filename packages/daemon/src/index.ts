@@ -47,6 +47,7 @@ import { SYSTEM_MONITOR_MANIFEST } from './builtin-skills/system-monitor.js';
 import { INFLUXDB_MANIFEST, influxdbHealthCheck } from './builtin-skills/influxdb.js';
 import { SkillHealthMonitor } from './skill-health-monitor.js';
 import { loadBuildInfo } from './build-info.js';
+import { resolveOutboundConnectPolicy, buildMeshConnector } from './mesh-connect.js';
 import { TelegramGateway } from './telegram-gateway.js';
 import type { AgentCard } from './agent-card.js';
 import { seedBuiltinSkills } from './builtin-skill-seed.js';
@@ -146,15 +147,21 @@ async function main(): Promise<void> {
   const initialCaBundle = trustStoreNotifier?.current() ?? [];
 
   // Undici-Dispatcher für ausgehende HTTPS-Verbindungen. Vertraut der eigenen
-  // Mesh-CA PLUS allen gepairten Peer-CAs.
+  // Mesh-CA PLUS allen gepairten Peer-CAs. Connector über mesh-connect.ts:
+  // TLMCP_DEBUG_CONNECT=1 loggt exakte Connect-Parameter + Socket-Fehler;
+  // TLMCP_DISABLE_OUTBOUND_PINNING=1 → kein Source-Bind + autoSelectFamily=false
+  // (Default-Source-Connect wie `nc`, Fix für dual-homed macOS EHOSTUNREACH).
+  const outboundConnectPolicy = resolveOutboundConnectPolicy(process.env);
+  if (outboundConnectPolicy.debug || outboundConnectPolicy.disablePinning) {
+    log.info(outboundConnectPolicy, '[connect] Outbound-Connect-Policy aktiv (Debug/Escape-Hatch)');
+  }
   const tlsDispatcher = tlsBundle
     ? new UndiciAgent({
-        connect: {
-          ca: initialCaBundle,
-          cert: tlsBundle.certPem,
-          key: tlsBundle.keyPem,
-          rejectUnauthorized: true,
-        },
+        connect: buildMeshConnector(
+          { ca: initialCaBundle, cert: tlsBundle.certPem, key: tlsBundle.keyPem },
+          outboundConnectPolicy,
+          log,
+        ),
       })
     : undefined;
 

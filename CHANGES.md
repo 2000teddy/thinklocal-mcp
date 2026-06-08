@@ -81,6 +81,19 @@ Beim Flip eines Nodes (`emit_canonical_sender=true`) akzeptierten **nicht alle**
 
 **Akzeptanz:** nach Deploy auf alle v0.34.2-Nachbarn muss ein TH01-Flip SKILL_ANNOUNCE 5/5 erfolgreich liefern (auch .56/.222). Live-Gegenprobe durch .94.
 
+### v0.34.3 — Outbound-Connect: Debug-Instrumentierung + Escape-Hatch (dual-homed macOS EHOSTUNREACH)
+
+Phase-3-Restbug: auf dem dual-homed macOS-Node .55 scheitert der ausgehende mTLS-Connect zu Peers konsistent mit `EHOSTUNREACH` (Source 10.10.10.55), obwohl `nc`/`ping` zur selben Peer-IP funktionieren. Neues Modul `mesh-connect.ts` liefert Diagnose + opt-in-Fix; **Default-Verhalten unverändert**.
+
+- **`TLMCP_DEBUG_CONNECT=1`** → loggt pro Outbound-Connect die **exakten Parameter** (host/port/servername/autoSelectFamily) und im Callback **Erfolg** (localAddress/localPort/remoteAddress/family) bzw. den **vollständigen Socket-Fehler** (code/errno/syscall/address/port/localAddress). Macht sichtbar, was der Daemon-Connect anders macht als `nc`.
+- **`TLMCP_DISABLE_OUTBOUND_PINNING=1`** (Escape-Hatch) → Connector ohne Source-Bind (kein `localAddress`) + `autoSelectFamily=false` → sauberer Default-Source-Connect wie `nc` ohne `-s`. Reversibel, opt-in.
+- **WICHTIG — diese Escape-Hatch fixt .55 NICHT** (per SSH auf .55 verifiziert 2026-06-08): der EHOSTUNREACH ist ein **macOS-Host-Routing-Problem**, kein Daemon-Bug. Plain `node net.connect` (ohne Daemon) reproduziert EHOSTUNREACH zu allen 10.10.10.x; `nc` geht. Auch `localAddress`/`family=4`/`autoSelectFamily=false` helfen NICHT (libuv `connectx` + Dual-Default-Route + IFSCOPE/REJECT-Routen + utun-Tunnel). **Fix ist host-seitig** (Network-Service-Order/zweite Default-Route/Reject-Route auf .55) — Node exponiert `IP_BOUND_IF` nicht. Diese PR liefert dennoch die **Debug-Instrumentierung** (Root-Cause-Beweis) + die generische Escape-Hatch für ANDERE (nicht-.55) Source-Bind-Fälle.
+- **Befund (am Code belegt):** der HTTP-Outbound-Dispatcher setzt **selbst KEIN `localAddress`** — das ADR-019-Interface-Pinning betrifft nur den mDNS-Multicast-Socket, nicht diesen Pfad. „Local (…)" im Fehler ist die OS-gewählte Source. Der Default-Pfad (beide Flags aus) ist **byte-äquivalent** zum bisherigen Inline-Connector.
+- **CR gpt-5.5 (security):** kein CRITICAL/HIGH/MEDIUM (mTLS unverändert scharf — `rejectUnauthorized:true` in allen Pfaden, keine Key-Leakage im Log). 2× LOW gefixt: Debug-Passthrough jetzt real getestet (Base injizierbar, Fehler/Erfolg genau einmal weitergereicht), `ConnectorOptions` getypt.
+- **PC:** clean. **908 Tests grün** (+10 mesh-connect), 6 Integration grün, tsc clean. Version 0.34.2 → **0.34.3**.
+
+Diagnose-Ergebnis (.55, 2026-06-08): EHOSTUNREACH ist host-seitig (macOS Dual-Default-Route + IFSCOPE/REJECT-Routen + utun), nicht durch Daemon-Connect-Optionen behebbar → .55 wird host-seitig gefixt (Christian). Die Debug-Flags bleiben als generisches Diagnose-/Escape-Werkzeug im Code.
+
 ### v0.34.2 — Attesting-CA-Pin Auto-Derive (Fleet-Voraussetzung, kein Hardcode)
 
 Fleet-Voraussetzung für den Produktiv-Flip: jeder Node bekommt den `TLMCP_PEERID_ATTESTING_CA_FP`-Pin automatisch, sonst fail-safe-blockt der Flip (`cert_issuer_not_attesting`, live auf TH02 beobachtet). Statt den Fingerprint pro Node hart zu verdrahten, wird er **aus der eigenen Mesh-CA abgeleitet**.
