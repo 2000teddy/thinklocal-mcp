@@ -458,7 +458,8 @@ async function main(): Promise<void> {
     getPeerPublicKey: (agentId: string) => mesh.resolvePeerPublicKey(agentId),
     // ADR-022 §3 (channel-bound): ein CA-validierter mTLS-Cert-SAN node/<PeerID>
     // schaltet die kanonische PeerID-Auflösung für diesen Peer frei.
-    onPeerCertVerified: (peerId: string, senderUri: string) => mesh.markPeerIdVerified(peerId, senderUri),
+    onPeerCertVerified: (peerId: string, senderUri: string, remoteAddress?: string) =>
+      mesh.markPeerIdVerified(peerId, senderUri, remoteAddress), // {ok, rollback} — transaktional
     // ADR-022 (CR gpt-5.5 WS-2 HIGH): NUR von der attestierenden Mesh-/Admin-CA (.94)
     // signierte node/<PeerID>-Certs dürfen eine PeerID attestieren — nicht jede CA im
     // Trust-Bundle. Pin wird oben aufgelöst (resolveAttestingCaFingerprints): Default =

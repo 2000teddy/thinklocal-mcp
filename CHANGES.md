@@ -66,6 +66,20 @@ diese periodische interface-gescopte Multicast-Aktivität auf dem Mesh-NIC re-ve
   Default-Route bzw. persistenter Route-Heal) und liegt beim Operator — kein weiterer Daemon-Code hilft.
 
 Siehe `docs/architecture/ADR-019-multi-interface-discovery.md` (Abschnitt „.55 connectx-Vergiftung“).
+### v0.34.4 — Bug #2: Canonical-Sender-Akzeptanz auf allen v0.34.2-Nachbarn (Host-Bind nach Cert-Attestierung)
+
+Beim Flip eines Nodes (`emit_canonical_sender=true`) akzeptierten **nicht alle** v0.34.2-Nachbarn den neuen `node/<PeerID>`-Sender: .52/.94 ✅, **.56/.222 ❌** („Peer kennt unseren Sender-Key nicht", kein Retry, heilt nicht). Blockierte den fleet-weiten Sender-Flip. (Hinweis: v0.34.3 = #162 Outbound-Debug/Escape, separater offener Branch.)
+
+- **Root-Cause:** `markPeerIdVerified(peerId, senderUri)` band/verifizierte nur, wenn ein Eintrag unter der kanonischen `senderUri` existiert (kanonische mDNS-Entdeckung) ODER genau ein Bestands-Eintrag bereits `libp2p.peerId===peerId` trug. Auf .56/.222 hatte der Legacy-Eintrag des flippenden Nodes die PeerID **nie gelernt** (kein mDNS-TXT/static_peer, stale Card) → kein Treffer → kanonischer Sender unauflösbar → 403.
+- **Fix:** Die issuer-gepinnte **Cert-Attestierung beweist die PeerID kryptografisch**; `agent-card.ts` reicht die TLS-authentifizierte Source-IP (`socket.remoteAddress`) durch. `markPeerIdVerified` bindet die attestierte PeerID an den **eindeutigen card-gestützten Host-Eintrag** dieser Source-IP (gleicher ECDSA-Signing-Key über den Flip — Option B). Zusätzlich werden exakte `senderUri`-Treffer mit `peerId===null` jetzt gebunden.
+- **CR gpt-5.5 (security):** 2 HIGH + 1 MEDIUM + 2 LOW gefunden, alle gefixt + re-reviewt (0 Residual):
+  - **HIGH 1:** Trust-State wurde vor der Envelope-Signaturprüfung mutiert → `markPeerIdVerified` ist jetzt **transaktional** (`{ ok, rollback }`); `agent-card.ts` rollbackt bei „Unknown sender"/ungültiger Signatur (sichert Vorzustand + stellt supersedete Einträge wieder her) → keine persistente Fehlbindung.
+  - **HIGH 2:** exakter `senderUri`-Treffer mit `peerId===null` wurde nicht gebunden → jetzt gebunden.
+  - **MEDIUM** (Shared-IP-Fehlbindung) durch den HIGH-1-Rollback abgedeckt. **LOW:** stale Kommentar + zentrale Host-Normalisierung (`normHost`: `::ffff:`/Zone-ID).
+- **Spoof-Sicherheit:** Bindung erfordert ein issuer-gepinntes attestiertes Cert für PeerID P (nicht fälschbar) UND eine echte mTLS-Verbindung von der passenden Host-IP; nur genau EIN Kandidat; nie Umbinden eines bereits anders verifizierten Eintrags; falscher Key ⇒ Signaturprüfung fail-closed.
+- **PC:** clean. **904 Tests grün** (+6 mesh: Host-Bind/IPv6-mapped/no-match/no-rebind/Rollback/peerId-null), 6 Integration grün, tsc clean. Version → **0.34.4**.
+
+**Akzeptanz:** nach Deploy auf alle v0.34.2-Nachbarn muss ein TH01-Flip SKILL_ANNOUNCE 5/5 erfolgreich liefern (auch .56/.222). Live-Gegenprobe durch .94.
 
 ### v0.34.2 — Attesting-CA-Pin Auto-Derive (Fleet-Voraussetzung, kein Hardcode)
 
