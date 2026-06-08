@@ -138,6 +138,9 @@ Schritt 3 schaltet die in PR #143 gebaute, noch **inerte** kanonische PeerID-Auf
 ### Riskantester Schritt
 Der Per-Node-Identity-Flip (Phase 3): Fenster, in dem Sender-URI und Cert-SAN/Nachbar-Verifikation auseinanderlaufen → **fail-closed 403**. Mitigation: Reihenfolge oben + Noise-Re-Handshake + accept-both-Netz.
 
+### Empfangsseitige Akzeptanz des kanonischen Senders (v0.34.4, Bug #2)
+Ein Nachbar akzeptiert den geflippten `node/<PeerID>`-Sender NUR, wenn er die PeerID an einen card-gestützten Eintrag binden kann. Nachbarn, die den flippenden Node ohne `p2pPeerId` kennen (static_peer / kein mDNS-TXT / stale Card), konnten das nicht (→ 403, .56/.222). Lösung: die **issuer-gepinnte Cert-Attestierung** (beweist die PeerID) + die **TLS-Source-IP der Verbindung** binden die attestierte PeerID an den eindeutigen Host-Eintrag (`markPeerIdVerified(peerId, senderUri, remoteHost)`, `agent-card.ts` → `socket.remoteAddress`). Transaktional: Rollback, falls die Envelope-Signatur scheitert (keine persistente Fehlbindung). Spoof-sicher: attestiertes Cert + reale Verbindung von der passenden IP + genau ein Kandidat + kein Umbinden bereits anders verifizierter Einträge.
+
 ### Verworfene Alternative
 „Node-to-node ganz über libp2p-Noise-Streams, HTTPS/mTLS für App-Traffic droppen" (vereint Transport+Identität, killt das Cross-Transport-Problem) — **abgelehnt für dieses Codebase**: Fastify-`/message`, Agent-Card und Admin-API laufen über HTTPS und brauchen einen Authz-Anker; PoP ist einmaliger Join-Kostenpunkt, nicht im Hot-Path.
 

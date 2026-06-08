@@ -130,7 +130,11 @@ export interface AgentCardServerOptions {
    * mTLS-Cert-SAN eine kanonische `node/<PeerID>` kryptografisch bestätigt — der
    * Aufrufer markiert die PeerID dann als verifiziert (mesh.markPeerIdVerified).
    */
-  onPeerCertVerified?: (peerId: string, senderUri: string) => void;
+  onPeerCertVerified?: (
+    peerId: string,
+    senderUri: string,
+    remoteAddress?: string,
+  ) => { ok: boolean; rollback: () => void } | void;
   /**
    * ADR-022 (CR gpt-5.5 WS-2 HIGH): SHA-256-Fingerprints der CAs, die berechtigt sind,
    * eine `node/<PeerID>`-PoP-Attestierung auszustellen (die Admin-/Mesh-CA auf .94).
@@ -250,6 +254,7 @@ export class AgentCardServer {
         // `getPeerCertificate(true)` → Detail-Cert inkl. issuerCertificate (für den CA-Pin).
         const tlsSock = request.raw.socket as {
           authorized?: boolean;
+          remoteAddress?: string;
           getPeerCertificate?: (detailed?: boolean) => {
             subjectaltname?: string;
             issuerCertificate?: { fingerprint256?: string };
@@ -284,19 +289,30 @@ export class AgentCardServer {
         }
         // Krypto-attestierte PeerID → Auflösung für diesen Peer freischalten (auch wenn der
         // Sender noch Legacy ist: Phase-1-Fall, Cert reissued vor Sender-Flip).
+        // CR gpt-5.5 HIGH (transaktional): Die Attestierung darf den Trust-State (PeerID-Bindung
+        // + verified-Flag) NICHT dauerhaft mutieren, BEVOR die Envelope-Signatur geprüft ist —
+        // sonst hinterließe eine fehlschlagende Nachricht eine persistente Fehlbindung, die der
+        // No-Rebind-Guard später blockiert. Daher: tentativ binden, bei Sig-Fehler rollbacken.
+        let certVerification: { ok: boolean; rollback: () => void } | undefined;
         if (attestedPeerId) {
-          opts.onPeerCertVerified?.(attestedPeerId, rawEnvelope.sender);
+          // remoteAddress = die TLS-authentifizierte Source-IP DIESER Verbindung → bindet die
+          // attestierte PeerID an den richtigen Host-Eintrag, auch wenn dessen mDNS-/Card-PeerID
+          // (noch) fehlt (Bug #2: .56/.222).
+          const r = opts.onPeerCertVerified?.(attestedPeerId, rawEnvelope.sender, tlsSock.remoteAddress);
+          certVerification = r && typeof r === 'object' ? r : undefined;
         }
 
         // Public Key des Senders nachschlagen
         const senderKey = opts.getPeerPublicKey?.(rawEnvelope.sender);
         if (!senderKey) {
+          certVerification?.rollback();
           return reply.code(403).send({ error: 'Unknown sender' });
         }
 
         // Signatur verifizieren + TTL prüfen
         const verified = decodeAndVerify(signed, senderKey);
         if (!verified) {
+          certVerification?.rollback();
           return reply.code(403).send({ error: 'Invalid signature or expired' });
         }
 
