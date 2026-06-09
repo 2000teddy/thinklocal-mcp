@@ -144,12 +144,49 @@ export function createNodeCert(
  * Lädt oder erstellt CA + Node-Zertifikat.
  * Persistiert alles im dataDir/tls/ Verzeichnis.
  */
+/**
+ * ADR-024: Optionale Canonical-Retention. Wird in index.ts VOR dem Bundle-Call
+ * aufgelöst. `trustedAttestingCaPems` ist bereits auf gepinnte Attesting-CA-
+ * Fingerprints gefiltert (die Filterung passiert beim Aufrufer).
+ */
+export interface CanonicalRetentionOpts {
+  /** Eigene kanonische `node/<PeerID>`-URI (aus dem lokalen libp2p-Key). */
+  canonicalSpiffeUri?: string;
+  /** CA-PEMs (eigene + gepairte), GEFILTERT auf gepinnte Attesting-CA-Fingerprints. */
+  trustedAttestingCaPems?: readonly string[];
+}
+
+/**
+ * ADR-024: Darf ein vorhandenes Node-Cert als kanonisch BEHALTEN werden?
+ * Rein/testbar. True NUR wenn: (a) eine Cert-SAN exakt die eigene kanonische URI
+ * ist (matcht die libp2p-PeerID), UND (b) das Leaf kryptografisch unter EINER
+ * gepinnten Attesting-CA verifiziert (`verifyPeerCert` prüft Signatur + Gültigkeit).
+ * KEINE Issuer-DN/Fingerprint-Ableitung aus dem Leaf (Confused-Deputy-Schutz, CO gpt-5.5).
+ */
+export function isRetainableCanonicalCert(args: {
+  certPem: string;
+  canonicalSpiffeUri: string | undefined;
+  trustedAttestingCaPems: readonly string[];
+}): boolean {
+  const { certPem, canonicalSpiffeUri, trustedAttestingCaPems } = args;
+  if (!canonicalSpiffeUri || trustedAttestingCaPems.length === 0) return false;
+  const sans = extractSpiffeUris(certPem);
+  // Die eigene kanonische URI MUSS enthalten sein …
+  if (!sans.includes(canonicalSpiffeUri)) return false;
+  // … und CR-MEDIUM (ADR-024): KEINE FREMDE kanonische node/<PeerID>-SAN. Legacy-`host/`-SANs
+  // (Migrations-Cert) sind erlaubt, aber jede `node/`-SAN muss die eigene sein — sonst würde
+  // ein überbreites Cert eine zweite Identität mit-attestieren.
+  if (sans.some((u) => u.startsWith('spiffe://thinklocal/node/') && u !== canonicalSpiffeUri)) return false;
+  return trustedAttestingCaPems.some((caPem) => verifyPeerCert(caPem, certPem));
+}
+
 export function loadOrCreateTlsBundle(
   dataDir: string,
   hostname: string,
   spiffeUri: string,
   log?: Logger,
   nodeId?: string,
+  retention?: CanonicalRetentionOpts,
 ): NodeCertBundle {
   const tlsDir = resolve(dataDir, 'tls');
   mkdirSync(tlsDir, { recursive: true });
@@ -321,12 +358,35 @@ export function loadOrCreateTlsBundle(
       }
 
       if (fullyValid && daysLeft > 7 && certSpiffeUri === spiffeUri && signedByCurrentCa && certKeyMatches) {
-        log?.info({ daysLeft }, 'Vorhandenes Node-Zertifikat geladen');
+        log?.info({ daysLeft, retainPath: 'legacy-current-ca' }, 'Vorhandenes Node-Zertifikat geladen');
         return {
           certPem,
           keyPem,
           caCertPem: ca.caCertPem,
         };
+      }
+
+      // ADR-024: Canonical-Retention. Ein frisch re-enrolltes node/<PeerID>-Cert
+      // (z.B. von der .94-Attesting-CA) würde sonst hier verworfen werden — auf
+      // CA-owner-Nodes wegen certSpiffeUri!==spiffeUri (Legacy), auf own-CA-Nodes
+      // wegen signedByCurrentCa===false. Behalte es, wenn es DIESE Node-eigene
+      // kanonische Identität trägt UND krypto unter einer gepinnten Attesting-CA
+      // verifiziert (additiv; ohne retention-Opts inert → Default unverändert).
+      if (
+        fullyValid &&
+        daysLeft > 7 &&
+        certKeyMatches &&
+        isRetainableCanonicalCert({
+          certPem,
+          canonicalSpiffeUri: retention?.canonicalSpiffeUri,
+          trustedAttestingCaPems: retention?.trustedAttestingCaPems ?? [],
+        })
+      ) {
+        log?.info(
+          { daysLeft, canonicalSpiffeUri: retention?.canonicalSpiffeUri, retainPath: 'canonical-attested' },
+          'ADR-024: Kanonisches Node-Zertifikat behalten (attestiert von gepinnter CA)',
+        );
+        return { certPem, keyPem, caCertPem: ca.caCertPem };
       }
 
       log?.warn(

@@ -756,4 +756,16 @@ Doc-only-Eintrag (Abschluss-Dokumentation Live-Test); kein Code → CO/CG/TS/CR/
 
 ---
 
-*Letzte Aktualisierung: 2026-06-08 — v0.34.4 Bug #2 Canonical-Sender Host-Bind.*
+## Session 2026-06-09 — v0.34.6 (DRAFT) ADR-024 Canonical-Cert-Retention
+
+| #       | PR    | Datum      | CO | CG | TS | CR | PC | DO | Findings                           |
+|---------|-------|------------|----|----|----|----|----|----|----|
+| v0.34.6 | DRAFT | 2026-06-09 | ✅ | ⚠️ | ✅ | ✅ | ✅ | ✅ | 4 HIGH (über 3 CR-Runden) gefixt + re-reviewed → 0 CRITICAL/HIGH; 2 MEDIUM + 2 LOW dokumentiert als merge-blocking-vor-Deploy |
+
+**CO:** `pal:consensus` gpt-5.5 (8/10, endorsed mit Krypto-Härtung „verify gegen gepinntes CA-PEM"). **CG:** ⚠️ gemini-2.5-pro nicht erreichbar (429 monthly-spend-cap) — Tests von Hand. **TS:** +12 Tests (`tls.test.ts`: Retention keep/regenerate, wrong-PeerID, unpinned-Issuer, Multi-SAN-Migration vs. fremd, cert-key-Mismatch, CA-owner, own-CA), 941 unit + 6 integration grün, tsc clean. **CR:** `pal:codereview` gpt-5.5 (security, 3 Runden) — HIGH-1 Flip-Gate-CA, HIGH-2 Trust-Distribution-CA, HIGH-3 Issuance-Topologie + MEDIUM (Multi-SAN, runtime-pin) gefixt; final 0 CRITICAL/HIGH. **PC:** gpt-5.3-codex 0 Blocker. **DO:** ADR-024, CHANGES (v0.34.6 DRAFT), COMPLIANCE, TODO.
+
+**Status:** DRAFT-PR, wartet auf Review. **KEIN Deploy/Re-Enroll/Merge/Branch-Protection-Änderung ohne Christians ausdrückliches Wort.** Merge-blocking-vor-Deploy: CA-Validity im Retention-Verify + Trust-Distribution-Lifecycle (ADR-024).
+
+---
+
+*Letzte Aktualisierung: 2026-06-09 — v0.34.6 (DRAFT) ADR-024 Canonical-Cert-Retention.*

@@ -6,7 +6,34 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-06-08
+## [Unreleased] — 2026-06-09
+
+### v0.34.6 (DRAFT, wartet auf Review — KEIN Deploy/Merge ohne Christians Wort) — ADR-024 Canonical-Cert-Retention
+
+Schließt die letzte Lücke des ADR-022-Sender-Flips für **CA-owner** (`.94`) und **own-CA**
+Nodes (`.56`/`.222`): `loadOrCreateTlsBundle` verwarf deren frisch re-enrolltes kanonisches
+`node/<PeerID>`-Cert beim Boot und regenerierte ein Legacy-Cert → kein Flip. Ursache: der
+CA-owner-Zweig reissued bei `certSpiffeUri !== spiffeUri` (Legacy zur Bundle-Zeit), der
+own-CA-Pfad verlangt `signedByCurrentCa` gegen die eigene (nicht die .94-)CA.
+
+- **`isRetainableCanonicalCert`** (rein, `tls.ts`): behält ein Cert nur, wenn (a) eine SAN exakt
+  die eigene kanonische `node/<PeerID>`-URI ist, (b) KEINE fremde `node/`-SAN vorhanden ist, und
+  (c) das Leaf KRYPTOGRAFISCH unter einer gepinnten Attesting-CA-PEM verifiziert (`verifyPeerCert`,
+  KEINE Issuer-DN-Ableitung — Confused-Deputy-Schutz, CO gpt-5.5). Zusätzlich `certKeyMatches` +
+  Gültigkeit. Additiv; ohne Retention-Opts unverändert.
+- **`index.ts`**: libp2pKey + pairingStore vor dem Bundle; **preliminärer** Pin (Disk-CA) nur für
+  die Retention, **autoritativer** Pin (post-bundle aus `tlsBundle.caCertPem`) für Flip-Gate +
+  Inbound-Authz + Trust-Distribution (kein stale Pin bei First-Boot/CA-Reissue). Flip-Gate prüft
+  jetzt „Serving-Cert verifiziert unter gepinnter Attesting-CA" (statt eigenem CA-Fingerprint).
+  Pairing publiziert die **ausstellende** CA (`servingCertIssuerCaPem`). Lokale Cert-Ausstellung
+  nur aktiv, wenn das Serving-Cert von der EIGENEN CA signiert ist (`.94` behält Ausstellung;
+  ein Node mit behaltenem fremd-signierten Cert deaktiviert sie fail-safe).
+- **CO** `pal:consensus` gpt-5.5 (8/10; gemini 429-Quota). **CR** gpt-5.5 (3 Runden): alle
+  HIGH gefixt (Flip-Gate-CA, Trust-Distribution-CA, Issuance-Topologie) + re-reviewed → 0
+  CRITICAL/HIGH. **PC** gpt-5.3-codex: 0 Blocker. **TS:** +12 Tests (`tls.test.ts`), 941 unit +
+  6 integration grün, tsc clean.
+- **Offen (merge-blocking VOR Deploy):** CA-Gültigkeit im Retention-Verify; Trust-Distribution-
+  Lifecycle bei retained fremd-Certs (siehe ADR-024). **Rollout NICHT Teil dieses Drafts.**
 
 ### v0.34.5 — mDNS-Interface-Pin abschaltbar (.55 dual-homed-macOS connectx-Fix)
 

@@ -4,7 +4,8 @@ import { Agent as UndiciAgent, fetch } from 'undici';
 import { loadConfig } from './config.js';
 import { createLogger } from './logger.js';
 import { loadOrCreateIdentity } from './identity.js';
-import { loadOrCreateTlsBundle, getCertDaysLeft, extractSpiffeUris, type NodeCertBundle } from './tls.js';
+import { loadOrCreateTlsBundle, getCertDaysLeft, extractSpiffeUris, verifyPeerCert, type NodeCertBundle } from './tls.js';
+import { existsSync as fsExistsSync } from 'node:fs';
 import { AuditLog } from './audit.js';
 import { MdnsDiscovery } from './discovery.js';
 import { AgentCardServer } from './agent-card.js';
@@ -38,7 +39,7 @@ import { loadOrCreateVaultPassphrase } from './vault-passphrase.js';
 import { isLoopbackHost } from './runtime-mode.js';
 import { TaskExecutor } from './task-executor.js';
 import { createLibp2pRuntime } from './libp2p-runtime.js';
-import { checkIdentityConsistency, resolveSelfIdentity, isAttestingIssuer } from './peer-identity.js';
+import { checkIdentityConsistency, resolveSelfIdentity, peerIdToSpiffeUri } from './peer-identity.js';
 import { loadOrCreateLibp2pPrivateKey } from './libp2p-identity.js';
 import { wireRegistrySync } from './registry-sync-libp2p-adapter.js';
 import type { SecretRequestPayload, SecretResponsePayload, AgentMessagePayload, AgentMessageAckPayload } from './messages.js';
@@ -101,6 +102,47 @@ async function main(): Promise<void> {
     'Identität geladen',
   );
 
+  // ADR-024: Self-Identität, Attesting-Pin und Trust-Material werden VOR dem TLS-Bundle
+  // aufgelöst, weil die Canonical-Cert-Retention beim Bundle-Load bereits (a) die eigene
+  // kanonische node/<PeerID>-URI (aus dem libp2p-Key) und (b) die gepinnten Attesting-CA-PEMs
+  // braucht, um ein re-enrolltes kanonisches Cert NICHT zu verwerfen. Non-fatal wenn libp2p
+  // deaktiviert (canonicalSelfUriForCert undefined → Retention inert → Default-Verhalten).
+  const libp2pKey = config.libp2p.enabled
+    ? await loadOrCreateLibp2pPrivateKey(config.daemon.data_dir, log)
+    : undefined;
+
+  // SPAKE2 Trust-Bootstrap: PairingStore VOR dem Trust-Store (gepairte CA-Certs fliessen ins
+  // aggregierte Bundle) UND vor dem TLS-Bundle (ADR-024 braucht die gepairten CA-PEMs).
+  const pairingStore = new PairingStore(config.daemon.data_dir, log);
+
+  // ADR-024: PRELIMINÄRER Attesting-Pin + Trust-Material NUR für die Canonical-Cert-Retention
+  // im TLS-Bundle-Load. Aus der ca.crt.pem von Disk abgeleitet (existiert vor dem Bundle).
+  // Der AUTORITATIVE Pin (Inbound-Authz, Flip-Gate) wird NACH dem Bundle aus tlsBundle.caCertPem
+  // neu aufgelöst (CR-MEDIUM: kein stale/leerer Pin bei First-Boot/CA-Reissue). normFp +
+  // filterPinnedCaPems werden für beide Phasen wiederverwendet.
+  const normFp = (fp: string): string => fp.replace(/:/g, '').toLowerCase();
+  const filterPinnedCaPems = (pems: Array<string | null | undefined>, pinnedFps: readonly string[]): string[] => {
+    const set = new Set(pinnedFps.map(normFp));
+    return Array.from(new Set(
+      pems
+        .filter((pem): pem is string => typeof pem === 'string' && pem.length > 0)
+        .filter((pem) => { try { return set.has(normFp(certFingerprint(pem))); } catch { return false; } }),
+    ));
+  };
+  const ownCaDiskPem = (() => {
+    const p = resolve(config.daemon.data_dir, 'tls', 'ca.crt.pem');
+    return fsExistsSync(p) ? readFileSync(p, 'utf-8') : null;
+  })();
+  const canonicalSelfUriForCert = libp2pKey ? peerIdToSpiffeUri(libp2pKey.peerId) : undefined;
+  const prelimPinnedFps = resolveAttestingCaFingerprints(
+    process.env['TLMCP_PEERID_ATTESTING_CA_FP'],
+    ownCaDiskPem,
+  ).fingerprints;
+  const prelimTrustedCaPems = filterPinnedCaPems(
+    [ownCaDiskPem, ...pairingStore.getAllPeers().map((p) => p.caCertPem)],
+    prelimPinnedFps,
+  );
+
   // 2. TLS-Bundle laden oder erstellen (CA + Node-Zertifikat)
   let tlsBundle: NodeCertBundle | undefined;
   if (config.daemon.tls_enabled) {
@@ -110,6 +152,7 @@ async function main(): Promise<void> {
       identity.spiffeUri,
       log,
       identity.stableNodeId,
+      { canonicalSpiffeUri: canonicalSelfUriForCert, trustedAttestingCaPems: prelimTrustedCaPems },
     );
     log.info('mTLS aktiviert — HTTPS mit gegenseitiger Zertifikatsprüfung');
   } else {
@@ -130,11 +173,6 @@ async function main(): Promise<void> {
   // Wird weiter unten in den onMessage-Handler eingebunden und ueber MCP-Tools
   // send_message_to_peer / read_inbox / mark_read freigegeben.
   const agentInbox = new AgentInbox(config.daemon.data_dir, log);
-
-  // SPAKE2 Trust-Bootstrap: PairingStore muss VOR dem Trust-Store angelegt
-  // werden, damit die CA-Certs aller bereits gepairten Peers beim Start sofort
-  // ins aggregierte Bundle einfliessen (bootstrap trust von Disk).
-  const pairingStore = new PairingStore(config.daemon.data_dir, log);
 
   // Aggregiertes mTLS Trust-Bundle: eigene CA + alle gepairten Peer-CAs.
   // Ohne diese Aggregation scheitert der mTLS-Handshake zwischen Peers mit
@@ -165,14 +203,6 @@ async function main(): Promise<void> {
       })
     : undefined;
 
-  // ADR-022 #0/Phase 3: persistierten libp2p-Ed25519-Key laden/erzeugen → stabile
-  // PeerID über Neustarts. NUR wenn libp2p aktiv ist (CR HIGH): im local-Modus ist
-  // libp2p deaktiviert → kein Key-Laden, eine korrupte Datei darf den Boot dann nicht
-  // blocken. Früh geladen, weil die kanonische Self-Identität davon abhängt (siehe unten).
-  const libp2pKey = config.libp2p.enabled
-    ? await loadOrCreateLibp2pPrivateKey(config.daemon.data_dir, log)
-    : undefined;
-
   // ADR-022 Phase 3 — Per-Node-Sender-Flip (Self-Identity-Ableitung):
   // `selfIdentityUri` ist die URI, die der Node als `envelope.sender` / agent_id /
   // Skill-Author / Inbox-Adresse / Audit-Identität verwendet. Sie flippt von Legacy
@@ -187,34 +217,41 @@ async function main(): Promise<void> {
   // bleibt der ECDSA-Agent-Key (Option B, ADR-022 §3): Peers lösen ihn über die
   // verifizierte, auf die PeerID gekeyte Agent-Card auf (resolvePeerPublicKey). Der Flip
   // ist rein additiv + per Flag reversibel (Flag aus → sofort wieder Legacy).
-  // ADR-022 WS-3 / Pin-Auto-Derive (pal:consensus 2026-06-06): Fingerprints der CAs, die
-  // `node/<PeerID>` attestieren dürfen. Default: aus der EIGENEN Mesh-CA abgeleitet
-  // (`caCertPem`, Guard: genau 1 Cert), env `TLMCP_PEERID_ATTESTING_CA_FP` überschreibt,
-  // `none` deaktiviert. Früh berechnet (die Flip-Entscheidung #159 braucht sie). Laut geloggt.
+  // AUTORITATIVE Attesting-Pin-Auflösung (NACH dem Bundle, aus tlsBundle.caCertPem — die jetzt
+  // sicher existierende/erzeugte eigene Mesh-CA; CR-MEDIUM: kein stale/leerer Pin bei
+  // First-Boot/CA-Reissue). env TLMCP_PEERID_ATTESTING_CA_FP überschreibt, `none` deaktiviert.
   const attestingPin = resolveAttestingCaFingerprints(
     process.env['TLMCP_PEERID_ATTESTING_CA_FP'],
-    tlsBundle?.caCertPem ?? null,
+    tlsBundle?.caCertPem ?? ownCaDiskPem,
   );
   const peerIdAttestingCaFingerprints = attestingPin.fingerprints;
   log.info(
     { source: attestingPin.source, fingerprints: peerIdAttestingCaFingerprints },
     '[identity] ADR-022 Attesting-CA-Pin aufgelöst',
   );
-  // CR-LOW: explizit gesetzte Env-Pins auf Format prüfen (SHA-256 = 64 Hex nach ':'-Strip).
-  // Ein Tippfehler bliebe sonst still in der Liste und führte zu schwer diagnostizierbarem
-  // Fail-closed (Sender/Cert würde nie attestiert). Nur warnen, nicht abbrechen.
   if (attestingPin.source === 'env') {
     const invalidPins = peerIdAttestingCaFingerprints.filter((fp) => !/^[0-9a-fA-F]{64}$/.test(fp.replace(/:/g, '')));
     if (invalidPins.length > 0) {
       log.warn({ invalidPins }, '[identity] ADR-022: Attesting-CA-Pin-Einträge mit ungültigem Format (kein SHA-256-Hex)');
     }
   }
+  // Gepinnte Attesting-CA-PEMs (eigene + gepairte), gefiltert auf den autoritativen Pin.
+  const trustedAttestingCaPems = filterPinnedCaPems(
+    [tlsBundle?.caCertPem ?? ownCaDiskPem, ...pairingStore.getAllPeers().map((p) => p.caCertPem)],
+    peerIdAttestingCaFingerprints,
+  );
   const certSansAtBoot = tlsBundle ? extractSpiffeUris(tlsBundle.certPem) : [];
-  // Issuer unseres Serving-Certs = unsere Mesh-CA (caCertPem). CR-HIGH (#159): nur flippen,
-  // wenn dieser Issuer in der gepinnten Attesting-Menge liegt (Symmetrie zur Empfangsseite).
-  const certIssuerIsAttesting = tlsBundle
-    ? isAttestingIssuer(certFingerprint(tlsBundle.caCertPem), peerIdAttestingCaFingerprints)
-    : false;
+  // CR-HIGH (#159): nur flippen, wenn das Serving-Cert von einer gepinnten Attesting-CA
+  // ausgestellt ist (Symmetrie zur Empfangsseite). ADR-024 CR-HIGH-1: die ausstellende CA
+  // ist NICHT zwingend die eigene `tlsBundle.caCertPem` — bei own-CA-Nodes (.56/.222), die
+  // ein .94-signiertes kanonisches Cert behalten, ist der Issuer die .94-CA. Daher KRYPTO-
+  // grafisch prüfen, ob das Serving-Cert unter EINER gepinnten Attesting-CA-PEM verifiziert
+  // (NICHT über den eigenen CA-Fingerprint). `servingCertIssuerCaPem` = genau diese CA (für die
+  // Pairing-/Trust-Distribution, CR-HIGH-2). `verifyPeerCert` prüft Signatur + Gültigkeit.
+  const servingCertIssuerCaPem = tlsBundle
+    ? trustedAttestingCaPems.find((caPem) => verifyPeerCert(caPem, tlsBundle!.certPem))
+    : undefined;
+  const certIssuerIsAttesting = servingCertIssuerCaPem !== undefined;
   const idDecision = resolveSelfIdentity({
     emitCanonicalFlag: config.daemon.emit_canonical_sender,
     legacyUri: identity.spiffeUri,
@@ -643,7 +680,11 @@ async function main(): Promise<void> {
     agentId: selfIdentityUri,
     hostname: config.daemon.hostname,
     publicKeyPem: identity.publicKeyPem,
-    caCertPem: tlsBundle?.caCertPem ?? '',
+    // ADR-024 CR-HIGH-2: gepairte Peers müssen die CA bekommen, die unser SERVING-Cert
+    // ausgestellt hat — bei einem behaltenen .94-signierten kanonischen Cert ist das die
+    // .94-Attesting-CA, NICHT unsere eigene Mesh-CA. Sonst könnten neu gepairte Peers unser
+    // Cert nicht validieren. Fallback: eigene CA (Legacy-/Default-Fall).
+    caCertPem: servingCertIssuerCaPem ?? tlsBundle?.caCertPem ?? '',
     fingerprint: identity.fingerprint,
     log,
     trustStoreNotifier,
@@ -652,11 +693,26 @@ async function main(): Promise<void> {
   // 8c1b. Token-Onboarding API (ADR-016)
   // Load CA key for cert-signing (only admin nodes have this)
   const caKeyPath = join(config.daemon.data_dir, 'tls', 'ca.key.pem');
+  // ADR-024 CR-HIGH-3: Token-Onboarding/Cert-Issuance NUR aktivieren, wenn unser eigenes
+  // Serving-Cert auch von unserer EIGENEN ca.crt.pem signiert ist. Hält ein own-CA-Node ein
+  // von .94 BEHALTENES (ADR-024 Retention) kanonisches Cert, ist die eigene CA NICHT der
+  // Issuer des Serving-Certs — würden wir damit Peers onboarden, bekämen sie einen
+  // Trust-Anchor, der unseren Server nicht verifiziert. Fail-safe: Issuance dann AUS.
+  // (.94 behält Issuance: sein Serving-Cert IST von seiner eigenen Mesh-CA signiert.)
+  const servingCertSignedByOwnCa = tlsBundle
+    ? verifyPeerCert(tlsBundle.caCertPem, tlsBundle.certPem)
+    : false;
   let caBundle: import('./tls.js').CaBundle | undefined;
   try {
     const caKeyPem = readFileSync(caKeyPath, 'utf-8');
-    caBundle = { caCertPem: tlsBundle?.caCertPem ?? '', caKeyPem: caKeyPem };
-    log.info('CA-Key geladen — Token-Onboarding aktiv (Admin-Node)');
+    if (servingCertSignedByOwnCa) {
+      caBundle = { caCertPem: tlsBundle?.caCertPem ?? '', caKeyPem: caKeyPem };
+      log.info('CA-Key geladen — Token-Onboarding aktiv (Admin-Node)');
+    } else {
+      log.warn(
+        'CA-Key vorhanden, aber Serving-Cert NICHT von der eigenen CA signiert (ADR-024: fremd-signiertes Cert behalten) — Token-Onboarding/Cert-Issuance DEAKTIVIERT (inkonsistente Issuer-Topologie, fail-safe)',
+      );
+    }
   } catch {
     log.info('Kein CA-Key gefunden — Token-Onboarding nicht verfuegbar (kein Admin-Node)');
   }
