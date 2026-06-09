@@ -63,6 +63,14 @@ describe('libp2p-runtime', () => {
     expect(resolveLibp2pMdnsEnabled({ disableMdnsInterfacePin: true })).toBe(false);
   });
 
+  it('resolveLibp2pMdnsEnabled: ADR-025 mdnsEnabled=false schaltet auch libp2p-mDNS aus', () => {
+    expect(resolveLibp2pMdnsEnabled({ mdnsEnabled: true })).toBe(true);
+    expect(resolveLibp2pMdnsEnabled({ mdnsEnabled: undefined })).toBe(true);
+    expect(resolveLibp2pMdnsEnabled({ mdnsEnabled: false })).toBe(false);
+    // beide Quellen kombiniert: eine reicht zum Abschalten
+    expect(resolveLibp2pMdnsEnabled({ disableMdnsInterfacePin: false, mdnsEnabled: false })).toBe(false);
+  });
+
   it('createInitialLibp2pState meldet mdns:false wenn disableMdnsInterfacePin (.55-Fix)', () => {
     const state = createInitialLibp2pState({
       enabled: true,

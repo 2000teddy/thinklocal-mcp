@@ -23,6 +23,12 @@ export interface Libp2pRuntimeConfig {
    */
   disableMdnsInterfacePin?: boolean;
   /**
+   * ADR-025 CR-HIGH: static-only-Modus (`discovery.mdns_enabled=false`) muss AUCH den
+   * zweiten mDNS-Stack (@libp2p/mdns) abschalten — sonst bleibt eine Poison-Quelle aktiv.
+   * Default (undefined/true): libp2p-mDNS bleibt aktiv. false → Service nicht registriert.
+   */
+  mdnsEnabled?: boolean;
+  /**
    * ADR-022 #0: persistierter libp2p-Ed25519-PrivateKey. Wird an createLibp2p
    * durchgereicht, damit die PeerID über Neustarts STABIL bleibt. Lose typisiert
    * (unknown), um die harte @libp2p/interface-Typabhängigkeit in diesem Modul zu
@@ -206,9 +212,10 @@ export function resolveNatReachability(args: {
  * Doku am Feld in Libp2pRuntimeConfig (.55 connectx-Re-Vergiftung, v0.34.5).
  */
 export function resolveLibp2pMdnsEnabled(
-  config: Pick<Libp2pRuntimeConfig, 'disableMdnsInterfacePin'>,
+  config: Pick<Libp2pRuntimeConfig, 'disableMdnsInterfacePin' | 'mdnsEnabled'>,
 ): boolean {
-  return config.disableMdnsInterfacePin !== true;
+  // Aus, wenn der Pin abgeschaltet ist (v0.34.5) ODER mDNS komplett deaktiviert (ADR-025).
+  return config.disableMdnsInterfacePin !== true && config.mdnsEnabled !== false;
 }
 
 export function createInitialLibp2pState(config: Libp2pRuntimeConfig): Libp2pRuntimeState {

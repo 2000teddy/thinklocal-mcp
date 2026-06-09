@@ -41,3 +41,31 @@ describe('loadConfig: disable_mdns_interface_pin (.55-Workaround)', () => {
     expect(cfg.discovery.disable_mdns_interface_pin).toBe(false);
   });
 });
+
+describe('loadConfig: ADR-025 mdns_enabled + preferred_interfaces', () => {
+  afterEach(() => {
+    delete process.env['TLMCP_MDNS_ENABLED'];
+    delete process.env['TLMCP_PREFERRED_INTERFACES'];
+  });
+
+  it('Defaults: mdns_enabled=true, preferred_interfaces=[]', () => {
+    const cfg = loadConfig(NO_TOML);
+    expect(cfg.discovery.mdns_enabled).toBe(true);
+    expect(cfg.discovery.preferred_interfaces).toEqual([]);
+  });
+
+  it('TLMCP_MDNS_ENABLED=0 → false (static-only)', () => {
+    process.env['TLMCP_MDNS_ENABLED'] = '0';
+    expect(loadConfig(NO_TOML).discovery.mdns_enabled).toBe(false);
+  });
+
+  it('TLMCP_MDNS_ENABLED=1 → true', () => {
+    process.env['TLMCP_MDNS_ENABLED'] = '1';
+    expect(loadConfig(NO_TOML).discovery.mdns_enabled).toBe(true);
+  });
+
+  it('TLMCP_PREFERRED_INTERFACES="en10,en0" → geparste, getrimmte Liste', () => {
+    process.env['TLMCP_PREFERRED_INTERFACES'] = ' en10 , en0 ';
+    expect(loadConfig(NO_TOML).discovery.preferred_interfaces).toEqual(['en10', 'en0']);
+  });
+});

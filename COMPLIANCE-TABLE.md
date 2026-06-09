@@ -768,4 +768,16 @@ Doc-only-Eintrag (Abschluss-Dokumentation Live-Test); kein Code → CO/CG/TS/CR/
 
 ---
 
-*Letzte Aktualisierung: 2026-06-09 — v0.34.6 (DRAFT) ADR-024 Canonical-Cert-Retention.*
+## Session 2026-06-09 — v0.34.7 (DRAFT) ADR-025 Static-Peer-Join + mDNS-off + Interface-Präferenz (.55)
+
+| #       | PR    | Datum      | CO | CG | TS | CR | PC | DO | Findings                           |
+|---------|-------|------------|----|----|----|----|----|----|----|
+| v0.34.7 | DRAFT | 2026-06-09 | ✅ | ⚠️ | ✅ | ✅ | ✅ | ✅ | CR gpt-5.5 (2 Runden): 1 HIGH (libp2p-mDNS-Gating) + 3 MEDIUM + 1 LOW gefixt → 0 CRITICAL/HIGH; 1 Rest-MEDIUM (harmloser Shutdown-Race) dokumentiert |
+
+**CO:** `pal:analyze` gpt-5.5 — alle 3 Optionen endorsed (1+2 must-have .55, 3 should-have /16). **CG:** ⚠️ gemini 429-Quota — Tests von Hand. **TS:** +20 Tests, 962 unit + 6 integration grün, tsc clean. **CR:** `pal:codereview` gpt-5.5 (2 Runden) — HIGH (mdns_enabled schaltete libp2p-mDNS nicht ab) + MEDIUM (steady-reconcile, undici-body-leak, stop-in-flight) + LOW gefixt; final 0 CRITICAL/HIGH. **PC:** gpt-5.3-codex 0 Blocker. **DO:** ADR-025, CHANGES (v0.34.7 DRAFT), COMPLIANCE, TODO.
+
+**Status:** DRAFT-PR, wartet auf Review. **KEIN Deploy/Merge/Branch-Protection-Änderung ohne Christians Wort.** Test auf `.55` durch Orchestrator.
+
+---
+
+*Letzte Aktualisierung: 2026-06-09 — v0.34.7 (DRAFT) ADR-025 Static-Peer-Join.*

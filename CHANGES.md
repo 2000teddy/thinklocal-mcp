@@ -8,6 +8,29 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-09
 
+### v0.34.7 (DRAFT, wartet auf Review — KEIN Deploy/Merge ohne Christians Wort) — ADR-025 Static-Peer-Join + abschaltbares mDNS + Interface-Präferenz (.55)
+
+Macht den Mesh-Join eines dual-homed macOS-Nodes (`.55`, en10-Dock + en0-WiFi) robust. Diagnose:
+der Daemon-Start vergiftet macOS-`connectx`-Routing **transient** (~Sekunden); der frühere
+**einmalige** static_peer-Connect-Burst (~100ms nach libp2p-Start, kein Retry) traf genau dieses
+Fenster → alle Connects `EHOSTUNREACH` → 0 Peers. Drei additive, config-gegatete Fixes (Default unverändert):
+
+- **`discovery.mdns_enabled`** (Default true): bei `false` wird **kein** Bonjour erzeugt
+  (`MdnsDiscovery`-Ctor early-return vor `getMeshIp`/Fail-closed; publish/browse/stop no-op) UND
+  der zweite mDNS-Stack (`@libp2p/mdns`) abgeschaltet (`resolveLibp2pMdnsEnabled` gated jetzt auf
+  `disableMdnsInterfacePin` ODER `mdnsEnabled`) → echtes static-only ohne Poison-Quelle. Env `TLMCP_MDNS_ENABLED=0`.
+- **Static-Peer-Reconciler** (`static-peer-reconciler.ts`): ersetzt den Einmal-Burst — versucht
+  nicht-verbundene Peers sofort, dann alle 15s für 5min; bei static-only danach langsam weiter (60s,
+  re-prüft ALLE Peers → Re-Discovery). Non-blocking, idempotent (`mesh.addPeer` dedupt), stopbar im
+  Shutdown. Robust für ALLE Nodes (übersteht transientes Start-Poison + später startende Peers).
+- **`discovery.preferred_interfaces`** (geordnete Liste): `orderMeshInterfaces` bevorzugt gelistete
+  Interface-Namen (z.B. `["en10","en0"]` → wired vor WiFi) bei mehreren CIDR-Treffern → erlaubt `/16`
+  ohne en0-Fehlwahl. Keine Wired/WiFi-Heuristik (deterministisch). Env `TLMCP_PREFERRED_INTERFACES`.
+- **CO** `pal:analyze` gpt-5.5 (alle 3 endorsed). **CR** gpt-5.5 (2 Runden): 1 HIGH (libp2p-mDNS-Gating)
+  + 3 MEDIUM + 1 LOW gefixt → 0 CRITICAL/HIGH (1 Rest-MEDIUM = harmloser Shutdown-Race, dokumentiert).
+  **PC** gpt-5.3-codex: 0 Blocker. **TS:** +20 Tests, 962 unit + 6 integration grün, tsc clean.
+- **Rollout NICHT Teil dieses Drafts.** `.55`-Empfehlung: `mdns_enabled=false` + static_peers. Test auf `.55` durch Orchestrator.
+
 ### v0.34.6 (DRAFT, wartet auf Review — KEIN Deploy/Merge ohne Christians Wort) — ADR-024 Canonical-Cert-Retention
 
 Schließt die letzte Lücke des ADR-022-Sender-Flips für **CA-owner** (`.94`) und **own-CA**
