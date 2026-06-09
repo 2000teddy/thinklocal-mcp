@@ -45,9 +45,11 @@ export function resolveBonjourOptions(
 }
 
 export class MdnsDiscovery {
-  private bonjour: Bonjour;
+  private bonjour?: Bonjour;
   private browser: Browser | null = null;
   private meshIp?: string;
+  /** ADR-025: false → static-only, keine Bonjour-Instanz, publish/browse/stop no-op. */
+  private readonly enabled: boolean;
 
   constructor(
     private serviceType: string,
@@ -56,6 +58,16 @@ export class MdnsDiscovery {
     private policy: DiscoveryPolicyConfig = {},
     networkInterfacesSource?: NetworkInterfacesSource,
   ) {
+    // ADR-025: mDNS komplett abschaltbar (static-only Nodes, z.B. dual-homed macOS .55,
+    // wo der mDNS-Stack die connectx-Route vergiftet). Früher Return VOR getMeshIp und
+    // dem allowed_mesh_cidrs-Fail-closed-Check: bei reinem static_peer-Betrieb darf eine
+    // fehlende Mesh-IP den Start NICHT blockieren. publish/browse/unpublish/stop werden no-op.
+    this.enabled = policy.mdns_enabled !== false;
+    if (!this.enabled) {
+      this.log?.info('[discovery] mDNS DEAKTIVIERT (mdns_enabled=false) — keine Bonjour-Instanz, Discovery rein über static_peers');
+      return;
+    }
+
     // ADR-019: explizites Interface-Pinning fuer den mDNS-Socket
     // (steuert auf welchem Interface Multicast versendet wird).
     //
@@ -123,6 +135,7 @@ export class MdnsDiscovery {
       proto: 'http' | 'https';
     },
   ): void {
+    if (!this.bonjour) return; // ADR-025: mDNS deaktiviert → no-op
     const service = this.bonjour.publish({
       name,
       type: this.serviceType.replace(/^_/, '').replace(/\._tcp$/, ''),
@@ -162,6 +175,7 @@ export class MdnsDiscovery {
   }
 
   browse(events: DiscoveryEvents): void {
+    if (!this.bonjour) return; // ADR-025: mDNS deaktiviert → no-op
     this.browser = this.bonjour.find(
       { type: this.serviceType.replace(/^_/, '').replace(/\._tcp$/, '') },
       (service: Service) => {
@@ -250,11 +264,13 @@ export class MdnsDiscovery {
   }
 
   unpublish(): void {
+    if (!this.bonjour) return; // ADR-025: mDNS deaktiviert → no-op
     this.bonjour.unpublishAll();
     this.log?.info('mDNS Service abgemeldet');
   }
 
   stop(): void {
+    if (!this.bonjour) return; // ADR-025: mDNS deaktiviert → no-op
     this.browser?.stop();
     this.unpublish();
     this.bonjour.destroy();

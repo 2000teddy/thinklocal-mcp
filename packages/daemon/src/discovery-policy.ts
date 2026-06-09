@@ -47,6 +47,19 @@ export interface DiscoveryPolicyConfig {
    * via Default-IF, Mesh via static_peer. Default false. Env: TLMCP_DISABLE_MDNS_INTERFACE_PIN=1.
    */
   disable_mdns_interface_pin?: boolean;
+
+  /**
+   * ADR-025: mDNS (bonjour-service) komplett abschalten (static-only). Default true.
+   * Bei false erzeugt MdnsDiscovery KEINE Bonjour-Instanz.
+   */
+  mdns_enabled?: boolean;
+
+  /**
+   * ADR-025: Geordnete Interface-Namen-Präferenz für die Mesh-IP-Wahl. Bei mehreren
+   * CIDR-Treffern gewinnen die zuerst gelisteten (z.B. ["en10","en0"] → wired vor WiFi).
+   * Leer/ungesetzt = deterministisch nach Interface-Name (bisheriges Verhalten).
+   */
+  preferred_interfaces?: string[];
 }
 
 export const DEFAULT_EXCLUDE_PATTERNS = [
@@ -181,16 +194,38 @@ export function selectMeshInterfaces(
 }
 
 /**
+ * ADR-025: Ordnet Mesh-Interfaces nach `preferred_interfaces` (geordnete Namensliste),
+ * dann deterministisch nach Interface-Name. Rein/testbar. Ein Interface, dessen Name
+ * in `preferred` steht, gewinnt gegen nicht gelistete; bei zwei gelisteten entscheidet
+ * deren Reihenfolge in `preferred`; sonst localeCompare (bisheriges Verhalten).
+ */
+export function orderMeshInterfaces(
+  ifaces: MeshInterface[],
+  preferred: readonly string[] = [],
+): MeshInterface[] {
+  const rank = new Map(preferred.map((name, index) => [name, index] as const));
+  return [...ifaces].sort((a, b) => {
+    const ar = rank.get(a.name);
+    const br = rank.get(b.name);
+    if (ar !== undefined && br !== undefined) return ar - br;
+    if (ar !== undefined) return -1;
+    if (br !== undefined) return 1;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+/**
  * Liefert die Mesh-IP fuer Service-Publishing.
- * Bei mehreren passenden: nimmt die erste (deterministisch nach Interface-Name).
- * Liefert undefined wenn keine passende IP gefunden.
+ * Bei mehreren passenden: `preferred_interfaces` zuerst, sonst deterministisch nach
+ * Interface-Name. Liefert undefined wenn keine passende IP gefunden.
  */
 export function getMeshIp(
   config: DiscoveryPolicyConfig = {},
   source: () => ReturnType<typeof networkInterfaces> = networkInterfaces,
 ): string | undefined {
-  const ifaces = selectMeshInterfaces(config, source).sort((a, b) =>
-    a.name.localeCompare(b.name),
+  const ifaces = orderMeshInterfaces(
+    selectMeshInterfaces(config, source),
+    config.preferred_interfaces ?? [],
   );
   return ifaces[0]?.address;
 }

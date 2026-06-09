@@ -9,6 +9,7 @@ import {
   matchesPattern,
   selectMeshInterfaces,
   getMeshIp,
+  orderMeshInterfaces,
   isPeerIpAllowed,
   restrictServiceToIp,
   DEFAULT_EXCLUDE_PATTERNS,
@@ -196,6 +197,52 @@ describe('getMeshIp', () => {
 
   it('liefert undefined wenn kein Interface passt', () => {
     expect(getMeshIp({ allowed_mesh_cidrs: ['192.168.99.0/24'] }, mockSource)).toBeUndefined();
+  });
+
+  // ADR-025: preferred_interfaces — /16 mit en10 (wired) + en0 (WiFi).
+  describe('preferred_interfaces (ADR-025, .55 /16-Fall)', () => {
+    const dualHomed = () =>
+      ({
+        en0: [
+          { address: '10.10.25.90', netmask: '255.255.0.0', family: 'IPv4', mac: 'aa:bb:cc:dd:ee:01', internal: false, cidr: '10.10.25.90/16' },
+        ],
+        en10: [
+          { address: '10.10.10.55', netmask: '255.255.0.0', family: 'IPv4', mac: 'aa:bb:cc:dd:ee:02', internal: false, cidr: '10.10.10.55/16' },
+        ],
+      }) as unknown as NetworkInterfacesReturn;
+
+    it('OHNE preferred: /16 wählt en0 (WiFi) — das ist der gemeldete Fehlfall', () => {
+      // localeCompare: "en0" < "en10" → WiFi gewinnt (falsch).
+      expect(getMeshIp({ allowed_mesh_cidrs: ['10.10.0.0/16'] }, dualHomed)).toBe('10.10.25.90');
+    });
+
+    it('MIT preferred_interfaces=["en10","en0"]: wählt en10 (wired) trotz /16', () => {
+      expect(
+        getMeshIp({ allowed_mesh_cidrs: ['10.10.0.0/16'], preferred_interfaces: ['en10', 'en0'] }, dualHomed),
+      ).toBe('10.10.10.55');
+    });
+
+    it('preferred_interfaces greift nur auf erlaubte (CIDR-gefilterte) Interfaces', () => {
+      // en8 (10.0.0.20) ist nicht im CIDR → preferred darf es nicht reinholen.
+      expect(
+        getMeshIp({ allowed_mesh_cidrs: ['10.10.10.0/24'], preferred_interfaces: ['en8', 'en10'] }, mockSource),
+      ).toBe('10.10.10.55');
+    });
+  });
+});
+
+describe('orderMeshInterfaces (ADR-025)', () => {
+  const mk = (name: string, address: string) => ({ name, address, cidr: `${address}/16`, netmask: '255.255.0.0' });
+
+  it('preferred zuerst (in Reihenfolge), Rest nach Name', () => {
+    const ifs = [mk('en0', '10.10.25.90'), mk('en10', '10.10.10.55'), mk('en5', '10.10.30.1')];
+    const ordered = orderMeshInterfaces(ifs, ['en10', 'en0']);
+    expect(ordered.map((i) => i.name)).toEqual(['en10', 'en0', 'en5']);
+  });
+
+  it('ohne preferred: deterministisch nach Name (localeCompare)', () => {
+    const ifs = [mk('en10', '10.10.10.55'), mk('en0', '10.10.25.90')];
+    expect(orderMeshInterfaces(ifs).map((i) => i.name)).toEqual(['en0', 'en10']);
   });
 });
 

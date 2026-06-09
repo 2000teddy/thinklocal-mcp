@@ -8,6 +8,7 @@ import { loadOrCreateTlsBundle, getCertDaysLeft, extractSpiffeUris, verifyPeerCe
 import { existsSync as fsExistsSync } from 'node:fs';
 import { AuditLog } from './audit.js';
 import { MdnsDiscovery } from './discovery.js';
+import { startStaticPeerReconciler } from './static-peer-reconciler.js';
 import { AgentCardServer } from './agent-card.js';
 import { MeshManager, type MeshPeer } from './mesh.js';
 import { CapabilityRegistry } from './registry.js';
@@ -367,6 +368,8 @@ async function main(): Promise<void> {
     // .55-Fix (v0.34.5): auf dual-homed macOS auch die libp2p-mDNS-Instanz
     // abschalten (zweite multicast-dns-Quelle der connectx-Re-Vergiftung).
     disableMdnsInterfacePin: config.discovery.disable_mdns_interface_pin,
+    // ADR-025 CR-HIGH: static-only (mdns_enabled=false) schaltet auch libp2p-mDNS ab.
+    mdnsEnabled: config.discovery.mdns_enabled,
     privateKey: libp2pKey?.privateKey,
   }, log, {
     protocolHandlers: registrySync.protocolHandlers,
@@ -1010,6 +1013,12 @@ async function main(): Promise<void> {
           ? config.discovery.exclude_interface_patterns
           : undefined,
       disable_mdns_interface_pin: config.discovery.disable_mdns_interface_pin,
+      // ADR-025: mDNS komplett aus (static-only) + geordnete Interface-Präferenz.
+      mdns_enabled: config.discovery.mdns_enabled,
+      preferred_interfaces:
+        config.discovery.preferred_interfaces.length > 0
+          ? config.discovery.preferred_interfaces
+          : undefined,
     },
   );
 
@@ -1064,40 +1073,52 @@ async function main(): Promise<void> {
     },
   });
 
-  // 9b. Statische Peers verbinden (parallel, Fallback wenn mDNS nicht funktioniert)
+  // 9b. Statische Peers verbinden — ADR-025: robuster Reconciler statt einmaligem Start-Burst.
+  // Auf dual-homed macOS (.55) vergiftet der Daemon-Start die connectx-Route transient (~Sekunden);
+  // der frühere Einmal-Connect traf genau dieses Fenster → EHOSTUNREACH → 0 Peers, kein Retry.
+  // Der Reconciler versucht nicht-verbundene Peers sofort, dann alle 15s für 5min neu; bei
+  // static-only (mDNS aus) danach langsam weiter (60s). Non-blocking, idempotent (mesh.addPeer
+  // dedupt über agentId), sauber stopbar im Shutdown.
+  let staticPeerReconciler: { stop: () => void } | undefined;
   if (config.discovery.static_peers.length > 0) {
-    log.info({ count: config.discovery.static_peers.length }, 'Statische Peers konfiguriert');
-    await Promise.allSettled(config.discovery.static_peers.map(async (sp) => {
+    log.info({ count: config.discovery.static_peers.length }, 'Statische Peers konfiguriert — Reconciler startet');
+    const connectStaticPeerOnce = async (sp: typeof config.discovery.static_peers[number]): Promise<boolean> => {
       const port = sp.port ?? config.daemon.port;
       const endpoint = `${proto}://${sp.host}:${port}`;
       const name = sp.name ?? `${sp.host}:${port}`;
-      try {
-        const res = await fetch(`${endpoint}/.well-known/agent-card.json`, {
-          signal: AbortSignal.timeout(5_000),
-          dispatcher: tlsDispatcher,
-        });
-        if (res.ok) {
-          const card = (await res.json()) as AgentCard;
-          const fingerprint = createHash('sha256').update(card.publicKey).digest('hex');
-          const peer = {
-            name,
-            host: sp.host,
-            port,
-            agentId: card.spiffeUri,
-            capabilityHash: '',
-            certFingerprint: fingerprint,
-            endpoint,
-          };
-          mesh.addPeer(peer);
-          mesh.updateAgentCard(card.spiffeUri, card);
-          log.info({ peer: name, agentId: card.spiffeUri }, 'Statischer Peer verbunden');
-        } else {
-          log.warn({ peer: name, status: res.status }, 'Statischer Peer nicht erreichbar');
-        }
-      } catch (err) {
-        log.warn({ peer: name, err }, 'Statischer Peer Verbindung fehlgeschlagen');
+      const res = await fetch(`${endpoint}/.well-known/agent-card.json`, {
+        signal: AbortSignal.timeout(5_000),
+        dispatcher: tlsDispatcher,
+      });
+      if (!res.ok) {
+        // CR-MEDIUM: Body verwerfen, sonst hält undici die Verbindung offen (Socket-Leak bei Retry).
+        await res.body?.cancel().catch(() => {});
+        log.warn({ peer: name, status: res.status }, 'Statischer Peer nicht erreichbar (retry)');
+        return false;
       }
-    }));
+      const card = (await res.json()) as AgentCard;
+      const fingerprint = createHash('sha256').update(card.publicKey).digest('hex');
+      mesh.addPeer({
+        name,
+        host: sp.host,
+        port,
+        agentId: card.spiffeUri,
+        capabilityHash: '',
+        certFingerprint: fingerprint,
+        endpoint,
+      });
+      mesh.updateAgentCard(card.spiffeUri, card);
+      log.info({ peer: name, agentId: card.spiffeUri }, 'Statischer Peer verbunden');
+      return true;
+    };
+    staticPeerReconciler = startStaticPeerReconciler({
+      staticPeers: config.discovery.static_peers,
+      connectOnce: connectStaticPeerOnce,
+      log,
+      // static-only (mDNS aus): nach dem Startup-Fenster langsam weiter-reconcilen,
+      // damit später startende Peers ohne mDNS trotzdem gefunden werden.
+      steadyIntervalMs: config.discovery.mdns_enabled === false ? 60_000 : undefined,
+    });
   }
 
   // 10. Heartbeat-Loop + Gossip-Sync starten
@@ -1153,6 +1174,7 @@ async function main(): Promise<void> {
     vault.close();
     agentInbox.close();
     rateLimiter.stop();
+    staticPeerReconciler?.stop();
     discovery.stop();
     await registrySync.coordinator.stop();
     await libp2pRuntime.stop();

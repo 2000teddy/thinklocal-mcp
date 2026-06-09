@@ -447,6 +447,43 @@ describe('Discovery-Policy-Integration', () => {
     });
   });
 
+  describe('mDNS komplett deaktiviert (ADR-025 mdns_enabled=false)', () => {
+    const fakeMeshInterface = () => ({
+      en10: [{ address: '10.10.10.55', netmask: '255.255.255.0', family: 'IPv4' as const, mac: '00:00:00:00:00:00', internal: false, cidr: '10.10.10.55/24', scopeid: 0 }],
+    });
+    beforeEach(() => { bonjourCtorSpy.mockClear(); });
+    afterEach(() => { bonjourCtorSpy.mockClear(); });
+
+    it('erzeugt KEINE Bonjour-Instanz wenn mdns_enabled=false', () => {
+      const d = new MdnsDiscovery('_thinklocal._tcp', undefined, true, { mdns_enabled: false }, fakeMeshInterface);
+      expect(bonjourCtorSpy).not.toHaveBeenCalled();
+      d.stop();
+    });
+
+    it('publish/browse/unpublish/stop sind no-op (kein Throw) bei mdns_enabled=false', () => {
+      const d = new MdnsDiscovery('_thinklocal._tcp', undefined, true, { mdns_enabled: false }, fakeMeshInterface);
+      expect(() => {
+        d.publish('node', 9440, { agentId: 'x', capabilityHash: '', certFingerprint: '', proto: 'https' });
+        d.browse({ onPeerFound: vi.fn(), onPeerLeft: vi.fn() });
+        d.unpublish();
+        d.stop();
+      }).not.toThrow();
+      expect(bonjourCtorSpy).not.toHaveBeenCalled();
+    });
+
+    it('startet NICHT fail-closed bei allowed_mesh_cidrs ohne Match, wenn mDNS aus (static-only)', () => {
+      const noMatch = () => ({ en5: [{ address: '192.168.1.20', netmask: '255.255.255.0', family: 'IPv4' as const, mac: '0', internal: false, cidr: '192.168.1.20/24', scopeid: 0 }] });
+      expect(() => new MdnsDiscovery('_thinklocal._tcp', undefined, true, { mdns_enabled: false, allowed_mesh_cidrs: ['10.10.10.0/24'] }, noMatch)).not.toThrow();
+      expect(bonjourCtorSpy).not.toHaveBeenCalled();
+    });
+
+    it('mdns_enabled=true (default) erzeugt weiterhin eine Bonjour-Instanz', () => {
+      const d = new MdnsDiscovery('_thinklocal._tcp', undefined, true, { mdns_enabled: true }, fakeMeshInterface);
+      expect(bonjourCtorSpy).toHaveBeenCalledTimes(1);
+      d.stop();
+    });
+  });
+
   describe('CIDR-Edge-Cases (Reflektor-Resilience)', () => {
     it('lehnt Spoofing-Versuche aus benachbarten Subnetzen ab', () => {
       // Angreifer published als 10.10.11.55 — sieht aehnlich aus aber falsches Subnet

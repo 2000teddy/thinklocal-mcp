@@ -69,6 +69,20 @@ export interface DaemonConfig {
      * (vergiftet sonst macOS connectx-scoped-routing → EHOSTUNREACH). Default false.
      */
     disable_mdns_interface_pin: boolean;
+    /**
+     * ADR-025: mDNS (bonjour-service) komplett abschalten. Wenn false, wird KEINE
+     * Bonjour-Instanz erzeugt (publish/browse no-op) — Discovery läuft rein über
+     * static_peers. Für static-only Nodes (z.B. dual-homed macOS .55), wo der
+     * mDNS-Stack die connectx-Route vergiftet. Default true (mDNS aktiv wie bisher).
+     */
+    mdns_enabled: boolean;
+    /**
+     * ADR-025: Geordnete Interface-Namen-Präferenz für die Mesh-IP-Wahl. Wenn
+     * mehrere Interfaces ein allowed_mesh_cidr matchen (z.B. /16 mit en10 wired +
+     * en0 WiFi), gewinnen die hier zuerst gelisteten. Leer = bisheriges Verhalten
+     * (deterministisch nach Interface-Name). Beispiel: ["en10", "en0"].
+     */
+    preferred_interfaces: string[];
   };
   libp2p: {
     enabled: boolean;
@@ -105,6 +119,8 @@ const DEFAULTS: DaemonConfig = {
     allowed_mesh_cidrs: [],
     exclude_interface_patterns: [],
     disable_mdns_interface_pin: false,
+    mdns_enabled: true,
+    preferred_interfaces: [],
   },
   libp2p: {
     enabled: true,
@@ -192,6 +208,17 @@ export function loadConfig(configPath?: string): DaemonConfig {
   // Dual-homed-macOS-Workaround (.55): mDNS-Interface-Pin abschalten.
   if (env['TLMCP_DISABLE_MDNS_INTERFACE_PIN']) {
     cfg.discovery.disable_mdns_interface_pin = env['TLMCP_DISABLE_MDNS_INTERFACE_PIN'] === '1';
+  }
+  // ADR-025: mDNS komplett abschalten (static-only). '0' → aus, alles andere gesetzte → an.
+  if (env['TLMCP_MDNS_ENABLED']) {
+    cfg.discovery.mdns_enabled = env['TLMCP_MDNS_ENABLED'] !== '0';
+  }
+  // ADR-025: geordnete Interface-Präferenz (komma-separiert, z.B. "en10,en0").
+  if (env['TLMCP_PREFERRED_INTERFACES']) {
+    cfg.discovery.preferred_interfaces = env['TLMCP_PREFERRED_INTERFACES']
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
   }
 
   // LOW-FIX (CR-Review): CIDRs validieren — fail fast statt silent.
