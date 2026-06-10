@@ -38,7 +38,25 @@ mTLS-Inbound-Verbindung **lernt** den Peer.
 inkl. IPv6/empty-addr, config-Flag). 983 unit + 6 integration grün, tsc clean.
 **CR:** gpt-5.5 security — 2 HIGH + 1 MEDIUM + 2 LOW, alle gefixt + Regressionstests. **PC:** gpt-5.3-codex.
 
-### v0.34.7 (DRAFT, wartet auf Review — KEIN Deploy/Merge ohne Christians Wort) — ADR-025 Static-Peer-Join + abschaltbares mDNS + Interface-Präferenz (.55)
+### LIVE-DEPLOY 2026-06-10 — Linux-Fleet auf 92e6058 (ADR-024 + ADR-025), canonical-emit fleet-weit
+
+Christian-autorisierter Produktiv-Deploy (Orchestrator .94). #165 (ADR-024) + #166 (ADR-025) sind in
+main (HEAD **92e6058**) gemerged. Linux-Fleet per-VM gepullt+gebaut+restartet, own-CA-Nodes re-enrollt:
+
+| Node | Identität | build | Ergebnis |
+|------|-----------|-------|----------|
+| TH01 (.80) | `node/12D3KooWKZ4z…` | 92e6058 | emitCanonical ✅, 5/5, 0×403 |
+| TH02 (.82) | `node/12D3KooWMu7…` | 92e6058 | emitCanonical ✅, 5/5, 0×403 |
+| .52 iobroker | `node/12D3KooWFgnD…` | 92e6058 | emitCanonical ✅, 5/5, 0×403 |
+| .56 influxdb | `node/12D3KooWFTT1…` | 92e6058 | RE-ENROLL ✅ (ADR-024 hält Cert), emitCanonical ✅, 5/5, 0×403 (InfluxDB unberührt) |
+| .222 ai-n8n | `node/12D3KooWJjAmkk…` | 92e6058 | RE-ENROLL ✅, emitCanonical ✅, 5/5, 0×403 |
+
+**.94 (CA-Owner) + .55 (dual-homed macOS)** macht der Orchestrator selbst (macOS, separate Kopierkästen).
+Daemon-only-Scope strikt (InfluxDB/ioBroker/n8n unberührt). Re-Enroll-Backups je Node in
+`~/.thinklocal/tls/reenroll-backup/`. Hinweis: `build_version`-String steht noch auf 0.34.4
+(package.json nicht gebumpt) — `build_number=92e6058` ist der maßgebliche Deploy-Marker.
+
+### v0.34.7 (#166 gemerged 2026-06-10, deployed Linux-Fleet) — ADR-025 Static-Peer-Join + abschaltbares mDNS + Interface-Präferenz (.55)
 
 Macht den Mesh-Join eines dual-homed macOS-Nodes (`.55`, en10-Dock + en0-WiFi) robust. Diagnose:
 der Daemon-Start vergiftet macOS-`connectx`-Routing **transient** (~Sekunden); der frühere
@@ -61,7 +79,7 @@ Fenster → alle Connects `EHOSTUNREACH` → 0 Peers. Drei additive, config-gega
   **PC** gpt-5.3-codex: 0 Blocker. **TS:** +20 Tests, 962 unit + 6 integration grün, tsc clean.
 - **Rollout NICHT Teil dieses Drafts.** `.55`-Empfehlung: `mdns_enabled=false` + static_peers. Test auf `.55` durch Orchestrator.
 
-### v0.34.6 (DRAFT, wartet auf Review — KEIN Deploy/Merge ohne Christians Wort) — ADR-024 Canonical-Cert-Retention
+### v0.34.6 (#165 gemerged 2026-06-10, deployed .56/.222 + Linux-Fleet) — ADR-024 Canonical-Cert-Retention
 
 Schließt die letzte Lücke des ADR-022-Sender-Flips für **CA-owner** (`.94`) und **own-CA**
 Nodes (`.56`/`.222`): `loadOrCreateTlsBundle` verwarf deren frisch re-enrolltes kanonisches
