@@ -8,6 +8,36 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-10
 
+### v0.34.8 (DRAFT, wartet auf Merge — Orchestrator merged mit `gh --admin` sobald Gates grün) — ADR-026 Symmetrische Auth-Peer-Discovery (403 „Unknown sender"-Fix)
+
+Behebt die **Discovery-Asymmetrie**: `resolvePeerPublicKey` löste den Sender-Signing-Key NUR über
+`this.peers` (eigene mDNS/static-Discovery) auf → ein authentifizierter, aber **nicht selbst
+entdeckter** Peer (mobil / Cross-Subnet / NAT / `mdns_enabled=false`) bekam **403 „Unknown sender"**
+auf `SKILL_ANNOUNCE` und re-tryte endlos. Lean-Fix (Option A, ADR-026): die authentifizierte
+mTLS-Inbound-Verbindung **lernt** den Peer.
+
+- **`mesh.ts`** — ephemere, AUTHN-only `authenticatedSeen`-Map (`recordAuthenticatedSeen`): TTL 15 min,
+  LRU-Cap 256, `state` konstant `authenticated_unapproved`. `resolvePeerPublicKey` konsultiert sie als
+  Fallback **vor** 403 — aber strikt: nur exakte `wantPeerId`, kanonische URI, nicht abgelaufen; bei
+  mehrdeutigen verifizierten Treffern (`matches.length > 1`) **fail-closed** (kein seen-Override).
+- **`inbound-peer-learner.ts`** (neu, pure/injiziert) — Card-Fetch von der TLS-Source-IP + **Doppel-
+  Bindung** `payload-sender == card-SAN == issuer-attestierte PeerID`; IPv6/IPv4-mapped-URL-sicher.
+- **`agent-card.ts`** — `onAuthenticatedInbound`-Hook feuert non-blocking auf dem 403-Pfad (nur bei
+  issuer-gepinnt attestierter PeerID); der Sender-Retry löst dann auf.
+- **AUTHN/AUTHZ-INVARIANTE (CR gpt-5.5 HIGH 1):** `authenticated_unapproved` leakt **NIRGENDS** in
+  Autorisierung. Neues Prädikat `mesh.isApprovedPeerSender` (this.peers-only, KEIN seen-Fallback);
+  `index.ts` gatet `REGISTRY_SYNC` + `SKILL_ANNOUNCE` auf `senderIsPaired || isApprovedPeerSender` →
+  ein nur-gelernter Peer wird AUTHN-aufgelöst, aber **vor jeder CRDT-/Capability-Mutation verworfen**.
+  Verhaltensneutral für die bestehende Fleet (== Vor-ADR-026-Akzeptanzmenge).
+- **`config.ts`** — `discovery.auto_register_authenticated_peers` (Default `true`,
+  `TLMCP_AUTO_REGISTER_AUTH_PEERS=0` → aus). **`audit.ts`** — Event `PEER_OBSERVED`.
+- **#164/#166 (Route-Poison-Schutz .55) bleiben unangetastet.** Mit ADR-026 hängt Discoverability
+  nicht mehr an mDNS → `mdns_enabled=false` wird first-class.
+
+**Tests:** +24 (mesh authenticatedSeen/isApprovedPeerSender/fail-closed/Isolation, learner-Outcomes
+inkl. IPv6/empty-addr, config-Flag). 983 unit + 6 integration grün, tsc clean.
+**CR:** gpt-5.5 security — 2 HIGH + 1 MEDIUM + 2 LOW, alle gefixt + Regressionstests. **PC:** gpt-5.3-codex.
+
 ### LIVE-DEPLOY 2026-06-10 — Linux-Fleet auf 92e6058 (ADR-024 + ADR-025), canonical-emit fleet-weit
 
 Christian-autorisierter Produktiv-Deploy (Orchestrator .94). #165 (ADR-024) + #166 (ADR-025) sind in

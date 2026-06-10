@@ -8,6 +8,9 @@ import type { Logger } from 'pino';
 export type AuditEventType =
   | 'PEER_JOIN'
   | 'PEER_LEAVE'
+  // ADR-026: authentifizierter (issuer-gepinnt attestierter) Inbound-Peer gelernt,
+  // aber NICHT approved (AUTHN-only, symmetrische Discovery) — getrennt von PEER_JOIN.
+  | 'PEER_OBSERVED'
   | 'HEARTBEAT'
   | 'CAPABILITY_QUERY'
   | 'TASK_DELEGATE'

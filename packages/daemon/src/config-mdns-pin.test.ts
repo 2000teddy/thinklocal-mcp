@@ -69,3 +69,19 @@ describe('loadConfig: ADR-025 mdns_enabled + preferred_interfaces', () => {
     expect(loadConfig(NO_TOML).discovery.preferred_interfaces).toEqual(['en10', 'en0']);
   });
 });
+
+describe('loadConfig: ADR-026 auto_register_authenticated_peers', () => {
+  afterEach(() => { delete process.env['TLMCP_AUTO_REGISTER_AUTH_PEERS']; });
+
+  it('Default ist true', () => {
+    expect(loadConfig(NO_TOML).discovery.auto_register_authenticated_peers).toBe(true);
+  });
+  it('TLMCP_AUTO_REGISTER_AUTH_PEERS=0 → false', () => {
+    process.env['TLMCP_AUTO_REGISTER_AUTH_PEERS'] = '0';
+    expect(loadConfig(NO_TOML).discovery.auto_register_authenticated_peers).toBe(false);
+  });
+  it('TLMCP_AUTO_REGISTER_AUTH_PEERS=1 → true', () => {
+    process.env['TLMCP_AUTO_REGISTER_AUTH_PEERS'] = '1';
+    expect(loadConfig(NO_TOML).discovery.auto_register_authenticated_peers).toBe(true);
+  });
+});
