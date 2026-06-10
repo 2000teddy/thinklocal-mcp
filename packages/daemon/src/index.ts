@@ -8,7 +8,7 @@ import { loadOrCreateTlsBundle, getCertDaysLeft, extractSpiffeUris, verifyPeerCe
 import { existsSync as fsExistsSync } from 'node:fs';
 import { AuditLog } from './audit.js';
 import { MdnsDiscovery } from './discovery.js';
-import { startStaticPeerReconciler } from './static-peer-reconciler.js';
+import { startStaticPeerReconciler, resolveStaticReconcileSteadyMs } from './static-peer-reconciler.js';
 import { learnInboundPeer } from './inbound-peer-learner.js';
 import { AgentCardServer } from './agent-card.js';
 import { MeshManager, type MeshPeer } from './mesh.js';
@@ -1131,9 +1131,10 @@ async function main(): Promise<void> {
   // 9b. Statische Peers verbinden — ADR-025: robuster Reconciler statt einmaligem Start-Burst.
   // Auf dual-homed macOS (.55) vergiftet der Daemon-Start die connectx-Route transient (~Sekunden);
   // der frühere Einmal-Connect traf genau dieses Fenster → EHOSTUNREACH → 0 Peers, kein Retry.
-  // Der Reconciler versucht nicht-verbundene Peers sofort, dann alle 15s für 5min neu; bei
-  // static-only (mDNS aus) danach langsam weiter (60s). Non-blocking, idempotent (mesh.addPeer
-  // dedupt über agentId), sauber stopbar im Shutdown.
+  // Der Reconciler versucht nicht-verbundene Peers sofort, dann alle 15s für 5min neu; danach
+  // (ADR-026/025-Follow-up) IMMER langsam weiter (60s, mDNS-unabhängig), damit ein offline
+  // geflappter static_peer re-connectet/re-onlined wird (checkPeers re-pollt offline-Peers nicht).
+  // Non-blocking, idempotent (mesh.addPeer dedupt über agentId), sauber stopbar im Shutdown.
   let staticPeerReconciler: { stop: () => void } | undefined;
   if (config.discovery.static_peers.length > 0) {
     log.info({ count: config.discovery.static_peers.length }, 'Statische Peers konfiguriert — Reconciler startet');
@@ -1170,9 +1171,11 @@ async function main(): Promise<void> {
       staticPeers: config.discovery.static_peers,
       connectOnce: connectStaticPeerOnce,
       log,
-      // static-only (mDNS aus): nach dem Startup-Fenster langsam weiter-reconcilen,
-      // damit später startende Peers ohne mDNS trotzdem gefunden werden.
-      steadyIntervalMs: config.discovery.mdns_enabled === false ? 60_000 : undefined,
+      // ADR-026/025 Follow-up: Steady-Reconcile IMMER (nicht mehr nur mdns-off). Ein static_peer,
+      // der transient offline flappt (dual-homed macOS .55), wird sonst nach dem one-shot-Connect
+      // NIE wieder verbunden — und checkPeers schließt offline-Peers vom /health-Re-Poll aus →
+      // dauerhaft offline trotz Erreichbarkeit. Steady (60s) re-connectet (addPeer re-onlined).
+      steadyIntervalMs: resolveStaticReconcileSteadyMs(config.discovery.static_peers.length),
     });
   }
 

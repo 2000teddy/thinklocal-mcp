@@ -3,7 +3,7 @@
  * Deterministisch via vitest fake timers (advanceTimersByTimeAsync flusht Timer + Microtasks).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { startStaticPeerReconciler } from './static-peer-reconciler.js';
+import { startStaticPeerReconciler, resolveStaticReconcileSteadyMs } from './static-peer-reconciler.js';
 import type { StaticPeer } from './config.js';
 
 const PEERS: StaticPeer[] = [{ host: '10.10.10.94', port: 9440 }];
@@ -93,5 +93,37 @@ describe('startStaticPeerReconciler', () => {
     await vi.advanceTimersByTimeAsync(60_000);
     expect(connectOnce).not.toHaveBeenCalled();
     expect(() => h.stop()).not.toThrow();
+  });
+
+  it('Self-Healing: ein static_peer, der offline flappt (connectOnce false), wird im Steady-Modus re-connectet', async () => {
+    // true (initialer Connect) → false (Peer flappt offline) → true (Steady re-connectet = re-online).
+    const results = [true, false, true];
+    let i = 0;
+    const connectOnce = vi.fn(async () => results[Math.min(i++, results.length - 1)] ?? true);
+    const h = startStaticPeerReconciler({
+      staticPeers: PEERS, connectOnce, intervalMs: 15_000, startupWindowMs: 30_000,
+      steadyIntervalMs: resolveStaticReconcileSteadyMs(PEERS.length), // = 60s (immer, mdns-unabhängig)
+    });
+    await vi.advanceTimersByTimeAsync(0);       // initial connect → true
+    await vi.advanceTimersByTimeAsync(30_000);  // Fenster → re-seed pending
+    await vi.advanceTimersByTimeAsync(60_000);  // steady-Tick: re-attempt (flapped) → false
+    await vi.advanceTimersByTimeAsync(60_000);  // steady-Tick: re-attempt → true (re-online)
+    expect(connectOnce.mock.calls.length).toBeGreaterThanOrEqual(3);
+    h.stop();
+  });
+});
+
+describe('resolveStaticReconcileSteadyMs — ADR-026/025 Online-Self-Healing (mdns-unabhängig)', () => {
+  it('static_peers vorhanden → Steady-Intervall (60s), UNABHÄNGIG von mdns_enabled', () => {
+    // Signatur hat bewusst KEINEN mdns-Parameter → Steady kann nicht mehr an mdns gekoppelt werden
+    // (genau das war der one-shot-Bug auf mdns-an-Nodes).
+    expect(resolveStaticReconcileSteadyMs(1)).toBe(60_000);
+    expect(resolveStaticReconcileSteadyMs(5)).toBe(60_000);
+  });
+  it('keine static_peers → undefined (one-shot, kein unnötiger Timer)', () => {
+    expect(resolveStaticReconcileSteadyMs(0)).toBeUndefined();
+  });
+  it('konfigurierbares Steady-Intervall', () => {
+    expect(resolveStaticReconcileSteadyMs(1, 30_000)).toBe(30_000);
   });
 });

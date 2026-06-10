@@ -100,9 +100,15 @@ export class MeshManager {
   addPeer(discovered: DiscoveredPeer): MeshPeer {
     const existing = this.peers.get(discovered.agentId);
     if (existing) {
+      // CR gpt-5.5 MEDIUM (ADR-026/025 Online-Self-Healing): War der Peer offline und wird
+      // jetzt re-connectet (Steady-Reconciler), muss der Offline→Online-Übergang die
+      // onPeerOnline-Side-Effects feuern — sonst verpassen Listener (Audit PEER_JOIN,
+      // Skill-/Cap-Re-Eval) das Recovery. recordHeartbeat/confirmPeerDiscovery tun das auch.
+      const wasOffline = existing.status === 'offline';
       existing.lastSeen = Date.now();
       existing.missedBeats = 0;
       existing.status = 'online';
+      if (wasOffline) this.events.onPeerOnline(existing);
       return existing;
     }
 

@@ -806,4 +806,16 @@ Christian-autorisiert (Orchestrator .94). Per-VM git pull main (HEAD 92e6058) + 
 
 ---
 
-*Letzte Aktualisierung: 2026-06-10 — v0.34.8 (#168) ADR-026 Symmetrische Auth-Peer-Discovery.*
+## Session 2026-06-10 — v0.34.9 (DRAFT) Static-Peer Online-Self-Healing (ADR-026/025-Follow-up)
+
+| #       | PR    | Datum      | CO  | CG | TS | CR | PC | DO | Findings                           |
+|---------|-------|------------|-----|----|----|----|----|----|----|
+| v0.34.9 | DRAFT | 2026-06-10 | n/a | —  | ✅ | ✅ | ✅ | ✅ | CR gpt-5.5: 0 HIGH; 1 MEDIUM (addPeer re-online feuerte kein onPeerOnline) + 2 LOW (stale Kommentare) gefixt + Regressionstests → 0 CRITICAL/HIGH |
+
+**CO:** entfällt (Bug-Fix/Robustheit, keine Architektur-Weiche; Default-Verhalten ohne static_peers unverändert). **CG:** —. **TS:** +6 Tests (Reconciler Self-Heal-Flap, `resolveStaticReconcileSteadyMs` mdns-Unabhängigkeit/zero/konfigurierbar, mesh Offline→Online-Event feuert / kein Doppel-Feuer), 989 unit + 6 integration grün, tsc clean. **CR:** `pal:codereview` gpt-5.5 (quick) — 0 HIGH/CRITICAL; MEDIUM (onPeerOnline beim Re-Connect) + 2 LOW (Kommentare) gefixt + Regressionstest. **PC:** gpt-5.3-codex (intern) — validation_complete, 0 Blocker. **DO:** CHANGES (v0.34.9 DRAFT), COMPLIANCE, TODO, package.json 0.34.9.
+
+**Status:** DRAFT-PR, ready — Orchestrator merged mit `gh pr merge --admin --squash` sobald Gates grün (Christian autorisiert). Macht `.55`/jeden static_peer self-healing nach transienten Blips. **#164/#166/#168 unangetastet.**
+
+---
+
+*Letzte Aktualisierung: 2026-06-10 — v0.34.9 (DRAFT) Static-Peer Online-Self-Healing.*
