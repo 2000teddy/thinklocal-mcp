@@ -144,6 +144,18 @@ export interface AgentCardServerOptions {
    * auf .94s Admin-CA). Schützt gegen eine bösartige gepairte Peer-CA im Trust-Bundle.
    */
   peerIdAttestingCaFingerprints?: string[];
+  /**
+   * ADR-026 symmetrische Discovery: wird gerufen, wenn ein authentifizierter, issuer-gepinnt
+   * attestierter Inbound-Sender NICHT auflösbar ist (kein Discovery-Eintrag). Der Aufrufer
+   * lernt den Peer asynchron (Card-Fetch + Validierung) → resolvePeerPublicKey beim Retry.
+   * Non-blocking, AUTHN-only (führt NIE zu Autorisierung).
+   */
+  onAuthenticatedInbound?: (info: {
+    peerId: string;
+    senderUri: string;
+    remoteAddress: string;
+    certFingerprint: string;
+  }) => void;
   /** Handler für eingehende Mesh-Nachrichten */
   onMessage?: MessageHandler;
   /** Rate-Limiter für alle Endpoints */
@@ -257,6 +269,7 @@ export class AgentCardServer {
           remoteAddress?: string;
           getPeerCertificate?: (detailed?: boolean) => {
             subjectaltname?: string;
+            fingerprint256?: string;
             issuerCertificate?: { fingerprint256?: string };
           };
         };
@@ -306,6 +319,19 @@ export class AgentCardServer {
         const senderKey = opts.getPeerPublicKey?.(rawEnvelope.sender);
         if (!senderKey) {
           certVerification?.rollback();
+          // ADR-026 symmetrische Discovery: Sender ist nicht auflösbar (kein eigener
+          // Discovery-Eintrag), ABER die Verbindung ist authentifiziert + issuer-gepinnt
+          // attestiert (attestedPeerId). Lerne den Peer ASYNCHRON (Card von der TLS-Source-IP
+          // holen, gegen die attestierte PeerID validieren) → der Retry des Senders löst auf.
+          // Non-blocking: dieser Request 403t noch. Nur AUTHN; keine Autorisierung.
+          if (attestedPeerId) {
+            opts.onAuthenticatedInbound?.({
+              peerId: attestedPeerId,
+              senderUri: rawEnvelope.sender,
+              remoteAddress: tlsSock.remoteAddress ?? '',
+              certFingerprint: peerCert?.fingerprint256 ?? '',
+            });
+          }
           return reply.code(403).send({ error: 'Unknown sender' });
         }
 

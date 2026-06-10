@@ -83,6 +83,13 @@ export interface DaemonConfig {
      * (deterministisch nach Interface-Name). Beispiel: ["en10", "en0"].
      */
     preferred_interfaces: string[];
+    /**
+     * ADR-026: symmetrische Discovery. Wenn true, lernt der Daemon einen authentifizierten,
+     * issuer-gepinnt attestierten Inbound-Sender automatisch (Card-Fetch → AUTHN-only seen-Map),
+     * sodass mDNS-lose / mobile / NAT-Nodes ohne manuellen static_peer am Hub auflösbar werden.
+     * AUTHN-only (keine Autorisierung). Default true. Env TLMCP_AUTO_REGISTER_AUTH_PEERS=0 → aus.
+     */
+    auto_register_authenticated_peers: boolean;
   };
   libp2p: {
     enabled: boolean;
@@ -121,6 +128,7 @@ const DEFAULTS: DaemonConfig = {
     disable_mdns_interface_pin: false,
     mdns_enabled: true,
     preferred_interfaces: [],
+    auto_register_authenticated_peers: true,
   },
   libp2p: {
     enabled: true,
@@ -219,6 +227,10 @@ export function loadConfig(configPath?: string): DaemonConfig {
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean);
+  }
+  // ADR-026: symmetrische Auth-Peer-Registrierung abschaltbar ('0' → aus).
+  if (env['TLMCP_AUTO_REGISTER_AUTH_PEERS']) {
+    cfg.discovery.auto_register_authenticated_peers = env['TLMCP_AUTO_REGISTER_AUTH_PEERS'] !== '0';
   }
 
   // LOW-FIX (CR-Review): CIDRs validieren — fail fast statt silent.

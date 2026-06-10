@@ -9,6 +9,7 @@ import { existsSync as fsExistsSync } from 'node:fs';
 import { AuditLog } from './audit.js';
 import { MdnsDiscovery } from './discovery.js';
 import { startStaticPeerReconciler } from './static-peer-reconciler.js';
+import { learnInboundPeer } from './inbound-peer-learner.js';
 import { AgentCardServer } from './agent-card.js';
 import { MeshManager, type MeshPeer } from './mesh.js';
 import { CapabilityRegistry } from './registry.js';
@@ -513,12 +514,51 @@ async function main(): Promise<void> {
     // aus der EIGENEN Single-Cert-`ca.crt.pem` abgeleitet; Env `TLMCP_PEERID_ATTESTING_CA_FP`
     // überschreibt; `none` deaktiviert (fail-closed). Paired-Fremd-CAs bleiben ausgeschlossen.
     peerIdAttestingCaFingerprints: peerIdAttestingCaFingerprints,
+    // ADR-026 symmetrische Discovery: ein authentifizierter, issuer-gepinnt attestierter
+    // Inbound-Sender, der (noch) nicht auflösbar ist, wird ASYNCHRON gelernt (Card-Fetch von
+    // der TLS-Source-IP, gegen die attestierte PeerID validiert → AUTHN-only seen-Map). Der
+    // Retry des Senders löst dann auf. mDNS-lose / mobile / NAT-Nodes brauchen keinen static_peer.
+    onAuthenticatedInbound: config.discovery.auto_register_authenticated_peers
+      ? (info) => {
+          void learnInboundPeer({
+            peerId: info.peerId,
+            senderUri: info.senderUri,
+            remoteAddress: info.remoteAddress,
+            port: config.daemon.port,
+            certFingerprint: info.certFingerprint,
+            expectedSpiffeUri: peerIdToSpiffeUri(info.peerId),
+            isAlreadyResolvable: () => mesh.resolvePeerPublicKey(info.senderUri) !== undefined,
+            rateLimitOk: () => rateLimiter.allow(`adr026-learn:${info.peerId}`),
+            fetchCard: async (endpoint) => {
+              const res = await fetch(`${endpoint}/.well-known/agent-card.json`, {
+                signal: AbortSignal.timeout(5_000),
+                dispatcher: tlsDispatcher,
+              });
+              if (!res.ok) {
+                await res.body?.cancel().catch(() => {});
+                return null;
+              }
+              const card = (await res.json()) as AgentCard;
+              return { spiffeUri: card.spiffeUri, publicKey: card.publicKey };
+            },
+            record: (e) => mesh.recordAuthenticatedSeen(e),
+            audit: (a) => audit.append('PEER_OBSERVED', a.peerId, `${a.endpoint} fp=${a.certFingerprint.slice(0, 16)}`),
+            log,
+          }).catch((err) => log.debug({ err: (err as Error)?.message }, '[discovery] ADR-026 learn error'));
+        }
+      : undefined,
     onMessage: async (envelope: MessageEnvelope, senderPublicKey: string) => {
       // ADR-022 Phase 3 / CR-MEDIUM (#159): ein gepairter Peer wird nach einem Identity-Flip
       // unter neuer URI über seinen (stabilen, bereits verifizierten) Public-Key als gepairt
       // erkannt — URI-gekeytes Pairing allein bräche sonst nach dem Flip fail-closed.
       const senderIsPaired =
         pairingStore.isPaired(envelope.sender) || pairingStore.isPairedByPublicKey(senderPublicKey);
+      // ADR-026 / CR gpt-5.5 HIGH 1 — AUTHN/AUTHZ-Trennung: Die Signatur kann jetzt auch über
+      // einen AUTHN-only gelernten (authenticated_unapproved) Peer auflösen. State-mutierende
+      // Message-Typen (REGISTRY_SYNC, SKILL_ANNOUNCE) DÜRFEN deshalb NICHT allein aus „Signatur
+      // gültig" folgen — sie verlangen einen APPROVED/DISCOVERED Peer (this.peers) oder Pairing.
+      // isApprovedPeerSender konsultiert authenticatedSeen NICHT → kein Leak in die Autorisierung.
+      const senderAuthorizedForMeshState = senderIsPaired || mesh.isApprovedPeerSender(envelope.sender);
       // Rate-Limiting prüfen
       if (!rateLimiter.allow(envelope.sender)) {
         log.warn({ sender: envelope.sender }, 'Rate-Limited — Nachricht abgelehnt');
@@ -528,6 +568,13 @@ async function main(): Promise<void> {
       // Nachricht je nach Typ verarbeiten
       switch (envelope.type) {
         case MessageType.REGISTRY_SYNC: {
+          // ADR-026 INVARIANTE: registry-sync-Akzeptanz nur von approved/discovered Peers —
+          // ein authenticated_unapproved (AUTHN-only) Sender darf den CRDT-State NICHT verändern.
+          if (!senderAuthorizedForMeshState) {
+            log.warn({ sender: envelope.sender, type: envelope.type }, 'AUTHZ: REGISTRY_SYNC von nicht-approved Sender abgelehnt (authenticated_unapproved)');
+            audit.append('PEER_OBSERVED', envelope.sender, 'REGISTRY_SYNC rejected: unapproved sender');
+            return null;
+          }
           const response = gossip.handleSyncMessage(envelope);
           const responseEnvelope = createEnvelope(
             MessageType.REGISTRY_SYNC_RESPONSE,
@@ -538,6 +585,14 @@ async function main(): Promise<void> {
           return encodeAndSign(responseEnvelope, identity.privateKeyPem);
         }
         case MessageType.SKILL_ANNOUNCE: {
+          // ADR-026 INVARIANTE: capability-merge / skill-exec-Akzeptanz nur von approved/discovered
+          // Peers — ein authenticated_unapproved (AUTHN-only) Sender darf KEINE Capabilities/Skills
+          // in die Registry einbringen oder Manifest-Installation/Auto-Activation auslösen.
+          if (!senderAuthorizedForMeshState) {
+            log.warn({ sender: envelope.sender, type: envelope.type }, 'AUTHZ: SKILL_ANNOUNCE von nicht-approved Sender abgelehnt (authenticated_unapproved)');
+            audit.append('PEER_OBSERVED', envelope.sender, 'SKILL_ANNOUNCE rejected: unapproved sender');
+            return null;
+          }
           const announcePayload = envelope.payload as SkillAnnouncePayload;
           // Phase 3 SkillManager: registers in CRDT capability registry
           skillManager.handleAnnounce(envelope.sender, announcePayload);

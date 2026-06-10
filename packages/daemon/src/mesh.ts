@@ -58,8 +58,35 @@ export interface PeerIdVerifyResult {
   rollback: () => void;
 }
 
+/**
+ * ADR-026: ephemerer AUTHN-only-Eintrag eines via authentifizierter, issuer-gepinnter
+ * mTLS-Inbound-Verbindung gelernten Peers (symmetrische Discovery). Wird AUSSCHLIESSLICH
+ * von `resolvePeerPublicKey` zur SIGNATURPRÜFUNG konsultiert — NIEMALS für Autorisierung
+ * (state ist konstant `authenticated_unapproved`; AUTHZ prüft weiter `this.peers`/Pairing).
+ */
+export interface AuthenticatedSeenEntry {
+  peerId: string;
+  /** ECDSA-Signing-Key (PEM) aus der validierten Agent-Card des Peers. */
+  publicKey: string;
+  /** Kanonische node/<PeerID>-URI (== peerIdToSpiffeUri(peerId), beim Lernen geprüft). */
+  spiffeUri: string;
+  /** sha256 des präsentierten Client-Leaf-Certs (Verbindungsbindung). */
+  certFingerprint: string;
+  endpoint: string;
+  lastSeen: number;
+  readonly state: 'authenticated_unapproved';
+}
+
+/** ADR-026 Guardrails: TTL + Cap für die ephemere authenticated-seen-Map. */
+const AUTH_SEEN_TTL_MS = 15 * 60_000;
+const AUTH_SEEN_MAX = 256;
+
 export class MeshManager {
   private peers = new Map<string, MeshPeer>();
+  // ADR-026: AUTHN-only. Getrennt von `this.peers` (approved/discovered) — wird NIE von
+  // Autorisierungspfaden (registry-sync-Akzeptanz, heartbeat, capability-merge, skill-exec)
+  // gelesen, AUSSCHLIESSLICH von resolvePeerPublicKey.
+  private authenticatedSeen = new Map<string, AuthenticatedSeenEntry>();
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
@@ -224,6 +251,39 @@ export class MeshManager {
    * Noise-RemotePeer) — der existiert vor dem Cert-Cutover noch nicht, daher löst aktuell
    * KEINE kanonische node/<PeerID>-URI auf (forward-compatible, fail-closed).
    */
+  /**
+   * ADR-026: speichert einen AUTHN-only-Eintrag aus einer authentifizierten Inbound-Verbindung
+   * (symmetrische Discovery). Der Caller (agent-card.ts → inbound-peer-learner) MUSS vorher
+   * kryptografisch geprüft haben: (a) issuer-gepinnte Cert-Attestierung der PeerID, (b)
+   * `card.spiffeUri === peerIdToSpiffeUri(peerId)`. TTL-Prune + LRU-Cap als DoS-Schutz.
+   * State ist konstant `authenticated_unapproved` — NIE für Autorisierung verwenden.
+   */
+  recordAuthenticatedSeen(entry: {
+    peerId: string;
+    publicKey: string;
+    spiffeUri: string;
+    certFingerprint: string;
+    endpoint: string;
+  }): void {
+    const now = Date.now();
+    for (const [k, v] of this.authenticatedSeen) {
+      if (now - v.lastSeen > AUTH_SEEN_TTL_MS) this.authenticatedSeen.delete(k);
+    }
+    this.authenticatedSeen.set(entry.peerId, { ...entry, lastSeen: now, state: 'authenticated_unapproved' });
+    if (this.authenticatedSeen.size > AUTH_SEEN_MAX) {
+      let oldestK: string | undefined;
+      let oldestT = Infinity;
+      for (const [k, v] of this.authenticatedSeen) {
+        if (v.lastSeen < oldestT) { oldestT = v.lastSeen; oldestK = k; }
+      }
+      if (oldestK) this.authenticatedSeen.delete(oldestK);
+    }
+    this.log?.info(
+      { peerId: entry.peerId, endpoint: entry.endpoint },
+      '[discovery] ADR-026: authentifizierter Peer gelernt (AUTHN-only, authenticated_unapproved)',
+    );
+  }
+
   resolvePeerPublicKey(senderUri: string): string | undefined {
     // SECURITY (CR gpt-5.5 HIGH 1, vollständig): Kanonische node/<PeerID>-Sender-URIs
     // dürfen AUSSCHLIESSLICH über eine KRYPTOGRAFISCH VERIFIZIERTE PeerID-Bindung
@@ -245,7 +305,26 @@ export class MeshManager {
           matches.push(peer.agentCard.publicKey);
         }
       }
-      return matches.length === 1 ? matches[0] : undefined;
+      if (matches.length === 1) return matches[0];
+      // SECURITY (CR gpt-5.5 HIGH 2): mehrdeutige verifizierte PeerID-Treffer sind ein
+      // sicherheitsrelevanter Identitäts-Konflikt → strikt fail-closed. KEIN authenticatedSeen-
+      // Fallback, sonst überstimmt ein AUTHN-only-Eintrag einen Zustand, der undefined sein muss.
+      if (matches.length > 1) {
+        this.log?.warn(
+          { senderUri, peerId: wantPeerId, matches: matches.length },
+          '[mesh] PeerID-Auflösung mehrdeutig — fail-closed, kein authenticatedSeen-Fallback',
+        );
+        return undefined;
+      }
+      // ADR-026: AUTHN-only Fallback (nur bei matches.length === 0) — via authentifizierter,
+      // issuer-gepinnter mTLS-Inbound gelernter Peer (symmetrische Discovery; resolvePeerPublicKey
+      // ist der EINZIGE Leser dieser Map). Strikt: PeerID == wantPeerId, kanonische URI exakt,
+      // nicht abgelaufen. Nur zur Signaturprüfung (AUTHN) — Autorisierung bleibt an this.peers/Pairing.
+      const seen = this.authenticatedSeen.get(wantPeerId);
+      if (seen && seen.spiffeUri === senderUri && Date.now() - seen.lastSeen <= AUTH_SEEN_TTL_MS) {
+        return seen.publicKey;
+      }
+      return undefined;
     }
 
     // Nicht-kanonische (Legacy host/<id>) Sender-URIs: card-backed exakte Treffer.
@@ -259,6 +338,32 @@ export class MeshManager {
       }
     }
     return undefined;
+  }
+
+  /**
+   * ADR-026 AUTHZ-Prädikat (CR gpt-5.5 HIGH 1): true NUR für einen APPROVED/DISCOVERED Peer
+   * (`this.peers` — verifizierte PeerID bzw. card-backed Legacy-Treffer). Spiegelt
+   * `resolvePeerPublicKey` OHNE den `authenticatedSeen`-Fallback: ein bloß AUTHN-gelernter
+   * `authenticated_unapproved` Peer ist hier IMMER false. State-mutierende Message-Typen
+   * (REGISTRY_SYNC, SKILL_ANNOUNCE) MÜSSEN hierauf (oder Pairing) gaten — niemals allein auf
+   * „Signatur war mit einem auflösbaren Key gültig" (das schlösse authenticatedSeen mit ein).
+   */
+  isApprovedPeerSender(senderUri: string): boolean {
+    const wantPeerId = spiffeUriToPeerId(senderUri);
+    if (wantPeerId) {
+      let count = 0;
+      for (const peer of this.peers.values()) {
+        if (peer.agentCard?.publicKey && peer.libp2p.peerIdVerified && peer.libp2p.peerId === wantPeerId) {
+          count++;
+        }
+      }
+      return count === 1;
+    }
+    if (this.peers.get(senderUri)?.agentCard?.publicKey) return true;
+    for (const peer of this.peers.values()) {
+      if (peer.agentCard?.publicKey && peer.agentCard.spiffeUri === senderUri) return true;
+    }
+    return false;
   }
 
   /**

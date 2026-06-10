@@ -278,3 +278,119 @@ describe('MeshManager.markPeerIdVerified — Bug #2: Host-Bind der attestierten 
     expect(mesh.resolvePeerPublicKey(canonical)).toBe('K');
   });
 });
+
+// ADR-026: symmetrische Auth-Peer-Registrierung (authenticated-seen-Map, AUTHN-only).
+describe('ADR-026 authenticated-seen (AUTHN-only)', () => {
+  const A = '12D3KooWAuthSeenPeerAAAA';
+  const B = '12D3KooWAuthSeenPeerBBBB';
+
+  it('recordAuthenticatedSeen → resolvePeerPublicKey löst kanonischen Sender auf', () => {
+    const mesh = mkMesh();
+    const uri = peerIdToSpiffeUri(A);
+    expect(mesh.resolvePeerPublicKey(uri)).toBeUndefined(); // vorher nicht auflösbar
+    mesh.recordAuthenticatedSeen({ peerId: A, publicKey: 'PK-A', spiffeUri: uri, certFingerprint: 'fp', endpoint: 'https://10.0.0.1:9440' });
+    expect(mesh.resolvePeerPublicKey(uri)).toBe('PK-A');
+  });
+
+  it('löst NUR den exakten PeerID-Sender auf (kein Cross-Match)', () => {
+    const mesh = mkMesh();
+    mesh.recordAuthenticatedSeen({ peerId: A, publicKey: 'PK-A', spiffeUri: peerIdToSpiffeUri(A), certFingerprint: 'fp', endpoint: 'https://10.0.0.1:9440' });
+    expect(mesh.resolvePeerPublicKey(peerIdToSpiffeUri(B))).toBeUndefined();
+  });
+
+  it('INVARIANTE: seen-Eintrag leakt NICHT in this.peers (AUTHN ≠ AUTHZ)', () => {
+    const mesh = mkMesh();
+    const uri = peerIdToSpiffeUri(A);
+    mesh.recordAuthenticatedSeen({ peerId: A, publicKey: 'PK-A', spiffeUri: uri, certFingerprint: 'fp', endpoint: 'https://10.0.0.1:9440' });
+    // AUTHN: Key auflösbar …
+    expect(mesh.resolvePeerPublicKey(uri)).toBe('PK-A');
+    // … aber AUTHZ-Pfade lesen this.peers — der Peer ist dort NICHT (kein getPeer-Treffer,
+    // kein markPeerIdVerified-Bind, zählt nicht als approved/online).
+    expect(mesh.getPeer(uri)).toBeUndefined();
+    expect(mesh.getPeer(A)).toBeUndefined();
+    expect(mesh.markPeerIdVerified(A).ok).toBe(false); // kein this.peers-Eintrag zum Binden
+  });
+
+  it('LRU-Cap: bei Überschreitung wird der älteste Eintrag verworfen', () => {
+    const mesh = mkMesh();
+    // 257 Einträge (> AUTH_SEEN_MAX=256) → erster (ältester) fällt raus.
+    for (let i = 0; i < 257; i++) {
+      const pid = `12D3KooWcap${i.toString().padStart(4, '0')}`;
+      mesh.recordAuthenticatedSeen({ peerId: pid, publicKey: `PK-${i}`, spiffeUri: peerIdToSpiffeUri(pid), certFingerprint: 'fp', endpoint: 'https://10.0.0.1:9440' });
+    }
+    expect(mesh.resolvePeerPublicKey(peerIdToSpiffeUri('12D3KooWcap0000'))).toBeUndefined(); // ältester evicted
+    expect(mesh.resolvePeerPublicKey(peerIdToSpiffeUri('12D3KooWcap0256'))).toBe('PK-256');   // neuester da
+  });
+});
+
+// ADR-026 / CR gpt-5.5 HIGH 1: AUTHZ-Prädikat isApprovedPeerSender — ein AUTHN-only gelernter
+// Peer ist NIE approved (gatet REGISTRY_SYNC / SKILL_ANNOUNCE in index.ts).
+describe('ADR-026 isApprovedPeerSender (AUTHZ ≠ AUTHN)', () => {
+  const A = '12D3KooWAuthSeenPeerAAAA';
+
+  it('HIGH 1: ein authenticated_unapproved (seen-only) Sender ist AUTHN-auflösbar, aber NICHT approved', () => {
+    const mesh = mkMesh();
+    const uri = peerIdToSpiffeUri(A);
+    mesh.recordAuthenticatedSeen({ peerId: A, publicKey: 'PK-A', spiffeUri: uri, certFingerprint: 'fp', endpoint: 'https://10.0.0.1:9440' });
+    // AUTHN: Signatur-Key auflösbar …
+    expect(mesh.resolvePeerPublicKey(uri)).toBe('PK-A');
+    // … AUTHZ: aber NICHT approved → REGISTRY_SYNC/SKILL_ANNOUNCE würden abgelehnt.
+    expect(mesh.isApprovedPeerSender(uri)).toBe(false);
+  });
+
+  it('ein verifizierter discovered Peer (this.peers) IST approved (canonical + legacy)', () => {
+    const mesh = mkMesh();
+    mesh.addPeer(disc({ agentId: LEGACY, p2pPeerId: PID }));
+    mesh.updateAgentCard(LEGACY, card('KEY-L', LEGACY));
+    markPeerIdVerified(mesh, LEGACY);
+    expect(mesh.isApprovedPeerSender(peerIdToSpiffeUri(PID))).toBe(true); // canonical via verified PeerID
+    expect(mesh.isApprovedPeerSender(LEGACY)).toBe(true);                  // legacy exact match
+  });
+
+  it('ein nicht-verifizierter (roh-mDNS) Peer ist NICHT approved', () => {
+    const mesh = mkMesh();
+    mesh.addPeer(disc({ agentId: peerIdToSpiffeUri(PID), p2pPeerId: PID, host: '10.10.10.66' }));
+    mesh.updateAgentCard(peerIdToSpiffeUri(PID), card('ATTACKER-KEY', peerIdToSpiffeUri(PID)));
+    // peerIdVerified bleibt false → kein approved-Treffer auf der kanonischen URI.
+    expect(mesh.isApprovedPeerSender(peerIdToSpiffeUri(PID))).toBe(false);
+  });
+
+  it('HIGH 2: bei mehrdeutigen verifizierten PeerID-Treffern überstimmt authenticatedSeen NICHT → undefined', () => {
+    const mesh = mkMesh();
+    const aaa = 'spiffe://thinklocal/host/aaa/agent/claude-code';
+    const bbb = 'spiffe://thinklocal/host/bbb/agent/claude-code';
+    mesh.addPeer(disc({ agentId: aaa, p2pPeerId: PID }));
+    mesh.addPeer(disc({ agentId: bbb, p2pPeerId: PID, host: '10.10.10.10' }));
+    mesh.updateAgentCard(aaa, card('KEY-AAA', aaa));
+    mesh.updateAgentCard(bbb, card('KEY-BBB', bbb));
+    markPeerIdVerified(mesh, aaa);
+    markPeerIdVerified(mesh, bbb);
+    // Zusätzlich ein seen-Eintrag für DIESELBE PeerID — darf den fail-closed-Zustand NICHT überstimmen.
+    mesh.recordAuthenticatedSeen({ peerId: PID, publicKey: 'PK-SEEN', spiffeUri: peerIdToSpiffeUri(PID), certFingerprint: 'fp', endpoint: 'https://10.0.0.1:9440' });
+    expect(mesh.resolvePeerPublicKey(peerIdToSpiffeUri(PID))).toBeUndefined();
+  });
+});
+
+// ADR-026 INVARIANTE (Architektur-Test): authenticatedSeen wird AUSSCHLIESSLICH von
+// recordAuthenticatedSeen + resolvePeerPublicKey referenziert — NIE von Autorisierungspfaden.
+describe('ADR-026 authenticatedSeen-Isolation (Architektur)', () => {
+  it('this.authenticatedSeen nur in record/resolve referenziert', () => {
+    const fs = require('node:fs') as typeof import('node:fs');
+    const src = fs.readFileSync(require('node:path').join(__dirname, 'mesh.ts'), 'utf-8');
+    // Zeilen mit this.authenticatedSeen sammeln + die umgebende Methode prüfen.
+    const lines = src.split('\n');
+    const refLines = lines.map((l, i) => ({ l, i })).filter(({ l }) => l.includes('this.authenticatedSeen'));
+    expect(refLines.length).toBeGreaterThan(0);
+    // Erlaubte Methoden: recordAuthenticatedSeen, resolvePeerPublicKey, (Feld-Deklaration).
+    for (const { i } of refLines) {
+      // rückwärts die nächste Methoden-Signatur suchen
+      let method = '';
+      for (let j = i; j >= 0; j--) {
+        const m = lines[j].match(/^\s{2}(\w+)\s*[(<]/);
+        if (m) { method = m[1]; break; }
+        if (/^\s*private authenticatedSeen/.test(lines[j])) { method = '<field-decl>'; break; }
+      }
+      expect(['recordAuthenticatedSeen', 'resolvePeerPublicKey', '<field-decl>']).toContain(method);
+    }
+  });
+});

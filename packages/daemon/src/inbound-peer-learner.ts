@@ -1,0 +1,90 @@
+/**
+ * inbound-peer-learner.ts — ADR-026 symmetrische Discovery.
+ *
+ * Wird ausgelöst, wenn ein SKILL_ANNOUNCE über eine AUTHENTIFIZIERTE, issuer-gepinnte
+ * mTLS-Inbound-Verbindung kommt (attestierte PeerID), der Sender aber NICHT auflösbar ist
+ * (kein eigener Discovery-Eintrag — mobil / NAT / Cross-Subnet / mdns_enabled=false).
+ * Holt die Agent-Card des Senders von der TLS-Source-IP, validiert sie gegen die attestierte
+ * PeerID und legt einen AUTHN-only-Eintrag in die authenticated-seen-Map (mesh.recordAuthenticatedSeen).
+ *
+ * STRIKT AUTHN: das Ergebnis wird NUR von resolvePeerPublicKey zur Signaturprüfung genutzt — der
+ * Peer ist `authenticated_unapproved` und fließt NIE in Autorisierung (ADR-001-Gates bleiben).
+ *
+ * Reine Orchestrierung — fetchCard/record/rateLimitOk/isAlreadyResolvable injiziert → ohne
+ * Netzwerk/Timer unit-testbar.
+ */
+import type { Logger } from 'pino';
+
+export type LearnResult = 'recorded' | 'skipped-resolvable' | 'rejected-identity' | 'rate-limited' | 'fetch-failed';
+
+export interface LearnInboundPeerDeps {
+  /** Attestierte PeerID (aus dem issuer-gepinnten Client-Cert-SAN). */
+  peerId: string;
+  /** payload-sender (rawEnvelope.sender) — MUSS == expectedSpiffeUri sein. */
+  senderUri: string;
+  /** TLS-Source-IP der Verbindung. */
+  remoteAddress: string;
+  port: number;
+  /** sha256 des präsentierten Client-Leaf-Certs (Verbindungsbindung, Audit). */
+  certFingerprint: string;
+  /** Erwartete kanonische URI = peerIdToSpiffeUri(peerId). */
+  expectedSpiffeUri: string;
+  /** Dedup: true wenn der Sender bereits auflösbar ist (dann nichts tun). */
+  isAlreadyResolvable: () => boolean;
+  /** Rate-Limit-Gate pro attestierter PeerID (konservativste Achse). true = erlaubt. */
+  rateLimitOk: () => boolean;
+  /** Holt + validiert die Agent-Card via mTLS von endpoint. */
+  fetchCard: (endpoint: string) => Promise<{ spiffeUri?: string; publicKey?: string } | null>;
+  /** Schreibt den AUTHN-only-Eintrag (mesh.recordAuthenticatedSeen). */
+  record: (e: { peerId: string; publicKey: string; spiffeUri: string; certFingerprint: string; endpoint: string }) => void;
+  /** Audit-Hook (PEER_OBSERVED). */
+  audit?: (info: { peerId: string; endpoint: string; certFingerprint: string }) => void;
+  log?: Logger;
+}
+
+/** URL-sichere Host-Darstellung: IPv4-mapped entmappen, echtes IPv6 bracketen. */
+function hostForUrl(host: string): string {
+  const h = host.replace(/^::ffff:/i, '');
+  return h.includes(':') ? `[${h}]` : h;
+}
+
+export async function learnInboundPeer(d: LearnInboundPeerDeps): Promise<LearnResult> {
+  // (1) Sender-Bindung: payload-sender MUSS der attestierten Transport-Identität entsprechen.
+  if (d.senderUri !== d.expectedSpiffeUri) {
+    d.log?.warn({ peerId: d.peerId, sender: d.senderUri }, '[discovery] ADR-026: sender != attestierte Transport-Identität — kein Learn');
+    return 'rejected-identity';
+  }
+  // (2) Dedup.
+  if (d.isAlreadyResolvable()) return 'skipped-resolvable';
+  // (3) Rate-Limit (DoS).
+  if (!d.rateLimitOk()) {
+    d.log?.warn({ peerId: d.peerId, remoteAddress: d.remoteAddress }, '[discovery] ADR-026: Learn rate-limited');
+    return 'rate-limited';
+  }
+  // CR gpt-5.5 MEDIUM: leere remoteAddress → kein valider Endpoint; IPv6 / IPv4-mapped
+  // (`::ffff:10.10.10.80`) müssen für die URL entmappt/gebracketet werden, sonst ist die URL
+  // ungültig und das Learning schlägt für solche Verbindungen unnötig fehl.
+  if (!d.remoteAddress) {
+    d.log?.warn({ peerId: d.peerId }, '[discovery] ADR-026: leere remoteAddress — kein Card-Fetch');
+    return 'fetch-failed';
+  }
+  const endpoint = `https://${hostForUrl(d.remoteAddress)}:${d.port}`;
+  let card: { spiffeUri?: string; publicKey?: string } | null;
+  try {
+    card = await d.fetchCard(endpoint);
+  } catch (err) {
+    d.log?.debug({ peerId: d.peerId, endpoint, err: (err as Error)?.message }, '[discovery] ADR-026: Card-Fetch fehlgeschlagen');
+    return 'fetch-failed';
+  }
+  // (4) Card-Validierung: PublicKey vorhanden UND Card-SAN == attestierte PeerID.
+  if (!card?.publicKey || card.spiffeUri !== d.expectedSpiffeUri) {
+    d.log?.warn(
+      { peerId: d.peerId, cardSpiffe: card?.spiffeUri, expected: d.expectedSpiffeUri },
+      '[discovery] ADR-026: Card-SAN != attestierte PeerID oder kein PublicKey — verworfen',
+    );
+    return 'rejected-identity';
+  }
+  d.record({ peerId: d.peerId, publicKey: card.publicKey, spiffeUri: d.expectedSpiffeUri, certFingerprint: d.certFingerprint, endpoint });
+  d.audit?.({ peerId: d.peerId, endpoint, certFingerprint: d.certFingerprint });
+  return 'recorded';
+}

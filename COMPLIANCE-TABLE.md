@@ -780,4 +780,16 @@ Doc-only-Eintrag (Abschluss-Dokumentation Live-Test); kein Code → CO/CG/TS/CR/
 
 ---
 
-*Letzte Aktualisierung: 2026-06-09 — v0.34.7 (DRAFT) ADR-025 Static-Peer-Join.*
+## Session 2026-06-10 — v0.34.8 (DRAFT) ADR-026 Symmetrische Auth-Peer-Discovery (403 „Unknown sender"-Fix)
+
+| #       | PR    | Datum      | CO | CG | TS | CR | PC | DO | Findings                           |
+|---------|-------|------------|----|----|----|----|----|----|----|
+| v0.34.8 | DRAFT | 2026-06-10 | ✅ | ⚠️ | ✅ | ✅ | ✅ | ✅ | CR gpt-5.5 (security): 2 HIGH (AUTHN/AUTHZ-Leak REGISTRY_SYNC/SKILL_ANNOUNCE; mehrdeutige PeerID-Override) + 1 MEDIUM (IPv6-Endpoint) + 2 LOW — alle gefixt + Regressionstests → 0 CRITICAL/HIGH |
+
+**CO:** `pal:consensus` (gpt-5.5 for 9/10, gpt-5.3-codex neutral 9/10) — Option A (Inbound-Auto-Registrierung) als Root-Fix endorsed, B1/B2 als unzureichend verworfen. **CG:** ⚠️ gemini 429-Quota — Tests von Hand. **TS:** +24 Tests (mesh authenticatedSeen/isApprovedPeerSender/fail-closed/Architektur-Isolation, learner-Outcomes inkl. IPv6/empty-addr, config-Flag), 983 unit + 6 integration grün, tsc clean. **CR:** `pal:codereview` gpt-5.5 (security) — 2 HIGH (AUTHN/AUTHZ-Trennung via `isApprovedPeerSender`-Gate auf state-mutierenden Message-Typen; `matches>1` fail-closed) + MEDIUM (IPv6/IPv4-mapped Endpoint-Bracket) + 2 LOW gefixt + Regressionstests. **PC:** gpt-5.3-codex. **DO:** ADR-026 (Accepted, §6 Impl.-Ergebnis), CHANGES (v0.34.8 DRAFT), COMPLIANCE, TODO.
+
+**Status:** DRAFT-PR, ready (nicht Draft) — Orchestrator merged mit `gh pr merge --admin` sobald Gates grün (Christian autorisiert). **#164/#166 unangetastet.** Fleet-Deploy + `.55`-Test durch Orchestrator.
+
+---
+
+*Letzte Aktualisierung: 2026-06-10 — v0.34.8 (DRAFT) ADR-026 Symmetrische Auth-Peer-Discovery.*
