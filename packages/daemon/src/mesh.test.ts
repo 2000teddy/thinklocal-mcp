@@ -279,6 +279,32 @@ describe('MeshManager.markPeerIdVerified — Bug #2: Host-Bind der attestierten 
   });
 });
 
+// ADR-026/025 Online-Self-Healing (CR gpt-5.5 MEDIUM): addPeer auf einen OFFLINE Peer
+// (Steady-Reconciler-Reconnect) muss den Offline→Online-Übergang via onPeerOnline feuern.
+describe('MeshManager.addPeer — Offline→Online Re-Connect feuert onPeerOnline', () => {
+  it('re-connect eines offline-markierten Peers triggert onPeerOnline (Recovery)', () => {
+    let online = 0;
+    let offline = 0;
+    const events = { onPeerOnline: () => { online++; }, onPeerOffline: () => { offline++; } };
+    const mesh = new MeshManager(10_000, 3, events);
+    mesh.addPeer(disc({ agentId: LEGACY }));        // initial → online (online=1)
+    expect(online).toBe(1);
+    mesh.getPeer(LEGACY)!.status = 'offline';        // simuliert missed-beats offline
+    mesh.addPeer(disc({ agentId: LEGACY }));          // Steady-Reconnect → Recovery
+    expect(online).toBe(2);                            // onPeerOnline erneut gefeuert
+    expect(mesh.getPeer(LEGACY)!.status).toBe('online');
+  });
+
+  it('re-connect eines bereits ONLINE Peers feuert onPeerOnline NICHT erneut (kein Spam)', () => {
+    let online = 0;
+    const events = { onPeerOnline: () => { online++; }, onPeerOffline: () => {} };
+    const mesh = new MeshManager(10_000, 3, events);
+    mesh.addPeer(disc({ agentId: LEGACY }));  // online=1
+    mesh.addPeer(disc({ agentId: LEGACY }));  // bereits online → kein erneutes Event
+    expect(online).toBe(1);
+  });
+});
+
 // ADR-026: symmetrische Auth-Peer-Registrierung (authenticated-seen-Map, AUTHN-only).
 describe('ADR-026 authenticated-seen (AUTHN-only)', () => {
   const A = '12D3KooWAuthSeenPeerAAAA';

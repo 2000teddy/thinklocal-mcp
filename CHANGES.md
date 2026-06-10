@@ -8,6 +8,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-10
 
+### v0.34.9 (DRAFT — Orchestrator merged mit `gh --admin` sobald Gates grün) — Static-Peer Online-Self-Healing (ADR-026/025-Follow-up)
+
+Behebt, dass ein **static_peer der transient offline flappt** (dual-homed macOS `.55`) **dauerhaft offline** hängen blieb: der Reconciler war im mDNS-an-Modus **one-shot** (`steadyIntervalMs` nur bei `mdns_enabled=false`), und `MeshManager.checkPeers` schließt offline-Peers vom `/health`-Re-Poll aus → kein Recovery-Pfad, obwohl der Peer wieder erreichbar ist.
+
+- **`static-peer-reconciler.ts`** — neuer reiner Helper `resolveStaticReconcileSteadyMs(count, steadyMs=60_000)`: Steady-Reconcile **IMMER** aktiv sobald static_peers existieren. **Bewusst KEIN `mdns_enabled`-Parameter** → der one-shot-Bug kann nicht erneut an mDNS gekoppelt werden (Regression-Guard).
+- **`index.ts`** — Verdrahtung nutzt den Helper statt `mdns_enabled === false ? 60_000 : undefined`. Ein geflappter static_peer wird alle 60 s re-connectet (`connectOnce → addPeer` re-onlined ihn), unabhängig vom Host-Routing.
+- **`mesh.ts`** — `addPeer` feuert beim **Offline→Online**-Re-Connect jetzt `onPeerOnline` (CR gpt-5.5 MEDIUM): sonst verpassten Listener (Audit `PEER_JOIN`, Skill/Cap-Re-Eval) das Recovery.
+
+**Wirkung:** `.55` (und jeder static_peer) self-healt nach transienten Blips — stabiles `discover_peers count=6`, **unabhängig** vom (separaten) `.55`-Host-Routing-Fix.
+**Tests:** +6 (Reconciler Self-Heal-Flap, Helper mdns-Unabhängigkeit/zero/konfigurierbar, mesh Offline→Online-Event). 989 unit + 6 integration grün, tsc clean. **CR:** gpt-5.5 — 0 HIGH, 1 MEDIUM + 2 LOW gefixt + Regressionstests. **PC:** gpt-5.3-codex (intern).
+
 ### v0.34.8 (DRAFT, wartet auf Merge — Orchestrator merged mit `gh --admin` sobald Gates grün) — ADR-026 Symmetrische Auth-Peer-Discovery (403 „Unknown sender"-Fix)
 
 Behebt die **Discovery-Asymmetrie**: `resolvePeerPublicKey` löste den Sender-Signing-Key NUR über

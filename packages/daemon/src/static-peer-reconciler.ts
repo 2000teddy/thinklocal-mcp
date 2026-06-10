@@ -23,7 +23,12 @@ export interface StaticPeerReconcilerOptions {
   intervalMs?: number;
   /** Dauer des dichten Retry-Fensters. Default 5min. */
   startupWindowMs?: number;
-  /** Optional: nach dem Startup-Fenster langsam weiter-reconcilen (z.B. static-only). undefined = stoppen. */
+  /**
+   * Optional: nach dem Startup-Fenster langsam weiter-reconcilen. Wird (ADR-026/025-Follow-up)
+   * IMMER gesetzt sobald static_peers existieren — UNABHÄNGIG von mDNS — damit ein offline
+   * geflappter static_peer re-connectet/re-onlined wird (siehe resolveStaticReconcileSteadyMs).
+   * undefined = stoppen (nur ohne static_peers).
+   */
   steadyIntervalMs?: number;
   /** Injizierbar für Tests. */
   setTimeoutFn?: (cb: () => void, ms: number) => ReturnType<typeof setTimeout>;
@@ -36,6 +41,22 @@ export interface StaticPeerReconcilerHandle {
 }
 
 const peerKey = (p: StaticPeer): string => `${p.host}:${p.port ?? ''}`;
+
+/**
+ * ADR-026/025 Follow-up (Online-Self-Healing): liefert das Steady-Reconcile-Intervall für die
+ * index.ts-Verdrahtung. **Bewusst UNABHÄNGIG von `mdns_enabled`** — genau das war der Bug:
+ * vorher lief Steady-Reconcile NUR im mdns-off-Modus, sodass ein static_peer, der auf einem
+ * mDNS-Node transient offline flappt (z.B. dual-homed macOS .55), nach dem one-shot-Connect NIE
+ * wieder verbunden wurde — und `MeshManager.checkPeers` schließt offline-Peers vom /health-
+ * Re-Poll aus → der Peer blieb dauerhaft offline, obwohl wieder erreichbar. Mit Steady-Reconcile
+ * (re-seedet `pending`, `connectOnce`→`addPeer` re-onlined den Eintrag) self-healt er nach jedem
+ * transienten Blip — unabhängig vom Host-Routing. Idempotent (addPeer dedupt).
+ *
+ * Rückgabe `undefined` (= one-shot) NUR wenn gar keine static_peers konfiguriert sind.
+ */
+export function resolveStaticReconcileSteadyMs(staticPeerCount: number, steadyMs = 60_000): number | undefined {
+  return staticPeerCount > 0 ? steadyMs : undefined;
+}
 
 /**
  * Startet den Reconciler. Gibt sofort zurück (non-blocking); der erste Versuch läuft
