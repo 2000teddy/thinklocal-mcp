@@ -780,4 +780,18 @@ Doc-only-Eintrag (Abschluss-Dokumentation Live-Test); kein Code → CO/CG/TS/CR/
 
 ---
 
-*Letzte Aktualisierung: 2026-06-09 — v0.34.7 (DRAFT) ADR-025 Static-Peer-Join.*
+## LIVE-DEPLOY 2026-06-10 — Linux-Fleet auf 92e6058 (#165 ADR-024 + #166 ADR-025 gemerged)
+
+Christian-autorisiert (Orchestrator .94). Per-VM git pull main (HEAD 92e6058) + tsc-build + Daemon-Restart; own-CA-Nodes (.56/.222) zusätzlich Node-Cert RE-ENROLL (node/<PeerID>, extra-CA = .94-Mesh-CA b56aa3 im Request-Trust). Verifiziert je Node: canonical `node/<PeerID>`, build_number=92e6058, **5/5 SKILL_ANNOUNCE, 0×403**.
+
+| Node | Re-Enroll? | Ergebnis |
+|------|-----------|----------|
+| TH01(.80) / TH02(.82) / .52 | nein (bereits canonical) | ✅ upgraded, canonical, 5/5, 0×403 |
+| .56 (influxdb) | ja | ✅ (ADR-024 hält Cert; InfluxDB unberührt, RAM ok, Backup gewaived) |
+| .222 (ai-n8n) | ja | ✅ |
+
+**.94 (CA-Owner) + .55 (macOS)** durch Orchestrator (Kopierkästen geliefert). Daemon-only-Scope strikt. **Keine Branch-Protection-Änderung; Merge dieser Doku-PR durch Christian.**
+
+---
+
+*Letzte Aktualisierung: 2026-06-10 — LIVE-DEPLOY Linux-Fleet canonical-emit (92e6058).*
