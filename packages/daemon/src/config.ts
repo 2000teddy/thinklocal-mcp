@@ -41,8 +41,10 @@ export interface DaemonConfig {
      * ADR-022 Phase 3: Wenn true, emittiert der Daemon seine kanonische
      * `spiffe://thinklocal/node/<PeerID>`-Identität als `envelope.sender` /
      * agent_id (statt Legacy `host/<id>`). Greift NUR, wenn libp2p aktiv ist
-     * UND der laufende mTLS-Cert-SAN bereits kanonisch ist (Cert-SAN VOR
-     * Sender-URI, ADR-022). Andernfalls Fail-safe → Legacy. Default: false.
+     * UND der laufende mTLS-Cert-SAN bereits kanonisch ist UND der Cert-Issuer
+     * die attestierende CA ist (Cert-SAN VOR Sender-URI, ADR-022). Andernfalls
+     * Fail-safe → Legacy. Default: true (sicher dank Fail-safe; ein Node ohne
+     * node/<PeerID>-Attesting-Cert emittiert weiterhin Legacy).
      */
     emit_canonical_sender: boolean;
   };
@@ -114,7 +116,13 @@ const DEFAULTS: DaemonConfig = {
     tls_enabled: true,
     agent_type: 'claude-code',
     data_dir: resolve(homedir(), '.thinklocal'),
-    emit_canonical_sender: false,
+    // ADR-022 Phase 3: Default-Sender ist kanonisch (node/<PeerID>). SICHER als Default,
+    // weil resolveSelfIdentity fail-closed gatet — kanonisch wird NUR emittiert, wenn
+    // (flag) UND der laufende mTLS-Cert-SAN bereits kanonisch ist UND der Cert-Issuer die
+    // attestierende CA ist; sonst automatischer Fallback auf Legacy host/<id>. Ein Node ohne
+    // node/<PeerID>-Cert emittiert also weiterhin Legacy. Committed-false ließ jeden Node beim
+    // `git pull` auf Legacy zurückfallen (TH01/.55-Regression) — Default true behebt das durable.
+    emit_canonical_sender: true,
   },
   mesh: {
     heartbeat_interval_ms: 10_000,

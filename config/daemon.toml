@@ -11,8 +11,9 @@ data_dir = "~/.thinklocal"
 # ADR-022 Phase 3 (Per-Node-Sender-Flip): kanonische node/<PeerID>-Identität als
 # envelope.sender/agent_id emittieren statt Legacy host/<id>. Greift NUR, wenn libp2p
 # aktiv ist UND das laufende mTLS-Cert bereits die EIGENE node/<PeerID>-SAN trägt
-# (.94-PoP-Cert). Sonst Fail-safe → Legacy. Default false. Env: TLMCP_EMIT_CANONICAL_SENDER=1
-emit_canonical_sender = false
+# (.94-PoP-Cert) UND der Cert-Issuer die attestierende CA ist. Sonst Fail-safe → Legacy.
+# Default true (sicher dank Fail-safe). Opt-out: Env TLMCP_EMIT_CANONICAL_SENDER=0
+emit_canonical_sender = true
 
 [mesh]
 heartbeat_interval_ms = 10000
