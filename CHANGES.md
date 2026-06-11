@@ -6,7 +6,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-06-10
+## [Unreleased] — 2026-06-11
+
+### v0.34.10 (DRAFT — Christian-autorisiert, --admin-Merge) — emit_canonical_sender Default true (ADR-022 Durable-Fix)
+
+Behebt die **wiederkehrende Legacy-Regression**: der committed-Default `emit_canonical_sender = false` (config.ts DEFAULTS + config/daemon.toml) ließ jeden canonical-Node beim `git pull` auf die **Legacy-Identität `host/<id>`** zurückfallen (TH01 + .55 mehrfach betroffen — das `=true` war nur lokale, nicht-committete Op-Mod).
+
+- **`config.ts`** DEFAULTS + **`config/daemon.toml`** committed: `emit_canonical_sender = true`.
+- **SICHER** durch den Fail-safe in `resolveSelfIdentity` (`peer-identity.ts`): kanonisch wird NUR emittiert, wenn `flag && certSanIsCanonical && certIssuerIsAttesting` — ein Node ohne `node/<PeerID>`-Attesting-Cert emittiert **automatisch weiterhin Legacy** (kein Mesh-Bruch, kein 403). Receiver-seitig bindet `authorizeHttpsSender` weiterhin `sender == cert-SAN`.
+- **`index.ts`**: Fail-safe-Log WARN→INFO (Legacy-Fallback ist mit Default-true erwartbar, kein Fehlerzustand).
+- Opt-out unverändert: `TLMCP_EMIT_CANONICAL_SENDER=0`.
+
+**Tests:** +4 (loadConfig Default true, Env 0/1, **committed-toml-Regression-Guard** dass `config/daemon.toml` selbst `true` trägt). 993 unit + 6 integration grün, tsc clean. **CR:** gpt-5.5 — 0 HIGH/CRITICAL; 1 MEDIUM (committed-toml-Guard) + 3 LOW (Kommentare/Log-Wording) gefixt. **PC:** gpt-5.3-codex (intern).
 
 ### v0.34.9 (DRAFT — Orchestrator merged mit `gh --admin` sobald Gates grün) — Static-Peer Online-Self-Healing (ADR-026/025-Follow-up)
 

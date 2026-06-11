@@ -263,11 +263,13 @@ async function main(): Promise<void> {
   });
   const { selfIdentityUri, emitCanonical, canonicalSelfUri } = idDecision;
   if (idDecision.blockedReason) {
-    // Flag explizit gesetzt, aber Vorbedingung nicht erfüllt → Fail-safe: Legacy emittieren
-    // und LAUT warnen (Fehlkonfiguration: Flip ohne kanonisches Cert würde 403 erzeugen).
-    log.warn(
+    // emit_canonical_sender ist aktiv (Default true seit ADR-022 Phase 3), aber die Vorbedingung
+    // (kanonischer Cert-SAN + attestierender Issuer) ist nicht erfüllt → Fail-safe: Legacy
+    // emittieren. INFO statt WARN, da `true` jetzt der Default ist und ein Node ohne node/<PeerID>-
+    // Attesting-Cert legitim auf Legacy bleibt (kein Fehlerzustand; ein Flip ohne Cert würde 403 erzeugen).
+    log.info(
       { reason: idDecision.blockedReason, certSans: certSansAtBoot, canonicalSelfUri },
-      '[identity] ADR-022 Phase 3: emit_canonical_sender gesetzt, aber Vorbedingung nicht erfüllt → bleibe bei Legacy-Sender (Fail-safe)',
+      '[identity] ADR-022 Phase 3: kanonischer Sender (noch) nicht möglich → bleibe bei Legacy-Sender (Fail-safe, erwartbar ohne node/<PeerID>-Cert)',
     );
   }
   if (emitCanonical) {

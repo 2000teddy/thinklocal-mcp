@@ -10,13 +10,19 @@
  * Siehe discovery.ts (resolveBonjourOptions) + ADR-019.
  */
 import { describe, it, expect, afterEach } from 'vitest';
-import { join } from 'node:path';
+import { join, resolve, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { loadConfig } from './config.js';
 
 // Nicht-existenter Pfad → loadConfig faellt auf DEFAULTS zurueck (kein TOML-Merge),
 // so testen wir ausschliesslich den Default + Env-Override-Pfad.
 const NO_TOML = join(tmpdir(), 'thinklocal-nonexistent-config-xyz.toml');
+
+// Repo-Root relativ zu dieser Testdatei (packages/daemon/src/ → ../../../).
+const resolveRepoPath = (rel: string): string =>
+  resolve(dirname(fileURLToPath(import.meta.url)), '../../../', rel);
 
 describe('loadConfig: disable_mdns_interface_pin (.55-Workaround)', () => {
   afterEach(() => {
@@ -67,6 +73,30 @@ describe('loadConfig: ADR-025 mdns_enabled + preferred_interfaces', () => {
   it('TLMCP_PREFERRED_INTERFACES="en10,en0" → geparste, getrimmte Liste', () => {
     process.env['TLMCP_PREFERRED_INTERFACES'] = ' en10 , en0 ';
     expect(loadConfig(NO_TOML).discovery.preferred_interfaces).toEqual(['en10', 'en0']);
+  });
+});
+
+describe('loadConfig: ADR-022 emit_canonical_sender Default (Durable-Fix)', () => {
+  afterEach(() => { delete process.env['TLMCP_EMIT_CANONICAL_SENDER']; });
+
+  it('Default ist true (kanonisch by default; fail-safe in resolveSelfIdentity gatet auf Legacy ohne node/-Cert)', () => {
+    expect(loadConfig(NO_TOML).daemon.emit_canonical_sender).toBe(true);
+  });
+  it('TLMCP_EMIT_CANONICAL_SENDER=0 → false (explizites Opt-out)', () => {
+    process.env['TLMCP_EMIT_CANONICAL_SENDER'] = '0';
+    expect(loadConfig(NO_TOML).daemon.emit_canonical_sender).toBe(false);
+  });
+  it('TLMCP_EMIT_CANONICAL_SENDER=1 → true', () => {
+    process.env['TLMCP_EMIT_CANONICAL_SENDER'] = '1';
+    expect(loadConfig(NO_TOML).daemon.emit_canonical_sender).toBe(true);
+  });
+
+  it('CR-MEDIUM: das COMMITTED config/daemon.toml selbst trägt emit_canonical_sender = true (Durable-Guard gegen Legacy-Rückfall beim git pull)', () => {
+    // Der eigentliche Bug war committed=false → jeder Node fiel beim pull auf Legacy zurück.
+    // Dieser Test schlägt fehl, falls jemand den committed-Wert wieder auf false setzt.
+    const repoToml = resolveRepoPath('config/daemon.toml');
+    const raw = readFileSync(repoToml, 'utf-8');
+    expect(/^\s*emit_canonical_sender\s*=\s*true\s*$/m.test(raw)).toBe(true);
   });
 });
 

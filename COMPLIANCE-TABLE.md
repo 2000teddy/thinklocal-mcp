@@ -818,4 +818,16 @@ Christian-autorisiert (Orchestrator .94). Per-VM git pull main (HEAD 92e6058) + 
 
 ---
 
-*Letzte Aktualisierung: 2026-06-10 — v0.34.9 (DRAFT) Static-Peer Online-Self-Healing.*
+## Session 2026-06-11 — v0.34.10 (DRAFT) emit_canonical_sender Default true (ADR-022 Durable-Fix)
+
+| #        | PR    | Datum      | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------|-----|----|----|----|----|----|----|
+| v0.34.10 | DRAFT | 2026-06-11 | ✅  | ⚠️ | ✅ | ✅ | ✅ | ✅ | CR gpt-5.5: 0 HIGH/CRITICAL; 1 MEDIUM (committed-toml-Guard) + 3 LOW (Kommentare/Log-Wording) gefixt + Regressionstest |
+
+**CO:** `pal:consensus` (gpt-5.5/MiniMax-M3, im .55-AUTH-Brief) — Default-Flip ist die durable Folge der ADR-022-Richtung; Sofort-Unblock-Analyse separat. **CG:** ⚠️ gemini 429-Quota — Tests von Hand. **TS:** +4 (loadConfig Default true, Env 0/1, committed-`config/daemon.toml`-Regression-Guard), 993 unit + 6 integration grün, tsc clean. **CR:** `pal:codereview` gpt-5.5 (quick) — Default-Flip sicher dank Fail-safe-Interlock (`flag && certSanIsCanonical && certIssuerIsAttesting`); MEDIUM + 3 LOW gefixt. **PC:** gpt-5.3-codex (intern) — validation_complete, 0 Blocker. **DO:** CHANGES (v0.34.10), COMPLIANCE, TODO, package.json 0.34.10.
+
+**Status:** DRAFT-PR, ready — `gh pr merge --admin --squash` (Christian autorisiert). Behebt die committed-`false`-Legacy-Regression beim `git pull` (TH01/.55). **Separater Befund (kein Code-Fix):** .55 `peers_online=0` = host-seitiger macOS-`connectx`-EHOSTUNREACH (raw `net.connect` scheitert, `curl` ok, saubere Route) → .55-Host-Reset (Christian, sudo/reboot), NICHT der Connector.
+
+---
+
+*Letzte Aktualisierung: 2026-06-11 — v0.34.10 (DRAFT) emit_canonical_sender Default true.*
