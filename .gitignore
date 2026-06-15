@@ -60,3 +60,11 @@ htmlcov/
 # Logs
 logs/
 *.log
+
+# Operative Artefakte (nicht ins Repo — Doku-Hygiene 2026-06-15 15:51)
+# Einmal-Rejoin-Skript (eigener Header: "Nicht committen (operativ)")
+packages/daemon/ws3-rejoin.mjs
+# operative Inbound-Briefe von .55
+from-mac55_*.md
+# daemon.toml-Backups (z.B. .bak-preflip-*)
+config/*.bak-*
