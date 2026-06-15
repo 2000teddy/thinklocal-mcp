@@ -842,9 +842,20 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 | Static-Peer Online-Self-Healing (v0.34.9) | #169 | `b1e5b48` |
 | emit_canonical_sender Default true (v0.34.10) | #170 | `a804f2f` |
 
-**Offen (Doku-PRs, Christians Review-Gate REVIEW_REQUIRED):** #171 (.55-Runbooks A/C2 + ADR-027 + Onboarding/Re-Enroll-Docs), #172 (.gitignore-Hygiene + .bak-Entfernung).
-**Aktueller Backlog:** `TODO.md` → „Follow-ups aus Code-Reviews" (.55 unter ADR-027 konsolidiert; ADR-028/029 + registry_sync-getPeerId/Capability-Drift als Design-First-Posten).
+**Doku-PRs gemergt:** #171 (.55-Runbooks A/C2 + ADR-027 + Onboarding/Re-Enroll), #172 (.gitignore-Hygiene), #173 (TODO/COMPLIANCE-Hygiene), #174 (Diagnose Capability-Drift).
 
 ---
 
-*Letzte Aktualisierung: 2026-06-15 16:19 — TODO/COMPLIANCE-Hygiene (gemergte PRs abgehakt, .55 unter ADR-027 konsolidiert, hh:mm-Konvention).*
+## Session 2026-06-15 22:33 — v0.34.11 (DRAFT) fix: registry-sync dialProtocol PeerId (Capability-Count-Drift)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|----|
+| v0.34.11 | #175  | 2026-06-15 22:33 | n/a | —  | ✅ | ✅ | ✅ | ✅ | CR gpt-5.5 (quick): 0 HIGH/CRITICAL/MEDIUM; 2 LOW (peerIdFromString-Throw-Kontext + PeerId-Shape-Assertion) gefixt |
+
+**CO:** entfällt (reiner Bug-Fix; Root-Cause in #174 belegt). **CG:** —. **TS:** +3 (`libp2p-runtime.test.ts`: dialProtocol/hangUpPeer → PeerId-Objekt mit toString-Round-Trip + Shape `toCID`; ungültige PeerID → kontextueller Throw), 996 unit + 6 integration grün, tsc clean. **CR:** `pal:codereview` gpt-5.5 — 0 HIGH/CRITICAL/MEDIUM, 2 LOW gefixt. **PC:** `pal:precommit` gpt-5.3-codex (intern) — 0 Blocker. **DO:** CHANGES (v0.34.11), COMPLIANCE, package.json 0.34.11.
+
+**Status:** Code-PR #175 — `dialProtocol`/`hangUpPeer` übergeben jetzt ein PeerId-Objekt (`peerIdFromString` via `toPeerId`) statt String → behebt den libp2p-v2-`getPeerId`-Fehler, der die Automerge-Registry-Sync-Konvergenz brach. **Orchestrator merged `--admin` nach Review** (kein Self-Merge). Reine Korrektheit, kein .55-/Produktiv-Eingriff.
+
+---
+
+*Letzte Aktualisierung: 2026-06-15 22:33 — v0.34.11 (DRAFT) registry-sync dialProtocol PeerId-Fix.*

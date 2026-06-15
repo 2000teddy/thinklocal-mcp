@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ActiveLibp2pRuntime,
   createInitialLibp2pState,
   getLibp2pListenMultiaddrs,
   getLibp2pProtocolList,
@@ -141,5 +142,48 @@ describe('libp2p-runtime', () => {
       observedMultiaddrs: [],
       relayTransport: true,
     })).toBe('private');
+  });
+});
+
+describe('ActiveLibp2pRuntime.dialProtocol/hangUpPeer — PeerId-Objekt statt String (getPeerId-Drift-Fix)', () => {
+  const cfg = {
+    enabled: true, bindHost: '0.0.0.0', listenPort: 9540, mdnsServiceTag: 'thinklocal-mcp',
+    natTraversalEnabled: false, relayTransportEnabled: false, relayServiceEnabled: false, announceMultiaddrs: [],
+  };
+  const PID = '12D3KooWKZ4zvnnd9mJimkncKatN9F6fQWRHc5ZNY9SMFNBb5Ynb';
+
+  function rtWithStubNode() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rt = new ActiveLibp2pRuntime(createInitialLibp2pState(cfg as any), cfg as any, {} as any);
+    const calls: { dial?: unknown; hangup?: unknown } = {};
+    (rt as unknown as { node: unknown }).node = {
+      dialProtocol: async (peer: unknown) => {
+        calls.dial = peer;
+        return { source: [], sink: async () => {}, close: async () => {}, abort: () => {} };
+      },
+      hangUp: async (peer: unknown) => { calls.hangup = peer; },
+    };
+    return { rt, calls };
+  }
+
+  it('dialProtocol übergibt ein PeerId-OBJEKT (kein String), das auf die Eingabe round-trippt + PeerId-Shape hat', async () => {
+    const { rt, calls } = rtWithStubNode();
+    await rt.dialProtocol(PID, '/thinklocal/mesh/registry/1.0.0');
+    expect(typeof calls.dial).not.toBe('string');
+    expect((calls.dial as { toString(): string }).toString()).toBe(PID);
+    // echte libp2p-PeerId-API (nicht nur ein String-Wrapper):
+    expect(typeof (calls.dial as { toCID?: unknown }).toCID).toBe('function');
+  });
+
+  it('dialProtocol wirft bei ungültiger PeerID mit Kontext (kein kryptischer getPeerId-TypeError)', async () => {
+    const { rt } = rtWithStubNode();
+    await expect(rt.dialProtocol('not-a-valid-peerid', '/x')).rejects.toThrow(/ungültige PeerID 'not-a-valid-peerid'/);
+  });
+
+  it('hangUpPeer übergibt ebenfalls ein PeerId-OBJEKT (kein String)', async () => {
+    const { rt, calls } = rtWithStubNode();
+    await rt.hangUpPeer(PID);
+    expect(typeof calls.hangup).not.toBe('string');
+    expect((calls.hangup as { toString(): string }).toString()).toBe(PID);
   });
 });

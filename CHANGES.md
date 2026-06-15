@@ -6,7 +6,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-06-11
+## [Unreleased] — 2026-06-15 22:33
+
+### v0.34.11 (DRAFT — Christian-autorisiert, Orchestrator --admin-Merge nach Review) — fix: registry-sync dialProtocol PeerId (Capability-Count-Drift)
+
+Behebt den in `docs/DIAGNOSE-capability-count-drift-registry-getPeerId.md` (PR #174) diagnostizierten Bug: die Capability-Registry konvergierte fleet-weit NICHT (Counts 5/18/19/24/24/26 statt identisch).
+
+- **Root-Cause:** `LibP2pRuntime.dialProtocol(peerId: string)` / `hangUpPeer(peerId: string)` übergaben einen **String** an `node.dialProtocol`/`node.hangUp`; libp2p v2 erwartet ein **PeerId-Objekt** → libp2p-intern `multiaddrs[0].getPeerId is not a function` → der Automerge-Registry-Sync-Dial (`/thinklocal/mesh/registry/1.0.0`) scheiterte → CRDT synct nur über bereits bestehende Verbindungen → Count-Drift.
+- **Fix:** `peerIdFromString` (aus `@libp2p/peer-id`) via neuen Helper `toPeerId(peerId)` (mit kontextueller Fehlermeldung statt kryptischem TypeError) an beiden String→libp2p-Call-Sites. `autoDialDiscoveredPeer` (nutzt bereits das PeerId-Objekt) unverändert.
+- **Reine Korrektheit, kein Feature-Scope.** Kein .55-/Produktiv-Eingriff.
+
+**Tests:** +3 (`libp2p-runtime.test.ts`: dialProtocol/hangUpPeer übergeben ein PeerId-Objekt mit toString-Round-Trip + PeerId-Shape `toCID`; ungültige PeerID → kontextueller Throw). 996 unit + 6 integration grün, tsc clean. **CR:** gpt-5.5 (quick) — 0 HIGH/CRITICAL/MEDIUM, 2 LOW gefixt. **PC:** gpt-5.3-codex (intern) — 0 Blocker.
 
 ### v0.34.10 (DRAFT — Christian-autorisiert, --admin-Merge) — emit_canonical_sender Default true (ADR-022 Durable-Fix)
 

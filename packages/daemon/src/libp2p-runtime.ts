@@ -1,5 +1,6 @@
 import type { Logger } from 'pino';
 import type { PrivateKey } from '@libp2p/interface';
+import { peerIdFromString } from '@libp2p/peer-id';
 import type { RuntimeMode } from './runtime-mode.js';
 
 export interface Libp2pRuntimeConfig {
@@ -489,12 +490,29 @@ export class ActiveLibp2pRuntime implements Libp2pRuntime {
     };
   }
 
+  /**
+   * String→PeerId für libp2p-Aufrufe (dialProtocol/hangUp erwarten PeerId/Multiaddr, keinen String).
+   * Wirft bei ungültiger PeerID mit Kontext (CR gpt-5.5 LOW) statt eines kryptischen libp2p-internen
+   * `getPeerId`-TypeErrors.
+   */
+  private toPeerId(peerId: string) {
+    try {
+      return peerIdFromString(peerId);
+    } catch (err) {
+      throw new Error(`[libp2p] ungültige PeerID '${peerId}': ${(err as Error)?.message ?? err}`);
+    }
+  }
+
   async dialProtocol(peerId: string, protocol: string): Promise<Libp2pStreamLike> {
     if (!this.node) throw new Error('libp2p node not started');
     if (typeof this.node.dialProtocol !== 'function') {
       throw new Error('libp2p node does not support dialProtocol');
     }
-    const stream = await this.node.dialProtocol(peerId, protocol);
+    // libp2p v2 `dialProtocol` erwartet ein PeerId-Objekt (oder Multiaddr), NICHT einen String.
+    // Ein blanker String wird intern als Multiaddr behandelt → `multiaddrs[0].getPeerId is not a
+    // function` → der Automerge-Registry-Sync-Dial scheiterte → Capability-Count-Drift (Diagnose
+    // docs/DIAGNOSE-capability-count-drift-registry-getPeerId.md). Fix: String → PeerId.
+    const stream = await this.node.dialProtocol(this.toPeerId(peerId), protocol);
     this.onStreamOpened(protocol);
     return this.wrapStream(stream, protocol);
   }
@@ -502,7 +520,8 @@ export class ActiveLibp2pRuntime implements Libp2pRuntime {
   async hangUpPeer(peerId: string): Promise<void> {
     if (!this.node) return;
     if (typeof this.node.hangUp === 'function') {
-      await this.node.hangUp(peerId);
+      // Wie dialProtocol: libp2p `hangUp` erwartet PeerId/Multiaddr, keinen String.
+      await this.node.hangUp(this.toPeerId(peerId));
     }
   }
 
