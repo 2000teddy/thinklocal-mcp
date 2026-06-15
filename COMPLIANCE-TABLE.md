@@ -830,4 +830,21 @@ Christian-autorisiert (Orchestrator .94). Per-VM git pull main (HEAD 92e6058) + 
 
 ---
 
-*Letzte Aktualisierung: 2026-06-11 — v0.34.10 (DRAFT) emit_canonical_sender Default true.*
+## Merge-Status-Hygiene (2026-06-15 16:19)
+
+Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **gemergt** (verifiziert via `git log origin/main`):
+
+| Eintrag | PR | Commit auf main |
+|---------|----|-----------------|
+| ADR-024 Canonical-Cert-Retention | #165 | `357842f` (⚠️ 2 CR/PC-MEDIUMs offen → „ADR-024-Rollout-Gate" in TODO) |
+| ADR-025 .55-Mesh-Join | #166 | `92e6058` |
+| ADR-026 Symmetrische Auth-Peer-Discovery | #168 | `58377b8` |
+| Static-Peer Online-Self-Healing (v0.34.9) | #169 | `b1e5b48` |
+| emit_canonical_sender Default true (v0.34.10) | #170 | `a804f2f` |
+
+**Offen (Doku-PRs, Christians Review-Gate REVIEW_REQUIRED):** #171 (.55-Runbooks A/C2 + ADR-027 + Onboarding/Re-Enroll-Docs), #172 (.gitignore-Hygiene + .bak-Entfernung).
+**Aktueller Backlog:** `TODO.md` → „Follow-ups aus Code-Reviews" (.55 unter ADR-027 konsolidiert; ADR-028/029 + registry_sync-getPeerId/Capability-Drift als Design-First-Posten).
+
+---
+
+*Letzte Aktualisierung: 2026-06-15 16:19 — TODO/COMPLIANCE-Hygiene (gemergte PRs abgehakt, .55 unter ADR-027 konsolidiert, hh:mm-Konvention).*
