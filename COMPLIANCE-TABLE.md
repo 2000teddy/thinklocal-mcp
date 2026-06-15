@@ -830,4 +830,16 @@ Christian-autorisiert (Orchestrator .94). Per-VM git pull main (HEAD 92e6058) + 
 
 ---
 
-*Letzte Aktualisierung: 2026-06-11 — v0.34.10 (DRAFT) emit_canonical_sender Default true.*
+## Session 2026-06-15 22:33 — v0.34.11 (DRAFT) fix: registry-sync dialProtocol PeerId (Capability-Count-Drift)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|----|
+| v0.34.11 | #175  | 2026-06-15 22:33 | n/a | —  | ✅ | ✅ | ✅ | ✅ | CR gpt-5.5 (quick): 0 HIGH/CRITICAL/MEDIUM; 2 LOW (peerIdFromString-Throw-Kontext + PeerId-Shape-Assertion) gefixt |
+
+**CO:** entfällt (reiner Bug-Fix, keine Architektur-Weiche; Root-Cause in #174 belegt). **CG:** —. **TS:** +3 (`libp2p-runtime.test.ts`: dialProtocol/hangUpPeer → PeerId-Objekt mit toString-Round-Trip + Shape `toCID`; ungültige PeerID → kontextueller Throw), 996 unit + 6 integration grün, tsc clean. **CR:** `pal:codereview` gpt-5.5 — 0 HIGH/CRITICAL/MEDIUM, 2 LOW gefixt. **PC:** `pal:precommit` gpt-5.3-codex (intern) — validation_complete, 0 Blocker. **DO:** CHANGES (v0.34.11), COMPLIANCE, package.json 0.34.11.
+
+**Status:** Code-PR #175 — `LibP2pRuntime.dialProtocol`/`hangUpPeer` übergeben jetzt ein PeerId-Objekt (`peerIdFromString` via `toPeerId`) statt String → behebt den libp2p-v2-`getPeerId`-Fehler, der die Automerge-Registry-Sync-Konvergenz brach. **Orchestrator merged `--admin` nach Review** (kein Self-Merge). Reine Korrektheit, kein .55-/Produktiv-Eingriff.
+
+---
+
+*Letzte Aktualisierung: 2026-06-15 22:33 — v0.34.11 (DRAFT) registry-sync dialProtocol PeerId-Fix.*
