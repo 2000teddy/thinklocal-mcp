@@ -1,10 +1,15 @@
 # ADR-028: Mesh-Comms — Agent↔Agent-Kommunikation reparieren (Identity / Transport / Auth / Authz / Discovery)
 
-**Status:** Proposed (DESIGN-ENTWURF — KEINE Umsetzung ohne Christians ausdrückliches Go)
-**Datum:** 2026-06-16 ~18:45
-**Autor:** Claude (claude-code @ TH01, Design + Code-Verifikation), Christian (Auftrag/Freigabe offen)
+**Status:** **ACCEPTED** (2026-06-16 20:16, Christians 3 Entscheidungen — s.u.). Umsetzung gestaffelt D1→D4; **Merge/Deploy jedes PRs bleibt Christians Gate** (kein Produktiv-Rollout/Cert-Änderung/Daemon-Flip ohne sein Wort).
+**Datum:** 2026-06-16 ~18:45 (Proposed) → 2026-06-16 20:16 (Accepted)
+**Autor:** Claude (claude-code @ TH01, Design + Code-Verifikation), Christian (Auftrag + Freigabe der 3 offenen Punkte)
 **CO:** `pal:consensus` — gpt-5.5 (for, 9/10) + gpt-5.3-codex (against, 8/10). Konsens: hoch. Beide einig bei Layer-Zerlegung + D1-first; Skeptiker erzwang 3 Härtungen (Authz-Layer, PKI-Vorbedingung, SyncHub=hybrid statt SPOF) — in dieser ADR eingearbeitet.
-**Verwandt:** ADR-022 (kanonische node/<PeerID>-Identität), ADR-026 (symmetric auth-discovery), ADR-027 (Overlay-Transport / .55), RUNBOOK-55-A, `[[th55-pathA-cert-san-blocker]]`, `[[macos-daemon-env-and-inbox-gaps]]`.
+**Verwandt:** ADR-020 (RegistrySyncCoordinator — wird für D4 erweitert), ADR-022 (kanonische node/<PeerID>-Identität), ADR-026 (symmetric auth-discovery), ADR-027 (Overlay-Transport / .55), RUNBOOK-55-A, `[[th55-pathA-cert-san-blocker]]`, `[[macos-daemon-env-and-inbox-gaps]]`.
+
+## Christian-Entscheidungen (2026-06-16, ACCEPTED)
+1. **HTTPS-universal-Cutover (Sequenz Schritt 5): JA mitplanen** — nicht deferren; als expliziter geplanter Schritt nach D4 (Cutover-Plan unten).
+2. **D4/SyncHub = den bestehenden ADR-020 `RegistrySyncCoordinator` ERWEITERN, KEIN Neubau** (Orchestrator-.94-Empfehlung; Christian kann redigieren). Die MCP-Capability-Registrierung wird zu einem zusätzlichen Replikations-Topic auf dem vorhandenen CRDT-Gossip-Substrat — der „hybride Index" ist also genau diese Erweiterung, kein separater Dienst.
+3. **Priorität: JA — ADR-028 (D1…) VOR dem TH02-Phase-3-Flip-Blocker** (`[[th02-phase3-flip-blocker]]` wird zurückgestellt, bis D1 die kanonische Adressierung repariert hat — der Flip-Blocker hängt selbst an kanonischer Identität).
 
 ## Kontext — Mesh-Comms trägt nicht, trotz vorhandener Primitive
 
@@ -64,14 +69,22 @@ Peer-mTLS-Certs SANen nur die LAN-IP (z.B. `10.10.10.80`), nicht die Tailscale-1
 - **SyncHub = Index/Beschleuniger ÜBER dem vorhandenen signierten CRDT-Capability-Gossip — KEINE harte Abhängigkeit / KEIN SPOF** (beide Modelle). Korrektheit muss auch ohne SyncHub gelten (dezentral); SyncHub liefert nur schnelle, deterministische Lookups. Kein „Hub publiziert Capabilities im Namen von Nodes" (Privilege-Escalation vermeiden).
 - Ziel-UX: .52 fragt „wer hostet `mcporter`?" → Antwort „node X" → `execute_remote_skill` invokiert remote, **ohne SSH-Config-Kopie**.
 
-## Sequencing (Konsens-verfeinert)
-1. **D1** Identity-Kanonisierung + dual-accept + **Telemetrie** (legacy-vs-canonical-Nutzung).
+## Sequencing (Konsens-verfeinert + Christian-Entscheidungen)
+1. **D1** Identity-Kanonisierung + dual-accept + **Telemetrie** (legacy-vs-canonical-Nutzung). ← **als nächstes, vor TH02-Flip-Blocker (Entscheid 3)**
 2. **D2a** Cert-Profil/PKI-Check (URI-SAN/EKU/Trust-Bundle).
 3. **D2b** strikter SPIFFE-Verifier + **Principal↔App-Binding (D3)**.
-4. **D4** Discovery-Rework als **hybrid** (SyncHub optionaler Accelerator).
-5. **Erst danach** optionaler „HTTPS als universeller Primary"-Cutover.
+4. **D4** Discovery-Rework als **Erweiterung des ADR-020 `RegistrySyncCoordinator`** (Entscheid 2) — MCP-Capability als zusätzliches CRDT-Replikations-Topic, hybrider Lookup-Index, kein neuer Dienst.
+5. **HTTPS-universal-Cutover — GEPLANT (Entscheid 1)**, siehe Plan unten.
 
 Jeder Schritt = eigener PR mit **vollständiger CO/CG/TS/CR/PC/DO**-Pipeline. Migration mit Instrumentierung (verification failures, registry staleness) **vor** jedem Hard-Cutover.
+
+### Schritt 5 — HTTPS-universal-Cutover-Plan (Entscheid 1: JA)
+Nach D1–D4 wird HTTPS(mTLS) :9440 von „CORE, libp2p sekundär" zum **expliziten universellen Primary** promotet; libp2p :9540 bleibt dokumentierter **Fallback** (NAT/Cross-Subnet), nicht abgeschaltet (Skeptiker-Härtung). Cutover-Gates:
+1. **Vorbedingung:** D1+D2b+D3 grün auf allen 6 Core-Nodes (kanonische Adressierung + SPIFFE-Verifier + Principal-Binding), Migrations-Telemetrie zeigt 0 Legacy-only-Sender.
+2. **Flag-gesteuert + reversibel:** Cutover hinter Config/Env-Flag pro Node, Rollback = Flag zurück (Lehre aus ADR-022/.55: nie Bare-Config, plist-Env/committed Default).
+3. **Reihenfolge:** zuerst 1 Canary-Node, dann Fleet; libp2p-Fallback bleibt erreichbar bis 2 Wochen stabil.
+4. **DoD-Cutover:** alle Core-Comms (inbox/registry-sync/skill-exec/heartbeat) laufen über HTTPS-Primary, libp2p nur noch als Fallback-Pfad gemessen.
+5. **Merge/Deploy = Christians Gate** (wie alle Schritte).
 
 ## Sicherheit / Blast-Radius
 - **Höchstes Risiko: D2b checkServerIdentity** — die 6 Bypass-Modi (loose prefix, Trust-Domain nicht exakt, erste-SAN-Falle, Normalisierungs-Äquivalenz, fehlendes App-Binding, versehentliches Schwächen der Default-Checks) sind im Verifier explizit auszuschließen + Regression-Tests je Modus.
@@ -85,7 +98,11 @@ Jeder Schritt = eigener PR mit **vollständiger CO/CG/TS/CR/PC/DO**-Pipeline. Mi
 3. **Fall A:** ein Node ohne lokalen `mcporter` findet den hostenden Node via `query_capabilities` und invokiert ihn via `execute_remote_skill` — **ohne SSH**.
 4. Spoofing-Negativtest: gefälschter `envelope.sender` ≠ Cert-Principal → 403.
 
-## Offene Punkte (Christian)
-1. Strategie: „HTTPS universeller Primary"-Cutover (Schritt 5) jetzt mitplanen oder deferren?
-2. SyncHub: neuer Dienst vs. Erweiterung des bestehenden RegistrySyncCoordinator (ADR-020)?
-3. Reihenfolge der PRs gegen andere offene Arbeit (ADR-022 Phase-3-Flip TH02-Blocker) priorisieren.
+## Offene Punkte (Christian) — ENTSCHIEDEN 2026-06-16
+1. ~~„HTTPS universeller Primary"-Cutover jetzt mitplanen oder deferren?~~ → **JA mitplanen** (Schritt-5-Plan oben).
+2. ~~SyncHub: neuer Dienst vs. Erweiterung RegistrySyncCoordinator?~~ → **ADR-020 erweitern, kein Neubau** (D4 oben).
+3. ~~Reihenfolge ggü. TH02-Phase-3-Flip-Blocker?~~ → **ADR-028/D1 zuerst** (Flip-Blocker zurückgestellt).
+
+## Umsetzungs-Status
+- **D1** — IN ARBEIT (Branch `agent/claude-code/adr-028-d1-canonical-identity`): `parseSpiffeUri`/`normalizeAgentId` akzeptieren kanonische `node/<PeerID>`; Ziel: .94 wieder adressierbar. Code + Unit-Tests + CR + PC; Merge/Deploy = Christians Gate.
+- **D2a/D2b/D3/D4/Cutover** — geplant, je eigener PR.
