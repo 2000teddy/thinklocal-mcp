@@ -6,7 +6,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-06-15 22:33
+## [Unreleased] — 2026-06-16 20:25
+
+### v0.34.12 (DRAFT — Christian-autorisiert, Merge/Deploy = Christians Gate) — feat(identity): ADR-028 D1 — kanonische `node/<PeerID>`-SPIFFE-URI adressierbar
+
+Behebt den in **ADR-028 §L1 / RUNBOOK-55-A Fall B** belegten Root-Blocker: `parseSpiffeUri`/`normalizeAgentId` (`spiffe-uri.ts`) akzeptierten nur die Legacy-Grammatik `host/<id>/agent/<type>` und lehnten die kanonische `node/<PeerID>`-Form (ADR-022 Phase 3) mit „must have 3 or 4 components" ab → **kanonisch-only Nodes (z.B. Orchestrator .94) waren nicht adressierbar** (Inbox-`send`/`execute_remote_skill` brachen).
+
+- **`spiffe-uri.ts`:** neuer `node/<PeerID>`-Parser-Arm (strikt: exakt 2 Pfad-Tokens, `PEERID_REGEX` base58btc `{32,128}`); `ParsedSpiffeUri` ist jetzt eine **diskriminierte Union** `{kind:'node'|'host'}` (kein Identity-Collapse — PeerID landet nie im `agentType`-Slot, CO-Härtung gpt-5.3-codex). `normalizeAgentId` gibt die kanonische Form unverändert zurück; `getAgentInstance`/`hasInstance` narrowen auf `kind`.
+- **Legacy-Pfad byte-identisch** (nur `kind:'host'` ergänzt) → kein Verhalten für bestehende Nodes geändert. Additive, fail-closed.
+- **Scope-Grenze:** D1 macht die Grammatik *adressierbar*. Die Bindung der kanonischen Identität an den mTLS-Cert-Principal (Anti-Spoofing) ist **D2b/D3** (eigene PRs), nicht D1.
+
+**Tests:** +Coverage in `spiffe-uri.test.ts` (kanonisch parse/normalize/instance/hasInstance, Reject: Extra-Tokens/`node/x/agent/y`, Nicht-base58, Längenband-Boundaries 31/32/128/129), 34 spiffe + 1002 daemon unit grün, tsc 0, eslint 0. **CO:** ADR-028 `pal:consensus` (gpt-5.5 for 9/10 + gpt-5.3-codex against 8/10). **CR:** `pal:codereview` gpt-5.3-codex (security) — 0 HIGH/CRITICAL, optionale Boundary-Tests ergänzt. **PC:** `pal:precommit` gpt-5.3-codex — 0 Blocker.
 
 ### v0.34.11 (DRAFT — Christian-autorisiert, Orchestrator --admin-Merge nach Review) — fix: registry-sync dialProtocol PeerId (Capability-Count-Drift)
 

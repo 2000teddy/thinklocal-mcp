@@ -13,10 +13,16 @@ import {
 
 const DAEMON = 'spiffe://thinklocal/host/69bc0bc908229c9f/agent/claude-code';
 const INSTANCE = 'spiffe://thinklocal/host/69bc0bc908229c9f/agent/claude-code/instance/abc123';
+// Canonical ADR-022 node identity (orchestrator .94 — the URI that failed
+// to address before ADR-028 D1: inbox send threw "must have 3 or 4 components").
+const NODE = 'spiffe://thinklocal/node/12D3KooWJcpi2JgLp32w1SYpkixVQDRScBumirEVcu1taTBDBgTN';
+const NODE_PEERID = '12D3KooWJcpi2JgLp32w1SYpkixVQDRScBumirEVcu1taTBDBgTN';
 
 describe('parseSpiffeUri', () => {
   it('parses a 3-component daemon URI', () => {
     const p = parseSpiffeUri(DAEMON);
+    expect(p.kind).toBe('host');
+    if (p.kind !== 'host') throw new Error('expected host kind');
     expect(p.stableNodeId).toBe('69bc0bc908229c9f');
     expect(p.agentType).toBe('claude-code');
     expect(p.instanceId).toBeUndefined();
@@ -25,9 +31,41 @@ describe('parseSpiffeUri', () => {
 
   it('parses a 4-component instance URI', () => {
     const p = parseSpiffeUri(INSTANCE);
+    expect(p.kind).toBe('host');
+    if (p.kind !== 'host') throw new Error('expected host kind');
     expect(p.stableNodeId).toBe('69bc0bc908229c9f');
     expect(p.agentType).toBe('claude-code');
     expect(p.instanceId).toBe('abc123');
+  });
+
+  it('parses a canonical node URI (ADR-028 D1)', () => {
+    const p = parseSpiffeUri(NODE);
+    expect(p.kind).toBe('node');
+    if (p.kind !== 'node') throw new Error('expected node kind');
+    expect(p.nodePeerId).toBe(NODE_PEERID);
+    expect(p.raw).toBe(NODE);
+  });
+
+  it('rejects a canonical node URI with extra path tokens', () => {
+    // node/<id>/agent/<type> must NOT parse as either form.
+    expect(() => parseSpiffeUri('spiffe://thinklocal/node/x/agent/y')).toThrow(SpiffeUriError);
+  });
+
+  it('rejects a node URI with an invalid (non-base58) PeerID', () => {
+    expect(() => parseSpiffeUri('spiffe://thinklocal/node/short')).toThrow(SpiffeUriError);
+    // base58btc excludes 0, O, I, l
+    expect(() =>
+      parseSpiffeUri('spiffe://thinklocal/node/12D3KooWJcpi0OIl000000000000000000000000'),
+    ).toThrow(SpiffeUriError);
+  });
+
+  it('enforces the PeerID length band {32,128} (CR hardening)', () => {
+    const ch = '1'; // valid base58btc char
+    expect(() => parseSpiffeUri(`spiffe://thinklocal/node/${ch.repeat(31)}`)).toThrow(SpiffeUriError);
+    expect(() => parseSpiffeUri(`spiffe://thinklocal/node/${ch.repeat(129)}`)).toThrow(SpiffeUriError);
+    // lower + upper boundary accepted
+    expect(parseSpiffeUri(`spiffe://thinklocal/node/${ch.repeat(32)}`).kind).toBe('node');
+    expect(parseSpiffeUri(`spiffe://thinklocal/node/${ch.repeat(128)}`).kind).toBe('node');
   });
 
   it('rejects non-string input', () => {
@@ -77,6 +115,10 @@ describe('normalizeAgentId', () => {
     expect(normalizeAgentId(DAEMON)).toBe(DAEMON);
   });
 
+  it('returns a canonical node URI unchanged (ADR-028 D1 — .94 addressable)', () => {
+    expect(normalizeAgentId(NODE)).toBe(NODE);
+  });
+
   it('throws on malformed input', () => {
     expect(() => normalizeAgentId('not a uri')).toThrow(SpiffeUriError);
   });
@@ -89,6 +131,10 @@ describe('getAgentInstance', () => {
 
   it('returns undefined for a 3-component URI', () => {
     expect(getAgentInstance(DAEMON)).toBeUndefined();
+  });
+
+  it('returns undefined for a canonical node URI', () => {
+    expect(getAgentInstance(NODE)).toBeUndefined();
   });
 });
 
@@ -142,6 +188,10 @@ describe('hasInstance', () => {
 
   it('returns false for 3-component URIs', () => {
     expect(hasInstance(DAEMON)).toBe(false);
+  });
+
+  it('returns false for canonical node URIs', () => {
+    expect(hasInstance(NODE)).toBe(false);
   });
 
   it('returns false for malformed input without throwing', () => {
