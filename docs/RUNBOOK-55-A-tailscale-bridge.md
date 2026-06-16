@@ -96,3 +96,29 @@ curl -sk --cert ~/.thinklocal/tls/node.crt.pem --key ~/.thinklocal/tls/node.key.
 ## Definition of Done
 - **Heute (config-only, 3 Tailscale-Peers):** .55 `peers_online=3` (TH01/TH02/.94, canonical node/12D3KooWJSg), diese 3 + LAN-inbound-Peers sehen .55 online + registry_sync converged — ohne Konsole/Reboot, reversibel.
 - **Voll (nach `tailscale up` auf .52/.56/.222 + deren 100.x ergänzt):** .55 `peers_online=6`.
+
+---
+## APPLY-VERSUCH 2026-06-16 ~18:06–18:34 (claude-code @ TH01, an Orchestrator .94) — ERGEBNIS: config-only UNZUREICHEND
+
+**peers_online VORHER=0, NACHHER=0. NICHT durable.** Pfad A als reine .55-Config erreicht das Ziel `0→3` NICHT — zweiter Blocker entdeckt (cert-SAN).
+
+**Gemacht (alles reversibel, KEIN Reboot):**
+1. Tailscale auf .55 war **gestoppt** → `tailscale up` (Key gültig, kein Login) → online (100.88.169.84).
+2. Backup `~/daemon.toml.bak.1781626125`. daemon.toml-Diff eingepflegt (CIDR += 100.64.0.0/10, +3 static_peers 100.x TH01/TH02/.94, announce → 100.88.169.84). Daemon kickstart → Config geladen (10 static_peers).
+
+**Diagnose (read-only, belegt):**
+- manueller mTLS-curl `.55→Peers` über Tailscale = **HTTP 200** (alle 3) — ABER mit `-k` (SAN-Check übersprungen).
+- `curl --interface`: unbound=200, en10/10.10.10.55=**000**, tailscale=200.
+- `lsof`: 6 **inbound** (Peers→.55:9440), **0 outbound**. `peers_online` zählt outbound.
+- **Schicht 1 (lösbar):** Outbound wählt via `autoSelectFamily`/Happy-Eyeballs die tote en10-Source (`mesh-connect.ts`). Escape-Hatch `TLMCP_DISABLE_OUTBOUND_PINNING=1` getestet (plist-Env, danach revertiert) → 100.x erreicht jetzt TLS.
+- **Schicht 2 (NICHT via .55-config lösbar):** `ERR_TLS_CERT_ALTNAME_INVALID` — Peer-mTLS-Certs haben **keine** 100.x in SAN:
+  - `100.103.115.126 not in [127.0.0.1, ::1, 10.10.10.80]` (TH01)
+  - `100.72.14.63 not in [127.0.0.1, ::1, 10.10.10.82]` (TH02)
+  - `100.109.194.2 not in [127.0.0.1, ::1, 10.10.10.94]` (.94)
+  `rejectUnauthorized:true` lehnt den 100.x-Dial deshalb ab (curl kam nur per `-k` auf 200).
+
+**Optionen Schicht 2:** (1) Fleet-weit Peer-Certs mit 100.x-SAN re-issuen (CA-Op). (2) **SPIFFE-SAN-basierter `checkServerIdentity`** statt IP-altname (Code, sauberster Fix — validiert ohnehin per SPIFFE-URI; härtet Overlay/Cross-Subnet generell). (3) static_peer servername/SNI-Override + DNS-SAN. → **Empfehlung: Option 2 als eigener Code-Task (CO/CG/TS/CR/PC/DO).**
+
+**Stand jetzt:** plist-Env auf Baseline (Flags entfernt), Daemon gesund (pid 4750, `peers_online=0`), Tailscale up. daemon.toml behält die Pfad-A-Einträge (harmlos, reversibel via Backup) als vorbereitete Config für nach dem Schicht-2-Fix.
+
+**Nebenbefund:** Inbox-`/api/inbox/send` an .94 schlägt fehl — `normalizeAgentId` akzeptiert die kanonische `node/<PeerID>`-URI nicht („must have 3 or 4 components"), und .94s Card führt keine Legacy-`host/agent`-URI mehr → kanonisch-only Nodes sind per Inbox derzeit nicht adressierbar (ADR-022-Migrations-Lücke). Report daher via diesem Doc.
