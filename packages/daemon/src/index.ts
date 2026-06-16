@@ -192,8 +192,15 @@ async function main(): Promise<void> {
   // TLMCP_DISABLE_OUTBOUND_PINNING=1 → kein Source-Bind + autoSelectFamily=false
   // (Default-Source-Connect wie `nc`, Fix für dual-homed macOS EHOSTUNREACH).
   const outboundConnectPolicy = resolveOutboundConnectPolicy(process.env);
-  if (outboundConnectPolicy.debug || outboundConnectPolicy.disablePinning) {
+  if (outboundConnectPolicy.debug || outboundConnectPolicy.disablePinning || outboundConnectPolicy.spiffeServerIdentity) {
     log.info(outboundConnectPolicy, '[connect] Outbound-Connect-Policy aktiv (Debug/Escape-Hatch)');
+  }
+  if (outboundConnectPolicy.spiffeServerIdentity) {
+    // CR-MEDIUM (gpt-5.3-codex): ohne per-Host-Pin-Resolver läuft D2b im TOFU-Modus
+    // (intra-Mesh-impersonation-tolerant). Operator muss das bewusst sehen (ADR-028-D2).
+    log.warn(
+      '[connect] ADR-028 D2b SPIFFE-Server-Identity AKTIV im TOFU-Modus (kein per-Host-Pin-Resolver verdrahtet) — nur eine gültige thinklocal-SPIFFE-SAN wird verlangt, NICHT gegen eine gepinnte Peer-Identität gebunden. Fleet-Aktivierung erst nach D2b-pin. Siehe docs/architecture/ADR-028-D2-spiffe-server-identity.md',
+    );
   }
   const tlsDispatcher = tlsBundle
     ? new UndiciAgent({

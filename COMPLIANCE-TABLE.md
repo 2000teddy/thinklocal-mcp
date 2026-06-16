@@ -870,4 +870,16 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-06-16 20:25 — v0.34.12 (DRAFT) ADR-028 D1 kanonische node/<PeerID>-Adressierung.*
+## Session 2026-06-16 22:22 — v0.34.13 (DRAFT) feat(transport): ADR-028 D2b SPIFFE-Server-Identity
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|----|
+| v0.34.13 | (neu) | 2026-06-16 22:22 | ✅  | —  | ✅ | ✅ | ✅ | ✅ | CR gpt-5.3-codex (security): 0 HIGH/CRITICAL, kein Auth-Bypass; MEDIUM (TOFU-Startup-Guard) + LOW (Resolver-try/catch fail-closed) gefixt |
+
+**CO:** ADR-028 `pal:consensus` (gpt-5.5 9/10 + gpt-5.3-codex 8/10) — deckt D2-Richtung + Härtungen. **CG:** —. **TS:** `mesh-server-identity.test.ts` (alle Bypass-Modi fail-closed) + `mesh-connect.test.ts` (Flag-Wiring, rejectUnauthorized true), 1017 daemon unit grün, tsc 0, lint 0 (2 nicht-fatale Warnings, eine pre-existing). **CR:** `pal:codereview` gpt-5.3-codex (security) — fail-closed-Invarianten bestätigt, kein Bypass; MEDIUM+LOW gefixt. **PC:** `pal:precommit` gpt-5.3-codex — 0 Blocker. **DO:** CHANGES (v0.34.13), COMPLIANCE, ADR-028-D2-Doc.
+
+**Status:** ADR-028 D2b — `checkServerIdentity` via SPIFFE-URI-SAN (statt IP-altname) hinter Flag `TLMCP_SPIFFE_SERVER_IDENTITY` (**Default OFF**). Macht Overlay/Cross-Subnet-Dial (.55→100.x) identitäts-validiert möglich. **Produktiv-Aktivierung/Cert-Rollout = Christians Gate.** Folge-PR: D2b-pin (per-Host-`resolveExpected` aus der Registry) — erst danach Fleet-Aktivierung.
+
+---
+
+*Letzte Aktualisierung: 2026-06-16 22:22 — v0.34.13 (DRAFT) ADR-028 D2b SPIFFE-Server-Identity (Flag Default-OFF).*
