@@ -858,4 +858,16 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-06-15 22:33 — v0.34.11 (DRAFT) registry-sync dialProtocol PeerId-Fix.*
+## Session 2026-06-16 20:25 — v0.34.12 (DRAFT) feat(identity): ADR-028 D1 — kanonische node/<PeerID> adressierbar
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|----|
+| v0.34.12 | (neu) | 2026-06-16 20:25 | ✅  | —  | ✅ | ✅ | ✅ | ✅ | CR gpt-5.3-codex (security): 0 HIGH/CRITICAL; optionale PeerID-Längenband-Boundary-Tests ergänzt |
+
+**CO:** ADR-028 `pal:consensus` (gpt-5.5 for 9/10 + gpt-5.3-codex against 8/10, Konsens hoch). **CG:** —. **TS:** `spiffe-uri.test.ts` +kanonisch/Reject/Boundary-Coverage, 34 spiffe + 1002 daemon unit grün, tsc 0, eslint 0. **CR:** `pal:codereview` gpt-5.3-codex (security) — 0 HIGH/CRITICAL, alle 4 Prüfziele erfüllt. **PC:** `pal:precommit` gpt-5.3-codex — 0 Blocker. **DO:** CHANGES (v0.34.12), COMPLIANCE, ADR-028 (ACCEPTED).
+
+**Status:** ADR-028 D1 — `parseSpiffeUri`/`normalizeAgentId` akzeptieren die kanonische `node/<PeerID>`-Identität (diskriminierte Union, fail-closed) → Orchestrator .94 wieder adressierbar (RUNBOOK-55-A Fall B). Additiv, Legacy-Pfad unverändert. **Merge/Deploy = Christians Gate** (kein Self-Merge, kein Produktiv-Rollout/Cert-Änderung/Daemon-Flip). D2a/D2b/D3/D4 + HTTPS-Cutover folgen je eigener PR.
+
+---
+
+*Letzte Aktualisierung: 2026-06-16 20:25 — v0.34.12 (DRAFT) ADR-028 D1 kanonische node/<PeerID>-Adressierung.*

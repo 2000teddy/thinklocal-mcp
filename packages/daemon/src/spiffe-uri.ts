@@ -1,13 +1,22 @@
 /**
  * ADR-005 — SPIFFE URI helpers for per-agent-instance routing.
  *
- * A thinklocal SPIFFE URI has one of two shapes:
+ * A thinklocal SPIFFE URI has one of three shapes:
  *
- *   3-component (daemon-level, cert-attested):
+ *   canonical node form (ADR-022 Phase 3, cert-attested — PREFERRED):
+ *     spiffe://thinklocal/node/<PeerID>
+ *
+ *   legacy 3-component (daemon-level, cert-attested):
  *     spiffe://thinklocal/host/<stableNodeId>/agent/<agentType>
  *
- *   4-component (agent-instance, application-layer routing):
+ *   legacy 4-component (agent-instance, application-layer routing):
  *     spiffe://thinklocal/host/<stableNodeId>/agent/<agentType>/instance/<instanceId>
+ *
+ * ADR-028 D1: the canonical `node/<PeerID>` form is now a FIRST-CLASS
+ * identity. Before this, `parseSpiffeUri`/`normalizeAgentId` only accepted
+ * the legacy `host/agent` grammar, which made canonical-only nodes (e.g.
+ * orchestrator .94, whose agent-card carries no legacy alias) UNADDRESSABLE
+ * — inbox send failed with "must have 3 or 4 components". See ADR-028 §L1.
  *
  * IMPORTANT — cert attestation:
  *   Only the 3-component form is carried in the TLS certificate SAN.
@@ -31,7 +40,26 @@ export class SpiffeUriError extends Error {
   }
 }
 
-export interface ParsedSpiffeUri {
+/**
+ * Canonical parsed identity. A discriminated union over `kind` keeps the
+ * canonical `node/<PeerID>` identity and the legacy `host/agent` identity
+ * cleanly separated — we never collapse a PeerID into the agentType slot
+ * (CO 2026-06-16: gpt-5.3-codex flagged that as a routing/authz hazard).
+ */
+export type ParsedSpiffeUri = ParsedNodeUri | ParsedHostUri;
+
+/** Canonical ADR-022 identity: `spiffe://thinklocal/node/<PeerID>`. */
+export interface ParsedNodeUri {
+  readonly kind: 'node';
+  /** libp2p PeerID (base58btc), the stable canonical node identity. */
+  readonly nodePeerId: string;
+  /** Original input, for logging/debugging. */
+  readonly raw: string;
+}
+
+/** Legacy identity: `spiffe://thinklocal/host/<stableNodeId>/agent/<agentType>[/instance/<id>]`. */
+export interface ParsedHostUri {
+  readonly kind: 'host';
   /** stable 16-hex node identifier (not the mDNS hostname). */
   readonly stableNodeId: string;
   /** Agent family: `claude-code`, `codex`, `gemini-cli`, … */
@@ -43,6 +71,13 @@ export interface ParsedSpiffeUri {
 }
 
 const SPIFFE_PREFIX = 'spiffe://thinklocal';
+
+/**
+ * libp2p PeerID charset (base58btc) + length sanity. Real PeerIDs are
+ * ~46–52 chars (CIDv0 `Qm…` / `12D3Koo…`). Strict charset — no `0OIl` —
+ * and a length band reject obvious garbage without rejecting valid IDs.
+ */
+export const PEERID_REGEX = /^[1-9A-HJ-NP-Za-km-z]{32,128}$/;
 
 /**
  * Canonical character set allowed in every SPIFFE-URI component
@@ -71,6 +106,27 @@ export function parseSpiffeUri(uri: string): ParsedSpiffeUri {
   }
   const rest = uri.slice(`${SPIFFE_PREFIX}/`.length);
   const parts = rest.split('/');
+  // Canonical ADR-022 form: node/<PeerID> (2 tokens). Checked FIRST so the
+  // legacy grammar below stays untouched. Strict: exactly 2 tokens, valid
+  // base58btc PeerID — anything else (e.g. node/x/agent/y) falls through to
+  // the host-grammar error, preserving existing reject behaviour.
+  if (parts[0] === 'node') {
+    if (parts.length !== 2) {
+      throw new SpiffeUriError(
+        `canonical node URI must be "node/<PeerID>" (2 path tokens), got ${parts.length}: ${uri}`,
+      );
+    }
+    const nodePeerId = parts[1];
+    if (!nodePeerId) {
+      throw new SpiffeUriError(`canonical node URI has empty PeerID: ${uri}`);
+    }
+    if (!PEERID_REGEX.test(nodePeerId)) {
+      throw new SpiffeUriError(
+        `canonical node URI has invalid PeerID (must match ${PEERID_REGEX}): ${uri}`,
+      );
+    }
+    return { kind: 'node', nodePeerId, raw: uri };
+  }
   // Accept: host/<id>/agent/<type>           (4 tokens → 3-comp)
   //         host/<id>/agent/<type>/instance/<id> (6 tokens → 4-comp)
   if (parts.length !== 4 && parts.length !== 6) {
@@ -111,30 +167,35 @@ export function parseSpiffeUri(uri: string): ParsedSpiffeUri {
         `SPIFFE URI has invalid characters in instanceId (must match ${SPIFFE_COMPONENT_REGEX}): ${uri}`,
       );
     }
-    return { stableNodeId, agentType, instanceId, raw: uri };
+    return { kind: 'host', stableNodeId, agentType, instanceId, raw: uri };
   }
-  return { stableNodeId, agentType, raw: uri };
+  return { kind: 'host', stableNodeId, agentType, raw: uri };
 }
 
 /**
- * Strip the optional `/instance/<id>` tail, returning the
- * 3-component daemon-level URI. Cert-validation, peer lookups,
- * and gossip **must** use this form to compare identities.
+ * Reduce a URI to its canonical daemon-level identity for comparison.
+ * Cert-validation, peer lookups, gossip and inbox routing **must** use
+ * this form. Behaviour by kind:
+ *   - canonical `node/<PeerID>` → returned unchanged (already daemon-level).
+ *   - legacy `host/agent[/instance]` → `/instance/<id>` tail stripped.
  *
- * Returns the input unchanged if it is already 3-component.
  * Throws `SpiffeUriError` on malformed input.
  */
 export function normalizeAgentId(uri: string): string {
   const parsed = parseSpiffeUri(uri);
+  if (parsed.kind === 'node') {
+    return `${SPIFFE_PREFIX}/node/${parsed.nodePeerId}`;
+  }
   return `${SPIFFE_PREFIX}/host/${parsed.stableNodeId}/agent/${parsed.agentType}`;
 }
 
 /**
- * Extract the instance id, or `undefined` if the URI is
- * 3-component. Throws `SpiffeUriError` on malformed input.
+ * Extract the instance id, or `undefined` if the URI is daemon-level
+ * (canonical node form, or legacy 3-component). Throws on malformed input.
  */
 export function getAgentInstance(uri: string): string | undefined {
-  return parseSpiffeUri(uri).instanceId;
+  const parsed = parseSpiffeUri(uri);
+  return parsed.kind === 'host' ? parsed.instanceId : undefined;
 }
 
 /**
@@ -169,7 +230,7 @@ export function buildInstanceUri(
  */
 export function hasInstance(uri: string): boolean {
   try {
-    return parseSpiffeUri(uri).instanceId !== undefined;
+    return getAgentInstance(uri) !== undefined;
   } catch {
     return false;
   }
