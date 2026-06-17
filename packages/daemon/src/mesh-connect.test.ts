@@ -42,18 +42,19 @@ describe('buildConnectorOptions', () => {
     expect('localAddress' in o).toBe(false); // kein Source-Bind
     expect(o['rejectUnauthorized']).toBe(true); // mTLS bleibt scharf
   });
-  it('spiffeServerIdentity: setzt checkServerIdentity, rejectUnauthorized bleibt true (ADR-028 D2b)', () => {
-    const o = buildConnectorOptions(TLS, { debug: false, disablePinning: false, spiffeServerIdentity: true });
-    expect(typeof o.checkServerIdentity).toBe('function');
+  it('spiffeServerIdentity OHNE injizierten Checker → wirft (D2b-pin Downgrade-Schutz, CR-MEDIUM)', () => {
+    expect(() =>
+      buildConnectorOptions(TLS, { debug: false, disablePinning: false, spiffeServerIdentity: true }),
+    ).toThrow(/D2b-pin|kein.*TOFU-Fallback|checkServerIdentity injiziert/i);
+  });
+  it('spiffeServerIdentity: injizierter (pinnender) Checker wird durchgereicht, rejectUnauthorized bleibt true (ADR-028 D2b-pin)', () => {
+    const injected = (host: string): Error | undefined =>
+      host === 'blocked' ? new Error('pinned-mismatch') : undefined;
+    const o = buildConnectorOptions(TLS, { debug: false, disablePinning: false, spiffeServerIdentity: true }, injected);
+    expect(o.checkServerIdentity).toBe(injected);
     expect(o['rejectUnauthorized']).toBe(true); // Chain-Validierung NIE geschwächt
-    // Verifier ist scharf: Cert ohne SPIFFE-SAN → Error (fail-closed)
-    expect(o.checkServerIdentity?.('10.10.10.80', { subjectaltname: 'IP Address:10.10.10.80' })).toBeInstanceOf(Error);
-    // gültige thinklocal-SPIFFE-SAN → akzeptiert (TOFU)
-    expect(
-      o.checkServerIdentity?.('100.103.115.126', {
-        subjectaltname: 'URI:spiffe://thinklocal/node/12D3KooWJcpi2JgLp32w1SYpkixVQDRScBumirEVcu1taTBDBgTN, IP Address:10.10.10.80',
-      }),
-    ).toBeUndefined();
+    expect(o.checkServerIdentity?.('blocked', { subjectaltname: '' })).toBeInstanceOf(Error);
+    expect(o.checkServerIdentity?.('ok', { subjectaltname: '' })).toBeUndefined();
   });
 });
 

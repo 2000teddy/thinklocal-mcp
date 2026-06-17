@@ -6,7 +6,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-06-16 22:22
+## [Unreleased] — 2026-06-17 06:35
+
+### v0.34.14 (DRAFT — Christian-autorisiert; Flag Default-OFF, Produktiv-Aktivierung = Christians Gate) — feat(transport): ADR-028 D2b-pin — per-Host-TOFU-Pin für SPIFFE-Server-Identity
+
+Schließt die in v0.34.13/ADR-028-D2 dokumentierte **nackte-TOFU-Restlücke**: statt bei aktivem Flag jede gültige thinklocal-SPIFFE-SAN zu akzeptieren, wird die beim ersten validierten Kontakt gesehene kanonische Identität **pro Dial-Host gepinnt und danach erzwungen** → spätere Intra-Mesh-Impersonation wird abgelehnt.
+
+- **`server-identity-pin.ts`** (neu): `ServerIdentityPinStore` (Dial-host-gekeyt — korrekt für den Overlay-Fall, wo `MeshPeer.host`=LAN-IP nicht zum 100.x-Dial passt), `singleNormalizedIdFromCert` (kein Auto-Pin bei mehrdeutiger SAN), `makePinningMeshCheckServerIdentity` (First-Contact TOFU+Pin, danach erzwungen; Konflikt re-pinnt NIE auf eine fremde Identität).
+- **`mesh-connect.ts`**: `checkServerIdentity` wird injiziert; bei aktivem Flag ohne injizierten Checker → **fail-fast** (kein stiller TOFU-Fallback, CR-MEDIUM). **`index.ts`**: Pin-Store + pinnender Checker werden verdrahtet (nur bei Flag-on).
+- **Scope:** schließt D2b's TOFU-Lücke. Flag bleibt **Default OFF**; Produktiv-/Fleet-Aktivierung = Christians Gate. Bewusst deferiert (CR-LOW): Pin-Persistenz über Neustart (in-memory → einmaliges Re-TOFU pro Host nach Restart, CA-Chain bleibt scharf).
+
+**Tests:** `server-identity-pin.test.ts` (pin/match/conflict, per-Host, mehrdeutig→kein-Pin, no-SAN→kein-Pin, **Impersonation-nach-Pin abgelehnt**) + `mesh-connect.test.ts` (Injektion durchgereicht, **fehlender Checker→throws**). 1029 daemon unit grün, tsc 0. **CR:** `pal:codereview` gpt-5.3-codex (security) — 0 HIGH/CRITICAL, MEDIUM (Downgrade-Schutz) gefixt, LOW (Persistenz) deferiert. **PC:** s.u.
 
 ### v0.34.13 (DRAFT — Christian-autorisiert; Flag Default-OFF, Produktiv-Aktivierung = Christians Gate) — feat(transport): ADR-028 D2b — SPIFFE-URI-Server-Identity-Verifikation (Overlay-Dial ohne IP-altname)
 
