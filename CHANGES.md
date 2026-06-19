@@ -6,7 +6,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-06-16 20:25
+## [Unreleased] — 2026-06-16 22:22
+
+### v0.34.13 (DRAFT — Christian-autorisiert; Flag Default-OFF, Produktiv-Aktivierung = Christians Gate) — feat(transport): ADR-028 D2b — SPIFFE-URI-Server-Identity-Verifikation (Overlay-Dial ohne IP-altname)
+
+Adressiert **ADR-028 §L2 / RUNBOOK-55-A Fall C**: Node-Certs SANen ihre SPIFFE-URI + LAN-IP, aber nicht die Tailscale-100.x → Node-Default-TLS scheitert beim Overlay-Dial mit `ERR_TLS_CERT_ALTNAME_INVALID`, obwohl die Identität korrekt CA-signiert ist.
+
+- **`mesh-server-identity.ts`** (neu, rein): `verifyMeshServerIdentity` ersetzt den IP-altname-Check durch SPIFFE-URI-SAN-Validierung (wiederverwendet `spiffeUrisFromSubjectAltName` + `normalizeAgentId`/D1). **Fail-closed**: `rejectUnauthorized:true` bleibt (Chain nie geschwächt — läuft erst danach), exakte Trust-Domain, ALLE SANs geprüft, optionaler per-Host-`expectedSpiffeId`-Pin (aus Registry, NICHT aus dem Cert) muss matchen.
+- **`mesh-connect.ts`**: Flag `TLMCP_SPIFFE_SERVER_IDENTITY=1` (Default **OFF** → bisheriges Verhalten) setzt `checkServerIdentity`. `index.ts`: Startup-`warn` bei aktivem Flag im TOFU-Modus (CR-MEDIUM-Guard).
+- **Scope:** macht den Overlay-Dial identitäts-validiert möglich. Per-Host-Pin-Resolver = unmittelbarer Folgeschritt **D2b-pin**; bis dahin Flag OFF (TOFU dokumentiert).
+
+**Tests:** `mesh-server-identity.test.ts` (alle Bypass-Modi fail-closed: no-SAN, fremde/lookalike Trust-Domain, malformed, expected-match/mismatch, alle-SANs, ungültige-expected, Resolver-Throw→fail-closed, per-Host-Pin) + `mesh-connect.test.ts` (Flag-Wiring, rejectUnauthorized bleibt true). 1017 daemon unit grün, tsc 0. **CO:** ADR-028-Konsens. **CR:** `pal:codereview` gpt-5.3-codex (security) — 0 HIGH/CRITICAL, kein Auth-Bypass; MEDIUM (TOFU-Guard) + LOW (Resolver-try/catch) gefixt. **PC:** `pal:precommit` — s.u.
 
 ### v0.34.12 (DRAFT — Christian-autorisiert, Merge/Deploy = Christians Gate) — feat(identity): ADR-028 D1 — kanonische `node/<PeerID>`-SPIFFE-URI adressierbar
 

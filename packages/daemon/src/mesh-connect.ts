@@ -15,12 +15,20 @@
  */
 import { buildConnector } from 'undici';
 import type { Logger } from 'pino';
+import { makeMeshCheckServerIdentity, type PeerCertLike } from './mesh-server-identity.js';
 
 export interface OutboundConnectPolicy {
   /** TLMCP_DEBUG_CONNECT=1 → exakte Connect-Parameter + Socket-Fehler loggen. */
   debug: boolean;
   /** TLMCP_DISABLE_OUTBOUND_PINNING=1 → kein Source-Bind, kein Family-Auto-Select. */
   disablePinning: boolean;
+  /**
+   * TLMCP_SPIFFE_SERVER_IDENTITY=1 (ADR-028 D2b) → ersetzt den IP-altname-Check durch
+   * SPIFFE-URI-SAN-Validierung (`mesh-server-identity.ts`), damit Overlay/Cross-Subnet-
+   * Dials (Tailscale 100.x) ohne per-IP-Cert-Reissue funktionieren. Default OFF → Node-
+   * Default-altname-Check (= bisheriges Verhalten). `rejectUnauthorized` bleibt true.
+   */
+  spiffeServerIdentity: boolean;
 }
 
 /** Liest die Outbound-Connect-Policy aus den Env-Variablen (rein, testbar). */
@@ -28,6 +36,7 @@ export function resolveOutboundConnectPolicy(env: NodeJS.ProcessEnv): OutboundCo
   return {
     debug: env['TLMCP_DEBUG_CONNECT'] === '1',
     disablePinning: env['TLMCP_DISABLE_OUTBOUND_PINNING'] === '1',
+    spiffeServerIdentity: env['TLMCP_SPIFFE_SERVER_IDENTITY'] === '1',
   };
 }
 
@@ -46,12 +55,19 @@ export interface ConnectorOptions {
   rejectUnauthorized: true;
   /** Nur bei disablePinning gesetzt: Happy-Eyeballs/Family-Auto-Select aus. */
   autoSelectFamily?: boolean;
+  /**
+   * Nur bei spiffeServerIdentity gesetzt (ADR-028 D2b): ersetzt den altname-Abgleich
+   * durch SPIFFE-URI-SAN-Validierung. Läuft NUR nach erfolgreicher CA-Chain-Prüfung
+   * (rejectUnauthorized:true) → lockert die Chain nicht, nur den Adress-Abgleich.
+   */
+  checkServerIdentity?: (host: string, cert: PeerCertLike) => Error | undefined;
 }
 
 /**
  * Baut die undici-`connect`-Optionen aus TLS-Material + Policy (rein, testbar).
  * `disablePinning` setzt `autoSelectFamily=false` und lässt `localAddress` bewusst
- * UNGESETZT (Default-Source). Sonst nur die TLS-Optionen (= bisheriges Verhalten).
+ * UNGESETZT (Default-Source). `spiffeServerIdentity` setzt den SPIFFE-URI-SAN-Verifier
+ * als `checkServerIdentity`. Sonst nur die TLS-Optionen (= bisheriges Verhalten).
  */
 export function buildConnectorOptions(tls: MeshTlsMaterial, policy: OutboundConnectPolicy): ConnectorOptions {
   const opts: ConnectorOptions = {
@@ -64,6 +80,11 @@ export function buildConnectorOptions(tls: MeshTlsMaterial, policy: OutboundConn
     // Happy-Eyeballs / Family-Auto-Select aus → ein direkter Default-Source-Connect.
     opts.autoSelectFamily = false;
     // localAddress bewusst NICHT gesetzt (kein Source-Bind).
+  }
+  if (policy.spiffeServerIdentity) {
+    // TODO(ADR-028 D2b-pin): resolveExpected aus der Peer-Registry injizieren (per-Host-
+    // Pin); aktuell TOFU (gültige thinklocal-SPIFFE-SAN nötig) — s. ADR-028-D2-Doc.
+    opts.checkServerIdentity = makeMeshCheckServerIdentity();
   }
   return opts;
 }

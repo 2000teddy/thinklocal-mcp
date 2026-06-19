@@ -10,8 +10,8 @@ import {
 const TLS = { ca: 'ca-pem', cert: 'cert-pem', key: 'key-pem' };
 
 describe('resolveOutboundConnectPolicy', () => {
-  it('Default: beide Flags aus', () => {
-    expect(resolveOutboundConnectPolicy({})).toEqual({ debug: false, disablePinning: false });
+  it('Default: alle Flags aus', () => {
+    expect(resolveOutboundConnectPolicy({})).toEqual({ debug: false, disablePinning: false, spiffeServerIdentity: false });
   });
   it('TLMCP_DEBUG_CONNECT=1 → debug', () => {
     expect(resolveOutboundConnectPolicy({ TLMCP_DEBUG_CONNECT: '1' }).debug).toBe(true);
@@ -19,24 +19,41 @@ describe('resolveOutboundConnectPolicy', () => {
   it('TLMCP_DISABLE_OUTBOUND_PINNING=1 → disablePinning', () => {
     expect(resolveOutboundConnectPolicy({ TLMCP_DISABLE_OUTBOUND_PINNING: '1' }).disablePinning).toBe(true);
   });
+  it('TLMCP_SPIFFE_SERVER_IDENTITY=1 → spiffeServerIdentity (ADR-028 D2b)', () => {
+    expect(resolveOutboundConnectPolicy({ TLMCP_SPIFFE_SERVER_IDENTITY: '1' }).spiffeServerIdentity).toBe(true);
+  });
   it('andere Werte als "1" zählen nicht', () => {
     const p = resolveOutboundConnectPolicy({ TLMCP_DEBUG_CONNECT: 'true', TLMCP_DISABLE_OUTBOUND_PINNING: '0' });
-    expect(p).toEqual({ debug: false, disablePinning: false });
+    expect(p).toEqual({ debug: false, disablePinning: false, spiffeServerIdentity: false });
   });
 });
 
 describe('buildConnectorOptions', () => {
-  it('Default (kein disablePinning): nur TLS-Optionen, KEIN autoSelectFamily, KEIN localAddress', () => {
-    const o = buildConnectorOptions(TLS, { debug: false, disablePinning: false });
+  it('Default (kein disablePinning): nur TLS-Optionen, KEIN autoSelectFamily, KEIN localAddress, KEIN checkServerIdentity', () => {
+    const o = buildConnectorOptions(TLS, { debug: false, disablePinning: false, spiffeServerIdentity: false });
     expect(o).toMatchObject({ ca: 'ca-pem', cert: 'cert-pem', key: 'key-pem', rejectUnauthorized: true });
     expect('autoSelectFamily' in o).toBe(false);
     expect('localAddress' in o).toBe(false);
+    expect('checkServerIdentity' in o).toBe(false); // Node-Default-altname (= bisheriges Verhalten)
   });
   it('disablePinning: autoSelectFamily=false, localAddress NICHT gesetzt (Default-Source)', () => {
-    const o = buildConnectorOptions(TLS, { debug: false, disablePinning: true });
+    const o = buildConnectorOptions(TLS, { debug: false, disablePinning: true, spiffeServerIdentity: false });
     expect(o['autoSelectFamily']).toBe(false);
     expect('localAddress' in o).toBe(false); // kein Source-Bind
     expect(o['rejectUnauthorized']).toBe(true); // mTLS bleibt scharf
+  });
+  it('spiffeServerIdentity: setzt checkServerIdentity, rejectUnauthorized bleibt true (ADR-028 D2b)', () => {
+    const o = buildConnectorOptions(TLS, { debug: false, disablePinning: false, spiffeServerIdentity: true });
+    expect(typeof o.checkServerIdentity).toBe('function');
+    expect(o['rejectUnauthorized']).toBe(true); // Chain-Validierung NIE geschwächt
+    // Verifier ist scharf: Cert ohne SPIFFE-SAN → Error (fail-closed)
+    expect(o.checkServerIdentity?.('10.10.10.80', { subjectaltname: 'IP Address:10.10.10.80' })).toBeInstanceOf(Error);
+    // gültige thinklocal-SPIFFE-SAN → akzeptiert (TOFU)
+    expect(
+      o.checkServerIdentity?.('100.103.115.126', {
+        subjectaltname: 'URI:spiffe://thinklocal/node/12D3KooWJcpi2JgLp32w1SYpkixVQDRScBumirEVcu1taTBDBgTN, IP Address:10.10.10.80',
+      }),
+    ).toBeUndefined();
   });
 });
 
