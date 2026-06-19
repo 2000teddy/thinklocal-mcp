@@ -894,4 +894,16 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-06-17 06:35 — v0.34.14 (DRAFT) ADR-028 D2b-pin per-Host-TOFU-Pin (Flag Default-OFF).*
+## Session 2026-06-19 12:35 — v0.34.15 (DRAFT) feat(discovery): ADR-028 D4-a MCP-Service-Modell (rein)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|----|
+| v0.34.15 | (neu) | 2026-06-19 12:35 | ✅  | —  | ✅ | ✅ | ✅ | ✅ | CR gpt-5.3-codex: 0 HIGH/CRITICAL; 2 MEDIUM (NaN-Trust fail-open, Servername-Kanonisierung→Split-Brain) + LOW gefixt |
+
+**CO:** ADR-028-Konsens + D4-Arbeitslinien-Patch (#184: Discovery default-open, 3-Stufen self/gate/consensus). **CG:** —. **TS:** `mcp-service-registry.test.ts` (17: Capability-Bau, Tier-Ableitung fail-closed, Multi-Provider, Offline-Skip, Case-Insensitivity, kein Allowlist), 1046 daemon unit grün, tsc 0, geänderte Dateien eslint-error-frei. **CR:** `pal:codereview` gpt-5.3-codex (full) — default-open + Tier-Ableitung bestätigt; 2 MEDIUM + LOW gefixt. **PC:** `pal:precommit` — 0 Blocker. **DO:** CHANGES (v0.34.15), COMPLIANCE.
+
+**Status:** ADR-028 D4-a — reines, getestetes MCP-Service-Capability-Modell (`buildMcpCapability`/`deriveExecutionTier`/`resolveMcp`), Discovery default-open, Ausführungsrisiko via `self|gate|consensus`. **Kein Wiring/Routing/Endpoint, kein Deploy, kein Flag-Flip.** Folge: D4-a-Teil-2 (Live-Registrierung als shared-MCP + `/api/capabilities`-Filter + `resolve_mcp`-Primitive), dann D4-b (MCP-Proxy-Routing).
+
+---
+
+*Letzte Aktualisierung: 2026-06-19 12:35 — v0.34.15 (DRAFT) ADR-028 D4-a MCP-Service-Modell (rein, default-open).*

@@ -6,7 +6,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-06-17 06:35
+## [Unreleased] — 2026-06-19 12:35
+
+### v0.34.15 (DRAFT — Christian-autorisiert; reines Modell, kein Wiring/Deploy) — feat(discovery): ADR-028 D4-a — MCP-Service-Capability-Modell + Auflösung (default-open)
+
+Erster Code-Slice von ADR-028 D4 (zentrale MCP-Service-Registry), **rein + getestet, ohne Live-Wiring/Routing/Endpoints** (D4-a-Teil-2/D4-b folgen).
+
+- **`mcp-service-registry.ts`** (neu, rein): `buildMcpCapability(...)` → CRDT-`Capability` mit `skill_id="mcp:<server>"`, `category="mcp"` (Tools in die `description` gefaltet, da die `Capability` noch kein Tools-Feld hat); `deriveExecutionTier(permissions, trust_level)` → `self|gate|consensus`; `resolveMcp(server, capabilities[])` → Multi-Provider-Auflösung.
+- **Arbeitslinie (ADR-028-D4-Patch):** **Discovery default-open** — kein Allowlist-Filter, keine deny-by-default-per-Agent-Logik; Risiko über die **Ausführungsstufe**. Stufen-Ableitung fail-closed (unbekannte Permission → mind. `gate`; destruktiv → `consensus`; niedriges Trust hebt `self→gate`).
+- **Designloch geschlossen:** `Capability` braucht `agent_id`+`updated_at` (in der Skizze fehlend) → als Eingaben übergeben (reines Modul, keine Uhr/Identität erfunden); `health` default `healthy` (echte Liveness = ADR-021-Side-Map).
+- **Kein Deploy, kein Flag-Flip, kein Routing/Proxy-Wiring.**
+
+**Tests:** `mcp-service-registry.test.ts` (17): Capability-Bau, Tier-Ableitung inkl. fail-closed (unknown→gate, NaN-Trust→gate), Multi-Provider-Auflösung, Offline-Skip, Case-Insensitivity (kein Split-Brain), kein Allowlist-Filter. 1046 daemon unit grün, tsc 0. **CO:** ADR-028-Konsens + D4-Arbeitslinien-Patch (#184). **CR:** `pal:codereview` gpt-5.3-codex — 0 HIGH/CRITICAL; 2 MEDIUM (NaN-Trust fail-open, Servername-Kanonisierung) + LOW gefixt. **PC:** s.u.
 
 ### v0.34.14 (DRAFT — Christian-autorisiert; Flag Default-OFF, Produktiv-Aktivierung = Christians Gate) — feat(transport): ADR-028 D2b-pin — per-Host-TOFU-Pin für SPIFFE-Server-Identity
 
