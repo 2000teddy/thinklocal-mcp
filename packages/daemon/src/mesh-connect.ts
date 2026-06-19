@@ -15,7 +15,7 @@
  */
 import { buildConnector } from 'undici';
 import type { Logger } from 'pino';
-import { makeMeshCheckServerIdentity, type PeerCertLike } from './mesh-server-identity.js';
+import { type PeerCertLike } from './mesh-server-identity.js';
 
 export interface OutboundConnectPolicy {
   /** TLMCP_DEBUG_CONNECT=1 → exakte Connect-Parameter + Socket-Fehler loggen. */
@@ -69,7 +69,11 @@ export interface ConnectorOptions {
  * UNGESETZT (Default-Source). `spiffeServerIdentity` setzt den SPIFFE-URI-SAN-Verifier
  * als `checkServerIdentity`. Sonst nur die TLS-Optionen (= bisheriges Verhalten).
  */
-export function buildConnectorOptions(tls: MeshTlsMaterial, policy: OutboundConnectPolicy): ConnectorOptions {
+export function buildConnectorOptions(
+  tls: MeshTlsMaterial,
+  policy: OutboundConnectPolicy,
+  meshCheckServerIdentity?: (host: string, cert: PeerCertLike) => Error | undefined,
+): ConnectorOptions {
   const opts: ConnectorOptions = {
     ca: tls.ca,
     cert: tls.cert,
@@ -82,9 +86,16 @@ export function buildConnectorOptions(tls: MeshTlsMaterial, policy: OutboundConn
     // localAddress bewusst NICHT gesetzt (kein Source-Bind).
   }
   if (policy.spiffeServerIdentity) {
-    // TODO(ADR-028 D2b-pin): resolveExpected aus der Peer-Registry injizieren (per-Host-
-    // Pin); aktuell TOFU (gültige thinklocal-SPIFFE-SAN nötig) — s. ADR-028-D2-Doc.
-    opts.checkServerIdentity = makeMeshCheckServerIdentity();
+    // ADR-028 D2b-pin (CR-MEDIUM gpt-5.3-codex): der per-Host-pinnende Verifier MUSS
+    // injiziert sein — KEIN stiller Fallback auf ungepinntes TOFU (Downgrade-Schutz).
+    // Eine fehlende Injektion bei aktivem Flag ist ein Verdrahtungsfehler → fail-fast.
+    if (!meshCheckServerIdentity) {
+      throw new Error(
+        'mesh-connect: spiffeServerIdentity aktiv, aber kein checkServerIdentity injiziert ' +
+          '(ADR-028 D2b-pin erzwingt den pinnenden Verifier — kein stiller TOFU-Fallback)',
+      );
+    }
+    opts.checkServerIdentity = meshCheckServerIdentity;
   }
   return opts;
 }
@@ -134,8 +145,13 @@ export function wrapConnectorWithDebug(base: LooseConnector, connectorOpts: Conn
  * Liefert eine undici-`connect`-Option (Connector-Funktion): die TLS-Connector-Basis,
  * bei `debug` umhüllt mit Logging der Connect-Parameter und des vollständigen Fehlers.
  */
-export function buildMeshConnector(tls: MeshTlsMaterial, policy: OutboundConnectPolicy, log?: Logger) {
-  const connectorOpts = buildConnectorOptions(tls, policy);
+export function buildMeshConnector(
+  tls: MeshTlsMaterial,
+  policy: OutboundConnectPolicy,
+  log?: Logger,
+  meshCheckServerIdentity?: (host: string, cert: PeerCertLike) => Error | undefined,
+) {
+  const connectorOpts = buildConnectorOptions(tls, policy, meshCheckServerIdentity);
   const base = buildConnector(connectorOpts as Parameters<typeof buildConnector>[0]);
   if (!policy.debug) return base;
   // Debug-Wrapper: signatur-identischer Passthrough (siehe wrapConnectorWithDebug), Cast

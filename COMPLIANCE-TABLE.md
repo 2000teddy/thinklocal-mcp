@@ -882,4 +882,16 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-06-16 22:22 — v0.34.13 (DRAFT) ADR-028 D2b SPIFFE-Server-Identity (Flag Default-OFF).*
+## Session 2026-06-17 06:35 — v0.34.14 (DRAFT) feat(transport): ADR-028 D2b-pin per-Host-TOFU-Pin
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|----|
+| v0.34.14 | (neu, gestackt auf #180) | 2026-06-17 06:35 | ✅ | — | ✅ | ✅ | ✅ | ✅ | CR gpt-5.3-codex (security): 0 HIGH/CRITICAL; MEDIUM (kein stiller TOFU-Fallback → fail-fast) gefixt; LOW (Pin-Persistenz) bewusst deferiert |
+
+**CO:** ADR-028-Konsens (deckt D2-Richtung + Pin-Härtung). **CG:** —. **TS:** `server-identity-pin.test.ts` (pin/match/conflict, per-Host, mehrdeutig→kein-Pin, Impersonation-nach-Pin abgelehnt) + `mesh-connect.test.ts` (Injektion, fehlender-Checker→throws), 1029 daemon unit grün, tsc 0, geänderte Dateien eslint-error-frei. **CR:** `pal:codereview` gpt-5.3-codex (security) — fail-closed bestätigt, kein Bypass; MEDIUM gefixt, LOW deferiert. **PC:** `pal:precommit` gpt-5.3-codex — 0 Blocker. **DO:** CHANGES (v0.34.14), COMPLIANCE.
+
+**Status:** ADR-028 D2b-pin — per-Host-TOFU-Pin (`ServerIdentityPinStore`) erzwingt nach First-Contact die gepinnte kanonische Peer-Identität → schließt die nackte-TOFU-Lücke aus D2b. Gestackt auf #180 (Base = D2-Branch). Flag bleibt **Default OFF**; **Produktiv-/Fleet-Aktivierung + Cert-Rollout = Christians Gate**. Folge: nach Merge von #180 → diesen PR → optionale Pin-Persistenz + 1-Node-Aktivierung (.55-Overlay-Verifikation).
+
+---
+
+*Letzte Aktualisierung: 2026-06-17 06:35 — v0.34.14 (DRAFT) ADR-028 D2b-pin per-Host-TOFU-Pin (Flag Default-OFF).*

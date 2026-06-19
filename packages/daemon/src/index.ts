@@ -51,6 +51,7 @@ import { INFLUXDB_MANIFEST, influxdbHealthCheck } from './builtin-skills/influxd
 import { SkillHealthMonitor } from './skill-health-monitor.js';
 import { loadBuildInfo } from './build-info.js';
 import { resolveOutboundConnectPolicy, buildMeshConnector } from './mesh-connect.js';
+import { ServerIdentityPinStore, makePinningMeshCheckServerIdentity } from './server-identity-pin.js';
 import { TelegramGateway } from './telegram-gateway.js';
 import type { AgentCard } from './agent-card.js';
 import { seedBuiltinSkills } from './builtin-skill-seed.js';
@@ -195,11 +196,15 @@ async function main(): Promise<void> {
   if (outboundConnectPolicy.debug || outboundConnectPolicy.disablePinning || outboundConnectPolicy.spiffeServerIdentity) {
     log.info(outboundConnectPolicy, '[connect] Outbound-Connect-Policy aktiv (Debug/Escape-Hatch)');
   }
+  // ADR-028 D2b-pin: per-Host-Pin-Store + pinnender Verifier (TOFU beim First-Contact,
+  // danach erzwungen). Schließt die nackte-TOFU-Restlücke aus D2b.
+  const serverIdentityPinStore = new ServerIdentityPinStore();
+  const meshCheckServerIdentity = outboundConnectPolicy.spiffeServerIdentity
+    ? makePinningMeshCheckServerIdentity(serverIdentityPinStore, log)
+    : undefined;
   if (outboundConnectPolicy.spiffeServerIdentity) {
-    // CR-MEDIUM (gpt-5.3-codex): ohne per-Host-Pin-Resolver läuft D2b im TOFU-Modus
-    // (intra-Mesh-impersonation-tolerant). Operator muss das bewusst sehen (ADR-028-D2).
     log.warn(
-      '[connect] ADR-028 D2b SPIFFE-Server-Identity AKTIV im TOFU-Modus (kein per-Host-Pin-Resolver verdrahtet) — nur eine gültige thinklocal-SPIFFE-SAN wird verlangt, NICHT gegen eine gepinnte Peer-Identität gebunden. Fleet-Aktivierung erst nach D2b-pin. Siehe docs/architecture/ADR-028-D2-spiffe-server-identity.md',
+      '[connect] ADR-028 D2b SPIFFE-Server-Identity AKTIV mit per-Host-Pin (D2b-pin): First-Contact = TOFU, danach gegen die gepinnte kanonische Peer-Identität erzwungen. Produktiv-/Fleet-Aktivierung = Christians Gate. Siehe docs/architecture/ADR-028-D2-spiffe-server-identity.md',
     );
   }
   const tlsDispatcher = tlsBundle
@@ -208,6 +213,7 @@ async function main(): Promise<void> {
           { ca: initialCaBundle, cert: tlsBundle.certPem, key: tlsBundle.keyPem },
           outboundConnectPolicy,
           log,
+          meshCheckServerIdentity,
         ),
       })
     : undefined;
