@@ -1,0 +1,184 @@
+/**
+ * mcp-service-registry.ts — ADR-028 D4-a: reines Modell + Auflösung für geteilte
+ * MCP-Server als namespaced Capabilities im bestehenden CRDT (ADR-020).
+ *
+ * Reine Funktionen (kein I/O, keine Uhr, kein CRDT-/Netz-Wiring) → vollständig
+ * unit-testbar. Live-Registrierung, `/api/capabilities`-Filter und das Routing
+ * (`/api/mcp/<server>`) sind bewusst NICHT hier (D4-a-Teil-2 / D4-b).
+ *
+ * Arbeitslinie (ADR-028-D4-Patch 2026-06-19): **Discovery default-open** — kein
+ * Allowlist-Filter, keine deny-by-default-per-Agent-Logik. Das Ausführungsrisiko
+ * wird über die **Ausführungsstufe** `self | gate | consensus` gesteuert, NICHT
+ * über die Sichtbarkeit. `execution_tier` ist aus `permissions`/`trust_level`
+ * ableitbar (hier `deriveExecutionTier`).
+ *
+ * Designloch geschlossen (minimal): die `Capability` (registry.ts) verlangt
+ * `agent_id` + `updated_at` (+ `health`), die in der vorgeschlagenen Signatur
+ * fehlten. Sie sind umgebungsabhängig (eigene Node-Identität / Zeitstempel) und
+ * werden daher als Eingaben übergeben (`agent_id`, `updated_at`) bzw. defaulten
+ * (`health='healthy'`; die echte Laufzeit-Liveness besitzt die ADR-021-Side-Map).
+ */
+import type { Capability, CapabilityHealth } from './registry.js';
+
+/** Präfix-Namespace für MCP-Service-Capabilities in der CRDT-`capabilities`-Map. */
+export const MCP_CATEGORY = 'mcp';
+/** `skill_id`-Präfix: `mcp:<server>`. */
+export const MCP_SKILL_PREFIX = 'mcp:';
+
+/** Ausführungsstufe (ADR-028-D4): Discovery offen, Risiko über die Stufe. */
+export type McpExecutionTier = 'self' | 'gate' | 'consensus';
+
+/** Trust-Level (0–5), unter dem selbst Read-only mindestens `gate` braucht. */
+export const LOW_TRUST_GATE_THRESHOLD = 2;
+
+/**
+ * Permission-Tokens (case-insensitive, Teilstring-Match), die eine Stufe erzwingen.
+ * Konservativ: destruktiv → consensus; schreibend/credential → gate; sonst read → self.
+ */
+const CONSENSUS_TOKENS = ['admin', 'delete', 'destroy', 'remove', 'reboot', 'shutdown', 'wipe', 'factory'];
+const GATE_TOKENS = ['write', 'credential', 'secret', 'control', 'set', 'configure', 'update', 'create', 'send', 'actuate', 'switch'];
+const SELF_TOKENS = ['read', 'query', 'list', 'get', 'view', 'convert', 'render', 'search', 'status'];
+
+function classify(token: string): McpExecutionTier | 'unknown' {
+  const t = token.toLowerCase();
+  if (CONSENSUS_TOKENS.some((k) => t.includes(k))) return 'consensus';
+  if (GATE_TOKENS.some((k) => t.includes(k))) return 'gate';
+  if (SELF_TOKENS.some((k) => t.includes(k))) return 'self';
+  return 'unknown';
+}
+
+const RANK: Record<McpExecutionTier, number> = { self: 0, gate: 1, consensus: 2 };
+function maxTier(a: McpExecutionTier, b: McpExecutionTier): McpExecutionTier {
+  return RANK[a] >= RANK[b] ? a : b;
+}
+
+/** Erlaubter MCP-Servername-Zeichenraum nach Kanonisierung. */
+const SERVER_NAME_RE = /^[a-z0-9._-]+$/;
+/** Kanonisiert einen Servernamen (trim + lowercase) — Build und Resolve MÜSSEN dasselbe nutzen (kein Split-Brain `mcp:Unifi` vs `mcp:unifi`). Reine Funktion, wirft NICHT. */
+export function canonicalizeServerName(raw: string): string {
+  return raw.trim().toLowerCase();
+}
+
+/**
+ * Leitet die Ausführungsstufe rein aus `permissions` + `trust_level` ab.
+ * - Keine Permissions → read-only → `self`.
+ * - Höchste durch ein Token erzwungene Stufe gewinnt (self<gate<consensus).
+ * - **Unbekanntes** (nicht klassifizierbares) Token → fail-closed auf mind. `gate`
+ *   (ADR-028-D4: „unklare Stufe → mindestens gate"; nie auf der Discovery-Ebene).
+ * - Niedriges Trust (`< LOW_TRUST_GATE_THRESHOLD`) hebt `self` auf `gate` (Read von
+ *   einem wenig vertrauten Provider braucht Approval), senkt aber NIE eine Stufe.
+ */
+export function deriveExecutionTier(permissions: readonly string[], trustLevel: number): McpExecutionTier {
+  let tier: McpExecutionTier = 'self';
+  for (const p of permissions) {
+    const c = classify(p);
+    tier = maxTier(tier, c === 'unknown' ? 'gate' : c);
+  }
+  // CR-MEDIUM (gpt-5.3-codex): ungültiges trustLevel (NaN/Infinity) darf NICHT fail-open
+  // bleiben (NaN < 2 === false) → als niedrigstes Vertrauen behandeln (fail-closed → gate).
+  const normalizedTrust = Number.isFinite(trustLevel) ? trustLevel : LOW_TRUST_GATE_THRESHOLD - 1;
+  if (tier === 'self' && normalizedTrust < LOW_TRUST_GATE_THRESHOLD) {
+    tier = 'gate';
+  }
+  return tier;
+}
+
+export interface BuildMcpCapabilityInput {
+  /** MCP-Server-Name, z.B. "unifi", "markitdown" → `skill_id="mcp:unifi"`. */
+  server: string;
+  /** Aussagekräftige Beschreibung (was der MCP tut) — für fremde Agents ohne Vorwissen. */
+  description: string;
+  /** Angebotene Tools/Capabilities des MCP (werden in die description gefaltet — die CRDT-`Capability` hat (noch) kein eigenes tools-Feld). */
+  tools?: readonly string[];
+  /** SemVer aus dem MCP-Manifest. */
+  version: string;
+  /** Benötigte Berechtigungen → Grundlage der Stufen-Ableitung. */
+  permissions?: readonly string[];
+  /** Trust-Level 0–5. */
+  trust_level: number;
+  /** SPIFFE-Identität des servierenden Nodes (eigene). Designloch-Closure (s. Kopf). */
+  agent_id: string;
+  /** ISO-8601-Zeitstempel (vom Aufrufer; reines Modul ruft keine Uhr). */
+  updated_at: string;
+  /** Optional; Default `healthy`. Echte Liveness besitzt die ADR-021-Side-Map. */
+  health?: CapabilityHealth;
+}
+
+/** MCP-Service-Capability inkl. der abgeleiteten Stufe (für Resolver/Anzeige). */
+export interface McpServiceCapability extends Capability {
+  execution_tier: McpExecutionTier;
+}
+
+/**
+ * Baut die CRDT-`Capability` für einen geteilten MCP-Server (default-open).
+ * `skill_id="mcp:<server>"`, `category="mcp"`; Tools werden in die `description`
+ * gefaltet; `execution_tier` wird abgeleitet und zusätzlich am Objekt geführt.
+ */
+export function buildMcpCapability(input: BuildMcpCapabilityInput): McpServiceCapability {
+  const server = canonicalizeServerName(input.server);
+  if (!SERVER_NAME_RE.test(server)) {
+    throw new Error(`buildMcpCapability: invalid server name (allowed ${SERVER_NAME_RE}, canonicalized lower-case): ${JSON.stringify(input.server)}`);
+  }
+  const permissions = [...(input.permissions ?? [])];
+  const tier = deriveExecutionTier(permissions, input.trust_level);
+  const tools = input.tools ?? [];
+  const description = tools.length > 0 ? `${input.description} (Tools: ${tools.join(', ')})` : input.description;
+  return {
+    skill_id: `${MCP_SKILL_PREFIX}${server}`,
+    category: MCP_CATEGORY,
+    version: input.version,
+    description,
+    agent_id: input.agent_id,
+    health: input.health ?? 'healthy',
+    trust_level: input.trust_level,
+    permissions,
+    updated_at: input.updated_at,
+    execution_tier: tier,
+  };
+}
+
+/** True, wenn die Capability ein MCP-Service-Eintrag ist. */
+export function isMcpCapability(cap: Pick<Capability, 'category' | 'skill_id'>): boolean {
+  return cap.category === MCP_CATEGORY && cap.skill_id.startsWith(MCP_SKILL_PREFIX);
+}
+
+/** Eine aufgelöste MCP-Bedienung: welcher Node serviert + Stufe. */
+export interface McpResolution {
+  /** SPIFFE-Identität des servierenden Nodes. */
+  agent_id: string;
+  /** `mcp:<server>`. */
+  skill_id: string;
+  description: string;
+  version: string;
+  trust_level: number;
+  health: CapabilityHealth;
+  execution_tier: McpExecutionTier;
+}
+
+/**
+ * Löst „wer serviert `mcp:<server>`" aus der (replizierten) Capability-Liste auf.
+ * **Default-open:** KEIN Allowlist-Filter, KEINE deny-by-default-per-Agent-Logik —
+ * jeder gesunde Provider wird geliefert (Multi-Provider). Offline-Provider
+ * (`health==='offline'`) werden übersprungen (Routing-Hygiene, kein Trust-Gate).
+ * Stufe wird pro Provider aus dessen `permissions`/`trust_level` abgeleitet.
+ * Liefert ein (ggf. leeres) Array; leer ist kein Fehler — der Aufrufer entscheidet.
+ */
+export function resolveMcp(server: string, capabilities: readonly Capability[]): McpResolution[] {
+  const target = `${MCP_SKILL_PREFIX}${canonicalizeServerName(server)}`;
+  const out: McpResolution[] = [];
+  for (const cap of capabilities) {
+    if (cap.category !== MCP_CATEGORY) continue;
+    if (cap.skill_id !== target) continue;
+    if (cap.health === 'offline') continue;
+    out.push({
+      agent_id: cap.agent_id,
+      skill_id: cap.skill_id,
+      description: cap.description,
+      version: cap.version,
+      trust_level: cap.trust_level,
+      health: cap.health,
+      execution_tier: deriveExecutionTier(cap.permissions, cap.trust_level),
+    });
+  }
+  return out;
+}
