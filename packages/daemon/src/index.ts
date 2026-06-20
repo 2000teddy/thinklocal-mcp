@@ -18,6 +18,7 @@ import { RateLimiter } from './ratelimit.js';
 import { MessageType, encodeAndSign, createEnvelope, serializeSignedMessage, type MessageEnvelope } from './messages.js';
 import { TaskManager } from './tasks.js';
 import { SkillManager, type SkillAnnouncePayload } from './skills.js';
+import { buildSharedMcpCapabilities, registerSharedMcps } from './mcp-registration.js';
 import { registerDashboardApi } from './dashboard-api.js';
 import { registerInboxApi } from './inbox-api.js';
 import { AgentRegistry } from './agent-registry.js';
@@ -337,6 +338,26 @@ async function main(): Promise<void> {
   });
   if (seededSkills.installed.length > 0) {
     log.info({ skills: seededSkills.installed }, 'Builtin-Skills geseeded');
+  }
+
+  // ADR-028 D4-a: geteilte MCP-Server aus der Config als mesh-Capabilities registrieren
+  // (Discovery default-open, owner-gegated mit eigener SPIFFE-Identität). Einzelne
+  // ungültige Einträge werden geskippt (fail-soft in buildSharedMcpCapabilities). Ein
+  // STRUKTURELLER Config-Fehler wirft — hier bewusst gefangen + laut geloggt statt den
+  // Boot zu crashen: Shared-MCPs sind ein optionales Discovery-Feature, kein Grund den
+  // Core-Daemon (Identity/Mesh/Skills) zu stoppen.
+  try {
+    registerSharedMcps(
+      registry,
+      buildSharedMcpCapabilities(config.mcp.share, selfIdentityUri, new Date().toISOString()),
+      log,
+    );
+  } catch (err) {
+    // CR-LOW: das Error-Objekt loggen (Stack/Kontext), nicht nur die Message.
+    log.error(
+      { err },
+      '[mcp-share] Shared-MCP-Config ungültig — übersprungen (Daemon startet ohne geteilte MCPs)',
+    );
   }
 
   // Registry-Sync (ADR-020 v1): Coordinator + Adapter zwischen Automerge
