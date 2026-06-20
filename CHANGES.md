@@ -6,7 +6,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-06-20 16:25
+## [Unreleased] — 2026-06-20 17:10
+
+### v0.34.18 (DRAFT — Christian-autorisiert; Boot-Verdrahtung, kein Routing/Endpoint/Flag/Deploy) — feat(discovery): ADR-028 D4-a — geteilte MCPs beim Start registrieren (`mcp.share`)
+
+Verdrahtet die Registrierungs-Komposition (v0.34.17) in den Daemon-Start: deklarierte geteilte MCPs werden beim Boot als mesh-Capabilities `mcp:<server>` registriert und sind fleet-weit auflösbar (Discovery default-open). **Kein Routing/Endpoint/Cert/Flag, kein Deploy** (das ist D4-b).
+
+- **`config.ts`**: neue Sektion `mcp.share` (`DaemonConfig` + DEFAULTS `[]`); Typ bewusst `unknown[]` (Validierung in `parseSharedMcpConfig`). **Härtung (CR-MEDIUM):** `deepMerge` schließt jetzt auch Array-**Targets** vom rekursiven Merge aus — ein falsches TOML-Shape (`[mcp.share]` statt `[[mcp.share]]`) wird sauber als Nicht-Array durchgereicht statt still hineingemerged.
+- **`index.ts`**: `registerSharedMcps(registry, buildSharedMcpCapabilities(config.mcp.share, selfIdentityUri, now), log)` nach Registry+Builtin-Skills (owner-gegated mit eigener SPIFFE-Identität). **In try/catch:** ein struktureller Config-Fehler loggt + überspringt (Daemon bootet ohne geteilte MCPs) — Shared-MCPs sind optional, kein Grund den Core-Daemon zu stoppen.
+- **`config/daemon.toml`**: kommentierte `[[mcp.share]]`-Doku (default-open, `share=false`=opt-out).
+
+**Tests:** `config-mcp-share.test.ts` (3): Default `[]`, `[[mcp.share]]`-Parse, mis-shaped `[mcp.share]`→Nicht-Array (deepMerge-Härtung). 1071 daemon unit grün, tsc 0. **CO:** ADR-028 + D4-Patch (#184). **CR:** `pal:codereview` gpt-5.3-codex — MEDIUM (deepMerge Array-Target) + 2 LOW (Error-Objekt loggen, Negativ-Shape-Test) gefixt. **PC:** s.u.
 
 ### v0.34.17 (DRAFT — Christian-autorisiert; Komposition + Registrar, KEINE Boot-Verdrahtung) — feat(discovery): ADR-028 D4-a — Shared-MCP-Registrierungs-Komposition
 

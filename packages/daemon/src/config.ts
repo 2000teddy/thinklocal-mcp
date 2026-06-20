@@ -105,6 +105,15 @@ export interface DaemonConfig {
   logging: {
     level: string;
   };
+  /**
+   * ADR-028 D4-a: geteilte MCP-Server (Discovery default-open). Rohe `[[mcp.share]]`-
+   * Einträge; validiert + default-open aufgelöst durch `parseSharedMcpConfig`
+   * (mcp-share-config.ts). Typ bewusst lose (`unknown[]`) — die Validierung gehört
+   * dorthin, nicht in den Config-Loader.
+   */
+  mcp: {
+    share: unknown[];
+  };
 }
 
 const DEFAULTS: DaemonConfig = {
@@ -149,6 +158,9 @@ const DEFAULTS: DaemonConfig = {
   },
   logging: {
     level: 'info',
+  },
+  mcp: {
+    share: [],
   },
 };
 
@@ -298,7 +310,11 @@ function deepMerge(target: JsonObject, source: JsonObject): void {
   for (const key of Object.keys(source)) {
     const sv = source[key];
     const tv = target[key];
-    if (sv && typeof sv === 'object' && !Array.isArray(sv) && tv && typeof tv === 'object') {
+    // CR-MEDIUM (gpt-5.3-codex): auch das TARGET-Array vom rekursiven Merge ausschließen.
+    // Sonst würde ein falsches TOML-Shape (Objekt) in ein Array-Default (z.B. `[mcp.share]`
+    // statt `[[mcp.share]]`) hineingemerged statt sauber als Nicht-Array weitergereicht zu
+    // werden — die nachgelagerte Validierung (parseSharedMcpConfig) erkennt es dann korrekt.
+    if (sv && typeof sv === 'object' && !Array.isArray(sv) && tv && typeof tv === 'object' && !Array.isArray(tv)) {
       deepMerge(tv as JsonObject, sv as JsonObject);
     } else if (sv !== undefined && sv !== '') {
       target[key] = sv;

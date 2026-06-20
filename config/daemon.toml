@@ -77,3 +77,24 @@ announce_multiaddrs = []        # Optional: oeffentliche oder Relay-Multiaddrs e
 
 [logging]
 level = "info"           # trace, debug, info, warn, error, fatal
+
+# ADR-028 D4-a: geteilte MCP-Server (Discovery default-open).
+# Jeder hier deklarierte MCP wird beim Start als mesh-Capability `mcp:<server>`
+# registriert und ist fleet-weit aufloesbar (kein SSH). Default-open: ein Eintrag
+# ist geteilt, ausser `share = false`. `description` ist Pflicht. `permissions` +
+# `trust_level` bestimmen spaeter die Ausfuehrungsstufe (self/gate/consensus).
+# Beispiel:
+# [[mcp.share]]
+# server = "markitdown"
+# description = "Markdown-Konvertierung beliebiger Dokumente"
+# tools = ["convert"]
+# version = "1.0.0"
+# permissions = ["convert"]
+# trust_level = 5
+#
+# [[mcp.share]]
+# server = "unifi"
+# description = "UniFi-Controller — Netzwerk-Status"
+# permissions = ["network.read"]
+# trust_level = 4
+# share = false          # explizit NICHT teilen (opt-out)

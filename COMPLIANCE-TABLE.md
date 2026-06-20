@@ -930,4 +930,16 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-06-20 16:25 — v0.34.17 (DRAFT) ADR-028 D4-a Shared-MCP-Registrierungs-Komposition.*
+## Session 2026-06-20 17:10 — v0.34.18 (DRAFT) feat(discovery): ADR-028 D4-a Boot-Verdrahtung (mcp.share)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|----|
+| v0.34.18 | (neu) | 2026-06-20 17:10 | ✅  | —  | ✅ | ✅ | ✅ | ✅ | CR gpt-5.3-codex: MEDIUM (deepMerge Array-Target-Härtung) + 2 LOW (Error-Objekt-Log, Negativ-Shape-Test) gefixt |
+
+**CO:** ADR-028-Konsens + D4-Patch (#184). **CG:** —. **TS:** `config-mcp-share.test.ts` (3: Default, `[[mcp.share]]`-Parse, mis-shaped `[mcp.share]`→Nicht-Array), 1071 daemon unit grün, tsc 0, keine NEUEN eslint-Errors (index.ts:268 `tlsBundle!` ist pre-existing). **CR:** `pal:codereview` gpt-5.3-codex (full) — Boot-Wiring korrekt + owner-gegated; MEDIUM+2LOW gefixt. **PC:** `pal:precommit` — 0 Blocker. **DO:** CHANGES (v0.34.18), COMPLIANCE, `config/daemon.toml`-Doku.
+
+**Status:** ADR-028 D4-a Boot-Verdrahtung — `mcp.share`-Config wird beim Daemon-Start gelesen + via `registerSharedMcps` als owner-gegatete `mcp:<server>`-Capabilities registriert (Discovery default-open, fail-soft im try/catch). **Kein Routing/Endpoint/Cert/Flag, kein Deploy.** Folge: **D4-b** (MCP-Proxy-Ingress `/api/mcp/<server>` + Forward-Routing über mTLS, D2/D3-Interlock).
+
+---
+
+*Letzte Aktualisierung: 2026-06-20 17:10 — v0.34.18 (DRAFT) ADR-028 D4-a Boot-Verdrahtung (mcp.share, default-open).*
