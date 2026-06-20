@@ -918,4 +918,16 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-06-20 12:42 — v0.34.16 (DRAFT) ADR-028 D4-a Teil 2 Shared-MCP-Config (rein, default-open).*
+## Session 2026-06-20 16:25 — v0.34.17 (DRAFT) feat(discovery): ADR-028 D4-a Shared-MCP-Registrierungs-Komposition
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|----|
+| v0.34.17 | (neu) | 2026-06-20 16:25 | ✅  | —  | ✅ | ✅ | ✅ | ✅ | CR gpt-5.3-codex: 0 funktionale Blocker; MEDIUM (Owner-Gating-Override-Regressionstest) ergänzt |
+
+**CO:** ADR-028-Konsens + D4-Patch (#184). **CG:** —. **TS:** `mcp-registration.test.ts` (9: Komposition, default-open, execution_tier-Strip→kein CRDT-Leak, fail-fast/fail-soft, Owner-Gating-Override-Ignoranz, Mock-Registry), 1068 daemon unit grün, tsc 0, eslint-error-frei. **CR:** `pal:codereview` gpt-5.3-codex (full) — Leak-Pfad geschlossen, 2-Stufen-Fehler korrekt; MEDIUM-Test ergänzt. **PC:** `pal:precommit` — 0 Blocker. **DO:** CHANGES (v0.34.17), COMPLIANCE.
+
+**Status:** ADR-028 D4-a — Registrierungs-Komposition (`buildSharedMcpCapabilities`/`registerSharedMcps`) verbindet #185+#186 zu owner-gegateten `mcp:<server>`-Capabilities. **Kein Routing/Endpoint/Cert/Flag, kein Deploy.** Folge: Boot-Verdrahtung (Config `mcp.share` in config.ts + Aufruf beim Daemon-Start), dann D4-b (MCP-Proxy-Routing).
+
+---
+
+*Letzte Aktualisierung: 2026-06-20 16:25 — v0.34.17 (DRAFT) ADR-028 D4-a Shared-MCP-Registrierungs-Komposition.*

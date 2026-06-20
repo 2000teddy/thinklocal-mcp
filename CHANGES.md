@@ -6,7 +6,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-06-20 12:42
+## [Unreleased] — 2026-06-20 16:25
+
+### v0.34.17 (DRAFT — Christian-autorisiert; Komposition + Registrar, KEINE Boot-Verdrahtung) — feat(discovery): ADR-028 D4-a — Shared-MCP-Registrierungs-Komposition
+
+Komponiert die gemergten D4-a-Bausteine (v0.34.15 Capability-Modell #185 + v0.34.16 Config-Vertrag #186) zu registrierbaren CRDT-`Capability`s + dünnem Registrar. **Kein Routing/Endpoint/Cert/Flag, kein Deploy.** Die Boot-Verdrahtung (Config-Pfad `mcp.share` lesen + Aufruf beim Start) ist der unmittelbare Folge-Slice.
+
+- **`mcp-registration.ts`** (neu): `buildSharedMcpCapabilities(rawShareConfig, agentId, nowIso)` → `{ capabilities, skipped }`; `registerSharedMcps(registry, result, log)` schreibt sie owner-gegated in die Registry (injizierbar).
+- **CRDT-Leak verhindert:** `execution_tier` wird vor `register` explizit gestrippt (`registry.register`/`stripNonCrdtFields` ist eine **Blacklist** → würde es sonst ins Automerge-Doc tragen). Test sichert `'execution_tier' in cap === false`.
+- **Owner-gegated:** ausschließlich die eigene `agent_id` wird gesetzt; ein in der Raw-Config eingeschleustes `agent_id` wird ignoriert (Regressionstest).
+- **Zwei-Stufen-Fehler:** strukturell falsche Config → **fail-fast** (`parseSharedMcpConfig` wirft); einzelner Eintrag mit ungültigem Servernamen → **fail-soft** (skip + log, kein Boot-Abbruch).
+
+**Tests:** `mcp-registration.test.ts` (9): Komposition, default-open opt-out, execution_tier-Strip, fail-fast/fail-soft, Owner-Gating-Override-Ignoranz, Registrar mit Mock-Registry. 1068 daemon unit grün, tsc 0. **CO:** ADR-028 + D4-Patch (#184). **CR:** `pal:codereview` gpt-5.3-codex — 0 funktionale Blocker; MEDIUM (Owner-Gating-Regressionstest) ergänzt. **PC:** s.u.
 
 ### v0.34.16 (DRAFT — Christian-autorisiert; reines Modul, kein Wiring/Deploy) — feat(discovery): ADR-028 D4-a Teil 2 — Shared-MCP-Config-Vertrag (default-open)
 
