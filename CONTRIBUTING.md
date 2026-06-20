@@ -112,6 +112,12 @@ skills/                      @any-agent OR @human
 3. Bei Konflikten: Rebase bevorzugen, nicht Merge
 4. Integration-Branch für Multi-Agent-Features verwenden
 
+### Reine Doku-Mergekonflikte — Agent-Autonomie (verbindlich)
+- Betrifft ein Mergekonflikt **ausschließlich Dokumentation** (`*.md`: Changelog/`CHANGES.md`, `COMPLIANCE-TABLE.md`, ADRs, README, `docs/**`, Tabellen, Begleittext), **löst der verantwortliche Agent ihn selbst.**
+- Das ist **ausdrücklich erlaubt** und braucht **keine Human-Freigabe**.
+- Solche Doku-Konflikte dürfen die Arbeit **nicht blockieren** — auflösen, betroffene Doku konsistent zusammenführen, die kleinsten relevanten Checks laufen lassen, Branch pushen, PR wieder merge-fähig machen. (Der Merge selbst bleibt das normale Gate.)
+- **Ausnahme → normaler Review-/Gate-Pfad:** sobald beim Auflösen auch **Code, Config, Verhalten, Security, Build oder Runtime-Artefakte** betroffen sind (oder der „Doku"-Konflikt solche Dateien mitzieht), greift wieder der reguläre CR/PC-/Review-Pfad — dann ist es kein reiner Doku-Konflikt mehr.
+
 ### Kommunikation
 - Issues für geplante Arbeit erstellen
 - Work-in-Progress PRs mit `[WIP]` markieren
