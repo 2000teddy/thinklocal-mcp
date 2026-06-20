@@ -6,7 +6,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-06-19 12:35
+## [Unreleased] — 2026-06-20 12:42
+
+### v0.34.16 (DRAFT — Christian-autorisiert; reines Modul, kein Wiring/Deploy) — feat(discovery): ADR-028 D4-a Teil 2 — Shared-MCP-Config-Vertrag (default-open)
+
+Zweiter, **unblocked** Code-Slice von ADR-028 D4-a (Teil 1 = v0.34.15/#185 — dieser Slice hängt NICHT davon ab). Reiner Config-Parser, **kein Live-Wiring, kein Endpoint, kein Deploy, kein Flag-Flip**.
+
+- **`mcp-share-config.ts`** (neu, rein): `parseSharedMcpConfig(raw)` → validierte `SharedMcpDeclaration[]`; `enabledSharedMcps(decls)` → die tatsächlich zu announcenden MCPs.
+- **Arbeitslinie (ADR-028-D4, auf main via #184):** **Discovery default-open** — fehlendes `share` → `share=true`; **nur explizites `share=false`** opted out (kein Falsy-Coercion); aussagekräftige `description` ist Pflicht; **keine Allowlist/deny-by-default**. Server-Namen-Kanonisierung + Stufen-Ableitung bleiben der Registrierung überlassen (kein Import aus #185).
+- **Fail-fast-Validierung** (Boot-Fehler bei Fehlkonfiguration): non-array, non-table, fehlender server/description, `trust_level` außerhalb 0–5, falsche Feldtypen.
+
+**Tests:** `mcp-share-config.test.ts` (13): default-open, opt-out nur via `false`, kein Falsy-Coercion (`share:0/null`→throw), Defaults, alle Fehlformen, `enabledSharedMcps`-Filter. 1042 daemon unit grün, tsc 0. **CO:** ADR-028 + D4-Patch (#184). **CR:** `pal:codereview` gpt-5.3-codex — **0 Findings**; 1 optionaler Härtungstest ergänzt. **PC:** s.u.
 
 ### v0.34.15 (DRAFT — Christian-autorisiert; reines Modell, kein Wiring/Deploy) — feat(discovery): ADR-028 D4-a — MCP-Service-Capability-Modell + Auflösung (default-open)
 

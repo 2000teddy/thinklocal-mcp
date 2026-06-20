@@ -898,7 +898,7 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 | #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
 |----------|-------|------------------|-----|----|----|----|----|----|----|
-| v0.34.15 | (neu) | 2026-06-19 12:35 | ✅  | —  | ✅ | ✅ | ✅ | ✅ | CR gpt-5.3-codex: 0 HIGH/CRITICAL; 2 MEDIUM (NaN-Trust fail-open, Servername-Kanonisierung→Split-Brain) + LOW gefixt |
+| v0.34.15 | #185  | 2026-06-19 12:35 | ✅  | —  | ✅ | ✅ | ✅ | ✅ | CR gpt-5.3-codex: 0 HIGH/CRITICAL; 2 MEDIUM (NaN-Trust fail-open, Servername-Kanonisierung→Split-Brain) + LOW gefixt |
 
 **CO:** ADR-028-Konsens + D4-Arbeitslinien-Patch (#184: Discovery default-open, 3-Stufen self/gate/consensus). **CG:** —. **TS:** `mcp-service-registry.test.ts` (17: Capability-Bau, Tier-Ableitung fail-closed, Multi-Provider, Offline-Skip, Case-Insensitivity, kein Allowlist), 1046 daemon unit grün, tsc 0, geänderte Dateien eslint-error-frei. **CR:** `pal:codereview` gpt-5.3-codex (full) — default-open + Tier-Ableitung bestätigt; 2 MEDIUM + LOW gefixt. **PC:** `pal:precommit` — 0 Blocker. **DO:** CHANGES (v0.34.15), COMPLIANCE.
 
@@ -906,4 +906,16 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-06-19 12:35 — v0.34.15 (DRAFT) ADR-028 D4-a MCP-Service-Modell (rein, default-open).*
+## Session 2026-06-20 12:42 — v0.34.16 (DRAFT) feat(discovery): ADR-028 D4-a Teil 2 Shared-MCP-Config (rein)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|----|
+| v0.34.16 | #186  | 2026-06-20 12:42 | ✅  | —  | ✅ | ✅ | ✅ | ✅ | CR gpt-5.3-codex: 0 Findings; 1 optionaler Härtungstest (kein Falsy-Coercion) ergänzt |
+
+**CO:** ADR-028-Konsens + D4-Patch (#184, gemergt: Discovery default-open). **CG:** —. **TS:** `mcp-share-config.test.ts` (13: default-open, opt-out nur via `false`, kein Falsy-Coercion, Defaults, alle Fehlformen, `enabledSharedMcps`), 1042 daemon unit grün, tsc 0, eslint-error-frei. **CR:** `pal:codereview` gpt-5.3-codex (full) — 0 Findings, alle 4 Kriterien erfüllt. **PC:** `pal:precommit` — 0 Blocker. **DO:** CHANGES (v0.34.16), COMPLIANCE.
+
+**Status:** ADR-028 D4-a Teil 2 — reiner Shared-MCP-Config-Parser (`parseSharedMcpConfig`/`enabledSharedMcps`), Discovery default-open, opt-out via `share=false`. **Unblocked** (kein Import aus #185, das inzwischen gemergt ist), **kein Wiring/Endpoint/Deploy/Flag-Flip.** Folge: Registrierung der enabled Shared-MCPs als `mcp:<server>`-Capability via `buildMcpCapability` (#185) + `resolve_mcp`-Primitive.
+
+---
+
+*Letzte Aktualisierung: 2026-06-20 12:42 — v0.34.16 (DRAFT) ADR-028 D4-a Teil 2 Shared-MCP-Config (rein, default-open).*
