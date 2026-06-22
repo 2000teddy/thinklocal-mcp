@@ -6,7 +6,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-06-20 17:10
+## [Unreleased] — 2026-06-20 17:35
+
+### v0.34.19 (DRAFT — Christian-autorisiert; reine Entscheidung, KEIN Endpoint/Forward/mcporter) — feat(discovery): ADR-028 D4-b (Start) — MCP-Routing-Entscheidung (self/remote/none)
+
+Beginnt ADR-028 **D4-b** (MCP-Proxy-Routing) mit dem **reinen Entscheidungskern**, ohne Live-Endpoint/Forward/mcporter-Exec (die folgen als eigene Slices).
+
+- **`mcp-routing.ts`** (neu, rein): `planMcpRoute(server, resolutions, selfAgentId)` → `{ mode: 'local' | 'remote' | 'none' }`. **self bevorzugt** (eigener nicht-offline Provider → lokal); sonst bester Remote-Provider (`healthy` vor `degraded`, deterministischer Tie-Break); kein nutzbarer Provider → `none` (kein Throw).
+- **Fail-closed (CR-MEDIUM):** filtert defensiv nur Resolutions mit `skill_id === mcp:<server>` (kanonisiert) → eine fehlverdrahtete Aufrufer-Liste routet NICHT versehentlich auf einen falschen MCP.
+- **Trifft nur die Entscheidung, führt NICHTS aus** — der spätere `/api/mcp/<server>`-Ingress ruft `resolveMcp` → `planMcpRoute` → exekutiert (lokaler mcporter ODER mTLS-Forward mit D2-Server-Identity + D3-Sender-Binding).
+
+**Tests:** `mcp-routing.test.ts` (11): local/remote/none, self-Präferenz (auch wenn Peers serven), healthy-vor-degraded, Tie-Break, offline-Skip, **fail-closed bei falschem server** (mis-wired), Case-Insensitivity, Purity (frozen input). 1082 daemon unit grün, tsc 0. **CO:** ADR-028 + D4-Patch (#184). **CR:** `pal:codereview` gpt-5.3-codex — MEDIUM (skill_id-fail-closed) + 2 LOW (Tie-Break-/Purity-Test) gefixt. **PC:** s.u.
 
 ### v0.34.18 (DRAFT — Christian-autorisiert; Boot-Verdrahtung, kein Routing/Endpoint/Flag/Deploy) — feat(discovery): ADR-028 D4-a — geteilte MCPs beim Start registrieren (`mcp.share`)
 

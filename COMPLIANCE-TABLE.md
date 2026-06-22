@@ -942,4 +942,16 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-06-20 17:10 — v0.34.18 (DRAFT) ADR-028 D4-a Boot-Verdrahtung (mcp.share, default-open).*
+## Session 2026-06-20 17:35 — v0.34.19 (DRAFT) feat(discovery): ADR-028 D4-b (Start) MCP-Routing-Entscheidung
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|----|
+| v0.34.19 | (neu) | 2026-06-20 17:35 | ✅  | —  | ✅ | ✅ | ✅ | ✅ | CR gpt-5.3-codex: MEDIUM (skill_id-fail-closed Filter) + 2 LOW (Tie-Break-/Purity-Test) gefixt |
+
+**CO:** ADR-028-Konsens + D4-Patch (#184). **CG:** —. **TS:** `mcp-routing.test.ts` (11: self/remote/none, self-Präferenz, healthy>degraded, Tie-Break, offline-Skip, fail-closed-mis-wired, Case-Insensitivity, Purity), 1082 daemon unit grün, tsc 0, eslint-error-frei. **CR:** `pal:codereview` gpt-5.3-codex (full) — reine Entscheidung korrekt; MEDIUM+2LOW gefixt. **PC:** `pal:precommit` — 0 Blocker. **DO:** CHANGES (v0.34.19), COMPLIANCE.
+
+**Status:** ADR-028 D4-b Start — reiner Routing-Planner (`planMcpRoute`: self/remote/none, Provider-Wahl, fail-closed skill_id-Filter). **KEIN Endpoint/Forward/mcporter/Cert/Flag, kein Deploy.** Folge-Slices: `/api/mcp/<server>`-Ingress (D3-Sender-Binding) → mTLS-Forward (D2-Server-Identity) → lokaler mcporter-Exec.
+
+---
+
+*Letzte Aktualisierung: 2026-06-20 17:35 — v0.34.19 (DRAFT) ADR-028 D4-b (Start) MCP-Routing-Entscheidung.*
