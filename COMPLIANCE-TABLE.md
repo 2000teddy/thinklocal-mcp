@@ -954,4 +954,16 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-06-20 17:35 — v0.34.19 (DRAFT) ADR-028 D4-b (Start) MCP-Routing-Entscheidung.*
+## Session 2026-06-22 21:50 — v0.34.20 fix(tls): ADR-024 Rollout-Gate — die 2 MERGE-blockierenden MEDIUMs (#165)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|----|
+| v0.34.20 | (neu) | 2026-06-22 21:50 | —   | —  | ✅ | ✅ | ✅ | ✅ | CR clink claude (codereviewer): 0 CRITICAL/HIGH; 1 MEDIUM (Test-Coverage-Lücke downstream `caValid`) → mit 2 Tests geschlossen |
+
+**CO/CG:** — (reiner Bug-Fix, schließt bekannte CR/PC-MEDIUMs aus #165). **TS:** `tls.test.ts` +9 → 30 (MEDIUM-1: CA-Gültigkeit gültig/abgelaufen/noch-nicht-gültig fail-closed; MEDIUM-2: `selectTrustDistributionCa` Issuer-/eigene-CA-Wahl, falsche+abgelaufene-erst-Kandidat-Skip, fail-closed-Fälle; Retention-Regression bei abgelaufener Attesting-CA). 1093 daemon unit grün, 6 integration grün, tsc 0. **CR:** clink **claude** codereviewer (Hausregel: nur claude/codex/agy, **nie MiniMax/pal:chat**; codex-CLI nicht installiert) — 0 CRITICAL/HIGH, 1 MEDIUM gefixt. **PC:** `pal:precommit` internal — 0 Issues. **DO:** CHANGES (v0.34.20), COMPLIANCE, TODO.md.
+
+**Status:** ADR-024 Rollout-Gate-MEDIUMs geschlossen — (1) `verifyPeerCert` prüft CA-Gültigkeitsfenster fail-closed; (2) Trust-Distribution wählt fail-closed nur eine CA, die das eigene Serving-Cert verifiziert, sonst keine Pairing-Registrierung. **KEIN Deploy/Re-Enroll/Flag-Flip.** getPeerId-Teil von B7 bereits via #175 (4b55f69) auf main. Offen für Gate #8 (Christian): Merge dieses PR → dann Re-Enroll-Voraussetzung erfüllt (Re-Enroll/100%-canonical-Emit bleibt separates Christian-Gate).
+
+---
+
+*Letzte Aktualisierung: 2026-06-22 21:50 — v0.34.20 fix(tls): ADR-024 Rollout-Gate — 2 MEDIUMs (#165) geschlossen.*

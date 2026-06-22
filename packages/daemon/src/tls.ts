@@ -443,14 +443,41 @@ export function verifyPeerCert(caCertPem: string, peerCertPem: string): boolean 
     // Prüfe ob von unserer CA signiert
     const verified = caCert.verify(peerCert);
 
-    // Prüfe Gültigkeit
     const now = new Date();
-    const valid = now >= peerCert.validity.notBefore && now <= peerCert.validity.notAfter;
+    // Leaf-Gültigkeit
+    const leafValid = now >= peerCert.validity.notBefore && now <= peerCert.validity.notAfter;
+    // ADR-024 MEDIUM-1 (CR/PC gpt-5.x): auch das Gültigkeitsfenster der AUSSTELLENDEN CA
+    // fail-closed prüfen. `caCert.verify` validiert nur die Signatur, nicht ob die CA selbst
+    // noch (oder schon) gültig ist. Eine abgelaufene/noch-nicht-gültige Issuer-CA darf weder
+    // im Retention- noch im Flip-/Trust-Distribution-Pfad als Vertrauensanker akzeptiert werden.
+    const caValid = now >= caCert.validity.notBefore && now <= caCert.validity.notAfter;
 
-    return verified && valid;
+    return verified && leafValid && caValid;
   } catch {
     return false;
   }
+}
+
+/**
+ * ADR-024 MEDIUM-2 (Trust-Distribution-Lifecycle, fail-closed): Wählt die CA, die an
+ * gepairte Peers verteilt wird. Die verteilte CA MUSS das eigene Serving-Cert kryptografisch
+ * verifizieren — sonst könnten neu gepairte Peers unseren Server nicht validieren (CR-HIGH-2).
+ * Hält ein own-CA-Node ein von der Attesting-CA (z.B. .94) BEHALTENES kanonisches Cert, ist
+ * der korrekte Trust-Anchor die Issuer-CA, NICHT die eigene Mesh-CA. Kandidaten werden in
+ * Reihenfolge geprüft; der erste, der das Serving-Cert verifiziert, gewinnt. Verifiziert KEINE
+ * Kandidaten-CA (fehlende/abgelaufene Issuer-CA) → `null` (Aufrufer verweigert die Distribution,
+ * statt einen nicht-validierenden/leeren Anker zu verteilen).
+ */
+export function selectTrustDistributionCa(args: {
+  servingCertPem: string | undefined;
+  candidateCaPems: Array<string | undefined>;
+}): string | null {
+  const { servingCertPem, candidateCaPems } = args;
+  if (!servingCertPem) return null;
+  for (const caPem of candidateCaPems) {
+    if (caPem && verifyPeerCert(caPem, servingCertPem)) return caPem;
+  }
+  return null;
 }
 
 /**

@@ -4,7 +4,7 @@ import { Agent as UndiciAgent, fetch } from 'undici';
 import { loadConfig } from './config.js';
 import { createLogger } from './logger.js';
 import { loadOrCreateIdentity } from './identity.js';
-import { loadOrCreateTlsBundle, getCertDaysLeft, extractSpiffeUris, verifyPeerCert, type NodeCertBundle } from './tls.js';
+import { loadOrCreateTlsBundle, getCertDaysLeft, extractSpiffeUris, verifyPeerCert, selectTrustDistributionCa, type NodeCertBundle } from './tls.js';
 import { existsSync as fsExistsSync } from 'node:fs';
 import { AuditLog } from './audit.js';
 import { MdnsDiscovery } from './discovery.js';
@@ -769,20 +769,42 @@ async function main(): Promise<void> {
 
   // 8c. Pairing-Routen registrieren (pairingStore wurde oben bereits erzeugt,
   // damit der Trust-Store die bestehenden CAs beim Start kennt).
-  registerPairingRoutes(cardServer.getServer(), {
+  // ADR-024 CR-HIGH-2 + MEDIUM-2 (Trust-Distribution-Lifecycle, fail-closed): gepairte Peers
+  // müssen die CA bekommen, die unser SERVING-Cert ausgestellt hat — bei einem behaltenen
+  // .94-signierten kanonischen Cert ist das die .94-Attesting-CA, NICHT unsere eigene Mesh-CA.
+  // `selectTrustDistributionCa` wählt die erste Kandidaten-CA, die das Serving-Cert tatsächlich
+  // verifiziert (Issuer-CA bevorzugt, eigene CA als Legacy-/Default-Fallback). Verifiziert KEINE
+  // → null statt eines nicht-validierenden/leeren Ankers: dann KEINE Pairing-Distribution
+  // registrieren (fail-closed), sonst bekämen neu gepairte Peers einen Anker, der unseren
+  // Server nicht validiert.
+  const pairingRouteBase = {
     store: pairingStore,
     agentId: selfIdentityUri,
     hostname: config.daemon.hostname,
     publicKeyPem: identity.publicKeyPem,
-    // ADR-024 CR-HIGH-2: gepairte Peers müssen die CA bekommen, die unser SERVING-Cert
-    // ausgestellt hat — bei einem behaltenen .94-signierten kanonischen Cert ist das die
-    // .94-Attesting-CA, NICHT unsere eigene Mesh-CA. Sonst könnten neu gepairte Peers unser
-    // Cert nicht validieren. Fallback: eigene CA (Legacy-/Default-Fall).
-    caCertPem: servingCertIssuerCaPem ?? tlsBundle?.caCertPem ?? '',
     fingerprint: identity.fingerprint,
     log,
     trustStoreNotifier,
-  });
+  };
+  if (tlsBundle) {
+    const trustDistributionCa = selectTrustDistributionCa({
+      servingCertPem: tlsBundle.certPem,
+      candidateCaPems: [servingCertIssuerCaPem, tlsBundle.caCertPem],
+    });
+    if (trustDistributionCa) {
+      registerPairingRoutes(cardServer.getServer(), { ...pairingRouteBase, caCertPem: trustDistributionCa });
+    } else {
+      // fail-closed: keine Kandidaten-CA verifiziert unser Serving-Cert → KEINE Pairing-Routen,
+      // sonst bekämen neu gepairte Peers einen Trust-Anker, der unseren Server nicht validiert.
+      log.error(
+        'ADR-024 MEDIUM-2: keine Kandidaten-CA verifiziert das eigene Serving-Cert → Trust-Distribution fail-closed: Pairing-Routen NICHT registriert (inkonsistente Issuer-Topologie). Cert-Re-Enroll/CA-Refresh nötig.',
+      );
+    }
+  } else {
+    // TLS deaktiviert (Loopback/lokaler Modus): keine mTLS-Trust-Distribution möglich —
+    // bisheriges Verhalten beibehalten (Pairing-Routen ohne ausstellenden CA-Anker).
+    registerPairingRoutes(cardServer.getServer(), { ...pairingRouteBase, caCertPem: '' });
+  }
 
   // 8c1b. Token-Onboarding API (ADR-016)
   // Load CA key for cert-signing (only admin nodes have this)

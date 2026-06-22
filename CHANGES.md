@@ -6,7 +6,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-06-20 17:35
+## [Unreleased] — 2026-06-22 21:50
+
+### v0.34.20 (Bug-Fix — Christian-autorisiert; KEIN Deploy/Flag-Flip/Re-Enroll) — fix(tls): ADR-024 Rollout-Gate — die 2 MERGE-blockierenden MEDIUMs (#165) geschlossen
+
+Schließt die beiden vor Re-Enroll zwingend zu klärenden ADR-024-MEDIUMs (CR/PC gpt-5.x aus #165). **Reiner Korrektheits-/Härtungs-Fix, kein neues Verhalten im Normalfall; kein Deploy/Re-Enroll/Flag.**
+
+- **MEDIUM-1 — CA-Gültigkeit fail-closed (`tls.ts` `verifyPeerCert`):** prüft jetzt zusätzlich zum Leaf-Fenster auch das Gültigkeitsfenster der **ausstellenden CA** (`notBefore/notAfter`). `caCert.verify` validiert nur die Signatur, nicht ob die CA selbst (noch) gültig ist → eine abgelaufene/noch-nicht-gültige Issuer-CA wird nun weder im Retention- noch im Flip-/Trust-Distribution-Pfad als Anker akzeptiert. Wirkt downstream durch `isRetainableCanonicalCert` (abgelaufene Attesting-CA → kein Retain → Legacy statt stillem canonical-Verlust auf eine tote CA).
+- **MEDIUM-2 — Trust-Distribution-Lifecycle fail-closed (`tls.ts` `selectTrustDistributionCa` neu, rein + `index.ts`-Verdrahtung):** die an gepairte Peers verteilte CA MUSS unser eigenes Serving-Cert verifizieren (CR-HIGH-2). Helper wählt die erste Kandidaten-CA (`[Issuer-CA, eigene CA]`), die das Serving-Cert kryptografisch bestätigt; verifiziert keine → `null`. Im Boot wird die Pairing-Distribution dann **fail-closed NICHT registriert** (statt vorher `caCertPem ?? ''` = leerer Anker) + `log.error`. TLS-deaktiviert-Pfad (Loopback) unverändert.
+
+**Tests (`tls.test.ts`, +9 → 30):** MEDIUM-1 (CA gültig→true; abgelaufene CA→false trotz gültigem Leaf+Signatur; noch-nicht-gültige CA→false); MEDIUM-2 `selectTrustDistributionCa` (Issuer-CA bei behaltenem fremd-Cert; eigene CA im Default; falsche-erst-Kandidat-Skip; **abgelaufene-erst-Kandidat-Skip**; fail-closed bei keiner/fehlendem Serving-Cert/leeren Kandidaten); **Retention-Regression** (abgelaufene Attesting-CA → regeneriert Legacy). 1093 daemon unit grün, 6 integration grün, tsc 0. **CO/CG:** n/a (Bug-Fix). **CR:** clink **claude** (codereviewer) — 0 CRITICAL/HIGH; 1 MEDIUM (Test-Coverage-Lücke der downstream `caValid`-Pfade) → mit 2 Tests geschlossen. **PC:** `pal:precommit` internal — 0 Issues. **getPeerId-Teil von B7** war bereits via #175 (4b55f69) auf main (Tests grün) → kein Code nötig.
 
 ### v0.34.19 (DRAFT — Christian-autorisiert; reine Entscheidung, KEIN Endpoint/Forward/mcporter) — feat(discovery): ADR-028 D4-b (Start) — MCP-Routing-Entscheidung (self/remote/none)
 

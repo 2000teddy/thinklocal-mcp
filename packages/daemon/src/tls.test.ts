@@ -7,10 +7,37 @@ import {
   createMeshCA,
   createNodeCert,
   verifyPeerCert,
+  selectTrustDistributionCa,
   extractSpiffeUri,
   isRetainableCanonicalCert,
   loadOrCreateTlsBundle,
 } from './tls.js';
+
+const DAY = 24 * 3600_000;
+
+// Mintet eine self-signed CA mit explizitem Gültigkeitsfenster (für Time-Window-Tests, ADR-024
+// MEDIUM-1). Leaf-Certs werden separat via createNodeCert (zeitlich gültiges Leaf) signiert, so
+// dass nur die CA-Gültigkeit das Verhalten bestimmt.
+function mintCaWithValidity(notBefore: Date, notAfter: Date): { caCertPem: string; caKeyPem: string } {
+  const keys = forge.pki.rsa.generateKeyPair(2048);
+  const cert = forge.pki.createCertificate();
+  cert.publicKey = keys.publicKey;
+  cert.serialNumber = '01' + Math.abs(notAfter.getTime() % 9973).toString(16);
+  cert.validity.notBefore = notBefore;
+  cert.validity.notAfter = notAfter;
+  const attrs = [
+    { name: 'commonName', value: `thinklocal Mesh CA validity-${notAfter.getTime()}` },
+    { name: 'organizationName', value: 'thinklocal-mcp' },
+  ];
+  cert.setSubject(attrs);
+  cert.setIssuer(attrs);
+  cert.setExtensions([
+    { name: 'basicConstraints', cA: true, critical: true },
+    { name: 'keyUsage', keyCertSign: true, cRLSign: true, critical: true },
+  ]);
+  cert.sign(keys.privateKey, forge.md.sha256.create());
+  return { caCertPem: forge.pki.certificateToPem(cert), caKeyPem: forge.pki.privateKeyToPem(keys.privateKey) };
+}
 
 // ADR-024: Canonical-Cert-Retention.
 describe('ADR-024 — Canonical-Cert-Retention', () => {
@@ -172,6 +199,23 @@ describe('ADR-024 — Canonical-Cert-Retention', () => {
         expect(extractSpiffeUri(bundle.certPem)).toBe(LEGACY);
       } finally { rmSync(dir, { recursive: true, force: true }); }
     });
+
+    // CR (claude codereviewer) — MEDIUM-1 wirkt auch durch isRetainableCanonicalCert: eine
+    // ABGELAUFENE Attesting-CA darf das kanonische Cert NICHT mehr behalten (verifyPeerCert
+    // caValid=false) → regeneriert auf Legacy statt eine abgelaufene CA als Anker zu akzeptieren.
+    it('Retention greift NICHT bei ABGELAUFENER Attesting-CA → regeneriert (Legacy)', () => {
+      const expiredAttesting = mintCaWithValidity(new Date(Date.now() - 400 * DAY), new Date(Date.now() - DAY));
+      const expiredSignedCert = createNodeCert(expiredAttesting, 'node', CANON, []);
+      const dir = setupTls(ownCa, expiredSignedCert);
+      try {
+        const bundle = loadOrCreateTlsBundle(dir, 'node', LEGACY, undefined, 'ownca56', {
+          canonicalSpiffeUri: CANON,
+          trustedAttestingCaPems: [expiredAttesting.caCertPem],
+        });
+        expect(extractSpiffeUri(bundle.certPem)).toBe(LEGACY);
+        expect(bundle.certPem).not.toBe(expiredSignedCert.certPem);
+      } finally { rmSync(dir, { recursive: true, force: true }); }
+    });
   });
 });
 
@@ -220,5 +264,93 @@ describe('TLS — Lokale CA und Zertifikate', () => {
     const bundle2 = createNodeCert(ca, 'host-2', 'spiffe://thinklocal/host/host-2/agent/b');
     // Zertifikate sind unterschiedlich
     expect(bundle1.certPem).not.toBe(bundle2.certPem);
+  });
+});
+
+// ADR-024 Rollout-Gate — die zwei MERGE-/DEPLOY-blockierenden MEDIUMs aus #165.
+describe('ADR-024 MEDIUM-1 — CA-Gültigkeit im Retention-/Verify-Pfad fail-closed', () => {
+  it('akzeptiert: CA gültig UND Leaf gültig', () => {
+    const ca = mintCaWithValidity(new Date(Date.now() - DAY), new Date(Date.now() + 365 * DAY));
+    const leaf = createNodeCert(ca, 'node', 'spiffe://thinklocal/node/12D3KooWValidCA');
+    expect(verifyPeerCert(ca.caCertPem, leaf.certPem)).toBe(true);
+  });
+
+  it('lehnt ab (fail-closed): ABGELAUFENE CA, obwohl Leaf zeitlich gültig + korrekt signiert', () => {
+    const expiredCa = mintCaWithValidity(new Date(Date.now() - 400 * DAY), new Date(Date.now() - DAY));
+    const leaf = createNodeCert(expiredCa, 'node', 'spiffe://thinklocal/node/12D3KooWExpiredCA');
+    // Signatur stimmt + Leaf-Fenster ist gültig — nur die CA ist abgelaufen.
+    expect(verifyPeerCert(expiredCa.caCertPem, leaf.certPem)).toBe(false);
+  });
+
+  it('lehnt ab (fail-closed): NOCH-NICHT-GÜLTIGE CA (notBefore in der Zukunft)', () => {
+    const futureCa = mintCaWithValidity(new Date(Date.now() + 10 * DAY), new Date(Date.now() + 400 * DAY));
+    const leaf = createNodeCert(futureCa, 'node', 'spiffe://thinklocal/node/12D3KooWFutureCA');
+    expect(verifyPeerCert(futureCa.caCertPem, leaf.certPem)).toBe(false);
+  });
+});
+
+describe('ADR-024 MEDIUM-2 — selectTrustDistributionCa (Trust-Distribution fail-closed)', () => {
+  const attestingCa = createMeshCA('thinklocal', 'admin94');
+  const ownCa = createMeshCA('thinklocal', 'ownca56');
+  // Serving-Cert wie bei einem own-CA-Node, der ein .94-signiertes kanonisches Cert BEHALTEN hat.
+  const retainedServing = createNodeCert(attestingCa, 'node', 'spiffe://thinklocal/node/12D3KooWRetained');
+  // Serving-Cert wie bei einem normalen Node: von der eigenen CA signiert.
+  const ownServing = createNodeCert(ownCa, 'node', 'spiffe://thinklocal/node/12D3KooWOwn');
+
+  it('wählt die Issuer-CA (nicht die eigene CA) für ein behaltenes fremd-signiertes Cert', () => {
+    const ca = selectTrustDistributionCa({
+      servingCertPem: retainedServing.certPem,
+      candidateCaPems: [attestingCa.caCertPem, ownCa.caCertPem],
+    });
+    expect(ca).toBe(attestingCa.caCertPem);
+  });
+
+  it('wählt die eigene CA für ein eigen-signiertes Cert (Legacy-/Default-Fall)', () => {
+    const ca = selectTrustDistributionCa({
+      servingCertPem: ownServing.certPem,
+      candidateCaPems: [undefined, ownCa.caCertPem],
+    });
+    expect(ca).toBe(ownCa.caCertPem);
+  });
+
+  it('überspringt eine nicht-verifizierende erste Kandidaten-CA und nimmt die passende', () => {
+    // Reihenfolge bewusst „falsch zuerst": ownCa verifiziert das .94-Cert NICHT → attestingCa gewinnt.
+    const ca = selectTrustDistributionCa({
+      servingCertPem: retainedServing.certPem,
+      candidateCaPems: [ownCa.caCertPem, attestingCa.caCertPem],
+    });
+    expect(ca).toBe(attestingCa.caCertPem);
+  });
+
+  // CR (claude codereviewer): die MEDIUM-1-CA-Gültigkeit auch durch den Distribution-Pfad testen —
+  // eine ABGELAUFENE erste Kandidaten-CA muss übersprungen werden (caValid=false in verifyPeerCert).
+  it('überspringt eine ABGELAUFENE erste Kandidaten-CA und nimmt die zeitlich gültige zweite', () => {
+    const expiredCa = mintCaWithValidity(new Date(Date.now() - 400 * DAY), new Date(Date.now() - DAY));
+    const ca = selectTrustDistributionCa({
+      servingCertPem: ownServing.certPem,
+      candidateCaPems: [expiredCa.caCertPem, ownCa.caCertPem],
+    });
+    expect(ca).toBe(ownCa.caCertPem);
+  });
+
+  it('fail-closed: KEINE Kandidaten-CA verifiziert das Serving-Cert → null', () => {
+    const foreign = createMeshCA('thinklocal', 'foreign');
+    const ca = selectTrustDistributionCa({
+      servingCertPem: retainedServing.certPem,
+      candidateCaPems: [ownCa.caCertPem, foreign.caCertPem],
+    });
+    expect(ca).toBeNull();
+  });
+
+  it('fail-closed: fehlendes Serving-Cert (kein tlsBundle) → null', () => {
+    expect(selectTrustDistributionCa({ servingCertPem: undefined, candidateCaPems: [attestingCa.caCertPem] })).toBeNull();
+  });
+
+  it('fail-closed: nur undefined/leere Kandidaten → null (kein leerer Anker verteilt)', () => {
+    const ca = selectTrustDistributionCa({
+      servingCertPem: ownServing.certPem,
+      candidateCaPems: [undefined, undefined],
+    });
+    expect(ca).toBeNull();
   });
 });
