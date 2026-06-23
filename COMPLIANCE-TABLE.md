@@ -982,4 +982,18 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-06-23 10:30 — v0.34.21 feat(macos): ADR-029 LaunchDaemon — Template + Render-Kern (Prep).*
+## Session 2026-06-23 11:05 — v0.34.22 feat(discovery): ADR-028 D4-b MCP-Forward-Spec-Builder (Prep)
+
+(v0.34.21 = ADR-029 LaunchDaemon-Prep auf separatem Branch/PR #192.)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|----|
+| v0.34.22 | (neu) | 2026-06-23 11:05 | —   | —  | ✅ | ✅ | ✅ | ✅ | CR clink claude (codereviewer): 0 CRITICAL/HIGH; 1 MEDIUM (URL-Base statt `parsed.origin` → Path/Query/Userinfo-Pollution) → gefixt + 2 Regressionstests |
+
+**CO/CG:** — (Folge-Slice eines akzeptierten ADR-028 D4; kein neuer Architektur-Konflikt). **TS:** `mcp-forward.test.ts` (14: none/local/remote, URL/Sender/Tier/Pin, Flag, trailing-slash, Servername-Encoding, CR-Regression origin/userinfo, fail-closed kein/leer/nicht-HTTPS/ungültig/leerer-Sender, local-exec ohne Sender). 1107 daemon unit grün, tsc 0. **CR:** clink **claude** codereviewer (Hausregel: nur claude/codex/agy, **nie MiniMax/pal:chat**; codex-CLI nicht installiert) — 0 CRITICAL/HIGH, 1 MEDIUM gefixt. **PC:** `pal:precommit` internal — 0 Issues. **DO:** CHANGES (v0.34.22), COMPLIANCE, ADR-028-D4-Notiz.
+
+**Status:** ADR-028 D4-b Forward-Spec — reiner `buildMcpForwardSpec` (local-exec/remote-forward/unavailable, fail-closed, D2-Pin + D3-Sender in der Spec). **KEIN `/api/mcp`-Ingress, kein echter mTLS-Forward, kein mcporter-Exec, kein Deploy.** Folge-Slices (Christian-Gate): Fastify-Ingress `/api/mcp/<server>` → undici-mTLS-Forward (D2-Dispatcher) → lokaler mcporter-Exec → 3-Stufen-Enforcement (D4-d).
+
+---
+
+*Letzte Aktualisierung: 2026-06-23 11:05 — v0.34.22 feat(discovery): ADR-028 D4-b MCP-Forward-Spec-Builder (Prep).*

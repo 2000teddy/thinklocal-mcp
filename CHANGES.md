@@ -6,7 +6,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-06-23 10:30
+## [Unreleased] — 2026-06-23 11:05
+
+### v0.34.22 (Prep — Christian-autorisiert; reine Spec, KEIN Ingress/Forward/mcporter/Deploy) — feat(discovery): ADR-028 D4-b — MCP-Forward-Spec-Builder (mTLS-Forward + local-exec, deploy-frei)
+
+Zweiter D4-b-Slice nach dem Routing-Planner (v0.34.19/#190): übersetzt einen `McpRoutePlan` in eine **ausführungs-freie** Forward-Spezifikation. **Kein `/api/mcp`-Endpoint, kein echter mTLS-Forward, kein mcporter-Exec, kein Deploy** (Folge-Slices, Christians Gate).
+
+- **`mcp-forward.ts`** (neu, rein): `buildMcpForwardSpec({plan, selfSenderUri, resolvePeer, requireServerIdentity?})` → `local-exec` (eigener Node serviert) | `remote-forward` (Forward an Owner-Peer) | `unavailable` (fail-closed).
+- **`remote-forward`** trägt `url = ${peerOrigin}/api/mcp/<server>`, `senderUri` (eigene SPIFFE-Identität für **D3**), `expectedServerSpiffeId = Owner-agent_id` (für **D2**-`checkServerIdentity`-Pin) und `requireServerIdentity` (Spiegel von `TLMCP_SPIFFE_SERVER_IDENTITY`).
+- **Fail-closed:** kein Provider, kein/leerer Endpoint, **nicht-HTTPS**-Endpoint (kein Plaintext-Forward), ungültige URL, oder fehlende eigene Sender-Identität → `unavailable` mit Grund. URL aus `URL.origin` (verwirft Path/Query/Userinfo am Endpoint, CR-MEDIUM), Servername `encodeURIComponent`.
+- **Rein:** kein Netz/mTLS, kein `child_process`/mcporter, kein I/O — `resolvePeer` (im Daemon `MeshManager.getPeer`→`endpoint`) injiziert.
+
+**Tests (`mcp-forward.test.ts`, 14):** none/local/remote, URL/Sender/Tier/Pin, requireServerIdentity-Flag, trailing-slash, Servername-Encoding, **CR-Regression** (origin verwirft Path/Query + Userinfo), fail-closed (kein/leerer/nicht-HTTPS/ungültiger Endpoint, leerer Sender), local-exec ohne Sender. 1107 daemon unit grün, tsc 0. **CO/CG:** n/a (Folge-Slice eines akzeptierten ADR). **CR:** clink **claude** codereviewer — 0 CRITICAL/HIGH, 1 MEDIUM (URL-origin) gefixt + 2 Regressionstests. **PC:** `pal:precommit` internal — 0 Issues. **DO:** CHANGES, COMPLIANCE, ADR-028-D4-Notiz.
 
 ### v0.34.21 (Prep — Christian-autorisiert; KEIN Installer-Umbau/Deploy/Install) — feat(macos): ADR-029 LaunchDaemon — Template + getesteter Render-Kern
 
@@ -17,7 +28,6 @@ Bereitet den TODO-Umstieg „macOS-Installer auf LaunchDaemon statt LaunchAgent"
 - **`docs/architecture/ADR-029-macos-launchdaemon.md`** (neu): Design + ehrliche Abgrenzung, was bewusst NICHT enthalten ist (Installer-`bootstrap system`, Service-User-Anlage, README-Umstellung, Live-Install/Reboot = Christian/FileVault).
 
 **Tests (`launchd-plist.test.ts`, 19):** Validierung (absolut/leer/whitespace), Render (Platzhalter ersetzt, UserName/GroupName, CONFIG-Default/-Override, Log-Pfade), Fail-closed (ungültiger Kontext, unbekannter Platzhalter), **CR-Regression** (XML-Escaping von `&`, Element-Injection-Abwehr, `{{lowercase}}`-Clean-Check), Template-Regression (keine hartkodierten Literale). 1112 daemon unit grün, tsc 0. **CO/CG:** n/a (beschlossenes Backlog-Item, kein Architektur-Konflikt). **CR:** clink **claude** codereviewer — 1 HIGH (XML-Escaping) + 1 MEDIUM (Platzhalter-Bypass) **gefixt + Regressionstests**. **PC:** `pal:precommit` internal — 0 Issues.
-
 ### v0.34.20 (Bug-Fix — Christian-autorisiert; KEIN Deploy/Flag-Flip/Re-Enroll) — fix(tls): ADR-024 Rollout-Gate — die 2 MERGE-blockierenden MEDIUMs (#165) geschlossen
 
 Schließt die beiden vor Re-Enroll zwingend zu klärenden ADR-024-MEDIUMs (CR/PC gpt-5.x aus #165). **Reiner Korrektheits-/Härtungs-Fix, kein neues Verhalten im Normalfall; kein Deploy/Re-Enroll/Flag.**

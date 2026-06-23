@@ -79,3 +79,23 @@ Die Stufe ist Teil der Service-Beschreibung (`execution_tier: self|gate|consensu
 1. **Single- vs Multi-Provider** je MCP: genau ein servierender Node, oder mehrere mit Failover/Last-Routing?
 2. **Stufen-Zuordnung:** wird `execution_tier` rein aus `permissions`/`trust_level` abgeleitet, oder pro MCP-Server explizit in der Share-Config gesetzt (Override)? Default-Ableitung: read-only→self, credential/write→gate.
 3. **Approval-Caching:** gate/consensus pro Tool-Call vs. mit TTL gecacht?
+
+## D4-b Forward-Spec (Prep, v0.34.22 — deploy-frei)
+
+Zwischen dem reinen Routing-Planner (`planMcpRoute`, v0.34.19/#190) und dem späteren
+Live-Ingress steht die **Forward-Spec**: `mcp-forward.ts` `buildMcpForwardSpec(plan, …)`
+übersetzt einen `McpRoutePlan` in eine ausführungs-freie Spezifikation:
+
+- `local-exec` — eigener Node serviert (späterer lokaler mcporter-Exec; `execution_tier` durchgereicht),
+- `remote-forward` — Forward an den Owner-Peer: `url = ${peerEndpoint}/api/mcp/<server>`,
+  `senderUri` (eigene SPIFFE-Identität für **D3**-Sender-Binding), `expectedServerSpiffeId`
+  (= Owner-`agent_id` für den **D2**-`checkServerIdentity`-Pin) und `requireServerIdentity`
+  (Spiegel von `TLMCP_SPIFFE_SERVER_IDENTITY`),
+- `unavailable` — fail-closed bei jeder Lücke: kein Provider, kein/leerer Endpoint, **nicht-HTTPS**
+  Endpoint (kein Plaintext-Forward), ungültige URL, fehlende eigene Sender-Identität.
+
+**Rein:** kein Netz/mTLS, kein `child_process`/mcporter, kein I/O. Die Endpoint-Auflösung wird als
+`resolvePeer`-Callback injiziert (im Daemon: `MeshManager.getPeer` → `MeshPeer.endpoint`).
+**NICHT enthalten (Folge-Slices, Christians Gate):** der `/api/mcp/<server>`-Fastify-Ingress, der
+tatsächliche undici-mTLS-Forward (D2-Dispatcher + Server-Identity-Pin), der lokale mcporter-Exec
+und das 3-Stufen-Enforcement (D4-d).
