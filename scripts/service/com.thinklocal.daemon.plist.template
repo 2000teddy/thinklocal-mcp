@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  ADR-029: macOS LaunchDaemon (System-Domain) statt LaunchAgent.
+  Diese Datei ist ein TEMPLATE. Die geschweiften Platzhalter (z.B. NODE_BIN, REPO) werden vom
+  Installer bzw. von renderLaunchDaemonPlist() (packages/daemon/src/launchd-plist.ts) ersetzt.
+  KEINE hartkodierten Pfade/Benutzer hier eintragen — alles kommt aus dem Kontext.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.thinklocal.daemon</string>
+
+    <!-- ADR-029: System-Domain-Daemon läuft NICHT als root, sondern als dedizierter
+         Benutzer/Gruppe (Least-Privilege). UserName/GroupName sind in LaunchAgents
+         nicht erlaubt, in System-LaunchDaemons hingegen erforderlich für headless-Start. -->
+    <key>UserName</key>
+    <string>{{RUN_USER}}</string>
+    <key>GroupName</key>
+    <string>{{RUN_GROUP}}</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{NODE_BIN}}</string>
+        <string>{{REPO}}/packages/daemon/node_modules/.bin/tsx</string>
+        <string>{{REPO}}/packages/daemon/src/index.ts</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>TLMCP_CONFIG</key>
+        <string>{{CONFIG}}</string>
+        <key>TLMCP_DATA_DIR</key>
+        <string>{{DATA_DIR}}</string>
+        <key>TLMCP_NO_TLS</key>
+        <string>0</string>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+
+    <!-- Durable Start: bei Boot laden (nach FileVault-Unlock; System-Domain startet
+         headless ohne GUI-Login, im Gegensatz zum LaunchAgent). -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- KeepAlive nur bei nicht-sauberem Exit neu starten — KEIN mystery-relauncher,
+         der ein bewusst gestopptes/SIGTERM-beendetes daemon wieder hochzieht. -->
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>{{DATA_DIR}}/logs/daemon.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>{{DATA_DIR}}/logs/daemon.error.log</string>
+
+    <key>WorkingDirectory</key>
+    <string>{{REPO}}</string>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+</dict>
+</plist>

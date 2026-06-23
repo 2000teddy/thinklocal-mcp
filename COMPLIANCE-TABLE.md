@@ -967,3 +967,19 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 ---
 
 *Letzte Aktualisierung: 2026-06-22 21:50 — v0.34.20 fix(tls): ADR-024 Rollout-Gate — 2 MEDIUMs (#165) geschlossen.*
+
+---
+
+## Session 2026-06-23 10:30 — v0.34.21 feat(macos): ADR-029 LaunchDaemon — Template + Render-Kern (Prep)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|----|
+| v0.34.21 | (neu) | 2026-06-23 10:30 | —   | —  | ✅ | ✅ | ✅ | ✅ | CR clink claude (codereviewer): 1 HIGH (XML-Escaping/Element-Injection) + 1 MEDIUM (`{{lowercase}}`-Bypass) → beide gefixt + 4 Regressionstests |
+
+**CO/CG:** — (beschlossenes Backlog-Item B6 „LaunchDaemon-Umstieg", kein Architektur-Konflikt). **TS:** `launchd-plist.test.ts` (19: Validierung, Render, Fail-closed, CR-Regression XML-Escaping/Injection/lowercase, Template-Regression). 1112 daemon unit grün, tsc 0. **CR:** clink **claude** codereviewer (Hausregel: nur claude/codex/agy, **nie MiniMax/pal:chat**; codex-CLI nicht installiert) — 1 HIGH + 1 MEDIUM gefixt. **PC:** `pal:precommit` internal — 0 Issues. **DO:** CHANGES (v0.34.21), COMPLIANCE, TODO, ADR-029.
+
+**Status:** ADR-029-Prep deploy-frei — System-Domain-Plist-Template + getesteter, fail-closed Render-Kern (`launchd-plist.ts`). **KEIN Installer-Umbau, kein `launchctl`/`bootstrap`, kein Deploy/Install.** Offen für Christian-Gate: `install_macos_service`-Umbau auf `bootstrap system` + `/Library/LaunchDaemons/`, Service-User-Anlage, README/INSTALL-Umstellung, Live-Install/Reboot (FileVault).
+
+---
+
+*Letzte Aktualisierung: 2026-06-23 10:30 — v0.34.21 feat(macos): ADR-029 LaunchDaemon — Template + Render-Kern (Prep).*

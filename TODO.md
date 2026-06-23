@@ -28,7 +28,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 ### Offen — Backlog (Design-First, nächste Sprints)
 - [x] 🟡 **registry_sync-Coordinator `getPeerId`-Bug + Capability-Count-Drift** — `multiaddrs[0].getPeerId is not a function` → ✅ **gefixt via #175 (4b55f69, `libp2p-runtime.ts` `toPeerId`/`peerIdFromString` in dialProtocol+hangUp), Tests grün.** (5-Tage-Plan B7, Teil 1.) Live-Re-Check `/api/status converged` bleibt Deploy-abhängig (Christian-Gate).
 - [ ] 🟡 **ADR-028: intelligente NIC-Auswahl + allowed-CIDR überstimmt `tailscale*/utun*`-Exclude** — ermöglicht .55-self-advertise über Tailscale + saubere mDNS-NIC-Wahl. (5-Tage-Plan B4/B5.)
-- [ ] 🟡 **ADR-029: macOS-LaunchDaemon-Installer** — durable Start, Env-durable, KeepAlive/RunAtLoad, kein mystery-relauncher, FileVault-aware. (5-Tage-Plan B6.)
+- [ ] 🟡 **ADR-029: macOS-LaunchDaemon-Installer** — durable Start, Env-durable, KeepAlive/RunAtLoad, kein mystery-relauncher, FileVault-aware. (5-Tage-Plan B6.) **Prep erledigt (v0.34.21):** ADR-029-Doku, System-Domain-Plist-Template, getesteter fail-closed Render-Kern `launchd-plist.ts` (19 Tests, XML-Escaping/Injection-fest). **Offen (Christian-Deploy-Gate):** Installer-Umbau + `bootstrap system` + Service-User + Live-Install/Reboot.
 - [ ] 🟡 **Owner-wins Phase-2: signierte Per-Key-Origin-Provenance** (ADR-020 v2.2 Phase-2) — additiv, Schema-Feld `provenance` reserviert. Nötig falls Mesh sparse/partitioniert.
 - [ ] 🟡 **CLI-Join: request-lokaler TLS-Skip statt prozessweit** (v0.30.1) — undici-`Agent({connect:{rejectUnauthorized:false}})` + dispatcher; braucht undici als CLI-Dep.
 
@@ -348,7 +348,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
   - [ ] Tests: Auswahllogik mit gefakten `os.networkInterfaces()`-Outputs (3-Interface-Mac, Pi mit einem Interface, Linux-Server mit Tailscale + eth0).
   - [ ] Regression: nach Sleep/Wake auf macOS muessen die Sockets neu gebunden werden (`pmset`-Sleep-Wakeup-Hook oder periodischer Health-Check der Browse-Antworten).
 - [ ] 🟠 **macOS-Installer auf LaunchDaemon umstellen** (statt LaunchAgent) — fuer headless/SSH-only/FileVault-Setups noetig. Details: `docs/MACOS-DEPLOYMENT.md` (Stand 2026-05-16). Konkret abzuarbeiten:
-  - [ ] `scripts/service/com.thinklocal.daemon.plist` zur Template-Datei (`*.plist.template`) machen mit Platzhaltern `{{USER}}`, `{{GROUP}}`, `{{HOME}}`, `{{NODE_BIN}}`, `{{REPO}}`. **Keine** hartkodierten `chris`/`staff`/`/Users/chris`-Pfade.
+  - [x] `scripts/service/com.thinklocal.daemon.plist.template` angelegt mit Platzhaltern `{{RUN_USER}}`, `{{RUN_GROUP}}`, `{{DATA_DIR}}`, `{{CONFIG}}`, `{{NODE_BIN}}`, `{{REPO}}` (System-Domain, `UserName`/`GroupName`). Keine hartkodierten Literale (Regressionstest). Render+Validierung via `launchd-plist.ts` (fail-closed, XML-escaped). ✅ v0.34.21
   - [ ] `scripts/install.sh` (macOS-Zweig, aktuell ab Zeile ~280): Template per `sed` mit `$SUDO_USER`/`id -gn`/`eval echo ~$USER`/`which node`-Werten befuellen, Output nach `/Library/LaunchDaemons/`. Dateirechte: `chown root:wheel`, `chmod 644`.
   - [ ] Installer-Sub-Task: Wrapper-Skript `~/<user>/.thinklocal/bin/daemon-launchagent.sh` aus Template generieren (analog), `chmod +x`. Wrapper enthaelt Netzwartungs-Loop gegen `EHOSTUNREACH 224.0.0.251:5353`-Race.
   - [ ] Installer prueft: User existiert, `$SUDO_USER` ist gesetzt (sonst Abbruch mit klarer Fehlermeldung), Node 22+ verfuegbar, kein bestehender LaunchAgent unter selbem Label (vorher `bootout` + `mv` zu `.disabled.<datum>`).
