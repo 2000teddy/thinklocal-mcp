@@ -997,3 +997,19 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 ---
 
 *Letzte Aktualisierung: 2026-06-23 11:05 — v0.34.22 feat(discovery): ADR-028 D4-b MCP-Forward-Spec-Builder (Prep).*
+
+---
+
+## Session 2026-06-23 12:42 — v0.34.23 feat(discovery): ADR-028 D4-b D2-Forward-Dispatch-Builder (Prep)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|----|
+| v0.34.23 | (neu) | 2026-06-23 12:42 | —   | —  | ✅ | ✅ | ✅ | ✅ | CR clink claude (codereviewer): 0 CRITICAL/HIGH; 1 MEDIUM (fehlender Exhaustiveness-Guard → künftige Spec-Variante könnte still in remote-Dispatch fallen) → gefixt + Regressionstest |
+
+**CO/CG:** — (Folge-Slice akzeptiertes ADR-028 D4). **TS:** `mcp-forward-dispatch.test.ts` (10: none/local/remote, Plan-Felder, D2-Pin an/aus + TOFU, Invariante Pin↔Verifier, opts-Propagation, Defaults, Purity, CR-Regression fail-fast unbekannter kind). 1136 daemon unit grün, tsc 0. **CR:** clink **claude** codereviewer (Hausregel: nur claude/codex/agy, **nie MiniMax/pal:chat**; codex-CLI nicht installiert) — 0 CRITICAL/HIGH, 1 MEDIUM gefixt. **PC:** `pal:precommit` internal — 0 Issues. **DO:** CHANGES (v0.34.23), COMPLIANCE, ADR-028-D4-Notiz.
+
+**Status:** ADR-028 D4-b D2-Forward-Dispatch — reiner `buildMcpForwardDispatch` (remote-Request-Plan/local/none); verdrahtet D2-Server-Identity (`expectedSpiffeId` ↔ `spiffeServerIdentity`-Invariante) + D3-Sender in den Plan, auf bestehenden `mesh-connect`/`mesh-server-identity`-Bausteinen. **KEIN `fetch`/Dispatch, kein `/api/mcp`-Ingress, kein mcporter-Exec, kein Deploy.** Folge-Slices (Christian-Gate): Fastify-Ingress → echter undici-mTLS-Forward (Executor) → lokales Serving (mcporter-Vertrag offen, ADR-023) → 3-Stufen-Enforcement (D4-d).
+
+---
+
+*Letzte Aktualisierung: 2026-06-23 12:42 — v0.34.23 feat(discovery): ADR-028 D4-b D2-Forward-Dispatch-Builder (Prep).*
