@@ -143,3 +143,53 @@ export function assertRenderedPlistClean(rendered: string): void {
     throw new Error(`[launchd-plist] Legacy-Platzhalter im Output: ${legacy[0]}`);
   }
 }
+
+/** Service-Label (Plist `Label`) + abgeleitete System-Domain-Konstanten (ADR-029). */
+export const LAUNCHD_SERVICE_LABEL = 'com.thinklocal.daemon';
+export const LAUNCHD_SYSTEM_PLIST_PATH = `/Library/LaunchDaemons/${LAUNCHD_SERVICE_LABEL}.plist`;
+
+/**
+ * ADR-029 Installer-Operationalisierung: deterministischer Install/Uninstall-Plan für den
+ * System-Domain-LaunchDaemon. Reine Daten (keine Ausführung) — der Installer (`install.sh`)
+ * konsumiert exakt diese Pfade/Kommandos. Hier getestet, damit Domain/Pfad/Rechte/Migration
+ * EINE getestete Quelle haben (statt nur untestbares Bash). Führt NICHTS aus.
+ */
+export interface LaunchDaemonInstallPlan {
+  label: string;
+  /** Ziel-Plist in der System-Domain. */
+  plistDst: string;
+  /** Datei-Eigentum (System-Domain verlangt root:wheel). */
+  owner: 'root:wheel';
+  /** Datei-Rechte (644 — world-readable, nur root schreibbar). */
+  mode: '644';
+  /** `launchctl <bootstrapArgs...>` lädt den Daemon in die System-Domain. */
+  bootstrapArgs: readonly string[];
+  /** `launchctl <bootoutArgs...>` entlädt ihn (sauberer Stop, kein KeepAlive-Relaunch). */
+  bootoutArgs: readonly string[];
+  /** Alter LaunchAgent-Plist-Pfad des Nutzers — bei Migration entladen + entfernen. */
+  legacyAgentPath: string;
+  /** `launchctl unload <legacyAgentPath>` (alte LaunchAgent-Domain). */
+  legacyUnloadArgs: readonly string[];
+}
+
+/**
+ * Baut den Install/Uninstall-Plan. `userHome` = Home des installierenden Nutzers (für den
+ * Legacy-LaunchAgent-Pfad). Rein; wirft bei leerem/relativem `userHome` (fail-closed).
+ */
+export function buildLaunchDaemonInstallPlan(opts: { userHome: string }): LaunchDaemonInstallPlan {
+  const home = opts.userHome;
+  if (!home || home.trim() === '' || !home.startsWith('/')) {
+    throw new Error(`[launchd-plist] buildLaunchDaemonInstallPlan: ungültiges userHome '${home}'`);
+  }
+  const legacyAgentPath = `${home.replace(/\/+$/, '')}/Library/LaunchAgents/${LAUNCHD_SERVICE_LABEL}.plist`;
+  return {
+    label: LAUNCHD_SERVICE_LABEL,
+    plistDst: LAUNCHD_SYSTEM_PLIST_PATH,
+    owner: 'root:wheel',
+    mode: '644',
+    bootstrapArgs: ['bootstrap', 'system', LAUNCHD_SYSTEM_PLIST_PATH],
+    bootoutArgs: ['bootout', `system/${LAUNCHD_SERVICE_LABEL}`],
+    legacyAgentPath,
+    legacyUnloadArgs: ['unload', legacyAgentPath],
+  };
+}

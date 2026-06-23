@@ -6,7 +6,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-06-23 11:05
+## [Unreleased] — 2026-06-23 13:30
+
+### v0.34.24 (Prep — Christian-autorisiert; Skript-Edit, NICHT ausgeführt; KEIN Deploy/Install) — feat(macos): ADR-029 — Installer auf System-Domain-LaunchDaemon operationalisiert
+
+Zieht ADR-029 (#192 = Template + Render-Kern) deploy-frei nach: der macOS-Installer nutzt jetzt den System-Domain-LaunchDaemon statt LaunchAgent. **Reines Skript-/Code-Edit — `install.sh` wird NICHT ausgeführt; Live-Install/`bootstrap`/Service-User = Christians Gate.**
+
+- **`launchd-plist.ts`**: `buildLaunchDaemonInstallPlan({userHome})` (neu, rein) + `LAUNCHD_SERVICE_LABEL`/`LAUNCHD_SYSTEM_PLIST_PATH` — Pfad (`/Library/LaunchDaemons/…`), `root:wheel`/`644`, `bootstrap`/`bootout system/<label>`, Legacy-Migration als EINE getestete Quelle (fail-closed bei leerem/relativem `userHome`).
+- **`scripts/install.sh`** `install_macos_service` + `cleanup_existing` (macOS): rendert `.plist.template` (sed, Werte escaped), **fail-closed**-Guard gegen verbliebene Platzhalter (spiegelt `assertRenderedPlistClean`), schreibt System-Domain mit `root:wheel`/`644`, `bootstrap system`; **Legacy-LaunchAgent**-Migration (unload+rm im Home des Lauf-Nutzers). Läuft als `${SUDO_USER}` (NICHT root).
+- **CR-Fixes (clink claude, 3 MEDIUM + 2 LOW alle gefixt):** Username gegen `[A-Za-z0-9._-]` validiert + Home via `dscl` **vor** `eval` (Injection-Schutz); `bootout` in **Label-Form** (kein Drift zum getesteten Plan); `cleanup_existing` nutzt das Home des **Lauf-Nutzers** (nicht `$HOME`=/root unter sudo); sed-Werte `&`/`\`/`/`-escaped; leere `NODE_BIN` → fail-closed.
+
+**Tests (`launchd-plist.test.ts`, +4 → 23):** `buildLaunchDaemonInstallPlan` (System-Domain-Pfad/root:wheel/644/bootstrap+bootout, Legacy-Pfad aus userHome, fail-closed userHome, kein LaunchAgents-Ziel). **`bash -n` clean**, 1130 daemon unit grün, tsc 0. **CO/CG:** n/a (Operationalisierung beschlossenes B6). **CR:** clink **claude** codereviewer — 3 MEDIUM + 2 LOW gefixt. **PC:** `pal:precommit` internal — 0 Issues. **DO:** CHANGES, COMPLIANCE, ADR-029.
 
 ### v0.34.22 (Prep — Christian-autorisiert; reine Spec, KEIN Ingress/Forward/mcporter/Deploy) — feat(discovery): ADR-028 D4-b — MCP-Forward-Spec-Builder (mTLS-Forward + local-exec, deploy-frei)
 

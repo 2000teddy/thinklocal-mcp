@@ -57,16 +57,30 @@ läuft. Konkret:
 - `launchd-plist.ts` Renderer/Validator + 15 Unit-Tests (`launchd-plist.test.ts`),
   inkl. Regressionstest „Template enthält keine hartkodierten Benutzer-/Pfad-Literale".
 
+- `launchd-plist.ts` Renderer/Validator + Unit-Tests (`launchd-plist.test.ts`),
+  inkl. Regressionstest „Template enthält keine hartkodierten Benutzer-/Pfad-Literale".
+
+**Operationalisierung (v0.34.24, deploy-frei nachgezogen):**
+- `install_macos_service` (`scripts/install.sh`) auf **System-Domain** umgestellt:
+  rendert das `.plist.template`, validiert fail-closed gegen verbliebene Platzhalter,
+  schreibt nach `/Library/LaunchDaemons/` mit `root:wheel`/`644` und
+  `launchctl bootstrap system`. Läuft als `${SUDO_USER}` (NICHT root; bricht ab, wenn
+  der Service-Nutzer root wäre).
+- **Migration** integriert: alter `~/Library/LaunchAgents/…`-LaunchAgent wird vor dem
+  Bootstrap entladen + entfernt (kein Doppelstart); `cleanup_existing` + Uninstall via
+  `bootout system`.
+- **Getesteter Plan** (`buildLaunchDaemonInstallPlan` in `launchd-plist.ts`): Pfad/Domain/
+  Rechte/Migration als EINE getestete Quelle; der Bash-Installer spiegelt sie.
+- Das Editieren des Skripts ist **deploy-frei** — es wird hier NICHT ausgeführt.
+
 **NICHT enthalten (bewusst — Christians Deploy-Gate):**
-- Umbau von `install_macos_service` auf `bootstrap system` + `/Library/LaunchDaemons/`
-  (root-Schreibzugriff, `sudo`).
-- Anlage des dedizierten Service-Benutzers.
-- README/INSTALL/USER-GUIDE-Umstellung des macOS-Abschnitts.
+- Tatsächliches Ausführen von `install.sh`/`bootstrap system` auf einem Host.
+- Anlage des dedizierten Service-Benutzers (Infra).
 - Live-Install/Reboot-Test (FileVault = Christian).
 
-Diese Schritte sind **Install-/Deploy-Operationen**, die ausdrücklich Christians
-Freigabe brauchen; der getestete Render-Kern + das Template sind die
-Voraussetzung dafür und werden hier vorab abgesichert.
+Diese Schritte sind **Run-/Deploy-Operationen**, die ausdrücklich Christians Freigabe
+brauchen; Template, getesteter Render-Kern + Install-Plan + die Installer-Verdrahtung sind
+die Voraussetzung und hier vorab abgesichert.
 
 ## Konsequenzen
 

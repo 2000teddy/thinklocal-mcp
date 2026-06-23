@@ -997,3 +997,21 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 ---
 
 *Letzte Aktualisierung: 2026-06-23 11:05 — v0.34.22 feat(discovery): ADR-028 D4-b MCP-Forward-Spec-Builder (Prep).*
+
+---
+
+## Session 2026-06-23 13:30 — v0.34.24 feat(macos): ADR-029 Installer auf System-Domain-LaunchDaemon operationalisiert
+
+(v0.34.23 = ADR-028 D4-b D2-Forward-Dispatch auf separatem Branch/PR #195.)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|----|
+| v0.34.24 | (neu) | 2026-06-23 13:30 | —   | —  | ✅ | ✅ | ✅ | ✅ | CR clink claude (codereviewer): 3 MEDIUM (eval-Injection via SUDO_USER, bootout-Label-Drift, cleanup `$HOME` statt Lauf-Nutzer-Home) + 2 LOW (sed-`&`-Escaping, leere NODE_BIN) → ALLE gefixt |
+
+**CO/CG:** — (Operationalisierung des beschlossenen B6/ADR-029; kein Architektur-Konflikt). **TS:** `launchd-plist.test.ts` +4 → 23 (`buildLaunchDaemonInstallPlan`: System-Domain-Pfad/root:wheel/644/bootstrap+bootout-Label, Legacy-Pfad aus userHome, fail-closed userHome, kein LaunchAgents-Ziel). `bash -n` clean, 1130 daemon unit grün, tsc 0. **CR:** clink **claude** codereviewer (Hausregel: nur claude/codex/agy, **nie MiniMax/pal:chat**; codex-CLI nicht installiert) — 3 MEDIUM + 2 LOW gefixt (Username-Validierung+dscl vor eval, sed-Escaping, NODE_BIN-Guard, Label-Form, Lauf-Nutzer-Home). **PC:** `pal:precommit` internal — 0 Issues. **DO:** CHANGES (v0.34.24), COMPLIANCE, ADR-029.
+
+**Status:** ADR-029 operationalisiert — `install.sh` (macOS) nutzt das System-Domain-LaunchDaemon-Template + getesteten Install-Plan (headless/FileVault, Least-Privilege, kein mystery-relauncher), inkl. Legacy-LaunchAgent-Migration. **Reines Skript-/Code-Edit — `install.sh` NICHT ausgeführt.** Offen für Christian-Deploy-Gate: tatsächliches Ausführen von `install.sh`/`bootstrap system`, Service-User-Anlage, Live-Install/Reboot (FileVault).
+
+---
+
+*Letzte Aktualisierung: 2026-06-23 13:30 — v0.34.24 feat(macos): ADR-029 Installer auf System-Domain-LaunchDaemon operationalisiert.*

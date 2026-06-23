@@ -104,18 +104,18 @@ Konfiguration via Umgebungsvariablen:
 # Installieren und starten
 ./scripts/install.sh
 
-# Oder manuell:
-cp scripts/service/com.thinklocal.daemon.plist ~/Library/LaunchAgents/
-# Platzhalter __NODE_PATH__, __INSTALL_DIR__, __HOME__ ersetzen!
-launchctl load ~/Library/LaunchAgents/com.thinklocal.daemon.plist
+# ADR-029: System-Domain LaunchDaemon (headless/FileVault-tauglich, kein GUI-Login noetig).
+# install.sh rendert scripts/service/com.thinklocal.daemon.plist.template, schreibt nach
+# /Library/LaunchDaemons/ (root:wheel, 644) und macht `launchctl bootstrap system`.
+# Erfordert sudo; der Daemon laeuft als ${SUDO_USER} (NICHT root).
 ```
 
-**Steuern:**
+**Steuern (System-Domain):**
 
 ```bash
-launchctl start com.thinklocal.daemon    # Starten
-launchctl stop com.thinklocal.daemon     # Stoppen
-launchctl list | grep thinklocal         # Status pruefen
+sudo launchctl kickstart -k system/com.thinklocal.daemon   # Neustart
+sudo launchctl bootout system/com.thinklocal.daemon        # Stoppen/Deinstallieren
+sudo launchctl print system/com.thinklocal.daemon          # Status pruefen
 ```
 
 ### Linux (systemd)
@@ -448,8 +448,11 @@ TLMCP_NO_TLS=1 npx tsx packages/daemon/src/index.ts
 ### macOS
 
 ```bash
-launchctl unload ~/Library/LaunchAgents/com.thinklocal.daemon.plist
-rm ~/Library/LaunchAgents/com.thinklocal.daemon.plist
+sudo launchctl bootout system/com.thinklocal.daemon
+sudo rm -f /Library/LaunchDaemons/com.thinklocal.daemon.plist
+# Falls noch eine alte LaunchAgent-Installation existiert:
+launchctl unload ~/Library/LaunchAgents/com.thinklocal.daemon.plist 2>/dev/null
+rm -f ~/Library/LaunchAgents/com.thinklocal.daemon.plist
 rm -rf ~/thinklocal-mcp ~/.thinklocal
 # Optional: ~/.mcp.json anpassen (thinklocal-Eintrag entfernen)
 ```
