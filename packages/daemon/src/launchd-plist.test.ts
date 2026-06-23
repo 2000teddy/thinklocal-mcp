@@ -9,6 +9,9 @@ import {
   validateLaunchDaemonContext,
   assertRenderedPlistClean,
   escapeXml,
+  buildLaunchDaemonInstallPlan,
+  LAUNCHD_SERVICE_LABEL,
+  LAUNCHD_SYSTEM_PLIST_PATH,
   type LaunchDaemonContext,
 } from './launchd-plist.js';
 
@@ -136,5 +139,35 @@ describe('escapeXml + Render-Escaping', () => {
     const out = renderLaunchDaemonPlist(TEMPLATE, { ...validCtx(), repoDir: inject });
     expect(out).not.toContain('<string>/bin/evil.sh</string>'); // NICHT als echtes Element injiziert
     expect(out).toContain('&lt;/string&gt;&lt;string&gt;'); // escaped als Text
+  });
+});
+
+describe('buildLaunchDaemonInstallPlan (ADR-029 Installer-Operationalisierung)', () => {
+  it('liefert den System-Domain-Plan: Pfad, root:wheel, 644, bootstrap/bootout system', () => {
+    const plan = buildLaunchDaemonInstallPlan({ userHome: '/Users/svc-thinklocal' });
+    expect(plan.label).toBe(LAUNCHD_SERVICE_LABEL);
+    expect(plan.plistDst).toBe(LAUNCHD_SYSTEM_PLIST_PATH);
+    expect(plan.plistDst).toBe('/Library/LaunchDaemons/com.thinklocal.daemon.plist');
+    expect(plan.owner).toBe('root:wheel');
+    expect(plan.mode).toBe('644');
+    expect(plan.bootstrapArgs).toEqual(['bootstrap', 'system', plan.plistDst]);
+    expect(plan.bootoutArgs).toEqual(['bootout', 'system/com.thinklocal.daemon']);
+  });
+
+  it('leitet den Legacy-LaunchAgent-Pfad + unload aus userHome ab (Migration)', () => {
+    const plan = buildLaunchDaemonInstallPlan({ userHome: '/Users/chris/' });
+    expect(plan.legacyAgentPath).toBe('/Users/chris/Library/LaunchAgents/com.thinklocal.daemon.plist');
+    expect(plan.legacyUnloadArgs).toEqual(['unload', plan.legacyAgentPath]);
+  });
+
+  it('wirft fail-closed bei leerem/relativem userHome', () => {
+    expect(() => buildLaunchDaemonInstallPlan({ userHome: '' })).toThrow(/ungültiges userHome/);
+    expect(() => buildLaunchDaemonInstallPlan({ userHome: 'relative/home' })).toThrow(/ungültiges userHome/);
+  });
+
+  it('System-Domain-Plan läuft NICHT als LaunchAgent (kein ~/Library/LaunchAgents als Ziel)', () => {
+    const plan = buildLaunchDaemonInstallPlan({ userHome: '/Users/x' });
+    expect(plan.plistDst.startsWith('/Library/LaunchDaemons/')).toBe(true);
+    expect(plan.plistDst).not.toContain('LaunchAgents');
   });
 });

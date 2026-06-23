@@ -235,6 +235,12 @@ cleanup_existing() {
 
         # Daemon stoppen
         if [ "$PLATFORM" = "darwin" ]; then
+            # System-Domain LaunchDaemon (ADR-029, Label-Form) + Legacy-LaunchAgent.
+            sudo launchctl bootout system/com.thinklocal.daemon 2>/dev/null || true
+            # Legacy-Agent im Home des LAUF-Nutzers (nicht $HOME=/root unter sudo, CR MEDIUM-3).
+            if resolve_run_user_home 2>/dev/null; then
+                launchctl unload "$TLMCP_RUN_HOME/Library/LaunchAgents/com.thinklocal.daemon.plist" 2>/dev/null || true
+            fi
             launchctl unload "$HOME/Library/LaunchAgents/com.thinklocal.daemon.plist" 2>/dev/null
         elif [ "$PLATFORM" = "linux" ]; then
             systemctl --user stop thinklocal-daemon 2>/dev/null
@@ -244,6 +250,10 @@ cleanup_existing() {
         fi
 
         # Alte Service-Dateien entfernen (Daemon + Dashboard)
+        if [ "$PLATFORM" = "darwin" ]; then
+            sudo rm -f /Library/LaunchDaemons/com.thinklocal.daemon.plist 2>/dev/null
+            resolve_run_user_home 2>/dev/null && rm -f "$TLMCP_RUN_HOME/Library/LaunchAgents/com.thinklocal.daemon.plist" 2>/dev/null
+        fi
         rm -f "$HOME/Library/LaunchAgents/com.thinklocal.daemon.plist" 2>/dev/null
         rm -f "$HOME/.config/systemd/user/thinklocal-daemon.service" 2>/dev/null
         rm -f "$HOME/.config/systemd/user/thinklocal-dashboard.service" 2>/dev/null
@@ -277,33 +287,95 @@ setup_data_dir() {
     ok "Datenverzeichnis: $DATA_DIR"
 }
 
-# --- macOS: launchd Service ---
-install_macos_service() {
-    info "Installiere macOS launchd Service..."
-    local NODE_PATH
-    # nvm-aware Node-Pfad
-    NODE_PATH=$(command -v node)
-    if [ -n "$NVM_BIN" ] && [ -x "$NVM_BIN/node" ]; then
-        NODE_PATH="$NVM_BIN/node"
+# --- Helfer: Lauf-Nutzer (bei sudo der aufrufende), validiert + sein Home (CR MEDIUM-1/3) ---
+# Setzt globale TLMCP_RUN_USER / TLMCP_RUN_HOME. Username wird gegen [A-Za-z0-9._-] geprueft,
+# BEVOR er in `eval` landet (kein Shell-Injection ueber ein praepariertes SUDO_USER). Return 1
+# bei root oder ungueltigem Namen.
+resolve_run_user_home() {
+    TLMCP_RUN_USER="${SUDO_USER:-$(id -un)}"
+    if [ "$TLMCP_RUN_USER" = "root" ]; then
+        echo "FEHLER: Service-Nutzer ist root — install.sh via 'sudo' als regulaerer Nutzer aufrufen (SUDO_USER muss gesetzt sein)." >&2
+        return 1
     fi
-    NODE_PATH=$(realpath "$NODE_PATH" 2>/dev/null || echo "$NODE_PATH")
-    local PLIST_SRC="$INSTALL_DIR/scripts/service/com.thinklocal.daemon.plist"
-    local PLIST_DST="$HOME/Library/LaunchAgents/com.thinklocal.daemon.plist"
+    case "$TLMCP_RUN_USER" in
+        *[!A-Za-z0-9._-]*|'')
+            echo "FEHLER: ungueltiger Service-Nutzername '$TLMCP_RUN_USER'." >&2
+            return 1 ;;
+    esac
+    # Home ueber Directory Services (kein eval) — robust + injection-frei.
+    TLMCP_RUN_HOME="$(dscl . -read "/Users/$TLMCP_RUN_USER" NFSHomeDirectory 2>/dev/null | awk '{print $2}')"
+    [ -z "$TLMCP_RUN_HOME" ] && TLMCP_RUN_HOME="$(eval echo "~$TLMCP_RUN_USER")"
+    if [ -z "$TLMCP_RUN_HOME" ]; then
+        echo "FEHLER: Home-Verzeichnis fuer '$TLMCP_RUN_USER' nicht ermittelbar." >&2
+        return 1
+    fi
+}
 
-    # Platzhalter ersetzen
-    sed -e "s|__NODE_PATH__|$NODE_PATH|g" \
-        -e "s|__INSTALL_DIR__|$INSTALL_DIR|g" \
-        -e "s|__HOME__|$HOME|g" \
-        "$PLIST_SRC" > "$PLIST_DST"
+# sed-Replacement-Escaping (CR LOW-1): &, \, / im Wert wuerden sonst sed-Sonderbedeutung haben.
+_sed_esc() { printf '%s' "$1" | sed 's/[&\\/]/\\&/g'; }
 
-    # Service laden
-    launchctl unload "$PLIST_DST" 2>/dev/null || true
-    launchctl load "$PLIST_DST"
-    ok "launchd Service installiert und gestartet"
+# --- macOS: System-Domain LaunchDaemon (ADR-029) ---
+# Headless/FileVault-tauglich (Start ohne GUI-Login), durable Env via plist, Least-Privilege
+# (laeuft als dedizierter Nutzer, NICHT root). Pfade/Domain/Rechte = getesteter Plan in
+# packages/daemon/src/launchd-plist.ts (buildLaunchDaemonInstallPlan). bootstrap/bootout braucht sudo.
+install_macos_service() {
+    info "Installiere macOS System-Domain LaunchDaemon (ADR-029)..."
+
+    local RUN_USER RUN_GROUP RUN_HOME NODE_BIN
+    resolve_run_user_home || return 1
+    RUN_USER="$TLMCP_RUN_USER"
+    RUN_HOME="$TLMCP_RUN_HOME"
+    RUN_GROUP="$(id -gn "$RUN_USER")"
+
+    NODE_BIN=$(command -v node)
+    if [ -n "$NVM_BIN" ] && [ -x "$NVM_BIN/node" ]; then NODE_BIN="$NVM_BIN/node"; fi
+    NODE_BIN=$(realpath "$NODE_BIN" 2>/dev/null || echo "$NODE_BIN")
+    # CR LOW-2: leere node-Binary wuerde ein stilles <string></string> erzeugen → fail-closed.
+    if [ -z "$NODE_BIN" ]; then
+        echo "FEHLER: node-Binary nicht gefunden — Abbruch." >&2
+        return 1
+    fi
+
+    local TEMPLATE="$INSTALL_DIR/scripts/service/com.thinklocal.daemon.plist.template"
+    local PLIST_DST="/Library/LaunchDaemons/com.thinklocal.daemon.plist"
+    local SERVICE_TARGET="system/com.thinklocal.daemon"
+    local DAEMON_DATA_DIR="$RUN_HOME/.thinklocal"
+    local CONFIG_PATH="$INSTALL_DIR/config/daemon.toml"
+    local TMP_PLIST
+    TMP_PLIST="$(mktemp -t com.thinklocal.daemon.plist)"
+
+    # Template rendern (Platzhalter wie in launchd-plist.ts renderLaunchDaemonPlist); Werte sed-escaped.
+    sed -e "s|{{NODE_BIN}}|$(_sed_esc "$NODE_BIN")|g" \
+        -e "s|{{REPO}}|$(_sed_esc "$INSTALL_DIR")|g" \
+        -e "s|{{DATA_DIR}}|$(_sed_esc "$DAEMON_DATA_DIR")|g" \
+        -e "s|{{CONFIG}}|$(_sed_esc "$CONFIG_PATH")|g" \
+        -e "s|{{RUN_USER}}|$(_sed_esc "$RUN_USER")|g" \
+        -e "s|{{RUN_GROUP}}|$(_sed_esc "$RUN_GROUP")|g" \
+        "$TEMPLATE" > "$TMP_PLIST"
+
+    # Fail-closed: kein verbliebener Platzhalter (spiegelt assertRenderedPlistClean).
+    if grep -qE '\{\{[^}]*\}\}|__[A-Z_]+__' "$TMP_PLIST"; then
+        echo "FEHLER: gerendertes Plist enthaelt unersetzte Platzhalter — Abbruch (kein kaputtes Service-File)." >&2
+        rm -f "$TMP_PLIST"; return 1
+    fi
+
+    # Migration: alten LaunchAgent (falls vorhanden) entladen + entfernen, sonst Doppelstart.
+    local LEGACY_AGENT="$RUN_HOME/Library/LaunchAgents/com.thinklocal.daemon.plist"
+    launchctl unload "$LEGACY_AGENT" 2>/dev/null || true
+    rm -f "$LEGACY_AGENT" 2>/dev/null || true
+
+    # System-Domain: root:wheel / 644, dann bootstrap (sudo). bootout in Label-Form (CR MEDIUM-2:
+    # gleich wie der getestete Plan; funktioniert auch ohne Plist auf Disk).
+    sudo cp "$TMP_PLIST" "$PLIST_DST"
+    rm -f "$TMP_PLIST"
+    sudo chown root:wheel "$PLIST_DST"
+    sudo chmod 644 "$PLIST_DST"
+    sudo launchctl bootout "$SERVICE_TARGET" 2>/dev/null || true
+    sudo launchctl bootstrap system "$PLIST_DST"
+    ok "System-Domain LaunchDaemon installiert (Nutzer: $RUN_USER, headless/FileVault-tauglich)"
     info "Steuern mit:"
-    echo "  launchctl start com.thinklocal.daemon    # Starten"
-    echo "  launchctl stop com.thinklocal.daemon     # Stoppen"
-    echo "  launchctl unload ~/Library/LaunchAgents/com.thinklocal.daemon.plist  # Deinstallieren"
+    echo "  sudo launchctl kickstart -k $SERVICE_TARGET   # Neustart"
+    echo "  sudo launchctl bootout $SERVICE_TARGET        # Deinstallieren"
 }
 
 # --- Linux: systemd Service ---

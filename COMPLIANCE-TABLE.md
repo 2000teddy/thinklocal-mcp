@@ -1000,16 +1000,18 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-## Session 2026-06-23 12:42 — v0.34.23 feat(discovery): ADR-028 D4-b D2-Forward-Dispatch-Builder (Prep)
+## Session 2026-06-23 13:30 — v0.34.24 feat(macos): ADR-029 Installer auf System-Domain-LaunchDaemon operationalisiert
+
+(v0.34.23 = ADR-028 D4-b D2-Forward-Dispatch auf separatem Branch/PR #195.)
 
 | #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
 |----------|-------|------------------|-----|----|----|----|----|----|----|
-| v0.34.23 | (neu) | 2026-06-23 12:42 | —   | —  | ✅ | ✅ | ✅ | ✅ | CR clink claude (codereviewer): 0 CRITICAL/HIGH; 1 MEDIUM (fehlender Exhaustiveness-Guard → künftige Spec-Variante könnte still in remote-Dispatch fallen) → gefixt + Regressionstest |
+| v0.34.24 | (neu) | 2026-06-23 13:30 | —   | —  | ✅ | ✅ | ✅ | ✅ | CR clink claude (codereviewer): 3 MEDIUM (eval-Injection via SUDO_USER, bootout-Label-Drift, cleanup `$HOME` statt Lauf-Nutzer-Home) + 2 LOW (sed-`&`-Escaping, leere NODE_BIN) → ALLE gefixt |
 
-**CO/CG:** — (Folge-Slice akzeptiertes ADR-028 D4). **TS:** `mcp-forward-dispatch.test.ts` (10: none/local/remote, Plan-Felder, D2-Pin an/aus + TOFU, Invariante Pin↔Verifier, opts-Propagation, Defaults, Purity, CR-Regression fail-fast unbekannter kind). 1136 daemon unit grün, tsc 0. **CR:** clink **claude** codereviewer (Hausregel: nur claude/codex/agy, **nie MiniMax/pal:chat**; codex-CLI nicht installiert) — 0 CRITICAL/HIGH, 1 MEDIUM gefixt. **PC:** `pal:precommit` internal — 0 Issues. **DO:** CHANGES (v0.34.23), COMPLIANCE, ADR-028-D4-Notiz.
+**CO/CG:** — (Operationalisierung des beschlossenen B6/ADR-029; kein Architektur-Konflikt). **TS:** `launchd-plist.test.ts` +4 → 23 (`buildLaunchDaemonInstallPlan`: System-Domain-Pfad/root:wheel/644/bootstrap+bootout-Label, Legacy-Pfad aus userHome, fail-closed userHome, kein LaunchAgents-Ziel). `bash -n` clean, 1130 daemon unit grün, tsc 0. **CR:** clink **claude** codereviewer (Hausregel: nur claude/codex/agy, **nie MiniMax/pal:chat**; codex-CLI nicht installiert) — 3 MEDIUM + 2 LOW gefixt (Username-Validierung+dscl vor eval, sed-Escaping, NODE_BIN-Guard, Label-Form, Lauf-Nutzer-Home). **PC:** `pal:precommit` internal — 0 Issues. **DO:** CHANGES (v0.34.24), COMPLIANCE, ADR-029.
 
-**Status:** ADR-028 D4-b D2-Forward-Dispatch — reiner `buildMcpForwardDispatch` (remote-Request-Plan/local/none); verdrahtet D2-Server-Identity (`expectedSpiffeId` ↔ `spiffeServerIdentity`-Invariante) + D3-Sender in den Plan, auf bestehenden `mesh-connect`/`mesh-server-identity`-Bausteinen. **KEIN `fetch`/Dispatch, kein `/api/mcp`-Ingress, kein mcporter-Exec, kein Deploy.** Folge-Slices (Christian-Gate): Fastify-Ingress → echter undici-mTLS-Forward (Executor) → lokales Serving (mcporter-Vertrag offen, ADR-023) → 3-Stufen-Enforcement (D4-d).
+**Status:** ADR-029 operationalisiert — `install.sh` (macOS) nutzt das System-Domain-LaunchDaemon-Template + getesteten Install-Plan (headless/FileVault, Least-Privilege, kein mystery-relauncher), inkl. Legacy-LaunchAgent-Migration. **Reines Skript-/Code-Edit — `install.sh` NICHT ausgeführt.** Offen für Christian-Deploy-Gate: tatsächliches Ausführen von `install.sh`/`bootstrap system`, Service-User-Anlage, Live-Install/Reboot (FileVault).
 
 ---
 
-*Letzte Aktualisierung: 2026-06-23 12:42 — v0.34.23 feat(discovery): ADR-028 D4-b D2-Forward-Dispatch-Builder (Prep).*
+*Letzte Aktualisierung: 2026-06-23 13:30 — v0.34.24 feat(macos): ADR-029 Installer auf System-Domain-LaunchDaemon operationalisiert.*
