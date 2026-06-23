@@ -118,3 +118,17 @@ Passthrough-Deskriptor statt einer erfundenen CLI. Der konkrete lokale Serving-P
 
 **Weiterhin NICHT enthalten (Christians Gate):** der echte `fetch`/undici-mTLS-Dispatch (Executor),
 der `/api/mcp/<server>`-Ingress, das lokale Serving und das 3-Stufen-Enforcement.
+
+### D2-Ingress-Handler (Prep, v0.34.25 — gestackt auf #195, deploy-frei)
+
+`mcp-ingress.ts` `handleMcpIngress(input, deps)` → `{ status, body }` ist die **Kern-Logik** des
+Daemon-MCP-Proxy-Ingress `/api/mcp/<server>`, framework-agnostisch + rein (bis auf einen injizierten
+`execute`). Ablauf fail-closed: **D3-Auth-Gate** (eingehender `senderUri` = mTLS-Principal; fehlend/
+abgelehnt → 403, KEIN Dispatch) → leerer Server → 400 → `resolveMcp` → `planMcpRoute` →
+`buildMcpForwardSpec` → `buildMcpForwardDispatch` → `none` → 503 → local/remote → an `execute`
+weiterreichen. Der **Forward-Sender** ist die eigene `selfAgentId` (D3, kein Confused-Deputy); die
+**D2-Pin-Konsistenz** zu #195 ist getestet. `try/catch` hält den `{status,body}`-Vertrag (unerwarteter
+Throw → 500), `execute` ist typseitig auf nicht-`none`-Dispatches verengt.
+
+**NICHT enthalten (Christians Gate):** der echte undici-mTLS-Forward-Executor (Net-Egress), das
+Fastify-Route-Wiring in den Live-`cardServer`, das lokale Serving und das 3-Stufen-Enforcement (D4-d).

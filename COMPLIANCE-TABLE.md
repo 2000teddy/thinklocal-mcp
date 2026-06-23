@@ -1015,3 +1015,19 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 ---
 
 *Letzte Aktualisierung: 2026-06-23 13:30 — v0.34.24 feat(macos): ADR-029 Installer auf System-Domain-LaunchDaemon operationalisiert.*
+
+---
+
+## Session 2026-06-24 07:05 — v0.34.25 feat(discovery): ADR-028 D4-b /api/mcp-Ingress-Handler-Logik (Re-PR von #197 gegen main)
+
+| #        | PR              | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-----------------|------------------|-----|----|----|----|----|----|----|
+| v0.34.25 | (Re-PR, base=main) | 2026-06-24 07:05 | —   | —  | ✅ | ✅ | ✅ | ✅ | CR clink claude (codereviewer, im Original-#197): 0 CRITICAL/HIGH; 2 MEDIUM (`execute`-Typ `Exclude<…,none>`, `try/catch`→500 Vertrag) → gefixt + Regressionstest |
+
+**CO/CG:** — (Folge-Slice akzeptiertes ADR-028 D4). **TS:** `mcp-ingress.test.ts` (12: Auth-Gate null/unauth, Happy-Path local+remote, Invalid-Plan/offline/kein-Endpoint→503, Reject-on-Mismatch, 400 missing-server, mTLS-Pin-Konsistenz+TOFU, 500-Throw-Abfang). Daemon-unit-Suite grün, tsc 0. **CR:** clink **claude** codereviewer (Hausregel: nur claude/codex/agy, **nie MiniMax/pal:chat**) — 0 CRITICAL/HIGH, 2 MEDIUM gefixt (im Original-#197). **PC:** `pal:precommit` internal — 0 Issues. **DO:** CHANGES (v0.34.25), COMPLIANCE, ADR-028-D4-Notiz.
+
+**Status:** ADR-028 D4-b Ingress-Handler-Logik — `handleMcpIngress` (D3-Auth-Gate → resolve/plan/spec/dispatch → injizierter Executor), fail-closed, D2-Pin/D3-Sender konsistent zu #195. **KEIN Net-Egress, kein Fastify-Wiring in den Live-Server, kein mcporter-Exec, kein Deploy.** **Re-PR:** Original-#197 wurde in den bereits-gemergten #195-Branch gemergt → Code kam nie auf main; dieser Re-PR cherry-pickt `374d6f7` sauber auf einen frischen Branch gegen `origin/main` (Code-Dateien konfliktfrei; nur CHANGES/COMPLIANCE-Doku-Konflikt, beide Einträge behalten). Folge-Slices (Christian-Gate): echter undici-mTLS-Forward-Executor + Fastify-Route-Wiring + lokales Serving + 3-Stufen-Enforcement (D4-d).
+
+---
+
+*Letzte Aktualisierung: 2026-06-24 07:05 — v0.34.25 feat(discovery): ADR-028 D4-b /api/mcp-Ingress-Handler-Logik (Re-PR von #197 gegen main).*
