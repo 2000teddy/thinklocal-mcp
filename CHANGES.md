@@ -6,7 +6,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-06-22 21:50
+## [Unreleased] — 2026-06-23 10:30
+
+### v0.34.21 (Prep — Christian-autorisiert; KEIN Installer-Umbau/Deploy/Install) — feat(macos): ADR-029 LaunchDaemon — Template + getesteter Render-Kern
+
+Bereitet den TODO-Umstieg „macOS-Installer auf LaunchDaemon statt LaunchAgent" (5-Tage-Plan B6) deploy-frei vor: System-Domain-Plist als **Template** + reiner, fail-closed **Renderer/Validator** mit Tests. **Kein Installer-Umbau, kein `launchctl`/`bootstrap`, kein Deploy/Install** — das bleibt Christians Gate.
+
+- **`scripts/service/com.thinklocal.daemon.plist.template`** (neu): System-Domain-LaunchDaemon mit `UserName`/`GroupName` (läuft NICHT als root), `RunAtLoad`, `KeepAlive={SuccessfulExit:false}` (kein mystery-relauncher). Platzhalter `{{NODE_BIN}}/{{REPO}}/{{DATA_DIR}}/{{CONFIG}}/{{RUN_USER}}/{{RUN_GROUP}}` — keine hartkodierten `chris`/`staff`/`/Users/chris`-Literale.
+- **`launchd-plist.ts`** (neu, rein): `renderLaunchDaemonPlist`/`validateLaunchDaemonContext`/`assertRenderedPlistClean`/`escapeXml`. Fail-closed: erzwingt absolute Pfade + nicht-leere User/Gruppe, **XML-escaped jeden Wert** (gegen ungültiges Plist + Element-Injection, CR-HIGH), und lehnt jeden im Output verbliebenen `{{…}}`/`__…__`-Platzhalter ab (auch non-uppercase, CR-MEDIUM). `assertRenderedPlistClean` separat exportiert, damit der spätere Installer sein `sed`-Ergebnis gegen denselben Vertrag prüfen kann.
+- **`docs/architecture/ADR-029-macos-launchdaemon.md`** (neu): Design + ehrliche Abgrenzung, was bewusst NICHT enthalten ist (Installer-`bootstrap system`, Service-User-Anlage, README-Umstellung, Live-Install/Reboot = Christian/FileVault).
+
+**Tests (`launchd-plist.test.ts`, 19):** Validierung (absolut/leer/whitespace), Render (Platzhalter ersetzt, UserName/GroupName, CONFIG-Default/-Override, Log-Pfade), Fail-closed (ungültiger Kontext, unbekannter Platzhalter), **CR-Regression** (XML-Escaping von `&`, Element-Injection-Abwehr, `{{lowercase}}`-Clean-Check), Template-Regression (keine hartkodierten Literale). 1112 daemon unit grün, tsc 0. **CO/CG:** n/a (beschlossenes Backlog-Item, kein Architektur-Konflikt). **CR:** clink **claude** codereviewer — 1 HIGH (XML-Escaping) + 1 MEDIUM (Platzhalter-Bypass) **gefixt + Regressionstests**. **PC:** `pal:precommit` internal — 0 Issues.
 
 ### v0.34.20 (Bug-Fix — Christian-autorisiert; KEIN Deploy/Flag-Flip/Re-Enroll) — fix(tls): ADR-024 Rollout-Gate — die 2 MERGE-blockierenden MEDIUMs (#165) geschlossen
 
