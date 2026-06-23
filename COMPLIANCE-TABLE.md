@@ -1013,3 +1013,19 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 ---
 
 *Letzte Aktualisierung: 2026-06-23 12:42 — v0.34.23 feat(discovery): ADR-028 D4-b D2-Forward-Dispatch-Builder (Prep).*
+
+---
+
+## Session 2026-06-23 15:45 — v0.34.25 feat(discovery): ADR-028 D4-b /api/mcp-Ingress-Handler-Logik (Prep, gestackt auf #195)
+
+| #        | PR              | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-----------------|------------------|-----|----|----|----|----|----|----|
+| v0.34.25 | (Draft, base=#195) | 2026-06-23 15:45 | —   | —  | ✅ | ✅ | ✅ | ✅ | CR clink claude (codereviewer): 0 CRITICAL/HIGH; 2 MEDIUM (`execute`-Typ `Exclude<…,none>`, `try/catch`→500 Vertrag) → gefixt + Regressionstest |
+
+**CO/CG:** — (Folge-Slice akzeptiertes ADR-028 D4). **TS:** `mcp-ingress.test.ts` (12: Auth-Gate null/unauth, Happy-Path local+remote, Invalid-Plan/offline/kein-Endpoint→503, Reject-on-Mismatch, 400 missing-server, mTLS-Pin-Konsistenz+TOFU, 500-Throw-Abfang). 1148 daemon unit grün, tsc 0. **CR:** clink **claude** codereviewer (Hausregel: nur claude/codex/agy, **nie MiniMax/pal:chat**; codex-CLI nicht installiert) — 0 CRITICAL/HIGH, 2 MEDIUM gefixt. **PC:** `pal:precommit` internal — 0 Issues. **DO:** CHANGES (v0.34.25), COMPLIANCE, ADR-028-D4-Notiz.
+
+**Status:** ADR-028 D4-b Ingress-Handler-Logik — `handleMcpIngress` (D3-Auth-Gate → resolve/plan/spec/dispatch → injizierter Executor), fail-closed, D2-Pin/D3-Sender konsistent zu #195. **KEIN Net-Egress, kein Fastify-Wiring in den Live-Server, kein mcporter-Exec, kein Deploy.** **Draft gestackt auf #195** (base=`agent/claude-code/adr-028-d2-forward-dispatch`, NICHT main); rebased nach #195-Merge. Folge-Slices (Christian-Gate): echter undici-mTLS-Forward-Executor + Fastify-Route-Wiring + lokales Serving + 3-Stufen-Enforcement (D4-d).
+
+---
+
+*Letzte Aktualisierung: 2026-06-23 15:45 — v0.34.25 feat(discovery): ADR-028 D4-b /api/mcp-Ingress-Handler-Logik (Prep, gestackt auf #195).*
