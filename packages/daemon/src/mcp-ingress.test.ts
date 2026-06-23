@@ -1,0 +1,190 @@
+/**
+ * Unit-Tests für ADR-028 D4-b MCP-Ingress-Handler (rein bis auf injizierten Executor;
+ * KEIN Net-Egress). Deckt: Happy-Path (local/remote), Invalid-Plan, Reject-on-Mismatch,
+ * Auth-Gate, mTLS-Pin-Konsistenz zu #195.
+ */
+import { describe, it, expect } from 'vitest';
+import type { Capability } from './registry.js';
+import type { McpForwardPeer } from './mcp-forward.js';
+import type { McpForwardDispatch } from './mcp-forward-dispatch.js';
+import { handleMcpIngress, type McpIngressDeps, type McpIngressResponse } from './mcp-ingress.js';
+
+const SELF = 'spiffe://thinklocal/node/12D3KooWSELF';
+const OWNER = 'spiffe://thinklocal/node/12D3KooWOWNER';
+
+const cap = (overrides: Partial<Capability> = {}): Capability => ({
+  skill_id: 'mcp:unifi',
+  version: '1.0.0',
+  description: 'UniFi',
+  agent_id: OWNER,
+  health: 'healthy',
+  trust_level: 4,
+  updated_at: '2026-06-23T00:00:00.000Z',
+  category: 'mcp',
+  permissions: [],
+  ...overrides,
+});
+
+// Executor-Stub: fängt den Dispatch + liefert eine Marker-Response.
+function makeExecutor(): { calls: McpForwardDispatch[]; execute: McpIngressDeps['execute'] } {
+  const calls: McpForwardDispatch[] = [];
+  return {
+    calls,
+    execute: async (d: McpForwardDispatch): Promise<McpIngressResponse> => {
+      calls.push(d);
+      return { status: 200, body: { ok: true, kind: d.kind } };
+    },
+  };
+}
+
+const peerMap =
+  (...peers: McpForwardPeer[]) =>
+  (id: string): McpForwardPeer | undefined =>
+    peers.find((p) => p.agentId === id);
+
+const baseDeps = (over: Partial<McpIngressDeps> = {}): McpIngressDeps => ({
+  selfAgentId: SELF,
+  resolvePeer: peerMap({ agentId: OWNER, endpoint: 'https://10.10.10.82:9440' }),
+  isAuthorizedSender: () => true,
+  requireServerIdentity: false,
+  execute: makeExecutor().execute,
+  ...over,
+});
+
+describe('handleMcpIngress', () => {
+  it('Auth-Gate: fehlender Sender → 403, KEIN Dispatch', async () => {
+    const ex = makeExecutor();
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: null, capabilities: [cap()] },
+      baseDeps({ execute: ex.execute }),
+    );
+    expect(res.status).toBe(403);
+    expect(ex.calls).toHaveLength(0);
+  });
+
+  it('Auth-Gate: nicht autorisierter Sender → 403, KEIN Dispatch', async () => {
+    const ex = makeExecutor();
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: 'spiffe://thinklocal/node/12D3KooWEVIL', capabilities: [cap()] },
+      baseDeps({ isAuthorizedSender: () => false, execute: ex.execute }),
+    );
+    expect(res.status).toBe(403);
+    expect(ex.calls).toHaveLength(0);
+  });
+
+  it('Happy-Path remote: autorisiert + Owner-Peer healthy → execute(remote)', async () => {
+    const ex = makeExecutor();
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: [cap()] },
+      baseDeps({ execute: ex.execute }),
+    );
+    expect(res.status).toBe(200);
+    expect(ex.calls).toHaveLength(1);
+    expect(ex.calls[0]?.kind).toBe('remote');
+  });
+
+  it('Happy-Path local: eigener Node serviert → execute(local)', async () => {
+    const ex = makeExecutor();
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: [cap({ agent_id: SELF })] },
+      baseDeps({ execute: ex.execute }),
+    );
+    expect(res.status).toBe(200);
+    expect(ex.calls).toHaveLength(1);
+    expect(ex.calls[0]?.kind).toBe('local');
+  });
+
+  it('Invalid-Plan: kein Provider → 503, KEIN Dispatch', async () => {
+    const ex = makeExecutor();
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: [] },
+      baseDeps({ execute: ex.execute }),
+    );
+    expect(res.status).toBe(503);
+    expect(ex.calls).toHaveLength(0);
+  });
+
+  it('Reject-on-Mismatch: Capabilities für einen ANDEREN Server → 503, KEIN Dispatch', async () => {
+    const ex = makeExecutor();
+    const res = await handleMcpIngress(
+      // angefragt: unifi; vorhanden: nur mcp:other → resolveMcp liefert [] → none.
+      { server: 'unifi', senderUri: SELF, capabilities: [cap({ skill_id: 'mcp:other' })] },
+      baseDeps({ execute: ex.execute }),
+    );
+    expect(res.status).toBe(503);
+    expect(ex.calls).toHaveLength(0);
+  });
+
+  it('Reject: offline-Provider wird nicht geroutet → 503', async () => {
+    const ex = makeExecutor();
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: [cap({ health: 'offline' })] },
+      baseDeps({ execute: ex.execute }),
+    );
+    expect(res.status).toBe(503);
+    expect(ex.calls).toHaveLength(0);
+  });
+
+  it('fail-closed: Remote ohne erreichbaren Endpoint → 503 (kein Forward)', async () => {
+    const ex = makeExecutor();
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: [cap()] },
+      baseDeps({ resolvePeer: peerMap(), execute: ex.execute }), // kein Endpoint für OWNER
+    );
+    expect(res.status).toBe(503);
+    expect(ex.calls).toHaveLength(0);
+  });
+
+  it('400 bei fehlendem Servernamen (nach Auth)', async () => {
+    const ex = makeExecutor();
+    const res = await handleMcpIngress(
+      { server: '   ', senderUri: SELF, capabilities: [cap()] },
+      baseDeps({ execute: ex.execute }),
+    );
+    expect(res.status).toBe(400);
+    expect(ex.calls).toHaveLength(0);
+  });
+
+  it('mTLS-Pin-Konsistenz zu #195: requireServerIdentity=true → Dispatch trägt expectedSpiffeId=Owner', async () => {
+    const ex = makeExecutor();
+    await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: [cap()] },
+      baseDeps({ requireServerIdentity: true, execute: ex.execute }),
+    );
+    const d = ex.calls[0];
+    expect(d?.kind).toBe('remote');
+    if (!d || d.kind !== 'remote') throw new Error('expected remote');
+    expect(d.request.outboundPolicy.spiffeServerIdentity).toBe(true);
+    expect(d.request.serverIdentityPolicy.expectedSpiffeId).toBe(OWNER);
+    // D3: der Forward-Sender ist die EIGENE Identität (nicht der eingehende Caller).
+    expect(d.request.senderUri).toBe(SELF);
+  });
+
+  // CR-MEDIUM: unerwarteter Throw in der Pipeline → 500, nicht rejected Promise (Vertrag halten).
+  it('fängt einen Throw in der Pipeline ab → 500, KEIN Dispatch', async () => {
+    const ex = makeExecutor();
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: [cap()] },
+      baseDeps({
+        resolvePeer: () => {
+          throw new Error('boom');
+        },
+        execute: ex.execute,
+      }),
+    );
+    expect(res.status).toBe(500);
+    expect(ex.calls).toHaveLength(0);
+  });
+
+  it('TOFU (requireServerIdentity=false): kein Pin im Dispatch', async () => {
+    const ex = makeExecutor();
+    await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: [cap()] },
+      baseDeps({ requireServerIdentity: false, execute: ex.execute }),
+    );
+    const d = ex.calls[0];
+    if (!d || d.kind !== 'remote') throw new Error('expected remote');
+    expect(d.request.outboundPolicy.spiffeServerIdentity).toBe(false);
+    expect(d.request.serverIdentityPolicy.expectedSpiffeId).toBeUndefined();
+  });
+});

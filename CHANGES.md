@@ -6,7 +6,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-06-23 12:42
+## [Unreleased] — 2026-06-23 15:45
+
+### v0.34.25 (Prep — Christian-autorisiert; reine Handler-Logik, gestackt auf #195; KEIN Net-Egress/Ingress-Wiring/Deploy) — feat(discovery): ADR-028 D4-b — `/api/mcp`-Ingress-Handler-Logik
+
+Vierter D4-b-Slice, **gestackt auf #195** (Dispatch-Builder): die Kern-Logik des Daemon-MCP-Proxy-Ingress `/api/mcp/<server>`. **Framework-agnostisch + rein** (bis auf injizierten Executor); **kein echter Net-Egress, kein Fastify-Wiring in den Live-Server, kein mcporter-Exec, kein Deploy.**
+
+- **`mcp-ingress.ts`** (neu): `handleMcpIngress(input, deps)` → `{ status, body }`. Ablauf fail-closed: **(1) D3-Auth-Gate** (fehlender/abgelehnter Sender → 403, KEIN Dispatch) → (2) leerer Server → 400 → (3) `resolveMcp` → `planMcpRoute` → `buildMcpForwardSpec` (#193) → `buildMcpForwardDispatch` (#195) → (4) `none` → 503 → (5) local/remote → an injizierten `execute` weiterreichen.
+- **D3:** der eingehende `senderUri` (mTLS-Principal) dient NUR dem Auth-Gate; der **Forward**-Sender ist die EIGENE `selfAgentId` (kein Confused-Deputy). **D2:** Pin-Konsistenz zu #195 (bei `requireServerIdentity` trägt der Dispatch `expectedSpiffeId`=Owner).
+- **CR-Fixes (clink claude, 0 CRITICAL/HIGH, 2 MEDIUM):** `execute` auf `Exclude<McpForwardDispatch,{kind:'none'}>` verengt (Invariante maschinell); `try/catch` um die Pipeline → **500** statt rejected Promise (hält den `{status,body}`-Vertrag).
+
+**Tests (`mcp-ingress.test.ts`, 12):** Auth-Gate (null/unauth), Happy-Path local+remote, Invalid-Plan/offline/kein-Endpoint → 503, **Reject-on-Mismatch**, 400 missing-server, **mTLS-Pin-Konsistenz** + TOFU, **500-Throw-Abfang**. 1148 daemon unit grün, tsc 0. **CO/CG:** n/a (Folge-Slice ADR-028 D4). **CR:** clink **claude** codereviewer — 2 MEDIUM gefixt + Regressionstest. **PC:** `pal:precommit` internal — 0 Issues. **DO:** CHANGES, COMPLIANCE, ADR-028-D4-Notiz. **Stack:** Branch baut auf `agent/claude-code/adr-028-d2-forward-dispatch` (#195), NICHT auf main.
 
 ### v0.34.23 (Prep — Christian-autorisiert; reiner Dispatch-Plan, KEIN fetch/Ingress/Deploy) — feat(discovery): ADR-028 D4-b — D2-Forward-Dispatch-Builder (mTLS-Plan)
 
