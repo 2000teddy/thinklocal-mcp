@@ -6,7 +6,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-06-23 11:05
+## [Unreleased] — 2026-06-23 12:42
+
+### v0.34.23 (Prep — Christian-autorisiert; reiner Dispatch-Plan, KEIN fetch/Ingress/Deploy) — feat(discovery): ADR-028 D4-b — D2-Forward-Dispatch-Builder (mTLS-Plan)
+
+Dritter D4-b-Slice nach Routing-Planner (#190) + Forward-Spec (#193): übersetzt eine `McpForwardSpec` in den **mTLS-Dispatch-Plan**, den der spätere Live-Ingress ausführt. **Kein `fetch`/Dispatch, kein `/api/mcp`-Endpoint, kein Deploy.**
+
+- **`mcp-forward-dispatch.ts`** (neu, rein): `buildMcpForwardDispatch(spec, opts?)` → `remote` (Request-Plan) | `local` (Passthrough) | `none`.
+- **D2-Verdrahtung:** `remote`-Plan trägt `outboundPolicy` (`spiffeServerIdentity = spec.requireServerIdentity`) + `serverIdentityPolicy` (`expectedSpiffeId = spec.expectedServerSpiffeId`, **nur bei aktivem Pin**, sonst TOFU) — direkt auf den bestehenden `mesh-connect`/`mesh-server-identity`-Bausteinen. **Invariante:** `expectedSpiffeId` gesetzt GENAU dann, wenn `spiffeServerIdentity` true (kein Pin ohne Verifier, kein Verifier ohne erwartete Identität); der Executor-`buildConnectorOptions` fail-fastet sonst.
+- **D3:** `senderUri` im Plan durchgereicht (Empfänger bindet via `authorizeHttpsSender` ans mTLS-Client-Cert).
+- **`local-exec` bewusst deferred:** kein mcporter-Vertrag im Repo (ADR-023 will mcporter+stunnel ersetzen) → Passthrough-Deskriptor statt erfundener CLI.
+- **Exhaustiveness-Guard (CR-MEDIUM):** `never`-Guard vor dem remote-Pfad — eine künftige Spec-Variante kann nicht still in einen falschen mTLS-Dispatch fallen.
+
+**Tests (`mcp-forward-dispatch.test.ts`, 10):** none/local/remote, Plan-Felder, D2-Pin an/aus + TOFU, **Invariante** (Pin↔Verifier), opts-Propagation, Defaults, Purity, **CR-Regression** (fail-fast bei unbekanntem kind). 1136 daemon unit grün, tsc 0. **CO/CG:** n/a (Folge-Slice akzeptiertes ADR-028 D4). **CR:** clink **claude** codereviewer — 0 CRITICAL/HIGH, 1 MEDIUM (Exhaustiveness) gefixt + Regressionstest. **PC:** `pal:precommit` internal — 0 Issues. **DO:** CHANGES, COMPLIANCE, ADR-028-D4-Notiz.
 
 ### v0.34.22 (Prep — Christian-autorisiert; reine Spec, KEIN Ingress/Forward/mcporter/Deploy) — feat(discovery): ADR-028 D4-b — MCP-Forward-Spec-Builder (mTLS-Forward + local-exec, deploy-frei)
 
