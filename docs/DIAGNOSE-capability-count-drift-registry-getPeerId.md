@@ -39,6 +39,31 @@ Peers mit einer **bereits etablierten** libp2p-Verbindung (mDNS-Auto-Dial / inbo
 - **Pre-existing & fleet-weit** (auch auf 92e6058), unabhängig von ADR-026/0.34.9/0.34.10.
 - **Kein Daten-/Sicherheits-Leck** — Owner-Gate (`importPeerCapabilities`) bleibt intakt; es ist ein **Vollständigkeits-/Konvergenz**-Problem, kein Integritätsproblem.
 
+## Re-Diagnose 2026-06-23 (B7, read-only von TH01) — Fix gemergt, aber NICHT deployt
+
+**Kernbefund:** Der Code-Fix ist **gemergt** (PR #175 / `4b55f69`, `libp2p-runtime.ts` `toPeerId`/
+`peerIdFromString` in `dialProtocol`+`hangUp`), **aber die laufenden Daemons sind älter als der Fix**
+→ der Bug ist **im laufenden Prozess weiterhin aktiv**, daher persistiert die Count-Drift.
+
+Belege (live, read-only, 2026-06-23 ~11:33 CEST):
+- **TH01-Daemon `ExecMainStartTimestamp = 2026-06-11 10:13:48`**; #175 mergte **2026-06-15 22:58** →
+  der laufende TH01-Prozess enthält den Fix **nicht** (4 Tage zu alt).
+- **Fleet-Cap-Counts:** `.94=2`, TH01=18 (7 Owner, aber 4/4/2/2/2/2/2 — uneven), `.82=24`, `.52=24`
+  → **dieselbe Drift-Signatur** wie am 15.06. (`5/18/19/24/24/26`).
+- **TH01-`registry_sync`:** mit 4 direkt-verbundenen Peers `converged:true`, rounds≈23107, 0 Timeouts,
+  `last_round` aktuell. Konsistent mit der ursprünglichen Diagnose: über **bestehende** (mDNS/inbound)
+  Verbindungen wird gesynct; nur der **explizite Coordinator-Dial-by-String** scheitert weiter am
+  `getPeerId` → Peers ohne bestehende Connection (z.B. `.94` → starved auf 2 Caps) konvergieren nicht.
+- Canonical `.55` (`node/12D3KooWJSg…`) erscheint registry-seitig (`status:online`) aber `endpoint:null`/
+  `peer_id_verified:null` → kein Direkt-Sync-Verhältnis.
+
+**Schlussfolgerung:** B7 ist **kein offener Code-Bug** mehr, sondern ein **Deployment-Gap**. Remedy =
+**Daemon-Restart/Redeploy auf #175-Stand** (pro Node), danach `/api/status registry_sync` +
+`/api/capabilities`-Count fleet-weit re-prüfen → erwartet identische Counts. Restart/Deploy =
+**Christians Gate** (kein autonomer Eingriff). Offene Verifikation NACH Deploy: ob nach #175 ein
+**zweiter** Konvergenz-Resteffekt bleibt (Hypothese: nein — die uneven Counts sind durch den
+ungefixten Dial vollständig erklärt).
+
 ## Nicht die Ursache (ausgeschlossen)
 - Identitäts-Dubletten (.55 legacy `host/813bdd` vs canonical) — Breakdown zeigt nur canonical Owner.
 - Availability-Side-Map (ADR-020 v2.2, direct-only) — betrifft `availability`, nicht die Cap-Menge.
