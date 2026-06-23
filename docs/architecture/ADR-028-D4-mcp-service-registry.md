@@ -99,3 +99,22 @@ Live-Ingress steht die **Forward-Spec**: `mcp-forward.ts` `buildMcpForwardSpec(p
 **NICHT enthalten (Folge-Slices, Christians Gate):** der `/api/mcp/<server>`-Fastify-Ingress, der
 tatsächliche undici-mTLS-Forward (D2-Dispatcher + Server-Identity-Pin), der lokale mcporter-Exec
 und das 3-Stufen-Enforcement (D4-d).
+
+### D2-Forward-Dispatch (Prep, v0.34.23 — deploy-frei)
+
+`mcp-forward-dispatch.ts` `buildMcpForwardDispatch(spec, opts?)` übersetzt die Forward-Spec in den
+**mTLS-Dispatch-Plan**: `remote` (Request-Plan) | `local` (Passthrough) | `none`. Der `remote`-Plan
+verdrahtet die **D2-Server-Identity** auf die bestehenden Bausteine (`mesh-connect`
+`OutboundConnectPolicy` + `mesh-server-identity` `MeshServerIdentityPolicy`):
+`spiffeServerIdentity = spec.requireServerIdentity` und `expectedSpiffeId = spec.expectedServerSpiffeId`
+**genau dann, wenn** der Pin aktiv ist (sonst TOFU). Diese **Invariante** (Pin ↔ Verifier) verhindert
+einen stillen TOFU-Downgrade; der Executor-`buildConnectorOptions` fail-fastet zusätzlich, falls der
+Verifier bei aktivem Pin fehlt. **D3:** `senderUri` wird im Plan durchgereicht.
+
+**`local-exec` ist bewusst deferred:** im Repo existiert **kein mcporter-Code/CLI-Vertrag** (mcporter
+nur in ADR-023/028-*Design*; ADR-023 will mcporter+stunnel sogar ersetzen) → der Builder liefert einen
+Passthrough-Deskriptor statt einer erfundenen CLI. Der konkrete lokale Serving-Primitive ist ein
+**eigener Folge-Slice**, sobald der Vertrag entschieden ist.
+
+**Weiterhin NICHT enthalten (Christians Gate):** der echte `fetch`/undici-mTLS-Dispatch (Executor),
+der `/api/mcp/<server>`-Ingress, das lokale Serving und das 3-Stufen-Enforcement.
