@@ -6,7 +6,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-06-24 06:47
+## [Unreleased] — 2026-06-24 07:32
 
 ### v0.34.26 (Prep — Christian-autorisiert; reine Exec-Spec/Skelett; KEIN Net-Egress/mcporter-Call/Wiring/Deploy) — feat(discovery): ADR-028 D4-b — D2-Forward Exec-Schicht (mcporter-Exec-Bridge, Skelett)
 
@@ -18,6 +18,16 @@ Fünfter D4-b-Slice: übersetzt einen `McpForwardDispatch` (#195) in eine ausfü
 - **CR-Fixes (clink claude, 0 CRITICAL/HIGH, 2 MEDIUM):** Exhaustiveness-`never`-Guard vor dem Remote-Pfad; leerer `expectedSpiffeId` zählt NICHT als gesetzt (XOR-Härtung).
 
 **Tests (`mcp-forward-exec.test.ts`, 12):** Happy-Path local (argv-Stub) + remote (Pin/TOFU), **Plan-Mismatch** (none→503), **Pin-Violation** (beide Richtungen + leerer String), **Timeout-Stub** (Default+Override), **Auth-Reject** (403), configPath-Durchreichung, Stub-Konstanten-Regression, **500-fail-fast** bei unbekanntem kind. 1152 daemon unit grün, tsc 0. **Live read-only `/healthz` (mTLS):** Daemon erreichbar — `/healthz`=404 (Route nicht registriert; Daemon nutzt `/health`=200, ~3.8 ms). **CO/CG:** n/a (Folge-Slice ADR-028 D4). **CR:** clink **claude** codereviewer — 2 MEDIUM gefixt. **PC:** `pal:precommit` internal — 0 Issues. **DO:** CHANGES, COMPLIANCE, ADR-028-D4-Notiz.
+
+### v0.34.25 (Prep — Christian-autorisiert; reine Handler-Logik; KEIN Net-Egress/Live-Wiring/Deploy) — feat(discovery): ADR-028 D4-b — `/api/mcp`-Ingress-Handler-Logik (Re-PR von #197 gegen main)
+
+Vierter D4-b-Slice, **gestackt auf #195** (Dispatch-Builder): die Kern-Logik des Daemon-MCP-Proxy-Ingress `/api/mcp/<server>`. **Framework-agnostisch + rein** (bis auf injizierten Executor); **kein echter Net-Egress, kein Fastify-Wiring in den Live-Server, kein mcporter-Exec, kein Deploy.**
+
+- **`mcp-ingress.ts`** (neu): `handleMcpIngress(input, deps)` → `{ status, body }`. Ablauf fail-closed: **(1) D3-Auth-Gate** (fehlender/abgelehnter Sender → 403, KEIN Dispatch) → (2) leerer Server → 400 → (3) `resolveMcp` → `planMcpRoute` → `buildMcpForwardSpec` (#193) → `buildMcpForwardDispatch` (#195) → (4) `none` → 503 → (5) local/remote → an injizierten `execute` weiterreichen.
+- **D3:** der eingehende `senderUri` (mTLS-Principal) dient NUR dem Auth-Gate; der **Forward**-Sender ist die EIGENE `selfAgentId` (kein Confused-Deputy). **D2:** Pin-Konsistenz zu #195 (bei `requireServerIdentity` trägt der Dispatch `expectedSpiffeId`=Owner).
+- **CR-Fixes (clink claude, 0 CRITICAL/HIGH, 2 MEDIUM):** `execute` auf `Exclude<McpForwardDispatch,{kind:'none'}>` verengt (Invariante maschinell); `try/catch` um die Pipeline → **500** statt rejected Promise (hält den `{status,body}`-Vertrag).
+
+**Tests (`mcp-ingress.test.ts`, 12):** Auth-Gate (null/unauth), Happy-Path local+remote, Invalid-Plan/offline/kein-Endpoint → 503, **Reject-on-Mismatch**, 400 missing-server, **mTLS-Pin-Konsistenz** + TOFU, **500-Throw-Abfang**. Daemon-unit-Suite grün, tsc 0. **CO/CG:** n/a (Folge-Slice ADR-028 D4). **CR:** clink **claude** codereviewer — 2 MEDIUM gefixt + Regressionstest. **PC:** `pal:precommit` internal — 0 Issues. **DO:** CHANGES, COMPLIANCE, ADR-028-D4-Notiz. **Re-PR-Hinweis:** Original-#197 wurde in den bereits-gemergten #195-Branch gemergt → Code kam nie auf main; dieser Re-PR cherry-pickt `374d6f7` sauber auf einen frischen Branch gegen `origin/main`.
 
 ### v0.34.24 (Prep — Christian-autorisiert; Skript-Edit, NICHT ausgeführt; KEIN Deploy/Install) — feat(macos): ADR-029 — Installer auf System-Domain-LaunchDaemon operationalisiert
 

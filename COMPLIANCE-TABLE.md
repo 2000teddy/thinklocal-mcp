@@ -1018,16 +1018,21 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-## Session 2026-06-24 06:47 — v0.34.26 feat(discovery): ADR-028 D4-b D2-Forward Exec-Schicht (mcporter-Exec-Bridge, Skelett)
+## Session 2026-06-24 07:32 — v0.34.26 + v0.34.25 ADR-028 D4-b (D2-Forward Exec-Schicht #198 + /api/mcp-Ingress-Handler #199)
 
-| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
-|----------|-------|------------------|-----|----|----|----|----|----|----|
-| v0.34.26 | (neu, base=main) | 2026-06-24 06:47 | —   | —  | ✅ | ✅ | ✅ | ✅ | CR clink claude (codereviewer): 0 CRITICAL/HIGH; 2 MEDIUM (Exhaustiveness-`never`-Guard, leerer `expectedSpiffeId` umgeht XOR) → gefixt + Regressionstests |
+| #        | PR              | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-----------------|------------------|-----|----|----|----|----|----|----|
+| v0.34.26 | (#198, base=main) | 2026-06-24 06:47 | —   | —  | ✅ | ✅ | ✅ | ✅ | CR clink claude + agy (Zweitstimme): 0 CRITICAL/HIGH; 2 MEDIUM (Exhaustiveness-`never`-Guard, leerer `expectedSpiffeId` umgeht XOR) → gefixt + Regressionstests |
+| v0.34.25 | (#199 Re-PR, base=main) | 2026-06-24 07:05 | —   | —  | ✅ | ✅ | ✅ | ✅ | CR clink claude (im Original-#197): 0 CRITICAL/HIGH; 2 MEDIUM (`execute`-Typ `Exclude<…,none>`, `try/catch`→500 Vertrag) → gefixt + Regressionstest. Code byte-identisch zu #197-Cherry-pick. |
 
-**CO/CG:** — (Folge-Slice akzeptiertes ADR-028 D4). **TS:** `mcp-forward-exec.test.ts` (12: Happy-Path local/remote, Plan-Mismatch, Pin-Violation beide Richtungen + leerer String, Timeout-Stub, Auth-Reject, configPath, Stub-Konstante, fail-fast unbekannter kind). 1152 daemon unit grün, tsc 0. **Live read-only `/healthz` (mTLS):** Daemon erreichbar (`/healthz`=404 Route absent, `/health`=200 ~3.8 ms). **CR:** clink **claude** codereviewer (Hausregel: nur claude/codex/agy, **nie MiniMax/pal:chat**; codex bis 25.06 quota-gesperrt) — 0 CRITICAL/HIGH, 2 MEDIUM gefixt. **PC:** `pal:precommit` internal — 0 Issues. **DO:** CHANGES (v0.34.26), COMPLIANCE, ADR-028-D4-Notiz.
+**v0.34.26 — D2-Forward Exec-Schicht (Skelett, #198):** `buildMcpExecSpec` (mcporter-local-Stub / mtls-forward / reject), fail-closed, D2-Pin-Re-Check. **mcporter-`argv` = provisorischer Platzhalter** (kein stabiler CLI-Vertrag; ADR-023). **KEIN Net-Egress, kein mcporter-Call, kein Live-Wiring, kein Deploy.** Folge-Slices (Christian-Gate): echter undici-mTLS-Forward-Executor + mcporter-`spawn` + Fastify-Route-Wiring + 3-Stufen-Enforcement (D4-d).
 
-**Status:** ADR-028 D4-b D2-Forward Exec-Schicht (Skelett) — `buildMcpExecSpec` (mcporter-local-Stub / mtls-forward / reject), fail-closed, D2-Pin-Re-Check. **mcporter-`argv` = provisorischer Platzhalter** (kein stabiler CLI-Vertrag; ADR-023). **KEIN Net-Egress, kein mcporter-Call, kein Live-Wiring, kein Deploy.** Folge-Slices (Christian-Gate): echter undici-mTLS-Forward-Executor + mcporter-`spawn` + Fastify-Route-Wiring + 3-Stufen-Enforcement (D4-d). **Hinweis:** #197 (`mcp-ingress.ts`) ist NICHT auf main (in den bereits-gemergten #195-Branch gemergt → nicht propagiert); braucht Re-PR gegen main.
+**v0.34.25 — /api/mcp-Ingress-Handler-Logik (#199 Re-PR):** `handleMcpIngress` (D3-Auth-Gate → resolve/plan/spec/dispatch → injizierter Executor), fail-closed, D2-Pin/D3-Sender konsistent zu #195. **KEIN Net-Egress, kein Fastify-Wiring in den Live-Server, kein mcporter-Exec, kein Deploy.** **Re-PR:** Original-#197 wurde in den bereits-gemergten #195-Branch gemergt → Code kam nie auf main; #199 cherry-pickt `374d6f7` sauber auf einen frischen Branch gegen `origin/main` (Code-Dateien konfliktfrei; CHANGES/COMPLIANCE/ADR-Doku-Konflikt nach #198-Merge aufgelöst, beide Einträge behalten).
+
+**CO/CG:** — (Folge-Slice akzeptiertes ADR-028 D4). **TS:** v0.34.26 `mcp-forward-exec.test.ts` (12: Happy-Path local/remote, Plan-Mismatch, Pin-Violation beide Richtungen + leerer String, Timeout-Stub, Auth-Reject, configPath, Stub-Konstante, fail-fast unbekannter kind); v0.34.25 `mcp-ingress.test.ts` (12: Auth-Gate null/unauth, Happy-Path local+remote, Invalid-Plan/offline/kein-Endpoint→503, Reject-on-Mismatch, 400 missing-server, mTLS-Pin-Konsistenz+TOFU, 500-Throw-Abfang). Daemon-unit-Suite grün, tsc 0. **Live read-only `/healthz` (mTLS):** Daemon erreichbar (`/healthz`=404 Route absent, `/health`=200 ~3.8 ms). **CR:** Hausregel — nur claude/codex/agy, **nie MiniMax/pal:chat**; codex bis 25.06 quota-gesperrt). **PC:** `pal:precommit` internal — 0 Issues. **DO:** CHANGES (v0.34.26 + v0.34.25), COMPLIANCE, ADR-028-D4-Notiz.
+
+**Status:** ADR-028 D4-b **D2-Forward + Ingress-Handler komplett** (Skelett + Handler-Logik) — beide PRs als squash-merge über admin-override (Self-Approval-Block) gelandet. Re-PR-Mechanismus hat funktioniert (Cherry-pick gegen main, Code byte-identisch zu bereits-reviewtem Original).
 
 ---
 
-*Letzte Aktualisierung: 2026-06-24 06:47 — v0.34.26 feat(discovery): ADR-028 D4-b D2-Forward Exec-Schicht (mcporter-Exec-Bridge, Skelett).*
+*Letzte Aktualisierung: 2026-06-24 07:32 — v0.34.26 + v0.34.25 ADR-028 D4-b (#198 + #199) gemergt.*
