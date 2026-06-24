@@ -1015,3 +1015,19 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 ---
 
 *Letzte Aktualisierung: 2026-06-23 13:30 — v0.34.24 feat(macos): ADR-029 Installer auf System-Domain-LaunchDaemon operationalisiert.*
+
+---
+
+## Session 2026-06-24 06:47 — v0.34.26 feat(discovery): ADR-028 D4-b D2-Forward Exec-Schicht (mcporter-Exec-Bridge, Skelett)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|----|
+| v0.34.26 | (neu, base=main) | 2026-06-24 06:47 | —   | —  | ✅ | ✅ | ✅ | ✅ | CR clink claude (codereviewer): 0 CRITICAL/HIGH; 2 MEDIUM (Exhaustiveness-`never`-Guard, leerer `expectedSpiffeId` umgeht XOR) → gefixt + Regressionstests |
+
+**CO/CG:** — (Folge-Slice akzeptiertes ADR-028 D4). **TS:** `mcp-forward-exec.test.ts` (12: Happy-Path local/remote, Plan-Mismatch, Pin-Violation beide Richtungen + leerer String, Timeout-Stub, Auth-Reject, configPath, Stub-Konstante, fail-fast unbekannter kind). 1152 daemon unit grün, tsc 0. **Live read-only `/healthz` (mTLS):** Daemon erreichbar (`/healthz`=404 Route absent, `/health`=200 ~3.8 ms). **CR:** clink **claude** codereviewer (Hausregel: nur claude/codex/agy, **nie MiniMax/pal:chat**; codex bis 25.06 quota-gesperrt) — 0 CRITICAL/HIGH, 2 MEDIUM gefixt. **PC:** `pal:precommit` internal — 0 Issues. **DO:** CHANGES (v0.34.26), COMPLIANCE, ADR-028-D4-Notiz.
+
+**Status:** ADR-028 D4-b D2-Forward Exec-Schicht (Skelett) — `buildMcpExecSpec` (mcporter-local-Stub / mtls-forward / reject), fail-closed, D2-Pin-Re-Check. **mcporter-`argv` = provisorischer Platzhalter** (kein stabiler CLI-Vertrag; ADR-023). **KEIN Net-Egress, kein mcporter-Call, kein Live-Wiring, kein Deploy.** Folge-Slices (Christian-Gate): echter undici-mTLS-Forward-Executor + mcporter-`spawn` + Fastify-Route-Wiring + 3-Stufen-Enforcement (D4-d). **Hinweis:** #197 (`mcp-ingress.ts`) ist NICHT auf main (in den bereits-gemergten #195-Branch gemergt → nicht propagiert); braucht Re-PR gegen main.
+
+---
+
+*Letzte Aktualisierung: 2026-06-24 06:47 — v0.34.26 feat(discovery): ADR-028 D4-b D2-Forward Exec-Schicht (mcporter-Exec-Bridge, Skelett).*
