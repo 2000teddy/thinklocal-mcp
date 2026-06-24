@@ -119,7 +119,23 @@ Passthrough-Deskriptor statt einer erfundenen CLI. Der konkrete lokale Serving-P
 **Weiterhin NICHT enthalten (Christians Gate):** der echte `fetch`/undici-mTLS-Dispatch (Executor),
 der `/api/mcp/<server>`-Ingress, das lokale Serving und das 3-Stufen-Enforcement.
 
-### D2-Ingress-Handler (Prep, v0.34.25 — gestackt auf #195, deploy-frei)
+### D2-Forward Exec-Schicht (Skelett, v0.34.26 — #198, deploy-frei)
+
+`mcp-forward-exec.ts` `buildMcpExecSpec(dispatch, opts?)` übersetzt einen `McpForwardDispatch`
+(#195) in eine **Exec-Spezifikation**: `mcporter-local` (lokaler Serve-**Stub**) | `mtls-forward`
+(Forward-Deskriptor) | `reject` (403/503/500). Fail-closed: `authorized=false` → 403 (Defense-in-depth
+zum D3-Ingress-Gate), `none` → 503, **Pin-Violation** (aktiver Verifier ⊻ vorhandene, nicht-leere
+`expectedSpiffeId`) → 500 — re-prüft die D2-Invariante aus #195, statt einen ungepinnten Forward zu fahren.
+
+**⚠️ Skelett:** im Repo gibt es **keinen stabilen mcporter-CLI-Vertrag** (ADR-028 D4 nennt mcporter
+als lokalen Serve-Pfad; ADR-023 will mcporter+stunnel ersetzen). Das `argv` des `mcporter-local`-Specs
+ist ein **provisorischer Platzhalter** (`MCPORTER_ARGV_STUB`), der bei der mcporter-Integration
+finalisiert wird — bewusst keine erfundene finale CLI. Die Datei führt **NICHTS** aus.
+
+**NICHT enthalten (Christians Gate):** der echte undici-mTLS-Forward-Executor (Net-Egress), der
+mcporter-`spawn`, das Fastify-Route-Wiring und das 3-Stufen-Enforcement (D4-d).
+
+### D2-Ingress-Handler (v0.34.25 — #199 Re-PR, deploy-frei)
 
 `mcp-ingress.ts` `handleMcpIngress(input, deps)` → `{ status, body }` ist die **Kern-Logik** des
 Daemon-MCP-Proxy-Ingress `/api/mcp/<server>`, framework-agnostisch + rein (bis auf einen injizierten
@@ -129,6 +145,11 @@ abgelehnt → 403, KEIN Dispatch) → leerer Server → 400 → `resolveMcp` →
 weiterreichen. Der **Forward-Sender** ist die eigene `selfAgentId` (D3, kein Confused-Deputy); die
 **D2-Pin-Konsistenz** zu #195 ist getestet. `try/catch` hält den `{status,body}`-Vertrag (unerwarteter
 Throw → 500), `execute` ist typseitig auf nicht-`none`-Dispatches verengt.
+
+**Re-PR-Mechanik:** Original-PR #197 wurde in den bereits-gemergten #195-Branch gemergt → Code kam
+nie auf main. #199 cherry-pickt `374d6f7` sauber auf einen frischen Branch gegen `origin/main`
+(Code-Dateien konfliktfrei; nur CHANGES/COMPLIANCE/ADR-Doku-Konflikt nach #198-Merge, beide Einträge
+behalten).
 
 **NICHT enthalten (Christians Gate):** der echte undici-mTLS-Forward-Executor (Net-Egress), das
 Fastify-Route-Wiring in den Live-`cardServer`, das lokale Serving und das 3-Stufen-Enforcement (D4-d).

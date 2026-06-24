@@ -6,7 +6,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-06-24 07:05
+## [Unreleased] — 2026-06-24 07:32
+
+### v0.34.26 (Prep — Christian-autorisiert; reine Exec-Spec/Skelett; KEIN Net-Egress/mcporter-Call/Wiring/Deploy) — feat(discovery): ADR-028 D4-b — D2-Forward Exec-Schicht (mcporter-Exec-Bridge, Skelett)
+
+Fünfter D4-b-Slice: übersetzt einen `McpForwardDispatch` (#195) in eine ausführungs-freie **Exec-Spezifikation**. **Kein echter Net-Egress, kein mcporter-/child_process-Call, kein Live-Wiring, kein Deploy.**
+
+- **`mcp-forward-exec.ts`** (neu, rein): `buildMcpExecSpec(dispatch, opts?)` → `mcporter-local` (lokaler Serve-**Stub**) | `mtls-forward` (Forward-Deskriptor) | `reject` (403/503/500).
+- **`mcporter-local` ist ein SKELETT:** im Repo existiert **kein stabiler mcporter-CLI-Vertrag** (ADR-028 D4 nennt mcporter als lokalen Serve-Pfad; ADR-023 will mcporter+stunnel ersetzen) → `argv` = provisorischer Platzhalter `MCPORTER_ARGV_STUB` (`<server>` eingesetzt), Regressionstest sichert den Platzhalter. Keine erfundene finale CLI.
+- **Fail-closed:** `authorized=false` → 403 (Defense-in-depth zum D3-Ingress-Gate); `none` → 503; **Pin-Violation** (aktiver Verifier ⊻ vorhandene, nicht-leere `expectedSpiffeId`) → 500 (kein ungepinnter Forward). Re-prüft die #195-D2-Invariante.
+- **CR-Fixes (clink claude, 0 CRITICAL/HIGH, 2 MEDIUM):** Exhaustiveness-`never`-Guard vor dem Remote-Pfad; leerer `expectedSpiffeId` zählt NICHT als gesetzt (XOR-Härtung).
+
+**Tests (`mcp-forward-exec.test.ts`, 12):** Happy-Path local (argv-Stub) + remote (Pin/TOFU), **Plan-Mismatch** (none→503), **Pin-Violation** (beide Richtungen + leerer String), **Timeout-Stub** (Default+Override), **Auth-Reject** (403), configPath-Durchreichung, Stub-Konstanten-Regression, **500-fail-fast** bei unbekanntem kind. 1152 daemon unit grün, tsc 0. **Live read-only `/healthz` (mTLS):** Daemon erreichbar — `/healthz`=404 (Route nicht registriert; Daemon nutzt `/health`=200, ~3.8 ms). **CO/CG:** n/a (Folge-Slice ADR-028 D4). **CR:** clink **claude** codereviewer — 2 MEDIUM gefixt. **PC:** `pal:precommit` internal — 0 Issues. **DO:** CHANGES, COMPLIANCE, ADR-028-D4-Notiz.
 
 ### v0.34.25 (Prep — Christian-autorisiert; reine Handler-Logik; KEIN Net-Egress/Live-Wiring/Deploy) — feat(discovery): ADR-028 D4-b — `/api/mcp`-Ingress-Handler-Logik (Re-PR von #197 gegen main)
 
