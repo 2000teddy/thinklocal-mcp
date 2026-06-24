@@ -118,3 +118,19 @@ Passthrough-Deskriptor statt einer erfundenen CLI. Der konkrete lokale Serving-P
 
 **Weiterhin NICHT enthalten (Christians Gate):** der echte `fetch`/undici-mTLS-Dispatch (Executor),
 der `/api/mcp/<server>`-Ingress, das lokale Serving und das 3-Stufen-Enforcement.
+
+### D2-Forward Exec-Schicht (Skelett, v0.34.26 — deploy-frei)
+
+`mcp-forward-exec.ts` `buildMcpExecSpec(dispatch, opts?)` übersetzt einen `McpForwardDispatch`
+(#195) in eine **Exec-Spezifikation**: `mcporter-local` (lokaler Serve-**Stub**) | `mtls-forward`
+(Forward-Deskriptor) | `reject` (403/503/500). Fail-closed: `authorized=false` → 403 (Defense-in-depth
+zum D3-Ingress-Gate), `none` → 503, **Pin-Violation** (aktiver Verifier ⊻ vorhandene, nicht-leere
+`expectedSpiffeId`) → 500 — re-prüft die D2-Invariante aus #195, statt einen ungepinnten Forward zu fahren.
+
+**⚠️ Skelett:** im Repo gibt es **keinen stabilen mcporter-CLI-Vertrag** (ADR-028 D4 nennt mcporter
+als lokalen Serve-Pfad; ADR-023 will mcporter+stunnel ersetzen). Das `argv` des `mcporter-local`-Specs
+ist ein **provisorischer Platzhalter** (`MCPORTER_ARGV_STUB`), der bei der mcporter-Integration
+finalisiert wird — bewusst keine erfundene finale CLI. Die Datei führt **NICHTS** aus.
+
+**NICHT enthalten (Christians Gate):** der echte undici-mTLS-Forward-Executor (Net-Egress), der
+mcporter-`spawn`, das Fastify-Route-Wiring und das 3-Stufen-Enforcement (D4-d).
