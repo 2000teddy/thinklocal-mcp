@@ -355,7 +355,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
   - [ ] `bootstrap`-Schritt: `sudo launchctl bootstrap system /Library/LaunchDaemons/com.thinklocal.daemon.plist`.
   - [ ] Uninstaller-Pendant in `install.sh --uninstall`: `bootout system`, plist + Wrapper loeschen.
   - [ ] Homebrew-Formel (`Formula/thinklocal.rb`) konsistent anpassen — derzeit installiert sie ebenfalls einen LaunchAgent.
-  - [ ] README/INSTALL.md / USER-GUIDE: macOS-Abschnitt auf LaunchDaemon umstellen, Wrapper-Sinn kurz erklaeren, FileVault-Hinweis aufnehmen.
+  - [x] README/INSTALL.md / USER-GUIDE: macOS-Abschnitt auf LaunchDaemon umstellen, Wrapper-Sinn kurz erklaeren, FileVault-Hinweis aufnehmen. **Erfasst via v0.34.27 (`docs/operations/RUNBOOK-ADR-029-launchdaemon-operator.md`) + INSTALL.md-updates aus #196.** Operator-Runbook (Pre-Flight/Operator-Sequenz/Smoke/Reboot/Rollback) liegt vor; Vor-Ort-Termin = Christians Deploy-Gate (Gate #5-Sequenz).
 
 ### 5.3 Claude Desktop MCP Integration
 - [x] 🔴 `thinklocal mcp config --claude-desktop` — generiert JSON-Block (2026-04-04)
