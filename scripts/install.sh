@@ -234,7 +234,7 @@ cleanup_existing() {
         info "Bestehende Installation gefunden — raeume auf..."
 
         # Daemon stoppen
-        if [ "$PLATFORM" = "darwin" ]; then
+        if [ "$PLATFORM" = "macos" ]; then
             # System-Domain LaunchDaemon (ADR-029, Label-Form) + Legacy-LaunchAgent.
             sudo launchctl bootout system/com.thinklocal.daemon 2>/dev/null || true
             # Legacy-Agent im Home des LAUF-Nutzers (nicht $HOME=/root unter sudo, CR MEDIUM-3).
@@ -254,7 +254,7 @@ cleanup_existing() {
         # bereits ENTLADEN und wird gleich in install_macos_service REVERSIBEL gesichert
         # (mv → .disabled.<datum>). cleanup_existing läuft nur bei --reinstall/--update und ist immer
         # von install_macos_service gefolgt; sonst wäre der Backup-Block unerreichbar (irreversibel).
-        if [ "$PLATFORM" = "darwin" ]; then
+        if [ "$PLATFORM" = "macos" ]; then
             sudo rm -f /Library/LaunchDaemons/com.thinklocal.daemon.plist 2>/dev/null
         fi
         rm -f "$HOME/.config/systemd/user/thinklocal-daemon.service" 2>/dev/null
