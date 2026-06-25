@@ -241,7 +241,7 @@ cleanup_existing() {
             if resolve_run_user_home 2>/dev/null; then
                 launchctl unload "$TLMCP_RUN_HOME/Library/LaunchAgents/com.thinklocal.daemon.plist" 2>/dev/null || true
             fi
-            launchctl unload "$HOME/Library/LaunchAgents/com.thinklocal.daemon.plist" 2>/dev/null
+            launchctl unload "$HOME/Library/LaunchAgents/com.thinklocal.daemon.plist" 2>/dev/null || true
         elif [ "$PLATFORM" = "linux" ]; then
             systemctl --user stop thinklocal-daemon 2>/dev/null
             systemctl --user stop thinklocal-dashboard 2>/dev/null
