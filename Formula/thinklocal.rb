@@ -45,10 +45,15 @@ class Thinklocal < Formula
     EOS
   end
 
-  # launchd service definition
+  # launchd service definition (ADR-029-Semantik, soweit der `brew services`-DSL es erlaubt)
   service do
     run [opt_bin/"tlmcp-daemon"]
-    keep_alive true
+    run_type :immediate # RunAtLoad — startet bei Service-Load / Boot
+    # ADR-029: KEIN mystery-relauncher — Neustart nur bei nicht-sauberem Exit
+    # (= launchd KeepAlive{SuccessfulExit:false}). Hängt davon ab, dass das Daemon bei SIGTERM/
+    # bootout sauber mit Exit 0 beendet — der SIGTERM-Handler tut das (index.ts: shutdown→exit(0)),
+    # daher wird ein bewusst gestopptes Daemon NICHT neu hochgezogen.
+    keep_alive successful_exit: false
     working_dir var/"thinklocal"
     log_path var/"log/thinklocal/daemon.log"
     error_log_path var/"log/thinklocal/daemon-error.log"
@@ -69,6 +74,11 @@ class Thinklocal < Formula
         brew services start thinklocal
         # oder manuell:
         tlmcp-daemon
+
+      Hinweis (ADR-029): `brew services` installiert einen PER-USER-LaunchAgent, der erst
+      nach GUI-Login startet. Fuer headless/SSH-only/FileVault-Macs den System-Domain-
+      LaunchDaemon-Installer nutzen (startet ohne GUI-Login, laeuft als dedizierter Nutzer):
+        sudo bash #{libexec}/scripts/install.sh   # rendert /Library/LaunchDaemons + bootstrap system
 
       CLI-Tool:
         thinklocal status        # Status pruefen

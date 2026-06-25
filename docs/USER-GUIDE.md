@@ -330,9 +330,12 @@ vi ~/.config/systemd/user/thinklocal-daemon.service
 systemctl --user daemon-reload
 systemctl --user restart thinklocal-daemon
 
-# macOS (launchd)
-# TLMCP_NO_TLS Key aus ~/Library/LaunchAgents/com.thinklocal.daemon.plist entfernen
-launchctl kickstart -k gui/$(id -u)/com.thinklocal.daemon
+# macOS (launchd — ADR-029 System-Domain-LaunchDaemon)
+# TLMCP_NO_TLS Key aus /Library/LaunchDaemons/com.thinklocal.daemon.plist entfernen (sudo),
+# danach den System-Domain-Service neu starten:
+sudo launchctl kickstart -k system/com.thinklocal.daemon
+# (Alt-Installation als per-User-LaunchAgent: Key aus ~/Library/LaunchAgents/com.thinklocal.daemon.plist
+#  entfernen + launchctl kickstart -k gui/$(id -u)/com.thinklocal.daemon)
 ```
 
 **Voraussetzung:** TLS-Zertifikate muessen existieren (`~/.thinklocal/tls/ca.crt.pem`,
