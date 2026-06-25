@@ -234,14 +234,14 @@ cleanup_existing() {
         info "Bestehende Installation gefunden — raeume auf..."
 
         # Daemon stoppen
-        if [ "$PLATFORM" = "darwin" ]; then
+        if [ "$PLATFORM" = "macos" ]; then
             # System-Domain LaunchDaemon (ADR-029, Label-Form) + Legacy-LaunchAgent.
             sudo launchctl bootout system/com.thinklocal.daemon 2>/dev/null || true
             # Legacy-Agent im Home des LAUF-Nutzers (nicht $HOME=/root unter sudo, CR MEDIUM-3).
             if resolve_run_user_home 2>/dev/null; then
                 launchctl unload "$TLMCP_RUN_HOME/Library/LaunchAgents/com.thinklocal.daemon.plist" 2>/dev/null || true
             fi
-            launchctl unload "$HOME/Library/LaunchAgents/com.thinklocal.daemon.plist" 2>/dev/null
+            launchctl unload "$HOME/Library/LaunchAgents/com.thinklocal.daemon.plist" 2>/dev/null || true
         elif [ "$PLATFORM" = "linux" ]; then
             systemctl --user stop thinklocal-daemon 2>/dev/null
             systemctl --user stop thinklocal-dashboard 2>/dev/null
@@ -250,11 +250,13 @@ cleanup_existing() {
         fi
 
         # Alte Service-Dateien entfernen (Daemon + Dashboard)
-        if [ "$PLATFORM" = "darwin" ]; then
+        # ADR-029-Fix (CR-MEDIUM, PR #203): den Legacy-LaunchAgent hier NICHT löschen — er ist oben
+        # bereits ENTLADEN und wird gleich in install_macos_service REVERSIBEL gesichert
+        # (mv → .disabled.<datum>). cleanup_existing läuft nur bei --reinstall/--update und ist immer
+        # von install_macos_service gefolgt; sonst wäre der Backup-Block unerreichbar (irreversibel).
+        if [ "$PLATFORM" = "macos" ]; then
             sudo rm -f /Library/LaunchDaemons/com.thinklocal.daemon.plist 2>/dev/null
-            resolve_run_user_home 2>/dev/null && rm -f "$TLMCP_RUN_HOME/Library/LaunchAgents/com.thinklocal.daemon.plist" 2>/dev/null
         fi
-        rm -f "$HOME/Library/LaunchAgents/com.thinklocal.daemon.plist" 2>/dev/null
         rm -f "$HOME/.config/systemd/user/thinklocal-daemon.service" 2>/dev/null
         rm -f "$HOME/.config/systemd/user/thinklocal-dashboard.service" 2>/dev/null
         [ "$PLATFORM" = "linux" ] && systemctl --user daemon-reload 2>/dev/null
@@ -359,10 +361,18 @@ install_macos_service() {
         rm -f "$TMP_PLIST"; return 1
     fi
 
-    # Migration: alten LaunchAgent (falls vorhanden) entladen + entfernen, sonst Doppelstart.
+    # Migration: alten LaunchAgent (falls vorhanden) entladen + REVERSIBEL sichern statt löschen
+    # (ADR-029: `mv` → `.disabled.<datum>` statt `rm`, Rollback möglich), sonst Doppelstart.
     local LEGACY_AGENT="$RUN_HOME/Library/LaunchAgents/com.thinklocal.daemon.plist"
     launchctl unload "$LEGACY_AGENT" 2>/dev/null || true
-    rm -f "$LEGACY_AGENT" 2>/dev/null || true
+    if [ -f "$LEGACY_AGENT" ]; then
+        local LEGACY_BAK="${LEGACY_AGENT}.disabled.$(date +%Y%m%d-%H%M%S)"
+        if mv "$LEGACY_AGENT" "$LEGACY_BAK" 2>/dev/null; then
+            info "Alten LaunchAgent reversibel gesichert: $LEGACY_BAK"
+        else
+            rm -f "$LEGACY_AGENT" 2>/dev/null || true
+        fi
+    fi
 
     # System-Domain: root:wheel / 644, dann bootstrap (sudo). bootout in Label-Form (CR MEDIUM-2:
     # gleich wie der getestete Plan; funktioniert auch ohne Plist auf Disk).

@@ -6,7 +6,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-06-25 13:05
+## [Unreleased] — 2026-06-25 14:35
+
+### v0.34.30 (Prep — Christian-autorisiert; Skript-Edit, NICHT ausgeführt; KEIN Deploy/Install) — feat(macos): ADR-029 — Installer-Legacy-Migration reversibel (`.disabled.<datum>` statt `rm`)
+
+Schließt den letzten repo-internen ADR-029-Installer-Sub-Punkt (TODO:354): die LaunchAgent→LaunchDaemon-Migration **löschte** den alten LaunchAgent (`rm -f`) — jetzt wird er **reversibel gesichert** (`mv` → `~/Library/LaunchAgents/com.thinklocal.daemon.plist.disabled.<YYYYMMDD-HHMMSS>`), Rollback möglich. **Reines Skript-Edit — `install.sh` wird NICHT ausgeführt; Live-Install = Christians Deploy-Gate.**
+
+- **`scripts/install.sh`** `install_macos_service`: `launchctl unload` + (bei vorhandener Datei) `mv … .disabled.<ts>` mit `info`-Log; Fallback `rm` nur falls `mv` scheitert. Verhindert Doppelstart, behält die Alt-Plist aber wiederherstellbar.
+- **`cleanup_existing` (CR-MEDIUM-Fix, Review zu #203):** löscht den Legacy-LaunchAgent **nicht mehr** per `rm -f` (entlädt ihn nur) → der reversible Backup-Block greift jetzt auch auf dem **`--reinstall`/`--update`-Pfad** (vorher dort weiterhin irreversibel, da die Datei schon weg war). System-Domain-Plist-Entfernung bleibt; `cleanup_existing` läuft nur bei reinstall/update und ist immer von `install_macos_service` gefolgt.
+- **`detect_platform`-Mismatch (CR-AMBER, codex-Review zu #203):** `cleanup_existing` verglich `$PLATFORM = "darwin"`, aber `detect_platform` setzt `"macos"` → der gesamte macOS-Cleanup-Block (bootout/unload/Plist-Entfernung) war auf macOS **toter Code**. Beide Vergleiche auf `"macos"` korrigiert (konsistent mit `detect_platform` + `main()`-`case`).
+- **`set -e`-Abbruch (CR-Re-Review zu #203):** die ungeschützte `launchctl unload "$HOME/.../com.thinklocal.daemon.plist"` in `cleanup_existing` konnte unter `set -euo pipefail` non-zero liefern und `--reinstall/--update` abbrechen (jetzt, da der macOS-Block wieder live ist). `|| true` ergänzt (wie die Nachbarzeilen). `bootstrap system` bleibt bewusst ungeschützt (Install soll bei Bootstrap-Fehler scheitern).
+- **`TODO.md`**: Installer-Pre-Flight-Sub-Item (TODO:354) als erledigt markiert (`$SUDO_USER`/non-root + Node-22-Checks bereits via #196; reversible Legacy-Sicherung jetzt ergänzt).
+
+**Checks:** `bash -n scripts/install.sh` clean; Backup-Logik smoke-getestet (tmp: `legacy.plist` → `legacy.plist.disabled.<ts>`). Kein TS geändert → daemon-unit-Suite unverändert grün. **CR:** clink **claude**. **PC:** `pal:precommit` internal. **Durable-Behavior (KeepAlive{SuccessfulExit:false}/RunAtLoad/FileVault-aware/kein mystery-relauncher) war bereits vollständig auf main** (#192-Template, #196-Installer, #201-Formel) — dieser Slice ist die letzte Migrations-Safety-Ergänzung.
 
 ### v0.34.29 (Status-Hygiene — Christian-autorisiert; REIN docs/TODO; KEIN Code/Deploy) — docs(todo): ADR-024/ADR-029-Status gegen main abgeglichen
 
