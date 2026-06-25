@@ -1052,3 +1052,19 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 ---
 
 *Letzte Aktualisierung: 2026-06-25 10:05 — v0.34.28 feat(macos): ADR-029 Homebrew-Formel + USER-GUIDE System-Domain-Semantik.*
+
+---
+
+## Session 2026-06-25 13:05 — v0.34.29 docs(todo): ADR-024/ADR-029-Status gegen main abgeglichen
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|----|
+| v0.34.29 | (neu, base=main) | 2026-06-25 13:05 | —   | —  | n/a (docs-only) | ✅ | ✅ | ✅ | Reine TODO-Status-Hygiene; gemergte Items (#191/#196/#201) waren noch als „offen" markiert |
+
+**CO/CG:** — (docs-only Reconcile). **TS:** n/a (kein Code; Status-Aussagen gegen gh/git verifiziert: #191 gemergt 2026-06-23, #196 + #201 gemergt 2026-06-25). **CR:** clink **claude** codereviewer (nur claude/codex/agy, nie MiniMax/pal:chat). **PC:** `pal:precommit` internal. **DO:** CHANGES (v0.34.29), COMPLIANCE.
+
+**Status:** TODO.md gegen main abgeglichen — ADR-024-Gate (Code via #191 auf main; offen nur Re-Enroll=Deploy-Gate) + ADR-029-Installer-Sub-Items (#196/#200/#201 erledigt; offen nur Live-Install=Deploy-Gate). Keine Code-/Verhaltens-Änderung.
+
+---
+
+*Letzte Aktualisierung: 2026-06-25 13:05 — v0.34.29 docs(todo): ADR-024/ADR-029-Status gegen main abgeglichen.*

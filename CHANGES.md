@@ -6,7 +6,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-06-25 10:05
+## [Unreleased] — 2026-06-25 13:05
+
+### v0.34.29 (Status-Hygiene — Christian-autorisiert; REIN docs/TODO; KEIN Code/Deploy) — docs(todo): ADR-024/ADR-029-Status gegen main abgeglichen
+
+Reconcile der Planungs-Quelle `TODO.md` gegen den echten main-Stand — mehrere bereits gemergte Items standen noch als „offen" und verfälschten den Plan. **Reine TODO-Korrektur, keine Code-/Verhaltens-Änderung.**
+
+- **ADR-024-Rollout-Gate:** die 2 CR/PC-MEDIUMs sind code-seitig geschlossen (v0.34.20) **und #191 ist gemergt (2026-06-23, auf main)** — TODO sagte noch „Offen: PR-Merge". Korrigiert: offen ist **nur noch Re-Enroll = Christian-Deploy-Gate**. Auch #165-Zeile („⚠️ Rest-MEDIUMs offen") angeglichen.
+- **ADR-029-Installer:** Installer-Umbau (`install.sh`→System-Domain + bootstrap + Uninstall, **#196**), Operator-Runbook (#200) und Homebrew/USER-GUIDE (**#201**) sind repo-intern erledigt — die Sub-Items standen noch auf `[ ]`. Abgehakt; offen nur noch **Live-Install/`bootstrap`-Ausführen + Service-User = Christian-Deploy-Gate**.
+
+**Checks:** docs-only (kein TS, kein `.ts`) → keine neuen Tests; Status-Aussagen gegen gh/git verifiziert (#191/#196/#201 gemergt). **CR:** clink **claude**. **PC:** `pal:precommit` internal.
 
 ### v0.34.28 (Prep — Christian-autorisiert; Formel-/Doku-Konsistenz; KEIN Deploy/Install/brew-Run) — feat(macos): ADR-029 — Homebrew-Formel + USER-GUIDE auf System-Domain-Semantik angeglichen
 
