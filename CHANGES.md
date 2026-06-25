@@ -6,6 +6,28 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
+## [Unreleased] — 2026-06-25 06:30
+
+### v0.34.27 (Prep — Christian-autorisiert; REINE Dokumentation; KEIN Code/Deploy/Install) — docs(operations): ADR-029 Operator-Runbook für Vor-Ort-Termin
+
+Schließt die nach #196 (Installer-Operationalisierung) offene Doku-Lücke: ein **dediziertes Operator-Runbook** für Christians macOS-Vor-Ort-Termin. **Rein dokumentarisch** — keine Code-Änderung, keine Install-Ausführung, kein Live-Wiring.
+
+- **`docs/operations/RUNBOOK-ADR-029-launchdaemon-operator.md`** (neu, 13.7 KB):
+  - **§0 Voraussetzungen** — macOS-Version, Node 22+, Repo-Checkout, letzter Installer-PR gemergt, `sudo` (nicht root).
+  - **§1 Pre-Flight** — FileVault-Status (`fdesetup status`), Service-Benutzer-/Gruppen-Existenz (`dscl . -list`), Port 9440 frei (`lsof`), alter LaunchAgent-Run-Check, Repo-Sauberkeit + `bash -n` Trockenprüfung.
+  - **§2 Operator-Sequenz** — Install / Steuern (`launchctl kickstart/bootout/bootstrap`) / Uninstall (idempotent).
+  - **§3 Smoke-Tests** — Prozess, Port, `/health`, `/api/status`, `tlmcp status`, Error-Log-Grep, MCP-Verfügbarkeit in Claude Code.
+  - **§4 Reboot-Test** — FileVault-Tauglichkeit inkl. Recovery-Key-Hinweis.
+  - **§5 Rollback** — drei Stufen (alter LaunchAgent → Repo-Stand vor #196 → Vault/Audit-Reset mit Sicherungs-Pflicht).
+  - **§6 Remote-Verifikation** — was Hermes via Tailscale-IP von TH01 aus prüfen kann, ohne sich am Mac einzuloggen.
+  - **§7 Limitierungen** — Service-User-Anlage, sudo-Passwordless, Linux-Äquivalent (KW26-Folge).
+  - **Anhang A** — `dscl`-Skript zum Anlegen des dedizierten Service-Benutzers.
+  - **Anhang B** — Referenzen (ADR-029, INSTALL.md, PR #196, Schwester-Runbooks).
+- **Bewusst NICHT enthalten (Christian-Deploy-Gate):** tatsächliches Ausführen von `install.sh`, Service-User-Anlage, `bootstrap system`, Reboot.
+- **Bezug:** [ADR-029](../architecture/ADR-029-macos-launchdaemon.md) + [INSTALL.md](../../INSTALL.md) (macOS-Abschnitt, unverändert — Runbook ergänzt nur, ändert nichts am Endnutzer-Text).
+
+**Compliance:** **CO/CG** n/a (reine Doku, kein Architektur-Thema). **TS** n/a (kein Code). **CR** n/a (Doku-Slice). **PC** n/a. **DO** ✅ — CHANGES, ADR-029-Verweis, TODO.md-Folge-Eintrag.
+
 ## [Unreleased] — 2026-06-24 07:32
 
 ### v0.34.26 (Prep — Christian-autorisiert; reine Exec-Spec/Skelett; KEIN Net-Egress/mcporter-Call/Wiring/Deploy) — feat(discovery): ADR-028 D4-b — D2-Forward Exec-Schicht (mcporter-Exec-Bridge, Skelett)
