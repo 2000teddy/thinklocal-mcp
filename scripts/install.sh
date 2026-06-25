@@ -250,11 +250,13 @@ cleanup_existing() {
         fi
 
         # Alte Service-Dateien entfernen (Daemon + Dashboard)
+        # ADR-029-Fix (CR-MEDIUM, PR #203): den Legacy-LaunchAgent hier NICHT löschen — er ist oben
+        # bereits ENTLADEN und wird gleich in install_macos_service REVERSIBEL gesichert
+        # (mv → .disabled.<datum>). cleanup_existing läuft nur bei --reinstall/--update und ist immer
+        # von install_macos_service gefolgt; sonst wäre der Backup-Block unerreichbar (irreversibel).
         if [ "$PLATFORM" = "darwin" ]; then
             sudo rm -f /Library/LaunchDaemons/com.thinklocal.daemon.plist 2>/dev/null
-            resolve_run_user_home 2>/dev/null && rm -f "$TLMCP_RUN_HOME/Library/LaunchAgents/com.thinklocal.daemon.plist" 2>/dev/null
         fi
-        rm -f "$HOME/Library/LaunchAgents/com.thinklocal.daemon.plist" 2>/dev/null
         rm -f "$HOME/.config/systemd/user/thinklocal-daemon.service" 2>/dev/null
         rm -f "$HOME/.config/systemd/user/thinklocal-dashboard.service" 2>/dev/null
         [ "$PLATFORM" = "linux" ] && systemctl --user daemon-reload 2>/dev/null

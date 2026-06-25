@@ -1075,7 +1075,7 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 | #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
 |----------|-------|------------------|-----|----|----|----|----|----|----|
-| v0.34.30 | (neu, base=main) | 2026-06-25 14:35 | —   | —  | ⚠️ | ✅ | ✅ | ✅ | CR clink claude — Bash-Migration `rm`→`mv .disabled.<ts>` (reversibel) |
+| v0.34.30 | (#203, base=main) | 2026-06-25 14:35 | —   | —  | ⚠️ | ✅ | ✅ | ✅ | CR clink claude: Bash-Migration `rm`→`mv .disabled.<ts>` (reversibel); **Post-Review CR-MEDIUM** (`cleanup_existing` löschte Legacy-Agent → reinstall/update irreversibel) gefixt: cleanup löscht nicht mehr, Backup zentral in `install_macos_service` |
 
 **CO/CG:** — (letzter ADR-029-Installer-Sub-Punkt, TODO:354). **TS:** ⚠️ Bash (kein TS) → `bash -n` clean + Backup-Logik smoke-getestet (`legacy.plist`→`.disabled.<ts>`); daemon-unit-Suite unverändert grün (kein TS geändert). **CR:** clink **claude** codereviewer (nur claude/codex/agy, nie MiniMax/pal:chat). **PC:** `pal:precommit` internal. **DO:** CHANGES (v0.34.30), COMPLIANCE, TODO.
 
