@@ -1068,3 +1068,19 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 ---
 
 *Letzte Aktualisierung: 2026-06-25 13:05 — v0.34.29 docs(todo): ADR-024/ADR-029-Status gegen main abgeglichen.*
+
+---
+
+## Session 2026-06-25 14:35 — v0.34.30 feat(macos): ADR-029 Installer-Legacy-Migration reversibel (.disabled-Backup)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|----|
+| v0.34.30 | (neu, base=main) | 2026-06-25 14:35 | —   | —  | ⚠️ | ✅ | ✅ | ✅ | CR clink claude — Bash-Migration `rm`→`mv .disabled.<ts>` (reversibel) |
+
+**CO/CG:** — (letzter ADR-029-Installer-Sub-Punkt, TODO:354). **TS:** ⚠️ Bash (kein TS) → `bash -n` clean + Backup-Logik smoke-getestet (`legacy.plist`→`.disabled.<ts>`); daemon-unit-Suite unverändert grün (kein TS geändert). **CR:** clink **claude** codereviewer (nur claude/codex/agy, nie MiniMax/pal:chat). **PC:** `pal:precommit` internal. **DO:** CHANGES (v0.34.30), COMPLIANCE, TODO.
+
+**Status:** ADR-029 — LaunchAgent→LaunchDaemon-Migration jetzt **reversibel** (`unload` + `mv` → `.disabled.<datum>` statt `rm`), Rollback möglich. Durable-Behavior (KeepAlive{SuccessfulExit:false}/RunAtLoad/FileVault/kein mystery-relauncher) war schon vollständig auf main (#192/#196/#201). **Reines Skript-Edit — kein `install.sh`-Run, kein Deploy.** Live-Install bleibt Christians Deploy-Gate.
+
+---
+
+*Letzte Aktualisierung: 2026-06-25 14:35 — v0.34.30 feat(macos): ADR-029 Installer-Legacy-Migration reversibel.*

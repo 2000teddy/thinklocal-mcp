@@ -6,7 +6,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-06-25 13:05
+## [Unreleased] — 2026-06-25 14:35
+
+### v0.34.30 (Prep — Christian-autorisiert; Skript-Edit, NICHT ausgeführt; KEIN Deploy/Install) — feat(macos): ADR-029 — Installer-Legacy-Migration reversibel (`.disabled.<datum>` statt `rm`)
+
+Schließt den letzten repo-internen ADR-029-Installer-Sub-Punkt (TODO:354): die LaunchAgent→LaunchDaemon-Migration **löschte** den alten LaunchAgent (`rm -f`) — jetzt wird er **reversibel gesichert** (`mv` → `~/Library/LaunchAgents/com.thinklocal.daemon.plist.disabled.<YYYYMMDD-HHMMSS>`), Rollback möglich. **Reines Skript-Edit — `install.sh` wird NICHT ausgeführt; Live-Install = Christians Deploy-Gate.**
+
+- **`scripts/install.sh`** `install_macos_service`: `launchctl unload` + (bei vorhandener Datei) `mv … .disabled.<ts>` mit `info`-Log; Fallback `rm` nur falls `mv` scheitert. Verhindert Doppelstart, behält die Alt-Plist aber wiederherstellbar.
+- **`TODO.md`**: Installer-Pre-Flight-Sub-Item (TODO:354) als erledigt markiert (`$SUDO_USER`/non-root + Node-22-Checks bereits via #196; reversible Legacy-Sicherung jetzt ergänzt).
+
+**Checks:** `bash -n scripts/install.sh` clean; Backup-Logik smoke-getestet (tmp: `legacy.plist` → `legacy.plist.disabled.<ts>`). Kein TS geändert → daemon-unit-Suite unverändert grün. **CR:** clink **claude**. **PC:** `pal:precommit` internal. **Durable-Behavior (KeepAlive{SuccessfulExit:false}/RunAtLoad/FileVault-aware/kein mystery-relauncher) war bereits vollständig auf main** (#192-Template, #196-Installer, #201-Formel) — dieser Slice ist die letzte Migrations-Safety-Ergänzung.
 
 ### v0.34.29 (Status-Hygiene — Christian-autorisiert; REIN docs/TODO; KEIN Code/Deploy) — docs(todo): ADR-024/ADR-029-Status gegen main abgeglichen
 

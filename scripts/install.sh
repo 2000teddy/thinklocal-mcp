@@ -359,10 +359,18 @@ install_macos_service() {
         rm -f "$TMP_PLIST"; return 1
     fi
 
-    # Migration: alten LaunchAgent (falls vorhanden) entladen + entfernen, sonst Doppelstart.
+    # Migration: alten LaunchAgent (falls vorhanden) entladen + REVERSIBEL sichern statt löschen
+    # (ADR-029: `mv` → `.disabled.<datum>` statt `rm`, Rollback möglich), sonst Doppelstart.
     local LEGACY_AGENT="$RUN_HOME/Library/LaunchAgents/com.thinklocal.daemon.plist"
     launchctl unload "$LEGACY_AGENT" 2>/dev/null || true
-    rm -f "$LEGACY_AGENT" 2>/dev/null || true
+    if [ -f "$LEGACY_AGENT" ]; then
+        local LEGACY_BAK="${LEGACY_AGENT}.disabled.$(date +%Y%m%d-%H%M%S)"
+        if mv "$LEGACY_AGENT" "$LEGACY_BAK" 2>/dev/null; then
+            info "Alten LaunchAgent reversibel gesichert: $LEGACY_BAK"
+        else
+            rm -f "$LEGACY_AGENT" 2>/dev/null || true
+        fi
+    fi
 
     # System-Domain: root:wheel / 644, dann bootstrap (sudo). bootout in Label-Form (CR MEDIUM-2:
     # gleich wie der getestete Plan; funktioniert auch ohne Plist auf Disk).
