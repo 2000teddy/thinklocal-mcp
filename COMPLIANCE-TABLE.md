@@ -1036,3 +1036,19 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 ---
 
 *Letzte Aktualisierung: 2026-06-24 07:32 — v0.34.26 + v0.34.25 ADR-028 D4-b (#198 + #199) gemergt.*
+
+---
+
+## Session 2026-06-25 10:05 — v0.34.28 feat(macos): ADR-029 Homebrew-Formel + USER-GUIDE auf System-Domain-Semantik angeglichen
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|----|
+| v0.34.28 | (neu, base=main) | 2026-06-25 10:05 | —   | —  | ⚠️ | ✅ | ✅ | ✅ | CR clink claude: DSL korrekt; 2 MEDIUM (Caveat-Pfad relativ→`#{libexec}`; SIGTERM-Exit-0-Abhängigkeit) → gefixt/verifiziert |
+
+**CO/CG:** — (Konsistenz-Slice eines bereits gemergten ADR-029). **TS:** ⚠️ kein TS geändert → keine neuen Unit-Tests; `ruby`/`brew` auf dem Linux-Host n/a → Formel per Inspektion gegen Homebrew-`service`-DSL geprüft; SIGTERM→`exit(0)` in `index.ts:1304` verifiziert (sichert `KeepAlive{SuccessfulExit:false}`-Korrektheit). tsc 0, daemon-unit-Suite 1164 grün (keine Regression). **CR:** clink **claude** codereviewer (nur claude/codex/agy, nie MiniMax/pal:chat) — 0 CRITICAL/HIGH, 2 MEDIUM gefixt. **PC:** `pal:precommit` internal. **DO:** CHANGES (v0.34.28), COMPLIANCE, TODO.
+
+**Status:** ADR-029-Konsistenz — Homebrew-`service do` auf `keep_alive successful_exit: false` + `run_type :immediate` + ADR-029-Caveat (headless→System-Domain-Installer); USER-GUIDE macOS-Pfad auf `/Library/LaunchDaemons/`. **Reines Formel-/Doku-Edit — kein `brew`/`install.sh`-Run, kein Deploy.** Live-Install bleibt Christians Deploy-Gate.
+
+---
+
+*Letzte Aktualisierung: 2026-06-25 10:05 — v0.34.28 feat(macos): ADR-029 Homebrew-Formel + USER-GUIDE System-Domain-Semantik.*

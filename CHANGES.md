@@ -6,7 +6,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-06-25 06:30
+## [Unreleased] — 2026-06-25 10:05
+
+### v0.34.28 (Prep — Christian-autorisiert; Formel-/Doku-Konsistenz; KEIN Deploy/Install/brew-Run) — feat(macos): ADR-029 — Homebrew-Formel + USER-GUIDE auf System-Domain-Semantik angeglichen
+
+Schließt den verbleibenden repo-internen ADR-029-Konsistenz-Rest nach #196/#200: die Homebrew-`service`-Definition + eine USER-GUIDE-Altreferenz spiegelten noch das alte LaunchAgent-/„immer-neustarten"-Modell. **Reines Formel-/Doku-Edit — `brew`/`install.sh` werden NICHT ausgeführt; Live-Install = Christians Deploy-Gate.**
+
+- **`Formula/thinklocal.rb`** `service do`: `keep_alive true` → **`keep_alive successful_exit: false`** (= launchd `KeepAlive{SuccessfulExit:false}`, **kein mystery-relauncher**; hängt am SIGTERM→`exit(0)`-Handler `index.ts:1304`, verifiziert) + explizit **`run_type :immediate`** (RunAtLoad). **Caveat** ergänzt: `brew services` installiert einen **per-User-LaunchAgent** (GUI-Login nötig) → headless/SSH/FileVault via `sudo bash #{libexec}/scripts/install.sh` (System-Domain-LaunchDaemon, ADR-029).
+- **`docs/USER-GUIDE.md`**: macOS-`TLMCP_NO_TLS`-Entfernen auf den System-Domain-Pfad `/Library/LaunchDaemons/…` + `sudo launchctl kickstart -k system/com.thinklocal.daemon` umgestellt (Legacy-LaunchAgent-Variante als Klammer erhalten).
+
+**Checks:** **CR clink claude** — DSL bestätigt korrekt; 2 MEDIUM (Caveat-`scripts/install.sh` relativ → absoluter `#{libexec}`-Pfad; SIGTERM-Exit-0-Abhängigkeit verifiziert+dokumentiert) **gefixt**. `ruby`/`brew` auf dem Linux-Build-Host **n/a** → Formel per Inspektion gegen die Homebrew-`service`-DSL geprüft (keine Auto-Lint). tsc 0, daemon-unit-Suite 1164 grün (kein TS geändert → keine Regression). **CO/CG:** n/a (Konsistenz-Slice). **PC:** `pal:precommit` internal.
 
 ### v0.34.27 (Prep — Christian-autorisiert; REINE Dokumentation; KEIN Code/Deploy/Install) — docs(operations): ADR-029 Operator-Runbook für Vor-Ort-Termin
 
