@@ -187,3 +187,67 @@ describe('ActiveLibp2pRuntime.dialProtocol/hangUpPeer — PeerId-Objekt statt St
     expect((calls.hangup as { toString(): string }).toString()).toBe(PID);
   });
 });
+
+// B7-Repro: nagelt den ORIGINAL-Fehlermodus `multiaddrs[0].getPeerId is not a function` fest und
+// belegt, dass der Fix (String→PeerId via toPeerId) ihn verhindert. Der Mock-Node bildet das
+// libp2p-v2-Verhalten nach: ein nackter STRING wird intern als Multiaddr behandelt → `.getPeerId()`
+// auf einem Nicht-Multiaddr → exakt jener TypeError; ein echtes PeerId-Objekt (hat `.toCID`) wird
+// akzeptiert. So ist der Regressionstest an die reale Fehlersignatur gebunden, nicht nur ans
+// Soll-Verhalten.
+describe('ActiveLibp2pRuntime — B7-Repro: getPeerId-TypeError-Failure-Mode (Capability-Count-Drift)', () => {
+  const cfg = {
+    enabled: true, bindHost: '0.0.0.0', listenPort: 9540, mdnsServiceTag: 'thinklocal-mcp',
+    natTraversalEnabled: false, relayTransportEnabled: false, relayServiceEnabled: false, announceMultiaddrs: [],
+  };
+  const PID = '12D3KooWKZ4zvnnd9mJimkncKatN9F6fQWRHc5ZNY9SMFNBb5Ynb';
+
+  // libp2p-v2-ähnlicher dialProtocol: String → Multiaddr-Pfad → `multiaddrs[0].getPeerId()` (TypeError).
+  function libp2pV2LikeDial(peer: unknown): unknown {
+    const isPeerIdObject =
+      peer !== null && typeof peer === 'object' && typeof (peer as { toCID?: unknown }).toCID === 'function';
+    if (!isPeerIdObject) {
+      const multiaddrs = [peer]; // libp2p behandelt den String als Multiaddr-artig
+      // genau hier entstand der Produktiv-Fehler: .getPeerId existiert auf dem Nicht-Multiaddr nicht.
+      return (multiaddrs[0] as unknown as { getPeerId: () => unknown }).getPeerId();
+    }
+    return { source: [], sink: async () => {}, close: async () => {}, abort: () => {} };
+  }
+
+  it('REPRO: ein nackter String löst exakt `getPeerId is not a function` aus (Original-Bug)', () => {
+    expect(() => libp2pV2LikeDial(PID)).toThrow(/getPeerId is not a function/);
+  });
+
+  it('FIX: rt.dialProtocol speist den libp2p-v2-Mock mit einem PeerId-Objekt → KEIN getPeerId-TypeError', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rt = new ActiveLibp2pRuntime(createInitialLibp2pState(cfg as any), cfg as any, {} as any);
+    let dialed: unknown;
+    (rt as unknown as { node: unknown }).node = {
+      dialProtocol: async (peer: unknown) => {
+        dialed = peer;
+        return libp2pV2LikeDial(peer); // wirft NUR, wenn peer ein String wäre
+      },
+      hangUp: async () => {},
+    };
+    // Mit dem Fix (toPeerId) erreicht den Mock ein PeerId-Objekt → der getPeerId-Pfad wird nie betreten.
+    await expect(rt.dialProtocol(PID, '/thinklocal/mesh/registry/1.0.0')).resolves.toBeDefined();
+    expect(typeof dialed).not.toBe('string');
+    expect(typeof (dialed as { toCID?: unknown }).toCID).toBe('function');
+  });
+
+  it('FIX: hangUpPeer speist den Mock ebenfalls mit PeerId-Objekt → kein getPeerId-TypeError', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rt = new ActiveLibp2pRuntime(createInitialLibp2pState(cfg as any), cfg as any, {} as any);
+    let hungUp: unknown;
+    (rt as unknown as { node: unknown }).node = {
+      hangUp: async (peer: unknown) => {
+        hungUp = peer;
+        // dieselbe libp2p-v2-Mimik: String würde getPeerId triggern.
+        if (!(peer !== null && typeof peer === 'object' && typeof (peer as { toCID?: unknown }).toCID === 'function')) {
+          ([peer] as unknown as { getPeerId: () => unknown }[])[0].getPeerId();
+        }
+      },
+    };
+    await expect(rt.hangUpPeer(PID)).resolves.toBeUndefined();
+    expect(typeof hungUp).not.toBe('string');
+  });
+});
