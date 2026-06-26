@@ -1084,3 +1084,19 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 ---
 
 *Letzte Aktualisierung: 2026-06-25 14:35 — v0.34.30 feat(macos): ADR-029 Installer-Legacy-Migration reversibel.*
+
+---
+
+## Session 2026-06-26 09:05 — v0.34.31 test(libp2p): B7 getPeerId-Repro + Regressionstest
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|----|
+| v0.34.31 | (neu, base=main) | 2026-06-26 09:05 | —   | —  | ✅ | ✅ | ✅ | ✅ | CR clink claude GREEN; Regressionstest empirisch bewiesen (Fix-Revert → 5 rot, restore → grün) |
+
+**CO/CG:** — (Test-Härtung eines gemergten Fixes #175). **TS:** `libp2p-runtime.test.ts` +3 (REPRO: String→exakt `getPeerId is not a function`; FIX dial+hangUp: PeerId-Objekt-Pfad). **Empirischer Guard-Beleg:** Fix temporär revertiert → `FIX:`-Tests + 3 bestehende getPeerId-Tests ROT (5 failed); restore → 1167 grün. tsc 0. **CR:** clink **claude** codereviewer (nur claude/codex/agy, nie MiniMax/pal:chat) — GREEN, faithful repro/kein false-negative. **PC:** `pal:precommit` internal — 0 Issues. **DO:** CHANGES (v0.34.31), COMPLIANCE.
+
+**Status:** B7 getPeerId — Code-Fix war via #175 (4b55f69) auf main; jetzt **expliziter Repro + Regressionstest** an die reale Fehlersignatur gebunden (test-only, kein Prod-Code). Live-`converged:false` bleibt deploy-abhängig (#194-Diagnose) = Christian-Deploy-Gate.
+
+---
+
+*Letzte Aktualisierung: 2026-06-26 09:05 — v0.34.31 test(libp2p): B7 getPeerId-Repro + Regressionstest.*

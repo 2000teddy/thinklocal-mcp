@@ -6,7 +6,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-06-25 14:35
+## [Unreleased] — 2026-06-26 09:05
+
+### v0.34.31 (Test-only — Christian-autorisiert; KEIN Prod-Code/Deploy) — test(libp2p): B7 getPeerId-Repro + Regressionstest (nagelt den Original-Fehlermodus fest)
+
+Der B7-getPeerId-**Code-Fix** ist seit **#175 (`4b55f69`) auf main** (`toPeerId`/`peerIdFromString` in `dialProtocol`+`hangUpPeer`). Bisher fehlte aber ein **expliziter Repro**, der den Original-Fehler `multiaddrs[0].getPeerId is not a function` (Capability-Count-Drift / `converged:false`) an die reale Fehlersignatur bindet. Dieser Slice schließt das **test-only** — keine Produktiv-Code-Änderung.
+
+- **`libp2p-runtime.test.ts`** (+3): neuer Block „B7-Repro: getPeerId-TypeError-Failure-Mode". Ein **libp2p-v2-ähnlicher Mock-Node** bildet das echte Verhalten nach (nackter String → als Multiaddr behandelt → `multiaddrs[0].getPeerId()` → exakt jener TypeError; echtes PeerId-Objekt → Stream-Stub).
+  - **REPRO:** ein String löst exakt `/getPeerId is not a function/` aus (Original-Bug, festgenagelt).
+  - **FIX (dial/hangUp):** `rt.dialProtocol`/`rt.hangUpPeer` speisen den Mock dank `toPeerId` mit einem PeerId-Objekt → der getPeerId-Pfad wird nie betreten.
+- **Empirischer Beleg, dass der Test den Fix wirklich bewacht:** Fix temporär revertiert (`toPeerId`→roher String) → die `FIX:`-Tests + 3 bestehende getPeerId-Tests werden **ROT** (5 failed); Fix restauriert → **alle grün**.
+
+**Checks:** tsc 0, daemon-unit-Suite **1167 grün** (+3). **CR:** clink **claude** codereviewer — **GREEN** (faithful repro, korrekter PeerId-Diskriminant, kein false-negative). **PC:** `pal:precommit` internal — 0 Issues. **Hinweis:** das **Live**-`converged:false`-Symptom bleibt deploy-abhängig (laufende Daemons pre-#175, Diagnose #194) = Christian-Deploy-Gate, kein Repo-Code.
 
 ### v0.34.30 (Prep — Christian-autorisiert; Skript-Edit, NICHT ausgeführt; KEIN Deploy/Install) — feat(macos): ADR-029 — Installer-Legacy-Migration reversibel (`.disabled.<datum>` statt `rm`)
 
