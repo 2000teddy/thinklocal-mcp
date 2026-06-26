@@ -8,6 +8,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.32 (Status-Hygiene — Christian-autorisiert; REIN docs/TODO; KEIN Code/Deploy) — docs(todo): B7 getPeerId — Regression-Proof #204 im Status nachgezogen
+
+Reconcile `TODO.md` gegen main: die B7-Zeile nannte nur den Code-Fix (#175), nicht den empirisch bewachten Repro/Regressionstest (#204, v0.34.31). Ergänzt; offen bleibt ausdrücklich nur der **Live-`converged:false`-Deploy-Gate** (laufende Daemons pre-#175, Diagnose #194 — Christian). Reine TODO-Korrektur, keine Code-/Verhaltens-Änderung.
+
 ### v0.34.31 (Test-only — Christian-autorisiert; KEIN Prod-Code/Deploy) — test(libp2p): B7 getPeerId-Repro + Regressionstest (nagelt den Original-Fehlermodus fest)
 
 Der B7-getPeerId-**Code-Fix** ist seit **#175 (`4b55f69`) auf main** (`toPeerId`/`peerIdFromString` in `dialProtocol`+`hangUpPeer`). Bisher fehlte aber ein **expliziter Repro**, der den Original-Fehler `multiaddrs[0].getPeerId is not a function` (Capability-Count-Drift / `converged:false`) an die reale Fehlersignatur bindet. Dieser Slice schließt das **test-only** — keine Produktiv-Code-Änderung.

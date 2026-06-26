@@ -1100,3 +1100,17 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 ---
 
 *Letzte Aktualisierung: 2026-06-26 09:05 — v0.34.31 test(libp2p): B7 getPeerId-Repro + Regressionstest.*
+
+---
+
+## Session 2026-06-26 12:02 — v0.34.32 docs(todo): B7 getPeerId Regression-Proof #204 im Status nachgezogen
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|----|
+| v0.34.32 | (neu, base=main) | 2026-06-26 12:02 | —   | —  | n/a (docs) | — | — | ✅ | TODO:29 nannte nur #175 → #204-Regression-Proof ergänzt; offen nur Deploy-Gate |
+
+**CO/CG/CR/PC:** — (reine TODO-Status-Hygiene, kein Code). **TS:** n/a. **DO:** TODO.md (#175+#204), CHANGES (v0.34.32), COMPLIANCE. **Status:** B7 repo-seitig vollständig (Code #175 + Regression-Proof #204); offen nur Live-`converged`-Deploy-Gate (#194). Keine Code-/Verhaltens-Änderung.
+
+---
+
+*Letzte Aktualisierung: 2026-06-26 12:02 — v0.34.32 docs(todo): B7 Regression-Proof #204 im Status nachgezogen.*
