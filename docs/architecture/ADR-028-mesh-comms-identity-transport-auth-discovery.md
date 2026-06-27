@@ -106,3 +106,16 @@ Nach D1–D4 wird HTTPS(mTLS) :9440 von „CORE, libp2p sekundär" zum **explizi
 ## Umsetzungs-Status
 - **D1** — IN ARBEIT (Branch `agent/claude-code/adr-028-d1-canonical-identity`): `parseSpiffeUri`/`normalizeAgentId` akzeptieren kanonische `node/<PeerID>`; Ziel: .94 wieder adressierbar. Code + Unit-Tests + CR + PC; Merge/Deploy = Christians Gate.
 - **D2a/D2b/D3/D4/Cutover** — geplant, je eigener PR.
+
+## NIC-Auswahl — allowed-CIDR überstimmt den `tailscale*/utun*`-Exclude (v0.34.34)
+
+`selectMeshInterfaces` (`discovery-policy.ts`) schloss virtuelle Interfaces (`tailscale*`/`utun*`/`docker*`/…)
+**vor** der `allowed_mesh_cidrs`-Prüfung aus → ein Tailscale-Interface (z.B. `utun4` mit `100.x`) wurde
+verworfen, **bevor** seine IP gegen die erlaubten Mesh-CIDRs geprüft wurde. Folge: `.55` konnte sich nicht
+über Tailscale self-advertisen (Overlay-Transport, ADR-027/Pfad A).
+
+**Fix (kleinster, default-neutral):** eine IP, die in einem **explizit konfigurierten** `allowed_mesh_cidrs`
+liegt, **überstimmt** den Exclude — der Betreiber hat diese CIDR bewusst als Mesh-Netz opt-in't (z.B.
+`100.64.0.0/10`). Bei leerer `allowed_mesh_cidrs`-Liste greift der Override nie → Linux/Standard-Nodes
+unverändert. Reine Auswahl-Logik (rein/testbar); kein Cert-/Flag-/Deploy-Eingriff. Live-Aktivierung auf `.55`
+(Config + Tailscale auf den Peers) bleibt Christians Deploy-Gate (Pfad A, RUNBOOK-55-A).

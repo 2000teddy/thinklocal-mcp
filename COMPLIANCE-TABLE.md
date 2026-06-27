@@ -1130,3 +1130,19 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 ---
 
 *Letzte Aktualisierung: 2026-06-27 06:40 — v0.34.33 test(tls): Regressionstest eigene-CA-Gültigkeit beim Reuse (PR #77).*
+
+---
+
+## Session 2026-06-27 10:05 — v0.34.34 feat(discovery): ADR-028 NIC-Auswahl — allowed_mesh_cidrs überstimmt tailscale*/utun*-Exclude
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|----|
+| v0.34.34 | (neu, base=main) | 2026-06-27 10:05 | —   | —  | ✅ | ✅ | ✅ | ✅ | CR clink claude; allowed-CIDR-Override (default-neutral) + 5 Tests, empirisch guard-bewiesen |
+
+**CO/CG:** — (design-first ADR-028-Note vor Code; kleinster sicherer Slice). **TS:** `discovery-policy.test.ts` +5 → 47 (Override, LAN+Tailscale-Koexistenz, nur-erlaubte-CIDR, docker0-bleibt-aus, default-neutral). Empirischer Beleg: Override-Block raus → ADR-028-Tests rot, re-applied → 1174 grün. tsc 0. **CR:** clink **claude** codereviewer (nur claude/codex/agy, nie MiniMax/pal:chat). **PC:** `pal:precommit` internal. **DO:** CHANGES (v0.34.34), COMPLIANCE, ADR-028-Note, TODO:30.
+
+**Status:** ADR-028 NIC-Auswahl — `selectMeshInterfaces` lässt eine IP in explizit gesetztem `allowed_mesh_cidrs` den `tailscale*/utun*`-Exclude überstimmen (Overlay-Self-Advertise). Default-neutral, rein/testbar. **Kein Deploy/Cert/Flag;** Live-Aktivierung auf `.55` = Christian-Deploy-Gate (Pfad A).
+
+---
+
+*Letzte Aktualisierung: 2026-06-27 10:05 — v0.34.34 feat(discovery): ADR-028 NIC-Auswahl (allowed-CIDR-Override).*

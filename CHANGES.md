@@ -9,6 +9,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 ## [Unreleased] — 2026-06-26 09:05
 
 
+### v0.34.34 (Christian-autorisiert; reine Auswahl-Logik, default-neutral; KEIN Deploy/Cert/Flag) — feat(discovery): ADR-028 NIC-Auswahl — allowed_mesh_cidrs überstimmt tailscale*/utun*-Exclude
+
+`selectMeshInterfaces` (`discovery-policy.ts`) schloss virtuelle Interfaces (`tailscale*`/`utun*`/…) **vor** dem `allowed_mesh_cidrs`-Check aus → ein Tailscale-Interface (`utun4`/`100.x`) wurde verworfen, bevor seine IP gegen die erlaubten Mesh-CIDRs geprüft wurde → `.55` konnte sich nicht über Tailscale self-advertisen (ADR-027/Pfad A). **Reine Auswahl-Logik — kein Cert/Flag/Deploy.**
+
+- **`discovery-policy.ts`** `selectMeshInterfaces`: eine IP in einem **explizit** konfigurierten `allowed_mesh_cidrs` **überstimmt** jetzt den Exclude (Override vor dem Pattern-Check). **Default-neutral:** bei leerer `allowed_mesh_cidrs`-Liste greift der Override nie → Linux/Standard-Nodes unverändert. Override gilt nur für IPs im erlaubten CIDR (docker0/172.x außerhalb bleibt aus).
+- **`discovery-policy.test.ts`** (+5): Override (utun4/100.x bei `100.64.0.0/10` DABEI), LAN+Tailscale-Koexistenz (`.55`-Fall en10+utun4), Override nur für erlaubte CIDR, docker0 außerhalb bleibt aus, default-neutral ohne CIDR.
+- **`docs/architecture/ADR-028-…md`** + `TODO:30`: Design-Note + Status (Live-Aktivierung auf `.55` = Deploy-Gate).
+
+**Checks:** tsc 0, daemon-unit-Suite **1174 grün** (+5). Empirischer Guard-Beleg: Override-Block entfernen → die ADR-028-Override-Tests werden ROT; re-applied → grün. **CR:** clink **claude**. **PC:** `pal:precommit` internal.
+
 ### v0.34.33 (Test-only — Christian-autorisiert; KEIN Prod-Code/Deploy) — test(tls): Regressionstest für eigene-CA-Gültigkeit beim Reuse (PR #77, fail-closed)
 
 Schließt einen empirisch belegten **Coverage-Gap**: `loadOrCreateTlsBundle` reissuet die eigene Mesh-CA, wenn die vorhandene `ca.crt.pem` abgelaufen / noch nicht gültig ist (PR #77, security-relevant: eine abgelaufene CA darf NICHT still wiederverwendet werden). Dieser `caValid`-Pfad war **ungetestet** — den Check zu brechen ließ 30/30 tls-Tests grün. **Test-only, keine Produktiv-Code-Änderung.**
