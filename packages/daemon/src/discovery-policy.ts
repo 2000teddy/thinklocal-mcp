@@ -159,11 +159,12 @@ export function listActiveIPv4Interfaces(
 /**
  * Waehlt die Mesh-tauglichen Interfaces aus.
  *
- * Auswahllogik:
- * 1. Falls allowed_mesh_cidrs gesetzt: filtere Interfaces deren IP in einem
- *    der CIDRs liegt
- * 2. Falls leer: nimm alle Interfaces die nicht in exclude_patterns matchen
- * 3. Wende exclude_patterns auf alle Kandidaten an
+ * Auswahllogik (ADR-028 NIC-Auswahl):
+ * 1. Interface, dessen IP in einem `allowed_mesh_cidrs` liegt → ERLAUBT (überstimmt den
+ *    Exclude; ermöglicht Overlay/Tailscale-Self-Advertise über `utun*`/`tailscale*`).
+ * 2. Sonst: in `exclude_patterns` (Defaults + User) matchend → ausgeschlossen.
+ * 3. `allowed_mesh_cidrs` gesetzt aber keine IP-Übereinstimmung → ausgeschlossen.
+ * 4. `allowed_mesh_cidrs` leer (Default): alle nicht-excludeten Interfaces — bisheriges Verhalten.
  */
 export function selectMeshInterfaces(
   config: DiscoveryPolicyConfig = {},
@@ -179,15 +180,21 @@ export function selectMeshInterfaces(
   const allowedCidrs = config.allowed_mesh_cidrs ?? [];
 
   return all.filter((iface) => {
+    // ADR-028 NIC-Auswahl: ein EXPLIZIT per allowed_mesh_cidrs erlaubtes Interface (z.B. Tailscale
+    // 100.x über utun*/tailscale*) ÜBERSTIMMT den Default-Exclude — sonst würde der Exclude
+    // greifen, bevor der CIDR-Check läuft, und .55 könnte sich nicht über Tailscale self-advertisen.
+    // Default-neutral: bei leerer allowed_mesh_cidrs-Liste greift der Override nie (Linux/Standard
+    // unverändert) — der Override gilt nur für IPs, die der Betreiber explizit als Mesh-CIDR opt-in't.
+    const inAllowedCidr = allowedCidrs.length > 0 && allowedCidrs.some((cidr) => ipInCidr(iface.address, cidr));
+    if (inAllowedCidr) return true;
+
     // Exclude virtual / unerwuenschte Interfaces
     for (const pattern of excludePatterns) {
       if (matchesPattern(iface.name, pattern)) return false;
     }
 
-    // Wenn CIDRs gesetzt: nur passende erlauben
-    if (allowedCidrs.length > 0) {
-      return allowedCidrs.some((cidr) => ipInCidr(iface.address, cidr));
-    }
+    // Wenn CIDRs gesetzt aber kein Match: ausschliessen (nur explizit erlaubte IPs)
+    if (allowedCidrs.length > 0) return false;
 
     return true;
   });

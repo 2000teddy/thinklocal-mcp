@@ -167,6 +167,40 @@ describe('selectMeshInterfaces', () => {
     const addrs = ifaces.map((i) => i.address).sort();
     expect(addrs).toEqual(['10.0.0.20', '10.10.10.55']);
   });
+
+  // ADR-028 NIC-Auswahl: allowed_mesh_cidrs ÜBERSTIMMT den tailscale*/utun*-Exclude.
+  it('ADR-028: allowed_mesh_cidrs überstimmt den utun*/tailscale*-Exclude (Tailscale-Self-Advertise)', () => {
+    // utun4 = 100.64.0.1 (Tailscale CGNAT). Mit 100.64.0.0/10 erlaubt → trotz utun*-Exclude DABEI.
+    const ifaces = selectMeshInterfaces({ allowed_mesh_cidrs: ['100.64.0.0/10'] }, mockSource);
+    expect(ifaces.map((i) => i.name)).toContain('utun4');
+    expect(ifaces.map((i) => i.address)).toContain('100.64.0.1');
+  });
+
+  it('ADR-028: LAN + Tailscale koexistieren (.55-Fall — en10 10.10.10.x UND utun4 100.x)', () => {
+    const ifaces = selectMeshInterfaces(
+      { allowed_mesh_cidrs: ['10.10.10.0/24', '100.64.0.0/10'] },
+      mockSource,
+    );
+    const addrs = ifaces.map((i) => i.address).sort();
+    expect(addrs).toEqual(['10.10.10.55', '100.64.0.1']);
+  });
+
+  it('ADR-028: Override gilt NUR für IPs im erlaubten CIDR — utun4 bleibt aus, wenn nicht erlaubt', () => {
+    // allowed_mesh_cidrs gesetzt, aber NICHT die Tailscale-CIDR → utun4 weiter ausgeschlossen.
+    const ifaces = selectMeshInterfaces({ allowed_mesh_cidrs: ['10.10.10.0/24'] }, mockSource);
+    expect(ifaces.map((i) => i.name)).not.toContain('utun4');
+  });
+
+  it('ADR-028: Override überstimmt NICHT andere virtuelle Interfaces ausserhalb des CIDR (docker0 bleibt aus)', () => {
+    // 100.64.0.0/10 erlaubt utun4 (100.x), aber docker0 (172.17.x) bleibt ausgeschlossen.
+    const ifaces = selectMeshInterfaces({ allowed_mesh_cidrs: ['100.64.0.0/10'] }, mockSource);
+    expect(ifaces.map((i) => i.name)).not.toContain('docker0');
+  });
+
+  it('ADR-028 default-neutral: OHNE allowed_mesh_cidrs bleibt utun*/tailscale* ausgeschlossen', () => {
+    const ifaces = selectMeshInterfaces({}, mockSource);
+    expect(ifaces.map((i) => i.name)).not.toContain('utun4');
+  });
 });
 
 describe('getMeshIp', () => {
