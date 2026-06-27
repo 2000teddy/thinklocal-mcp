@@ -168,6 +168,35 @@ describe('ADR-024 — Canonical-Cert-Retention', () => {
       } finally { rmSync(dir, { recursive: true, force: true }); }
     });
 
+    // SECURITY (PR #77, fail-closed CA-Gültigkeit beim Reuse): eine eigene `ca.crt.pem`, deren
+    // Gültigkeitsfenster abgelaufen / noch nicht gültig ist, darf NICHT still wiederverwendet werden
+    // → CA-Reissue. Dieser Pfad (`tls.ts` `loadOrCreateTlsBundle`, `caValid`-Check) war bisher
+    // ungetestet (Bruch der Bedingung lässt 30/30 grün) — diese zwei Tests nageln ihn fest.
+    it('eigene CA ABGELAUFEN → CA-Reissue (nicht still wiederverwenden, PR #77)', () => {
+      const expiredOwnCa = mintCaWithValidity(new Date(Date.now() - 400 * DAY), new Date(Date.now() - DAY));
+      const nodeUnderExpired = createNodeCert(expiredOwnCa, 'node', LEGACY);
+      const dir = setupTls(expiredOwnCa, nodeUnderExpired);
+      try {
+        const bundle = loadOrCreateTlsBundle(dir, 'node', LEGACY, undefined, 'ownca56');
+        // Reissue: die zurückgegebene CA ist NICHT mehr die abgelaufene Eingabe …
+        expect(bundle.caCertPem).not.toBe(expiredOwnCa.caCertPem);
+        // … und das frische Node-Cert verifiziert gegen die frische, GÜLTIGE CA (verifyPeerCert
+        // ist fail-closed auf CA-Gültigkeit, ADR-024 MEDIUM-1 → true nur wenn CA aktuell gültig).
+        expect(verifyPeerCert(bundle.caCertPem, bundle.certPem)).toBe(true);
+      } finally { rmSync(dir, { recursive: true, force: true }); }
+    });
+
+    it('eigene CA NOCH NICHT GÜLTIG (notBefore in der Zukunft) → CA-Reissue', () => {
+      const futureOwnCa = mintCaWithValidity(new Date(Date.now() + 10 * DAY), new Date(Date.now() + 400 * DAY));
+      const nodeUnderFuture = createNodeCert(futureOwnCa, 'node', LEGACY);
+      const dir = setupTls(futureOwnCa, nodeUnderFuture);
+      try {
+        const bundle = loadOrCreateTlsBundle(dir, 'node', LEGACY, undefined, 'ownca56');
+        expect(bundle.caCertPem).not.toBe(futureOwnCa.caCertPem);
+        expect(verifyPeerCert(bundle.caCertPem, bundle.certPem)).toBe(true);
+      } finally { rmSync(dir, { recursive: true, force: true }); }
+    });
+
     it('Retention greift NICHT bei cert<->key-Mismatch → regeneriert (Legacy, Security)', () => {
       // node.crt.pem = kanonisch (von attestingCa), node.key.pem = FREMDER Key (passt nicht).
       const foreign = createNodeCert(ownCa, 'other', 'spiffe://thinklocal/host/other/agent/x');

@@ -8,6 +8,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+
+### v0.34.33 (Test-only — Christian-autorisiert; KEIN Prod-Code/Deploy) — test(tls): Regressionstest für eigene-CA-Gültigkeit beim Reuse (PR #77, fail-closed)
+
+Schließt einen empirisch belegten **Coverage-Gap**: `loadOrCreateTlsBundle` reissuet die eigene Mesh-CA, wenn die vorhandene `ca.crt.pem` abgelaufen / noch nicht gültig ist (PR #77, security-relevant: eine abgelaufene CA darf NICHT still wiederverwendet werden). Dieser `caValid`-Pfad war **ungetestet** — den Check zu brechen ließ 30/30 tls-Tests grün. **Test-only, keine Produktiv-Code-Änderung.**
+
+- **`tls.test.ts`** (+2, im `loadOrCreateTlsBundle`-Block): (1) eigene CA **abgelaufen** → CA-Reissue; (2) eigene CA **noch nicht gültig** (notBefore in der Zukunft) → CA-Reissue. Assert: zurückgegebene `caCertPem` ≠ Eingabe (reissued) **und** `verifyPeerCert(bundle.caCertPem, bundle.certPem)===true` (frisches Node-Cert unter frischer, gültiger CA).
+- **Empirischer Guard-Beleg:** den `caValid`-Check in `tls.ts:218` brechen → genau diese 2 neuen Tests werden **ROT**; restaurieren → **32/32 grün**.
+
+**Checks:** tsc 0, daemon-unit-Suite **1169 grün** (+2). **CR:** clink **claude** codereviewer — **GREEN** (Assertions ziel-spezifisch auf den `!caValid`-Reissue-Pfad, `verifyPeerCert`-Proxy sound, kein Flake); 1 LOW (`DAY`-Shadowing) gefixt. **PC:** `pal:precommit` internal — 0 Issues.
 ### v0.34.32 (Status-Hygiene — Christian-autorisiert; REIN docs/TODO; KEIN Code/Deploy) — docs(todo): B7 getPeerId — Regression-Proof #204 im Status nachgezogen
 
 Reconcile `TODO.md` gegen main: die B7-Zeile nannte nur den Code-Fix (#175), nicht den empirisch bewachten Repro/Regressionstest (#204, v0.34.31). Ergänzt; offen bleibt ausdrücklich nur der **Live-`converged:false`-Deploy-Gate** (laufende Daemons pre-#175, Diagnose #194 — Christian). Reine TODO-Korrektur, keine Code-/Verhaltens-Änderung.

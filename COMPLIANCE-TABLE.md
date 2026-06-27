@@ -1114,3 +1114,19 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 ---
 
 *Letzte Aktualisierung: 2026-06-26 12:02 — v0.34.32 docs(todo): B7 Regression-Proof #204 im Status nachgezogen.*
+
+---
+
+## Session 2026-06-27 06:40 — v0.34.33 test(tls): Regressionstest eigene-CA-Gültigkeit beim Reuse (PR #77)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|----|
+| v0.34.33 | (neu, base=main) | 2026-06-27 06:40 | —   | —  | ✅ | ✅ | ✅ | ✅ | CR clink claude GREEN; ungebachter `caValid`-Reissue-Pfad (PR #77) empirisch festgenagelt (Bruch → 2 rot, restore → grün); 1 LOW (DAY-Shadow) gefixt |
+
+**CO/CG:** — (Test-Härtung eines bestehenden security-Checks). **TS:** `tls.test.ts` +2 (eigene CA abgelaufen/noch-nicht-gültig → CA-Reissue). Empirischer Coverage-Beleg: `caValid` (tls.ts:218) brechen → all-30-grün (Gap), nach Tests → Bruch macht 2 ROT, restore → 32 grün. tsc 0, full 1169 grün. **CR:** clink **claude** codereviewer (nur claude/codex/agy, nie MiniMax/pal:chat) — GREEN, 1 LOW gefixt. **PC:** `pal:precommit` internal — 0 Issues. **DO:** CHANGES (v0.34.33), COMPLIANCE.
+
+**Status:** TLS-Härtung test-only — der PR-#77-Pfad „eigene CA abgelaufen/noch-nicht-gültig → Reissue" ist jetzt fail-closed test-bewacht (war ungetestet). Keine Produktiv-Code-Änderung; gleicher cert-validity-fail-closed-Strang wie ADR-024 MEDIUM-1.
+
+---
+
+*Letzte Aktualisierung: 2026-06-27 06:40 — v0.34.33 test(tls): Regressionstest eigene-CA-Gültigkeit beim Reuse (PR #77).*
