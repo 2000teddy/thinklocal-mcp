@@ -1179,4 +1179,14 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-06-29 17:15 — v0.34.38 feat(storage): SQLite WAL-Checkpoint + Retention (T1.3 / V5 Spur 1).*
+## Session 2026-06-29 17:40 — v0.34.39 test(cert): RE-CHECK Cert/Rotation — Verdikt festgenagelt (KW27)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|----|
+| v0.34.39 | (#212, base=main) | 2026-06-29 17:40 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | Evidence/Test-only; Verdikt: cert-rotation.ts tot, Rotation feuert nur beim Start, kein Timer → T2.1 gerechtfertigt; empirisch guard-bewiesen |
+
+**CO/CG:** n/a — reiner Evidence-/Verdikt-Slice (kein Produktionscode, keine Design-Frage). **TS:** `cert-rotation-recheck.test.ts` (neu, 4 Tests): 30-Tage→behalten, 3-Tage→Reissue-beim-Load, Reissue-nur-auf-Load, `cert-rotation.ts`-Importeure=0. Volle Suite **100 Files / 1199 grün**, tsc 0. Empirischer Beleg: Reissue-Gate `daysLeft > 7` → `> 0` mutiert ⇒ 1 rot, restauriert ⇒ 4 grün. **CR:** unabhängiger **Claude**-Subagent-Review (nur claude/codex/agy — `agy` fehlt im Env). **PC:** `pal:precommit` (s. PR-Body). **DO:** CHANGES (v0.34.39), COMPLIANCE, `changes/2026-06-29_cert-rotation-recheck-verdict.md`. **Status:** Verdikt belegt; **Folge-Slice = T2.1** (laufender Cert-Check + Alert + Reissue/Hot-Reload). Kein Deploy.
+
+---
+
+*Letzte Aktualisierung: 2026-06-29 17:40 — v0.34.39 test(cert): RE-CHECK Cert/Rotation — Verdikt festgenagelt (KW27).*
