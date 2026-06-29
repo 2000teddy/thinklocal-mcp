@@ -33,6 +33,8 @@ export type MeshEventType =
   | 'audit:new'
   | 'system:startup'
   | 'system:shutdown'
+  // T2.1: Live-Cert-Ablauf-Alert (warn/critical) vom periodischen Monitor.
+  | 'system:cert_expiry'
   // ADR-007/008 Phase A+B: governance + capability lifecycle events
   | 'inbox:new'
   | 'approval:created'

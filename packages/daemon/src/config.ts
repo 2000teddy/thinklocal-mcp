@@ -124,6 +124,17 @@ export interface DaemonConfig {
     peer_audit_max_age_days: number;
     revoked_capability_max_age_days: number;
   };
+  /**
+   * T2.1: Live-Cert-Ablauf-Monitor. Der Daemon prüft das TLS-Node-Cert
+   * periodisch (nicht nur beim Start) und alarmiert bei Unterschreiten der
+   * Schwellen. Reissue selbst passiert weiterhin erst beim (Neu-)Start
+   * (`loadOrCreateTlsBundle`, `daysLeft <= 7`) — siehe RE-CHECK-Verdikt.
+   */
+  cert: {
+    expiry_warn_days: number;
+    expiry_critical_days: number;
+    expiry_check_interval_ms: number;
+  };
 }
 
 const DEFAULTS: DaemonConfig = {
@@ -176,6 +187,11 @@ const DEFAULTS: DaemonConfig = {
     checkpoint_interval_ms: 3_600_000, // 1 h
     peer_audit_max_age_days: 90,
     revoked_capability_max_age_days: 90,
+  },
+  cert: {
+    expiry_warn_days: 30,
+    expiry_critical_days: 7,
+    expiry_check_interval_ms: 43_200_000, // 12 h
   },
 };
 
@@ -288,6 +304,23 @@ export function loadConfig(configPath?: string): DaemonConfig {
     );
   }
 
+  // T2.1: Live-Cert-Ablauf-Monitor.
+  if (env['TLMCP_CERT_EXPIRY_WARN_DAYS']) {
+    cfg.cert.expiry_warn_days = readPositiveInt('TLMCP_CERT_EXPIRY_WARN_DAYS', cfg.cert.expiry_warn_days);
+  }
+  if (env['TLMCP_CERT_EXPIRY_CRITICAL_DAYS']) {
+    cfg.cert.expiry_critical_days = readPositiveInt(
+      'TLMCP_CERT_EXPIRY_CRITICAL_DAYS',
+      cfg.cert.expiry_critical_days,
+    );
+  }
+  if (env['TLMCP_CERT_EXPIRY_CHECK_INTERVAL_MS']) {
+    cfg.cert.expiry_check_interval_ms = readPositiveInt(
+      'TLMCP_CERT_EXPIRY_CHECK_INTERVAL_MS',
+      cfg.cert.expiry_check_interval_ms,
+    );
+  }
+
   // LOW-FIX (CR-Review): CIDRs validieren — fail fast statt silent.
   // Typos wie "10.10.10.0/33" oder "10.10.10.0/24foo" muessen sofort
   // sichtbar sein, sonst publish/browse-Verhalten ist stillschweigend kaputt.
@@ -296,6 +329,16 @@ export function loadConfig(configPath?: string): DaemonConfig {
     throw new Error(
       `Ungueltige CIDRs in discovery.allowed_mesh_cidrs: ${JSON.stringify(invalidCidrs)}. ` +
         `Erwartet: IPv4 a.b.c.d/n mit n in 0..32.`,
+    );
+  }
+
+  // T2.1 (CR-LOW): warn-Schwelle MUSS > critical-Schwelle sein — fail fast statt
+  // still. Bei warn <= critical wäre der warn-Tier unerreichbar (classifyCertExpiry
+  // prüft critical zuerst) → alles unterhalb würde fälschlich als critical gewertet.
+  if (cfg.cert.expiry_warn_days <= cfg.cert.expiry_critical_days) {
+    throw new Error(
+      `Ungueltige Cert-Schwellen: expiry_warn_days (${cfg.cert.expiry_warn_days}) ` +
+        `muss > expiry_critical_days (${cfg.cert.expiry_critical_days}) sein.`,
     );
   }
 

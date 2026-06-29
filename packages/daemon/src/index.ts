@@ -5,6 +5,7 @@ import { loadConfig } from './config.js';
 import { createLogger } from './logger.js';
 import { loadOrCreateIdentity } from './identity.js';
 import { loadOrCreateTlsBundle, getCertDaysLeft, extractSpiffeUris, verifyPeerCert, selectTrustDistributionCa, type NodeCertBundle } from './tls.js';
+import { startCertExpiryMonitor } from './cert-expiry-monitor.js';
 import { existsSync as fsExistsSync } from 'node:fs';
 import { AuditLog } from './audit.js';
 import { MdnsDiscovery } from './discovery.js';
@@ -1315,23 +1316,29 @@ async function main(): Promise<void> {
     'Daemon bereit — warte auf Peers...',
   );
 
-  // Zertifikat-Ablauf-Warnung
-  const certDaysLeft = getCertDaysLeft(config.daemon.data_dir);
-  if (certDaysLeft !== null) {
-    if (certDaysLeft <= 7) {
-      log.warn({ certDaysLeft }, 'Zertifikat laeuft in weniger als 7 Tagen ab!');
-      eventBus.emit('system:startup', { warning: 'cert_expiry_soon', certDaysLeft });
-    } else if (certDaysLeft <= 30) {
-      log.info({ certDaysLeft }, 'Zertifikat laeuft in weniger als 30 Tagen ab');
-    } else {
-      log.debug({ certDaysLeft }, 'Zertifikat gueltig');
-    }
-  }
+  // T2.1: Live-Cert-Ablauf-Monitor — prüft das Node-Cert periodisch (nicht nur
+  // beim Start) und alarmiert bei <30 d (warn) / ≤7 d (critical) via Log +
+  // signiertem Audit-Event + EventBus. Reissue selbst passiert weiterhin erst
+  // beim Neustart (RE-CHECK-Verdikt, PR #212).
+  const certExpiryTimer = startCertExpiryMonitor(
+    {
+      getDaysLeft: () => getCertDaysLeft(config.daemon.data_dir),
+      thresholds: {
+        warnDays: config.cert.expiry_warn_days,
+        criticalDays: config.cert.expiry_critical_days,
+      },
+      log,
+      audit,
+      eventBus,
+    },
+    config.cert.expiry_check_interval_ms,
+  );
 
   // 12. Graceful Shutdown
   const shutdown = async (signal: string): Promise<void> => {
     log.info({ signal }, 'Shutdown eingeleitet...');
     clearInterval(storageMaintenanceTimer); // ADR-030 (T1.3)
+    clearInterval(certExpiryTimer); // T2.1
     telegramGateway?.stop();
     skillHealthMonitor.stop();
     gossip.stop();

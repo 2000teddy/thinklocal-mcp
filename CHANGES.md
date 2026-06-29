@@ -8,6 +8,22 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.40 (T2.1 / V5 Spur 2 — Observability, KEINE Cert-Rotation, KEIN Deploy) — feat(cert): Live-Cert-Ablauf-Monitor + <30d-Alert
+
+Schließt die im RE-CHECK (v0.34.39) belegte Lücke: der TLS-Node-Cert-Ablauf wurde
+**nur beim Start** geprüft → ein langlebiger Daemon bekam keinen Alarm. T2.1 fügt
+einen **periodischen** Monitor hinzu, der bei `< 30 d` (warn) / `≤ 7 d` (critical)
+alarmiert — via **signiertem Audit-Event** `CERT_EXPIRY_WARNING` + EventBus
+`system:cert_expiry` + Log. **Rotiert nicht:** Reissue passiert weiterhin erst beim
+(Neu-)Start (`loadOrCreateTlsBundle`, `daysLeft > 7`); der Alert sagt das explizit.
+
+- **`cert-expiry-monitor.ts`** (neu): `classifyCertExpiry` (rein), `runCertExpiryCheck` (Alarm nur bei warn/critical), `startCertExpiryMonitor` (sofort + `setInterval`, `unref`, try/catch).
+- **`index.ts`**: einmaliger Startup-Check → periodischer Monitor; `clearInterval` im Shutdown.
+- **`audit.ts`** `CERT_EXPIRY_WARNING`; **`events.ts`** `system:cert_expiry`.
+- **`config.ts`**: `[cert]`-Sektion (warn=30, critical=7, interval=12 h) + Env; Fail-fast bei `warn <= critical`.
+- **Sink-Scope ehrlich:** durabler Sink (Audit+EventBus) jetzt; Human-Push (Telegram/Toast) = **T2.2/T2.3**.
+- Tests: `cert-expiry-monitor.test.ts` (neu, 17); volle Suite **101 Files / 1216 grün**, tsc 0, eslint 0. Empirisch guard-bewiesen (critical-Grenze mutiert ⇒ rot). CR: Claude-Subagent **APPROVE-WITH-NITS** (CR-LOW gefixt, CR-MEDIUM als Scope-Grenze). Beleg: `changes/2026-06-29_t21-cert-expiry-monitor.md`.
+
 ### v0.34.39 (KW27 RE-CHECK — Evidence/Test-only, KEINE Produktionscode-Änderung, KEIN Deploy) — test(cert): Rotation-Pfad-Verdikt festgenagelt
 
 RE-CHECK Cert/Rotation (WOCHENPLAN Z62-66). **Verdikt:** (1) Die Dispatch-Prämisse
