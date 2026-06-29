@@ -1189,4 +1189,14 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-06-29 17:40 — v0.34.39 test(cert): RE-CHECK Cert/Rotation — Verdikt festgenagelt (KW27).*
+## Session 2026-06-29 18:15 — v0.34.40 feat(cert): Live-Cert-Ablauf-Monitor + <30d-Alert (T2.1 / V5 Spur 2)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|----|
+| v0.34.40 | (#213, base=main) | 2026-06-29 18:15 | △ #212 | n/a | ✅ | ✅ | ✅ | ✅ | CR Claude-Subagent APPROVE-WITH-NITS; CR-LOW (warn>critical) gefixt+getestet, CR-MEDIUM (Push-Sink) als T2.2/T2.3-Scope-Grenze; empirisch guard-bewiesen |
+
+**CO/CG:** CO via RE-CHECK-Verdikt #212 (Design dort empfohlen: laufender Check + Alert + Reissue-bei-Neustart). CG n/a. **TS:** `cert-expiry-monitor.test.ts` (neu, 17 Tests): classify-Grenzen, runCheck-Gating (Audit/Emit nur warn/critical, „Neustart"-Hinweis), periodischer Re-Check (Fake-Timer = T2.1-Kern), Crash-Sicherheit, config Defaults/Env/`warn<=critical`-throw. Volle Suite **101 Files / 1216 grün**, tsc 0, eslint 0. Empirischer Beleg: critical-Grenze `<=`→`<` mutiert ⇒ 1 rot, restauriert ⇒ grün. **CR:** unabhängiger **Claude**-Subagent (nur claude/codex/agy — `agy` fehlt im Env). APPROVE-WITH-NITS, 0× HIGH/CRITICAL; CR-LOW gefixt, CR-MEDIUM dokumentierte Scope-Grenze. **PC:** `pal:precommit` (s. PR-Body). **DO:** CHANGES (v0.34.40), COMPLIANCE, `changes/2026-06-29_t21-cert-expiry-monitor.md`. **Status:** Repo-Slice durch; Push-Sink = T2.2/T2.3; In-Process-Reissue = größerer Folge-Slice. Kein Deploy.
+
+---
+
+*Letzte Aktualisierung: 2026-06-29 18:15 — v0.34.40 feat(cert): Live-Cert-Ablauf-Monitor + <30d-Alert (T2.1 / V5 Spur 2).*

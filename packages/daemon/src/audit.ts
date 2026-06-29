@@ -37,7 +37,9 @@ export type AuditEventType =
   // ADR-020 v1: Registry-Sync Safety Valve
   | 'REGISTRY_REPUBLISH'
   // ADR-021: Skill-Health-Lifecycle State-Transition
-  | 'SKILL_HEALTH_TRANSITION';
+  | 'SKILL_HEALTH_TRANSITION'
+  // T2.1: TLS-Node-Cert läuft bald ab (Live-Monitor; Reissue erst beim Neustart).
+  | 'CERT_EXPIRY_WARNING';
 
 /**
  * ADR-007 Phase A: Entity types for structured audit querying.
