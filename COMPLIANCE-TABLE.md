@@ -1146,3 +1146,19 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 ---
 
 *Letzte Aktualisierung: 2026-06-27 10:05 — v0.34.34 feat(discovery): ADR-028 NIC-Auswahl (allowed-CIDR-Override).*
+
+---
+
+## Session 2026-06-29 14:42 — v0.34.36 fix(cert): Recovery-/Rotation-Helper auf kanonische TLS-/Pairing-Pfade migriert
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|----|
+| v0.34.36 | (#209, base=main) | 2026-06-29 14:42 | —   | —  | ✅ | ✅ | — | ✅ | PR #208 Follow-up: Legacy-Pfad-Mismatch gefixt; codex review GREEN |
+
+**CO/CG:** — (kleiner Bug-Fix fuer empirisch belegten Legacy-Pfad-Mismatch aus v0.34.35). **TS:** `cert-rotation.test.ts` +3 und `recovery.test.ts` +1; `cd packages/daemon && npx vitest run src/cert-rotation.test.ts src/recovery.test.ts` gruen; `npm run daemon:build` gruen. **CR:** `codex review --uncommitted` auf PR-Branch/Head `3c1fb8c` — keine actionable correctness issues; nach Compliance-Fix Head `c72fbe7` nur CHANGES.md ergaenzt. **PC:** — (pal/precommit nicht genutzt; kein MiniMax/pal:chat). **DO:** CHANGES (v0.34.36), COMPLIANCE, `changes/2026-06-29_cert-recovery-canonical-paths.md`.
+
+**Status:** `rotateCert()`, `trustReset()`, `runRecoveryChecks()` und `auditCerts()` verwenden jetzt die kanonischen Runtime-Pfade `tls/node.crt.pem`, `tls/node.key.pem` und `pairing/paired-peers.json` statt der alten `certs/node.*`-/`pairing-store.json`-Pfade. Kein Deploy.
+
+---
+
+*Letzte Aktualisierung: 2026-06-29 14:42 — v0.34.36 fix(cert): Recovery-/Rotation-Helper auf kanonische TLS-/Pairing-Pfade migriert.*
