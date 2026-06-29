@@ -1199,4 +1199,14 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-06-29 18:15 — v0.34.40 feat(cert): Live-Cert-Ablauf-Monitor + <30d-Alert (T2.1 / V5 Spur 2).*
+## Session 2026-06-29 18:40 — v0.34.41 fix(influx): Health-Probe-Fix + Skill-Health-Alert-Event (T2.2 / V5 Spur 2)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|----|
+| v0.34.41 | (#214, base=main) | 2026-06-29 18:40 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | CR Claude-Subagent APPROVE-WITH-NITS, Probe-Fix CORRECT; beide Nits adressiert; empirisch guard-bewiesen |
+
+**CO/CG:** n/a — gezielter Bugfix (Root-Cause `/health` < 1.8 → 404 → false-negative) + kleines Alert-Event; keine Architektur-Frage. **TS:** `builtin-skills/influxdb.test.ts` (neu, 6 Tests): /health-200→healthy (kein /ping), /health-404→/ping-204→healthy (Regression), Netzwerkfehler→Fallback, beide-nicht-ok→unhealthy, beide-werfen→unhealthy, aborted-Signal→false. Volle Suite **102 Files / 1222 grün**, tsc 0, eslint 0. Empirischer Beleg: /ping-Fallback entfernt ⇒ 3 rot, restauriert ⇒ 6 grün. **CR:** unabhängiger **Claude**-Subagent (nur claude/codex/agy — `agy` fehlt im Env). APPROVE-WITH-NITS, 0× HIGH/CRITICAL; Nit-1 (`/ping`-Liveness im Doc) + Nit-2 (emit listener-isoliert) gefixt. **PC:** `pal:precommit` (s. PR-Body). **DO:** CHANGES (v0.34.41), COMPLIANCE, `changes/2026-06-29_t22-influx-probe-alert-sink.md`. **Status:** Probe-/Daemon-Seite durch; Push-Zustellung (Telegram/Hermes) = Admin/Hermes-Seite. Kein Deploy.
+
+---
+
+*Letzte Aktualisierung: 2026-06-29 18:40 — v0.34.41 fix(influx): Health-Probe-Fix + Skill-Health-Alert-Event (T2.2 / V5 Spur 2).*

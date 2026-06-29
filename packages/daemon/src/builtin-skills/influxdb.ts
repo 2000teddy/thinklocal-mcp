@@ -171,13 +171,35 @@ export async function influxdbWrite(
 
 /**
  * Prueft ob InfluxDB erreichbar ist.
+ *
+ * T2.2-Fix: `/health` existiert erst ab InfluxDB **1.8**. Auf älteren 1.x-Knoten
+ * liefert `/health` 404 → die Probe meldete einen GESUNDEN Dienst faelschlich als
+ * unhealthy (Ursache der „22.786 Fehlversuche"-Fehlmeldung). `/ping` ist der
+ * universelle, auth-freie Liveness-Endpoint (204 No Content) über ALLE 1.x/2.x.
+ * Strategie: `/health` zuerst (reichere Aussage wo vorhanden) und bei nicht-ok /
+ * Fehler auf `/ping` zurückfallen, statt sofort „unhealthy" zu melden.
+ *
+ * Hinweis: `/ping` ist ein reiner LIVENESS-Check — ein degradierter, aber noch
+ * lauschender Knoten (z. B. read-only/recovering) antwortet mit 204 und gilt hier
+ * als „healthy". Das ist der bewusste Trade gegen die false-negatives auf 1.x
+ * (wo `/health` gar nicht existiert); Readiness nutzt `/health`, wo vorhanden.
+ *
+ * ADR-021: nutzt das vom SkillHealthMonitor übergebene AbortSignal (Timeout);
+ * Fallback auf eigenes 3s-Timeout, wenn standalone (Boot-Check) aufgerufen.
  */
 export async function influxdbHealthCheck(signal?: AbortSignal): Promise<boolean> {
+  const sig = signal ?? AbortSignal.timeout(3_000);
   try {
-    // ADR-021: nutzt das vom SkillHealthMonitor übergebene AbortSignal (Timeout);
-    // Fallback auf eigenes 3s-Timeout, wenn standalone (Boot-Check) aufgerufen.
-    const res = await fetch(`${INFLUXDB_URL}/health`, { signal: signal ?? AbortSignal.timeout(3_000) });
-    return res.ok;
+    const health = await fetch(`${INFLUXDB_URL}/health`, { signal: sig });
+    if (health.ok) return true;
+    // non-ok (z. B. 404 auf < 1.8) → kein endgültiges „unhealthy", /ping versuchen.
+  } catch {
+    // Netzwerkfehler/Abort → unten /ping versuchen (falls Signal noch nicht aborted).
+  }
+  if (sig.aborted) return false;
+  try {
+    const ping = await fetch(`${INFLUXDB_URL}/ping`, { signal: sig });
+    return ping.ok; // 204 No Content → ok
   } catch {
     return false;
   }
