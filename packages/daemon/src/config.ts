@@ -114,6 +114,16 @@ export interface DaemonConfig {
   mcp: {
     share: unknown[];
   };
+  /**
+   * ADR-030 (T1.3): SQLite-Wartung. `checkpoint_interval_ms` steuert den
+   * periodischen `wal_checkpoint(TRUNCATE)` für `audit.db` + `activation.db`.
+   * Die `*_max_age_days`-Felder steuern Retention; `0` = unbegrenzt (nur Checkpoint).
+   */
+  retention: {
+    checkpoint_interval_ms: number;
+    peer_audit_max_age_days: number;
+    revoked_capability_max_age_days: number;
+  };
 }
 
 const DEFAULTS: DaemonConfig = {
@@ -161,6 +171,11 @@ const DEFAULTS: DaemonConfig = {
   },
   mcp: {
     share: [],
+  },
+  retention: {
+    checkpoint_interval_ms: 3_600_000, // 1 h
+    peer_audit_max_age_days: 90,
+    revoked_capability_max_age_days: 90,
   },
 };
 
@@ -253,6 +268,26 @@ export function loadConfig(configPath?: string): DaemonConfig {
     cfg.discovery.auto_register_authenticated_peers = env['TLMCP_AUTO_REGISTER_AUTH_PEERS'] !== '0';
   }
 
+  // ADR-030 (T1.3): SQLite-Checkpoint/Retention.
+  if (env['TLMCP_RETENTION_CHECKPOINT_MS']) {
+    cfg.retention.checkpoint_interval_ms = readPositiveInt(
+      'TLMCP_RETENTION_CHECKPOINT_MS',
+      cfg.retention.checkpoint_interval_ms,
+    );
+  }
+  if (env['TLMCP_PEER_AUDIT_MAX_AGE_DAYS']) {
+    cfg.retention.peer_audit_max_age_days = readNonNegativeInt(
+      'TLMCP_PEER_AUDIT_MAX_AGE_DAYS',
+      cfg.retention.peer_audit_max_age_days,
+    );
+  }
+  if (env['TLMCP_REVOKED_CAP_MAX_AGE_DAYS']) {
+    cfg.retention.revoked_capability_max_age_days = readNonNegativeInt(
+      'TLMCP_REVOKED_CAP_MAX_AGE_DAYS',
+      cfg.retention.revoked_capability_max_age_days,
+    );
+  }
+
   // LOW-FIX (CR-Review): CIDRs validieren — fail fast statt silent.
   // Typos wie "10.10.10.0/33" oder "10.10.10.0/24foo" muessen sofort
   // sichtbar sein, sonst publish/browse-Verhalten ist stillschweigend kaputt.
@@ -300,6 +335,21 @@ function readPositiveInt(envName: string, fallback: number): number {
   const value = Number.parseInt(raw, 10);
   if (!Number.isFinite(value) || value <= 0) {
     throw new Error(`Ungültige Konfiguration ${envName}: "${raw}" (erwartet: positive Ganzzahl)`);
+  }
+  return value;
+}
+
+/**
+ * ADR-030 (T1.3): wie readPositiveInt, erlaubt aber `0` (= Retention deaktiviert).
+ */
+function readNonNegativeInt(envName: string, fallback: number): number {
+  const raw = process.env[envName];
+  if (raw == null) return fallback;
+  const value = Number.parseInt(raw, 10);
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(
+      `Ungültige Konfiguration ${envName}: "${raw}" (erwartet: Ganzzahl ≥ 0)`,
+    );
   }
   return value;
 }

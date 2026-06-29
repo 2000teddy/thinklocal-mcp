@@ -947,6 +947,57 @@ async function main(): Promise<void> {
     log,
   });
 
+  // ADR-030 (T1.3): periodische SQLite-Wartung — WAL-Checkpoint (TRUNCATE) für
+  // audit.db + activation.db, plus Retention auf den sicher löschbaren Tabellen
+  // (peer_audit_events / terminale revoked-Capabilities). Die lokale signierte
+  // audit_events-Chain bleibt unangetastet (append-only). Fehler dürfen den
+  // Daemon nie crashen → alles try/catch-gekapselt.
+  // wal_checkpoint(TRUNCATE) wirft nicht, wenn eine andere Verbindung das WAL
+  // hält — better-sqlite3 liefert dann {busy:1} und das -wal wird NICHT gekürzt.
+  // Das sichtbar machen (kein stiller Fehler), statt es zu verschlucken.
+  const logIfBusy = (db: string, result: unknown): void => {
+    const row = Array.isArray(result) ? (result[0] as { busy?: number } | undefined) : undefined;
+    if (row?.busy) {
+      log.debug({ db, result: row }, '[maintenance] WAL-Checkpoint busy — -wal nicht gekürzt');
+    }
+  };
+  const runStorageMaintenance = (): void => {
+    try {
+      logIfBusy('audit', audit.checkpoint());
+    } catch (err) {
+      log.warn({ err }, '[maintenance] audit-Checkpoint fehlgeschlagen');
+    }
+    try {
+      logIfBusy('capabilities', capActivation.checkpoint());
+    } catch (err) {
+      log.warn({ err }, '[maintenance] capability-Checkpoint fehlgeschlagen');
+    }
+    const DAY_MS = 86_400_000;
+    if (config.retention.peer_audit_max_age_days > 0) {
+      try {
+        audit.prunePeerEventsOlderThan(config.retention.peer_audit_max_age_days * DAY_MS);
+      } catch (err) {
+        log.warn({ err }, '[maintenance] peer_audit-Retention fehlgeschlagen');
+      }
+    }
+    if (config.retention.revoked_capability_max_age_days > 0) {
+      try {
+        capActivation.pruneRevokedOlderThan(
+          config.retention.revoked_capability_max_age_days * DAY_MS,
+        );
+      } catch (err) {
+        log.warn({ err }, '[maintenance] revoked-capability-Retention fehlgeschlagen');
+      }
+    }
+  };
+  // Einmal beim Start (kürzt ein evtl. großes -wal aus dem letzten Lauf), dann periodisch.
+  runStorageMaintenance();
+  const storageMaintenanceTimer = setInterval(
+    runStorageMaintenance,
+    config.retention.checkpoint_interval_ms,
+  );
+  storageMaintenanceTimer.unref();
+
   // Announce local skills to every new peer that joins.
   // This is the "push" side of the ioBroker-Moment: when a peer appears,
   // we send a signed SKILL_ANNOUNCE message via mTLS so its daemon
@@ -1280,6 +1331,7 @@ async function main(): Promise<void> {
   // 12. Graceful Shutdown
   const shutdown = async (signal: string): Promise<void> => {
     log.info({ signal }, 'Shutdown eingeleitet...');
+    clearInterval(storageMaintenanceTimer); // ADR-030 (T1.3)
     telegramGateway?.stop();
     skillHealthMonitor.stop();
     gossip.stop();
