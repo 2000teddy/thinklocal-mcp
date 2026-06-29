@@ -8,6 +8,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.39 (KW27 RE-CHECK — Evidence/Test-only, KEINE Produktionscode-Änderung, KEIN Deploy) — test(cert): Rotation-Pfad-Verdikt festgenagelt
+
+RE-CHECK Cert/Rotation (WOCHENPLAN Z62-66). **Verdikt:** (1) Die Dispatch-Prämisse
+`cert-rotation.ts → pairing-store.json` ist seit PR #209 veraltet (kanonische Pfade).
+(2) `cert-rotation.ts` ist **totes Modul** — kein Produktionscode importiert es.
+(3) Die reale Cert-Erneuerung ist `loadOrCreateTlsBundle()` (tls.ts) **beim Start**:
+Node-Cert wird bei `daysLeft > 7` behalten, sonst reissued. (4) **Keine Auto-Rotation
+auf einem laufenden Daemon** — kein Timer; Erneuerung nur beim (Neu-)Start.
+
+→ Der Cert-Ablauf (2026-09-02) ist ein reales Risiko für durchlaufende Daemons →
+**T2.1 gerechtfertigt** (laufender Check + Alert + Reissue/Hot-Reload).
+
+- **`cert-rotation-recheck.test.ts`** (neu, 4 Tests): 30-Tage→behalten, 3-Tage→Reissue-beim-Load (empirisch guard-bewiesen: Gate `>7`→`>0` ⇒ rot), Reissue-nur-auf-Load, `cert-rotation.ts`-Importeure=0.
+- Volle Suite **100 Files / 1199 grün**; tsc 0. CR: Claude-Subagent. Verdikt-Doku: `changes/2026-06-29_cert-rotation-recheck-verdict.md`.
+
 ### v0.34.38 (T1.3 / V5 Spur 1 — Operational-Hygiene, KEIN Protokoll-Change, KEIN Deploy) — feat(storage): SQLite WAL-Checkpoint + Retention (ADR-030)
 
 Alle SQLite-DBs liefen im WAL-Modus, ohne je zu checkpointen → `-wal`-Dateien
