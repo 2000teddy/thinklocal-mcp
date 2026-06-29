@@ -6,9 +6,10 @@
   "type": "module",
   "scripts": {
     "postinstall": "cd packages/daemon && npm install && cd ../dashboard-ui && npm install && cd ../.. && node scripts/check-native-modules.cjs",
-    "start": "cd packages/daemon && npx tsx src/index.ts",
+    "start": "npm run daemon:build && node packages/daemon/dist/index.js",
     "start:dev": "TLMCP_RUNTIME_MODE=local npm start",
-    "daemon:start": "cd packages/daemon && npx tsx src/index.ts",
+    "start:tsx": "cd packages/daemon && npx tsx src/index.ts",
+    "daemon:start": "npm run daemon:build && node packages/daemon/dist/index.js",
     "daemon:build": "cd packages/daemon && npx tsc",
     "dashboard": "cd packages/dashboard-ui && npx vite",
     "dashboard:dev": "cd packages/dashboard-ui && npx vite",

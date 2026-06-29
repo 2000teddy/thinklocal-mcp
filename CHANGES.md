@@ -8,6 +8,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.37 (T1.1 / V5 Spur 1 — Perf/Packaging, KEIN Verhaltens-/Protokoll-Change, KEIN Deploy) — perf(daemon): Startpfad `tsx` → `node dist/`
+
+Der scharfe Daemon startet jetzt vorkompiliert über `node packages/daemon/dist/index.js`
+statt via `tsx` (Runtime-Transpile, eine **devDependency**). Gemessen (Median aus 3
+Läufen, identische Env, Single-Process im systemd-Stil, Node v22.22.3):
+**RSS 201 → 132 MiB (−34 %)**, **Start-CPU 2.08 → 1.19 s (−43 %)**. Behebt nebenbei
+die latente Inkonsistenz, dass der Deb-Postinst `npm install --omit=dev` läuft (tsx
+also nie installiert), die Unit aber `--import tsx` startete.
+
+- **`package.json`** (root): `start` + `daemon:start` → `npm run daemon:build && node packages/daemon/dist/index.js`; `start:tsx` als Dev-Fallback ergänzt.
+- **`scripts/build-deb.sh`**: tsc-Build + `dist/index.js`-Guard **vor** dem Packen; systemd `ExecStart` und `tlmcp-daemon`-Wrapper → `node …/dist/index.js` (kein `--import tsx` mehr).
+- **`packages/daemon/src/start-path.test.ts`** (neu): Regressionstest (loader-form-agnostisch), empirisch guard-bewiesen (ExecStart→tsx ⇒ 1 rot, restauriert ⇒ 4 grün).
+- **Bewusst out-of-scope:** CLI-/`tlmcp-mcp`-Wrapper bleiben auf `tsx` (vorbestehend, nicht verschlechtert) → Follow-up. **Live-Cutover auf TH01 (build vor Restart) ist ein gateter Deploy-Schritt, nicht Teil dieses PRs.**
+- Tests: volle Daemon-Suite grün (96 Files / 1178 Tests). CR: Claude-Subagent **APPROVE-WITH-NITS** (alle Findings low/info). Beleg: `changes/2026-06-29_t11-tsx-to-node-dist.md`.
+
 ### v0.34.36 (KW27 Follow-up — Runtime-/Operator-Fix; KEIN Deploy) — fix(cert): Recovery-/Rotation-Helper auf kanonische TLS- und Pairing-Pfade migriert
 
 Schliesst den in v0.34.35 belegten Legacy-Pfad-Mismatch: `cert-rotation.ts` und `recovery.ts` loeschen/pruefen jetzt die aktuellen Runtime-Dateien `tls/node.crt.pem`, `tls/node.key.pem` und `pairing/paired-peers.json` statt der alten `certs/node.*`-/`pairing-store.json`-Pfade. `auditCerts()` betrachtet `tls/*.crt.pem`. Fokus-Regressionstests decken `rotateCert()`, `trustReset()`, `auditCerts()` und `runRecoveryChecks()` ab.

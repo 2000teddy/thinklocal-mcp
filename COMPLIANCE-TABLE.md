@@ -1141,11 +1141,9 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 **CO/CG:** — (design-first ADR-028-Note vor Code; kleinster sicherer Slice). **TS:** `discovery-policy.test.ts` +5 → 47 (Override, LAN+Tailscale-Koexistenz, nur-erlaubte-CIDR, docker0-bleibt-aus, default-neutral). Empirischer Beleg: Override-Block raus → ADR-028-Tests rot, re-applied → 1174 grün. tsc 0. **CR:** clink **claude** codereviewer (nur claude/codex/agy, nie MiniMax/pal:chat). **PC:** `pal:precommit` internal. **DO:** CHANGES (v0.34.34), COMPLIANCE, ADR-028-Note, TODO:30.
 
-**Status:** ADR-028 NIC-Auswahl — `selectMeshInterfaces` lässt eine IP in explizit gesetztem `allowed_mesh_cidrs` den `tailscale*/utun*`-Exclude überstimmen (Overlay-Self-Advertise). Default-neutral, rein/testbar. **Kein Deploy/Cert/Flag;** Live-Aktivierung auf `.55` = Christian-Deploy-Gate (Pfad A).
-
 ---
 
-*Letzte Aktualisierung: 2026-06-27 10:05 — v0.34.34 feat(discovery): ADR-028 NIC-Auswahl (allowed-CIDR-Override).*
+**Status:** ADR-028 NIC-Auswahl — `selectMeshInterfaces` lässt eine IP in explizit gesetztem `allowed_mesh_cidrs` den `tailscale*/utun*`-Exclude überstimmen (Overlay-Self-Advertise). Default-neutral, rein/testbar. **Kein Deploy/Cert/Flag;** Live-Aktivierung auf `.55` = Christian-Deploy-Gate (Pfad A).
 
 ---
 
@@ -1161,4 +1159,14 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-06-29 14:42 — v0.34.36 fix(cert): Recovery-/Rotation-Helper auf kanonische TLS-/Pairing-Pfade migriert.*
+## Session 2026-06-29 16:15 — v0.34.37 perf(daemon): Startpfad `tsx` → `node dist/` (T1.1 / V5 Spur 1)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|----|
+| v0.34.37 | (#210, base=main) | 2026-06-29 16:15 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | Rebase nach #209-Merge; CR Claude-Subagent APPROVE-WITH-NITS (alle low/info); RSS −34 % / Start-CPU −43 % gemessen; Regressionstest empirisch guard-bewiesen |
+
+**CO/CG:** n/a — keine Architektur-/Design-Frage, `tsx→dist` ist bereits gebundene Tech-Entscheidung (V5 T1.1); reiner Perf/Packaging-Slice. **TS:** `start-path.test.ts` (neu, 4 Tests); volle Daemon-Suite 96 Files / **1178 grün** (auch nach Rebase auf main re-verifiziert). Empirischer Beleg: ExecStart→tsx zurückgedreht ⇒ 1 rot, restauriert ⇒ 4 grün. Messung 3×Median: RSS 201→132 MiB, Start-CPU 2.08→1.19 s. **CR:** unabhängiger **Claude**-Subagent-Review (nur claude/codex/agy — `agy`-Backend von `pal:codereview` im Env nicht installiert, daher Claude-Subagent als echtes Review). APPROVE-WITH-NITS, 0× HIGH/CRITICAL. **PC:** `pal:precommit` (s. PR-Body). **DO:** CHANGES (v0.34.37), COMPLIANCE, `changes/2026-06-29_t11-tsx-to-node-dist.md`. **Status:** Repo-Slice durch; Live-Cutover TH01 (build vor Restart) bleibt gateter Deploy-Schritt.
+
+---
+
+*Letzte Aktualisierung: 2026-06-29 16:15 — v0.34.37 perf(daemon): Startpfad `tsx` → `node dist/` (T1.1 / V5 Spur 1).*
