@@ -23,6 +23,12 @@ export interface RecoveryResult {
   details?: string;
 }
 
+function isTokenOnboardedTls(dataDir: string): boolean {
+  const caCertPath = resolve(dataDir, 'tls', 'ca.crt.pem');
+  const caKeyPath = resolve(dataDir, 'tls', 'ca.key.pem');
+  return existsSync(caCertPath) && !existsSync(caKeyPath);
+}
+
 /**
  * Prueft auf bekannte Probleme und versucht sie automatisch zu beheben.
  * Wird beim Daemon-Start aufgerufen.
@@ -58,22 +64,49 @@ export async function runRecoveryChecks(
 function checkCertExpiry(dataDir: string, log?: Logger): RecoveryResult {
   const daysLeft = getCertDaysLeft(dataDir);
   if (daysLeft === null) {
-    return { issue: 'none', recovered: true, action: 'Kein Zertifikat vorhanden (wird beim Start erstellt)' };
+    return {
+      issue: 'none',
+      recovered: true,
+      action: 'Kein Zertifikat vorhanden (wird beim Start erstellt)',
+    };
   }
   if (daysLeft > 7) {
     return { issue: 'none', recovered: true, action: `Zertifikat gueltig (${daysLeft} Tage)` };
   }
 
+  if (isTokenOnboardedTls(dataDir)) {
+    log?.warn(
+      { daysLeft },
+      'Recovery: Token-onboarded Zertifikat laeuft ab, aber lokaler CA-Key fehlt - Re-Enroll erforderlich',
+    );
+    return {
+      issue: 'cert_expired',
+      recovered: false,
+      action: 'Token-onboarded Zertifikat erfordert Re-Enroll',
+      details:
+        'Lokaler CA-Key fehlt; automatische Loesch-/Reissue-Recovery wuerde Trust-State ersetzen.',
+    };
+  }
+
   // Zertifikat erneuern: altes loeschen, wird beim naechsten TLS-Init neu erstellt
-  const certPath = resolve(dataDir, 'certs', 'node.crt');
-  const keyPath = resolve(dataDir, 'certs', 'node.key');
+  const certPath = resolve(dataDir, 'tls', 'node.crt.pem');
+  const keyPath = resolve(dataDir, 'tls', 'node.key.pem');
   try {
     if (existsSync(certPath)) unlinkSync(certPath);
     if (existsSync(keyPath)) unlinkSync(keyPath);
     log?.info({ daysLeft }, 'Recovery: Abgelaufenes Zertifikat geloescht (wird neu erstellt)');
-    return { issue: 'cert_expired', recovered: true, action: 'Zertifikat geloescht und wird neu erstellt' };
+    return {
+      issue: 'cert_expired',
+      recovered: true,
+      action: 'Zertifikat geloescht und wird neu erstellt',
+    };
   } catch (err) {
-    return { issue: 'cert_expired', recovered: false, action: 'Zertifikat konnte nicht geloescht werden', details: String(err) };
+    return {
+      issue: 'cert_expired',
+      recovered: false,
+      action: 'Zertifikat konnte nicht geloescht werden',
+      details: String(err),
+    };
   }
 }
 
@@ -111,7 +144,9 @@ function checkHostnameChange(dataDir: string, log?: Logger): RecoveryResult {
     // Erster Start — Hostname speichern
     try {
       writeFileSync(hostFile, currentHostname);
-    } catch { /* ok */ }
+    } catch {
+      /* ok */
+    }
     return { issue: 'none', recovered: true, action: 'Hostname gespeichert' };
   }
 
@@ -121,12 +156,15 @@ function checkHostnameChange(dataDir: string, log?: Logger): RecoveryResult {
     log?.info({ previous: lastHostname, current: currentHostname }, 'Recovery: Hostname geaendert');
     try {
       writeFileSync(hostFile, currentHostname);
-    } catch { /* ok */ }
+    } catch {
+      /* ok */
+    }
     return {
       issue: 'hostname_changed',
       recovered: true,
       action: `Hostname geaendert: ${lastHostname} → ${currentHostname}`,
-      details: 'SPIFFE-URI wird beim naechsten Start aktualisiert. Peers muessen sich neu verbinden.',
+      details:
+        'SPIFFE-URI wird beim naechsten Start aktualisiert. Peers muessen sich neu verbinden.',
     };
   }
 
@@ -135,10 +173,7 @@ function checkHostnameChange(dataDir: string, log?: Logger): RecoveryResult {
 
 /** Prueft Datenbank-Integritaet (Audit + Vault) */
 function checkDatabaseIntegrity(dataDir: string, log?: Logger): RecoveryResult {
-  const databases = [
-    resolve(dataDir, 'audit', 'audit.db'),
-    resolve(dataDir, 'vault', 'vault.db'),
-  ];
+  const databases = [resolve(dataDir, 'audit', 'audit.db'), resolve(dataDir, 'vault', 'vault.db')];
 
   for (const dbPath of databases) {
     if (!existsSync(dbPath)) continue;
@@ -160,7 +195,11 @@ function checkDatabaseIntegrity(dataDir: string, log?: Logger): RecoveryResult {
           action: `Defekte DB gesichert: ${backupPath}`,
         };
       } catch {
-        return { issue: 'corrupt_db', recovered: false, action: 'DB konnte nicht repariert werden' };
+        return {
+          issue: 'corrupt_db',
+          recovered: false,
+          action: 'DB konnte nicht repariert werden',
+        };
       }
     }
   }

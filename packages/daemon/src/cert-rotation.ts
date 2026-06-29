@@ -32,6 +32,12 @@ export interface CertAuditResult {
   }>;
 }
 
+function isTokenOnboardedTls(dataDir: string): boolean {
+  const caCertPath = resolve(dataDir, 'tls', 'ca.crt.pem');
+  const caKeyPath = resolve(dataDir, 'tls', 'ca.key.pem');
+  return existsSync(caCertPath) && !existsSync(caKeyPath);
+}
+
 /**
  * Prueft ob eine Zertifikat-Rotation noetig ist.
  * Gibt true zurueck wenn das Zertifikat erneuert werden sollte.
@@ -46,8 +52,15 @@ export function needsRotation(dataDir: string, minDays = 7): boolean {
  * Rotiert das Node-Zertifikat (loescht das alte, wird beim naechsten TLS-Init neu erstellt).
  */
 export function rotateCert(dataDir: string, log?: Logger): boolean {
-  const certPath = resolve(dataDir, 'certs', 'node.crt');
-  const keyPath = resolve(dataDir, 'certs', 'node.key');
+  const certPath = resolve(dataDir, 'tls', 'node.crt.pem');
+  const keyPath = resolve(dataDir, 'tls', 'node.key.pem');
+
+  if (isTokenOnboardedTls(dataDir)) {
+    log?.warn(
+      'Zertifikat-Rotation abgebrochen: Token-onboarded Node hat keinen lokalen CA-Key; Re-Enroll erforderlich',
+    );
+    return false;
+  }
 
   try {
     if (existsSync(certPath)) unlinkSync(certPath);
@@ -64,20 +77,36 @@ export function rotateCert(dataDir: string, log?: Logger): boolean {
  * Trust-Reset: Setzt alle Pairing-Daten und Peer-Trust zurueck.
  * ACHTUNG: Alle Peers muessen danach neu gepairt werden!
  */
-export function trustReset(dataDir: string, log?: Logger): {
+export function trustReset(
+  dataDir: string,
+  log?: Logger,
+): {
   certsRemoved: number;
   pairingReset: boolean;
 } {
+  if (isTokenOnboardedTls(dataDir)) {
+    log?.warn(
+      'Trust-Reset abgebrochen: Token-onboarded Node hat keinen lokalen CA-Key; Re-Enroll erforderlich',
+    );
+    return { certsRemoved: 0, pairingReset: false };
+  }
+
   let certsRemoved = 0;
 
   // Node-Cert loeschen
-  const certPath = resolve(dataDir, 'certs', 'node.crt');
-  const keyPath = resolve(dataDir, 'certs', 'node.key');
-  if (existsSync(certPath)) { unlinkSync(certPath); certsRemoved++; }
-  if (existsSync(keyPath)) { unlinkSync(keyPath); certsRemoved++; }
+  const certPath = resolve(dataDir, 'tls', 'node.crt.pem');
+  const keyPath = resolve(dataDir, 'tls', 'node.key.pem');
+  if (existsSync(certPath)) {
+    unlinkSync(certPath);
+    certsRemoved++;
+  }
+  if (existsSync(keyPath)) {
+    unlinkSync(keyPath);
+    certsRemoved++;
+  }
 
   // Pairing-Store loeschen
-  const pairingPath = resolve(dataDir, 'pairing-store.json');
+  const pairingPath = resolve(dataDir, 'pairing', 'paired-peers.json');
   let pairingReset = false;
   if (existsSync(pairingPath)) {
     unlinkSync(pairingPath);
@@ -86,18 +115,24 @@ export function trustReset(dataDir: string, log?: Logger): {
 
   // CRL loeschen
   const crlPath = resolve(dataDir, 'certs', 'crl.json');
-  if (existsSync(crlPath)) { unlinkSync(crlPath); certsRemoved++; }
+  if (existsSync(crlPath)) {
+    unlinkSync(crlPath);
+    certsRemoved++;
+  }
 
-  log?.warn({ certsRemoved, pairingReset }, 'Trust-Reset durchgefuehrt — alle Peers muessen neu gepairt werden');
+  log?.warn(
+    { certsRemoved, pairingReset },
+    'Trust-Reset durchgefuehrt — alle Peers muessen neu gepairt werden',
+  );
 
   return { certsRemoved, pairingReset };
 }
 
 /**
- * Prueft alle Zertifikate im certs/-Verzeichnis.
+ * Prueft alle Zertifikate im tls/-Verzeichnis.
  */
 export function auditCerts(dataDir: string, _log?: Logger): CertAuditResult {
-  const certsDir = resolve(dataDir, 'certs');
+  const certsDir = resolve(dataDir, 'tls');
   const result: CertAuditResult = {
     total: 0,
     valid: 0,
@@ -109,7 +144,7 @@ export function auditCerts(dataDir: string, _log?: Logger): CertAuditResult {
   if (!existsSync(certsDir)) return result;
 
   try {
-    const files = readdirSync(certsDir).filter((f) => f.endsWith('.crt'));
+    const files = readdirSync(certsDir).filter((f) => f.endsWith('.crt.pem'));
     result.total = files.length;
 
     for (const file of files) {
@@ -123,16 +158,25 @@ export function auditCerts(dataDir: string, _log?: Logger): CertAuditResult {
         );
 
         let status: 'valid' | 'expiring' | 'expired' | 'error';
-        if (daysLeft <= 0) { status = 'expired'; result.expired++; }
-        else if (daysLeft <= 30) { status = 'expiring'; result.expiringSoon++; }
-        else { status = 'valid'; result.valid++; }
+        if (daysLeft <= 0) {
+          status = 'expired';
+          result.expired++;
+        } else if (daysLeft <= 30) {
+          status = 'expiring';
+          result.expiringSoon++;
+        } else {
+          status = 'valid';
+          result.valid++;
+        }
 
         result.details.push({ file, daysLeft, status });
       } catch {
         result.details.push({ file, daysLeft: null, status: 'error' });
       }
     }
-  } catch { /* certsDir nicht lesbar */ }
+  } catch {
+    /* certsDir nicht lesbar */
+  }
 
   return result;
 }

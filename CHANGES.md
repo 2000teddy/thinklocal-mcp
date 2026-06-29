@@ -8,6 +8,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.36 (KW27 Follow-up — Runtime-/Operator-Fix; KEIN Deploy) — fix(cert): Recovery-/Rotation-Helper auf kanonische TLS- und Pairing-Pfade migriert
+
+Schliesst den in v0.34.35 belegten Legacy-Pfad-Mismatch: `cert-rotation.ts` und `recovery.ts` loeschen/pruefen jetzt die aktuellen Runtime-Dateien `tls/node.crt.pem`, `tls/node.key.pem` und `pairing/paired-peers.json` statt der alten `certs/node.*`-/`pairing-store.json`-Pfade. `auditCerts()` betrachtet `tls/*.crt.pem`. Fokus-Regressionstests decken `rotateCert()`, `trustReset()`, `auditCerts()` und `runRecoveryChecks()` ab.
+
+**Checks:** `cd packages/daemon && npx vitest run src/cert-rotation.test.ts src/recovery.test.ts` gruen; `npm run daemon:build` gruen. **CR:** codex review — keine actionable correctness issues.
+
 ### v0.34.35 (Evidence-only — KW27 Re-Check; AMBER; KEIN Code/Deploy) — docs(cert): Cert-Rotation-Pfad empirisch eingeordnet
 
 Re-Check des Cert-Rotation-Pfads mit reproduzierbarem Dry-Run. Ergebnis:
