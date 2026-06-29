@@ -121,6 +121,15 @@ cat > "$PKG_DIR/DEBIAN/conffiles" << EOF
 /etc/thinklocal/daemon.toml
 EOF
 
+# T1.1: Daemon nach dist/ vorkompilieren (Runtime laeuft via `node dist/`, nicht via tsx).
+# Ergebnis liegt unter packages/daemon/dist/ und wird mit `cp -r packages` ins Paket uebernommen.
+echo "==> Building daemon (tsc → packages/daemon/dist) for node-dist runtime"
+( cd packages/daemon && npm run build )
+if [ ! -f packages/daemon/dist/index.js ]; then
+    echo "FEHLER: packages/daemon/dist/index.js nach Build nicht vorhanden — Abbruch" >&2
+    exit 1
+fi
+
 # Projekt-Dateien kopieren
 cp -r packages "$PKG_DIR${INSTALL_DIR}/"
 cp package.json "$PKG_DIR${INSTALL_DIR}/"
@@ -164,7 +173,7 @@ Type=simple
 User=thinklocal
 Group=thinklocal
 WorkingDirectory=/opt/thinklocal-mcp
-ExecStart=/usr/bin/node --import tsx /opt/thinklocal-mcp/packages/daemon/src/index.ts
+ExecStart=/usr/bin/node /opt/thinklocal-mcp/packages/daemon/dist/index.js
 EnvironmentFile=-/etc/thinklocal/daemon.env
 Restart=on-failure
 RestartSec=5
@@ -201,7 +210,7 @@ chmod 755 "$PKG_DIR/usr/bin/thinklocal"
 
 cat > "$PKG_DIR/usr/bin/tlmcp-daemon" << 'EOF'
 #!/bin/bash
-exec node --import tsx /opt/thinklocal-mcp/packages/daemon/src/index.ts "$@"
+exec node /opt/thinklocal-mcp/packages/daemon/dist/index.js "$@"
 EOF
 chmod 755 "$PKG_DIR/usr/bin/tlmcp-daemon"
 
