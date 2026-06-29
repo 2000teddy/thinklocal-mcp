@@ -8,6 +8,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.35 (Evidence-only — KW27 Re-Check; KEIN Code/Deploy) — docs(cert): Cert-Rotation-Pfad empirisch eingeordnet
+
+Re-Check des Cert-Rotation-Pfads mit reproduzierbarem Dry-Run. Ergebnis:
+`cert-rotation.ts`/`recovery.ts` sind **nicht** im Daemon-Startup verdrahtet und
+zeigen noch auf Legacy-Pfade (`certs/node.crt`, `certs/node.key`,
+`pairing-store.json`). Die aktuelle Runtime nutzt `tls/node.crt.pem`,
+`tls/node.key.pem` und `pairing/paired-peers.json`. Der echte Renewal-Pfad ist
+der Startup-Load via `loadOrCreateTlsBundle()`: ein 3-Tage-Testcert wurde beim
+erneuten Bundle-Load regeneriert (`DAYS_LEFT_AFTER_STARTUP_LOAD 89`).
+
+**Checks:** `rg`-Import-/Pfadprüfung, reproduzierbarer `npx tsx --eval`-Dry-Run
+unter `/tmp`, gezielte Build-/Test-Verifikation. **Nächster Slice:** alte
+Rotation-/Recovery-Pfade entweder auf aktuelle Dateien migrieren und testen
+oder als irreführenden Legacy-Code deprecaten/entfernen.
 
 ### v0.34.34 (Christian-autorisiert; reine Auswahl-Logik, default-neutral; KEIN Deploy/Cert/Flag) — feat(discovery): ADR-028 NIC-Auswahl — allowed_mesh_cidrs überstimmt tailscale*/utun*-Exclude
 
