@@ -8,6 +8,26 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.38 (T1.3 / V5 Spur 1 — Operational-Hygiene, KEIN Protokoll-Change, KEIN Deploy) — feat(storage): SQLite WAL-Checkpoint + Retention (ADR-030)
+
+Alle SQLite-DBs liefen im WAL-Modus, ohne je zu checkpointen → `-wal`-Dateien
+wuchsen unbegrenzt. T1.3 führt periodischen `wal_checkpoint(TRUNCATE)` für
+`audit.db` + `capabilities/activation.db` ein (Maintenance-Task in `index.ts`,
+`unref()`/`clearInterval`, 1× beim Start; plus in jedem `close()`), sowie
+Retention **nur auf sicher löschbaren Daten**:
+- `peer_audit_events` nach Alter (Default 90 d) — re-syncbar, keine Hash-Chain.
+- `capability_activations` mit `state='revoked'` nach Alter (Default 90 d) — GC toter Zeilen.
+
+Die **lokale signierte `audit_events`-Chain bleibt append-only** (Phase-1-Konsensus;
+Rationale in ADR-030 §3). Maintenance ist try/catch-gekapselt (kein Daemon-Crash);
+`busy`-Checkpoints werden auf `debug` sichtbar gemacht.
+
+- **`config.ts`**: neue `[retention]`-Sektion (`checkpoint_interval_ms`, `peer_audit_max_age_days`, `revoked_capability_max_age_days`) + Env-Overrides; `0` beim Alter = deaktiviert.
+- **`audit.ts` / `capability-activation.ts`**: `checkpoint()` + `prune*OlderThan()` + Checkpoint-on-close.
+- **`index.ts`**: periodischer `runStorageMaintenance`-Task + Shutdown-Cleanup.
+- **`retention.test.ts`** (neu, 10 Tests); empirisch guard-bewiesen (Cutoff invertiert ⇒ 1 rot, restauriert ⇒ 10 grün).
+- Tests: volle Daemon-Suite **99 Files / 1195 grün**; tsc 0. CR: Claude-Subagent **APPROVE-WITH-NITS** (kein Bug; beide Low-Nits adressiert). Belege: `docs/architecture/ADR-030-*.md`, `changes/2026-06-29_t13-sqlite-wal-checkpoint-retention.md`.
+
 ### v0.34.37 (T1.1 / V5 Spur 1 — Perf/Packaging, KEIN Verhaltens-/Protokoll-Change, KEIN Deploy) — perf(daemon): Startpfad `tsx` → `node dist/`
 
 Der scharfe Daemon startet jetzt vorkompiliert über `node packages/daemon/dist/index.js`

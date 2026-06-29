@@ -313,6 +313,42 @@ export class AuditLog {
   }
 
   /**
+   * ADR-030 (T1.3): WAL-Checkpoint — schreibt das Write-Ahead-Log in die
+   * Haupt-DB zurück und kürzt die `-wal`-Datei (TRUNCATE). Verhindert
+   * unbegrenztes Wachstum der `-wal`-Datei auf langlebigen Knoten.
+   * Gibt das better-sqlite3-Ergebnis ({busy, log, checkpointed}) zurück.
+   */
+  checkpoint(): unknown {
+    return this.db.pragma('wal_checkpoint(TRUNCATE)');
+  }
+
+  /**
+   * ADR-030 (T1.3): Retention — löscht importierte Peer-Audit-Events, die älter
+   * als `maxAgeMs` sind. **Sicher:** `peer_audit_events` trägt keine Hash-Chain,
+   * ist re-syncbar und per `UNIQUE entry_hash` re-import-idempotent.
+   *
+   * Die lokale, signierte `audit_events`-Chain wird **bewusst NICHT** angetastet
+   * (append-only, Phase-1-Konsensus — siehe ADR-030).
+   *
+   * @returns Anzahl gelöschter Peer-Events.
+   */
+  prunePeerEventsOlderThan(maxAgeMs: number): number {
+    if (!Number.isFinite(maxAgeMs) || maxAgeMs <= 0) return 0;
+    const cutoff = new Date(Date.now() - maxAgeMs).toISOString();
+    const info = this.db
+      .prepare('DELETE FROM peer_audit_events WHERE timestamp < ?')
+      .run(cutoff);
+    const deleted = info.changes;
+    if (deleted > 0) {
+      this.log?.info(
+        { deleted, cutoff },
+        '[audit] retention: alte peer_audit_events entfernt',
+      );
+    }
+    return deleted;
+  }
+
+  /**
    * Importiert ein Audit-Event von einem Peer.
    * Speichert es in einer separaten Tabelle fuer Peer-Events.
    * SECURITY: Verifiziert die Signatur wenn publicKey vorhanden.
@@ -425,6 +461,13 @@ export class AuditLog {
   }
 
   close(): void {
+    // ADR-030 (T1.3): finalen Checkpoint vor dem Schliessen — kürzt die
+    // `-wal`-Datei, statt sie bis zum nächsten Start liegen zu lassen.
+    try {
+      this.db.pragma('wal_checkpoint(TRUNCATE)');
+    } catch {
+      /* Checkpoint best-effort; Shutdown darf nie daran scheitern. */
+    }
     this.db.close();
   }
 

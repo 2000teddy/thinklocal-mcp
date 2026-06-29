@@ -223,7 +223,47 @@ export class CapabilityActivationStore {
     return row?.state === 'active';
   }
 
+  /**
+   * ADR-030 (T1.3): WAL-Checkpoint — kürzt die `-wal`-Datei (TRUNCATE).
+   * Gibt das better-sqlite3-Ergebnis ({busy, log, checkpointed}) zurück.
+   */
+  checkpoint(): unknown {
+    return this.db.pragma('wal_checkpoint(TRUNCATE)');
+  }
+
+  /**
+   * ADR-030 (T1.3): Retention — GC für terminale `revoked`-Zeilen, die älter als
+   * `maxAgeMs` sind (`revoked_at < cutoff`). **Sicher:** nur der terminale Zustand
+   * `revoked` wird entfernt; `discovered`/`active`/`suspended` bleiben unberührt.
+   *
+   * @returns Anzahl gelöschter Zeilen.
+   */
+  pruneRevokedOlderThan(maxAgeMs: number): number {
+    if (!Number.isFinite(maxAgeMs) || maxAgeMs <= 0) return 0;
+    const cutoff = new Date(Date.now() - maxAgeMs).toISOString();
+    const info = this.db
+      .prepare(
+        `DELETE FROM capability_activations
+         WHERE state = 'revoked' AND revoked_at IS NOT NULL AND revoked_at < ?`,
+      )
+      .run(cutoff);
+    const deleted = info.changes;
+    if (deleted > 0) {
+      this.log?.info(
+        { deleted, cutoff },
+        '[cap-activation] retention: alte revoked-Zeilen entfernt',
+      );
+    }
+    return deleted;
+  }
+
   close(): void {
+    // ADR-030 (T1.3): finalen Checkpoint vor dem Schliessen.
+    try {
+      this.db.pragma('wal_checkpoint(TRUNCATE)');
+    } catch {
+      /* best-effort */
+    }
     this.db.close();
   }
 }

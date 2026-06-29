@@ -1169,4 +1169,14 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-06-29 16:15 — v0.34.37 perf(daemon): Startpfad `tsx` → `node dist/` (T1.1 / V5 Spur 1).*
+## Session 2026-06-29 17:15 — v0.34.38 feat(storage): SQLite WAL-Checkpoint + Retention (T1.3 / V5 Spur 1, ADR-030)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|----|
+| v0.34.38 | (#211, base=main) | 2026-06-29 17:15 | △ ADR | n/a | ✅ | ✅ | ✅ | ✅ | CR Claude-Subagent APPROVE-WITH-NITS (kein Bug); beide Low-Nits adressiert; Retention empirisch guard-bewiesen |
+
+**CO/CG:** CO via **ADR-030** (Design-Doku VOR Code) — `pal:consensus` extern nicht verfügbar (`agy`-Backend fehlt im Env), daher explizite konservative Design-Begründung; default-sicher (kein Eingriff in die signierte Audit-Chain). CG n/a. **TS:** `retention.test.ts` (neu, 10 Tests): checkpoint `busy===0`, peer-/revoked-Retention (alt weg, neu/aktiv bleibt), **lokale Chain unangetastet**, `0`=No-Op, config-Defaults/Env/Validierung. Volle Suite **99 Files / 1195 grün**, tsc 0. Empirischer Beleg: Cutoff `<`→`>` invertiert ⇒ 1 rot, restauriert ⇒ 10 grün. **CR:** unabhängiger **Claude**-Subagent-Review (nur claude/codex/agy — `agy` fehlt im Env). APPROVE-WITH-NITS, 0× HIGH/CRITICAL; busy-Logging + `busy===0`-Assertion als Reaktion ergänzt. **PC:** `pal:precommit` (s. PR-Body). **DO:** CHANGES (v0.34.38), COMPLIANCE, ADR-030, `changes/2026-06-29_t13-sqlite-wal-checkpoint-retention.md`. **Status:** Repo-Slice durch; kein Deploy.
+
+---
+
+*Letzte Aktualisierung: 2026-06-29 17:15 — v0.34.38 feat(storage): SQLite WAL-Checkpoint + Retention (T1.3 / V5 Spur 1).*
