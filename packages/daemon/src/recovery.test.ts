@@ -47,4 +47,23 @@ describe('runRecoveryChecks canonical certificate paths', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('fails closed for expiring token-onboarded TLS without a local CA key', async () => {
+    const dir = makeDataDir();
+    try {
+      writeFileSync(join(dir, 'tls', 'ca.crt.pem'), createExpiringCertPem());
+      writeFileSync(join(dir, 'tls', 'node.crt.pem'), createExpiringCertPem());
+      writeFileSync(join(dir, 'tls', 'node.key.pem'), 'key');
+
+      const results = await runRecoveryChecks(dir, 0);
+      const certResult = results.find((r) => r.issue === 'cert_expired');
+
+      expect(certResult).toMatchObject({ recovered: false });
+      expect(certResult?.action).toContain('Re-Enroll');
+      expect(existsSync(join(dir, 'tls', 'node.crt.pem'))).toBe(true);
+      expect(existsSync(join(dir, 'tls', 'node.key.pem'))).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

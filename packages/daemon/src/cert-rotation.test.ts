@@ -20,6 +20,10 @@ function writeDummyRuntimeFiles(dir: string): void {
   writeFileSync(join(dir, 'certs', 'node.key'), 'legacy-key');
 }
 
+function markTokenOnboarded(dir: string): void {
+  writeFileSync(join(dir, 'tls', 'ca.crt.pem'), createCertPem(30));
+}
+
 function createCertPem(daysLeft: number): string {
   const keys = forge.pki.rsa.generateKeyPair(2048);
   const cert = forge.pki.createCertificate();
@@ -51,6 +55,21 @@ describe('cert-rotation canonical runtime paths', () => {
     }
   });
 
+  it('rotateCert fails closed for token-onboarded TLS without a local CA key', () => {
+    const dir = makeDataDir();
+    try {
+      writeDummyRuntimeFiles(dir);
+      markTokenOnboarded(dir);
+
+      expect(rotateCert(dir)).toBe(false);
+
+      expect(existsSync(join(dir, 'tls', 'node.crt.pem'))).toBe(true);
+      expect(existsSync(join(dir, 'tls', 'node.key.pem'))).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('trustReset removes canonical TLS material and paired-peers.json', () => {
     const dir = makeDataDir();
     try {
@@ -66,6 +85,23 @@ describe('cert-rotation canonical runtime paths', () => {
       expect(existsSync(join(dir, 'pairing', 'paired-peers.json'))).toBe(false);
       expect(existsSync(join(dir, 'pairing-store.json'))).toBe(true);
       expect(existsSync(join(dir, 'certs', 'crl.json'))).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('trustReset fails closed for token-onboarded TLS without a local CA key', () => {
+    const dir = makeDataDir();
+    try {
+      writeDummyRuntimeFiles(dir);
+      markTokenOnboarded(dir);
+      writeFileSync(join(dir, 'pairing', 'paired-peers.json'), '[]');
+
+      expect(trustReset(dir)).toEqual({ certsRemoved: 0, pairingReset: false });
+
+      expect(existsSync(join(dir, 'tls', 'node.crt.pem'))).toBe(true);
+      expect(existsSync(join(dir, 'tls', 'node.key.pem'))).toBe(true);
+      expect(existsSync(join(dir, 'pairing', 'paired-peers.json'))).toBe(true);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

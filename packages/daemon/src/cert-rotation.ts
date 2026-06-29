@@ -32,6 +32,12 @@ export interface CertAuditResult {
   }>;
 }
 
+function isTokenOnboardedTls(dataDir: string): boolean {
+  const caCertPath = resolve(dataDir, 'tls', 'ca.crt.pem');
+  const caKeyPath = resolve(dataDir, 'tls', 'ca.key.pem');
+  return existsSync(caCertPath) && !existsSync(caKeyPath);
+}
+
 /**
  * Prueft ob eine Zertifikat-Rotation noetig ist.
  * Gibt true zurueck wenn das Zertifikat erneuert werden sollte.
@@ -48,6 +54,13 @@ export function needsRotation(dataDir: string, minDays = 7): boolean {
 export function rotateCert(dataDir: string, log?: Logger): boolean {
   const certPath = resolve(dataDir, 'tls', 'node.crt.pem');
   const keyPath = resolve(dataDir, 'tls', 'node.key.pem');
+
+  if (isTokenOnboardedTls(dataDir)) {
+    log?.warn(
+      'Zertifikat-Rotation abgebrochen: Token-onboarded Node hat keinen lokalen CA-Key; Re-Enroll erforderlich',
+    );
+    return false;
+  }
 
   try {
     if (existsSync(certPath)) unlinkSync(certPath);
@@ -71,6 +84,13 @@ export function trustReset(
   certsRemoved: number;
   pairingReset: boolean;
 } {
+  if (isTokenOnboardedTls(dataDir)) {
+    log?.warn(
+      'Trust-Reset abgebrochen: Token-onboarded Node hat keinen lokalen CA-Key; Re-Enroll erforderlich',
+    );
+    return { certsRemoved: 0, pairingReset: false };
+  }
+
   let certsRemoved = 0;
 
   // Node-Cert loeschen

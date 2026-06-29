@@ -23,6 +23,12 @@ export interface RecoveryResult {
   details?: string;
 }
 
+function isTokenOnboardedTls(dataDir: string): boolean {
+  const caCertPath = resolve(dataDir, 'tls', 'ca.crt.pem');
+  const caKeyPath = resolve(dataDir, 'tls', 'ca.key.pem');
+  return existsSync(caCertPath) && !existsSync(caKeyPath);
+}
+
 /**
  * Prueft auf bekannte Probleme und versucht sie automatisch zu beheben.
  * Wird beim Daemon-Start aufgerufen.
@@ -66,6 +72,20 @@ function checkCertExpiry(dataDir: string, log?: Logger): RecoveryResult {
   }
   if (daysLeft > 7) {
     return { issue: 'none', recovered: true, action: `Zertifikat gueltig (${daysLeft} Tage)` };
+  }
+
+  if (isTokenOnboardedTls(dataDir)) {
+    log?.warn(
+      { daysLeft },
+      'Recovery: Token-onboarded Zertifikat laeuft ab, aber lokaler CA-Key fehlt - Re-Enroll erforderlich',
+    );
+    return {
+      issue: 'cert_expired',
+      recovered: false,
+      action: 'Token-onboarded Zertifikat erfordert Re-Enroll',
+      details:
+        'Lokaler CA-Key fehlt; automatische Loesch-/Reissue-Recovery wuerde Trust-State ersetzen.',
+    };
   }
 
   // Zertifikat erneuern: altes loeschen, wird beim naechsten TLS-Init neu erstellt
