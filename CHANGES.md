@@ -8,7 +8,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### v0.34.35 (Evidence-only — KW27 Re-Check; KEIN Code/Deploy) — docs(cert): Cert-Rotation-Pfad empirisch eingeordnet
+### v0.34.35 (Evidence-only — KW27 Re-Check; AMBER; KEIN Code/Deploy) — docs(cert): Cert-Rotation-Pfad empirisch eingeordnet
 
 Re-Check des Cert-Rotation-Pfads mit reproduzierbarem Dry-Run. Ergebnis:
 `cert-rotation.ts`/`recovery.ts` sind **nicht** im Daemon-Startup verdrahtet und

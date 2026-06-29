@@ -2,7 +2,13 @@
 
 ## Verdict
 
-**RE-CHECK abgeschlossen, kein Runtime-Fix in diesem Slice.**
+**AMBER — RE-CHECK abgeschlossen, kein Runtime-Fix in diesem Slice.**
+
+Kein akuter Ausfallpfad im heutigen Startup-Load bewiesen, aber ein echter
+Legacy-/Wartungsbefund: `cert-rotation.ts` und Teile von `recovery.ts` zeigen
+weiterhin auf alte Pfade und koennen dadurch einen falschen Sicherheitszustand
+suggerieren, obwohl die echte Erneuerung derzeit nur ueber den Startup-Load via
+`loadOrCreateTlsBundle()` passiert.
 
 Der aktuelle Daemon-Startpfad nutzt **nicht** `cert-rotation.ts` fuer eine
 periodische/aktive Rotation. Beim Start wird das TLS-Bundle ueber
