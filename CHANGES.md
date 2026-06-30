@@ -8,6 +8,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.48 (Cleanup, KEIN Deploy, keine Verhaltensänderung) — chore(cert): `cert-rotation.ts` als @deprecated/Legacy markieren
+
+Totes Modul `cert-rotation.ts` (0 Produktions-Importeure, RE-CHECK B) trug einen irreführenden
+Header („kann als periodischer Check laufen") — nie verdrahtet. Jetzt klar als Legacy markiert.
+
+- **`cert-rotation.ts`**: Header → prominenter `@deprecated`-Block + per-Export-Tags, die den kanonischen Pfad benennen (Erneuerung = `loadOrCreateTlsBundle`/Reissue beim Start; Live-Alert = `cert-expiry-monitor.ts` T2.1; Pairing = `pairing.ts`). **Keine Logik-Änderung** (nur Kommentare).
+- **Markieren statt löschen:** `trustReset`/`auditCerts` bleiben als unverdrahtete, getestete Manuell-Utilities (Guardrail „nicht neu verdrahten ohne ADR"); Entfernen = optionaler Folge-Slice.
+- **`cert-rotation-recheck.test.ts`** (+1): Guard, dass das tote Modul markiert bleibt + auf die kanonischen Pfade zeigt. `cert-rotation.test.ts`: Header-Notiz. `TODO.md` Z407 nachgezogen.
+- Volle Suite **106 Files / 1295 grün**, tsc 0. Guard-bewiesen (Marker entfernt ⇒ Test rot). CR: Claude-Subagent APPROVE, 0× HIGH/CRITICAL.
+
 ### v0.34.47 (T2.4-Folge / V5 Spur 2 — Routing/Lastverteilung, KEIN Deploy) — feat(routing): Self-Last in der least-loaded-Auswahl
 
 #219 wählte den least-loaded **Remote**-Peer, der **lokale** Knoten (nicht in `/api/peers`)

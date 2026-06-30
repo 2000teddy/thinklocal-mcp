@@ -404,7 +404,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [x] 🔴 Diagnostik: `thinklocal doctor` (Daemon, Keys, Peers, MCP, Certs, Ports) (2026-04-04)
 - [x] 🟠 Recovery-Flows: abgelaufene Certs, Port-Konflikte, umbenannte Hosts — `recovery.ts` runRecoveryChecks() (2026-04-05)
 - [x] 🟠 Versioning: Kompatibilitaetsmatrix, graceful Degradation — `version-compat.ts` + FEATURE_MATRIX (2026-04-05)
-- [x] 🟡 Security-Lifecycle: Cert-Rotation, Revocation, Trust-Reset — `cert-rotation.ts` + `crl.ts` (2026-04-05)
+- [x] 🟡 Security-Lifecycle: Cert-Rotation, Revocation, Trust-Reset — `cert-rotation.ts` + `crl.ts` (2026-04-05). **⚠️ 2026-06-30: `cert-rotation.ts` als @deprecated/Legacy markiert** (totes Modul, 0 Produktions-Importeure — RE-CHECK-Verdikt). Kanonisch: Erneuerung via `loadOrCreateTlsBundle` (Reissue beim Start), Live-Alert via `cert-expiry-monitor.ts` (T2.1). `trustReset`/`auditCerts` bleiben unverdrahtete Manuell-Utilities.
 - [x] 🟡 Benutzerfreundliche Fehlermeldungen statt Stack-Traces — Farbige CLI-Ausgabe (2026-04-04)
 
 ---

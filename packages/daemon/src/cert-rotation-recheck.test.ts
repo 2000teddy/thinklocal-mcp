@@ -150,4 +150,15 @@ describe('RE-CHECK B — cert-rotation.ts ist totes Modul (NICHT der scharfe Pfa
     }
     expect(importers).toEqual([]);
   });
+
+  it('cert-rotation.ts ist als @deprecated/Legacy markiert + zeigt auf den kanonischen Pfad', () => {
+    // Solange das Modul tot ist (kein Importeur, s.o.), MUSS die Deprecation-Markierung
+    // bleiben — sonst liest sich tote Altverdrahtung wieder wie der scharfe Pfad
+    // (genau die Verwechslung, die den RE-CHECK ausgelöst hat).
+    const here = dirname(fileURLToPath(import.meta.url));
+    const src = readFileSync(resolve(here, 'cert-rotation.ts'), 'utf8');
+    expect(src, 'Deprecation-Marker fehlt').toMatch(/@deprecated/);
+    expect(src, 'Verweis auf den kanonischen Erneuerungs-Pfad fehlt').toMatch(/loadOrCreateTlsBundle/);
+    expect(src, 'Verweis auf den Live-Alert-Pfad fehlt').toMatch(/cert-expiry-monitor/);
+  });
 });

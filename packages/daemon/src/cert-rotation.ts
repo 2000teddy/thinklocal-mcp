@@ -1,13 +1,25 @@
 /**
- * cert-rotation.ts — Zertifikat-Rotation und Security-Lifecycle
+ * cert-rotation.ts — @deprecated LEGACY-Utilities, NICHT der Laufzeit-Pfad.
  *
- * Automatische Erneuerung von Zertifikaten bevor sie ablaufen.
- * Kann als periodischer Check im Daemon-Lifecycle laufen.
+ * ⚠️ TOTES MODUL (Stand 2026-06-30): **kein** Produktionscode (daemon/cli) importiert
+ * diese Funktionen — bewiesen + festgenagelt durch `cert-rotation-recheck.test.ts`
+ * (RE-CHECK B) und das Verdikt `changes/2026-06-29_cert-rotation-recheck-verdict.md`.
+ * Die frühere Header-Behauptung „kann als periodischer Check im Daemon-Lifecycle laufen"
+ * war nie verdrahtet.
  *
- * Features:
- * - Automatische Rotation bei < X Tagen Restlaufzeit
- * - Trust-Reset: Alle Pairing-Daten und Zertifikate zuruecksetzen
- * - Cert-Audit: Prueft alle lokalen Zertifikate auf Gueltigkeit
+ * KANONISCHER Pfad (das, was wirklich läuft):
+ * - **Erneuerung/Rotation:** `tls.ts loadOrCreateTlsBundle()` — beim (Neu-)Start; ein
+ *   Node-Cert mit `daysLeft <= 7` wird verworfen und frisch ausgestellt (Rotation = Reissue).
+ * - **Ablauf-Alert (live):** `cert-expiry-monitor.ts` (T2.1, #213) — periodischer Check +
+ *   signiertes `CERT_EXPIRY_WARNING` + EventBus/Telegram-Sink bei `<30d`/`≤7d`.
+ * - **Pairing-/Trust-Daten:** `pairing.ts` (`PairingStore`, `pairing/paired-peers.json`).
+ *
+ * Diese Datei bleibt vorerst als **manuell aufrufbare** Legacy-Utility erhalten
+ * (`trustReset`/`auditCerts` sind sinnvolle, getestete Operationen ohne aktuelle
+ * Verdrahtung). Bei Bedarf an einen CLI-Befehl anschließen ODER in einem Folge-Slice
+ * entfernen — bis dahin: **nicht neu verdrahten** ohne ADR.
+ *
+ * @deprecated Nutze `loadOrCreateTlsBundle` (Erneuerung) + `cert-expiry-monitor` (Alert).
  */
 
 import { existsSync, unlinkSync, readdirSync, readFileSync } from 'node:fs';
@@ -41,6 +53,7 @@ function isTokenOnboardedTls(dataDir: string): boolean {
 /**
  * Prueft ob eine Zertifikat-Rotation noetig ist.
  * Gibt true zurueck wenn das Zertifikat erneuert werden sollte.
+ * @deprecated Totes Modul — der Live-Ablauf-Check ist `cert-expiry-monitor.ts` (T2.1).
  */
 export function needsRotation(dataDir: string, minDays = 7): boolean {
   const daysLeft = getCertDaysLeft(dataDir);
@@ -50,6 +63,7 @@ export function needsRotation(dataDir: string, minDays = 7): boolean {
 
 /**
  * Rotiert das Node-Zertifikat (loescht das alte, wird beim naechsten TLS-Init neu erstellt).
+ * @deprecated Totes Modul — Rotation passiert real als Reissue in `loadOrCreateTlsBundle` beim Start.
  */
 export function rotateCert(dataDir: string, log?: Logger): boolean {
   const certPath = resolve(dataDir, 'tls', 'node.crt.pem');
@@ -76,6 +90,7 @@ export function rotateCert(dataDir: string, log?: Logger): boolean {
 /**
  * Trust-Reset: Setzt alle Pairing-Daten und Peer-Trust zurueck.
  * ACHTUNG: Alle Peers muessen danach neu gepairt werden!
+ * @deprecated Unverdrahtete Legacy-Utility (kein CLI/daemon-Aufrufer) — nur manuell.
  */
 export function trustReset(
   dataDir: string,
@@ -130,6 +145,7 @@ export function trustReset(
 
 /**
  * Prueft alle Zertifikate im tls/-Verzeichnis.
+ * @deprecated Unverdrahtete Legacy-Utility — Live-Ablauf-Status liefert `cert-expiry-monitor.ts`.
  */
 export function auditCerts(dataDir: string, _log?: Logger): CertAuditResult {
   const certsDir = resolve(dataDir, 'tls');

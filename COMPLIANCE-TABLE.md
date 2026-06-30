@@ -1269,4 +1269,14 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-06-30 16:09 — v0.34.47 feat(routing): Self-Last in der least-loaded-Auswahl (T2.4-Folge / V5 Spur 2).*
+## Session 2026-06-30 16:39 — v0.34.48 chore(cert): cert-rotation.ts deprecaten (Cleanup)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|------------------------------------|
+| v0.34.48 | (offen, base=main) | 2026-06-30 16:39 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | CR Claude-Subagent APPROVE, 0× HIGH/CRITICAL/MEDIUM/LOW (2 kosmetische NITs); Deprecation verifiziert akkurat (0 Importeure, kanonische Pfade live, keine Logik-Änderung); empirisch guard-bewiesen |
+
+**CO/CG:** n/a — Cleanup/Doku-Slice (tote Altverdrahtung markieren), keine Design-Frage, keine Verhaltensänderung. **TS:** `cert-rotation-recheck.test.ts` (+1): Guard, dass `cert-rotation.ts` `@deprecated`-markiert bleibt + auf `loadOrCreateTlsBundle`/`cert-expiry-monitor` zeigt (token-basiert, nicht prosa-überfittet); `cert-rotation.test.ts` Header-Notiz. Volle Suite **106 Files / 1295 grün**, tsc 0. Empirischer Beleg: `@deprecated`-Marker entfernt ⇒ Guard-Test rot, restauriert ⇒ grün. (Vorbestehender `require()`-eslint-Error in `auditCerts` Z168 = Baseline seit 2026-04-05, nicht Teil des Slices.) **CR:** unabhängiger **Claude**-Subagent (nur claude/codex/agy — `agy` fehlt im Env). APPROVE, 0× HIGH/CRITICAL/MEDIUM/LOW; bestätigt: 0 ausführbare Zeilen geändert, `@deprecated` bricht Build nicht (keine no-deprecated-Regel). **PC:** manuell (tsc/Suite grün, `git diff` reviewed) — `agy`-Backend fehlt. **DO:** CHANGES (v0.34.48), COMPLIANCE, `changes/2026-06-30_cert-rotation-deprecate.md`, TODO.md. **Status:** Markiert; optionales hartes Entfernen = Folge-Slice. Kein Deploy.
+
+---
+
+*Letzte Aktualisierung: 2026-06-30 16:39 — v0.34.48 chore(cert): cert-rotation.ts deprecaten (Cleanup).*
