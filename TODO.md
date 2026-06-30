@@ -259,6 +259,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [x] 🟡 Deno-Isolate als dritte Sandbox-Option — `sandbox.ts` fuehrt `runtime=deno` mit `deno run --no-prompt`, expliziten `--allow-*`-Flags und lokalem `DENO_DIR` im Skill-Verzeichnis aus (2026-04-07)
 
 ### 3.4 Policy Engine
+> **⚠️ 2026-06-30: `policy.ts`/`PolicyEngine` als @deprecated/Legacy markiert** (totes Modul, 0 Produktions-Importeure). Nie an den Request-Pfad angeschlossen. Real verdrahtete Autorisierung: mTLS/Trust + `isApprovedPeerSender` (ADR-026) + Vault-Approval-Flow (`vault.createApprovalRequest`). (`approval-gates.ts` ist ebenfalls unverdrahtet — nicht kanonisch.) Anschließen via ADR oder Entfernen = Folge-Slice.
 - [x] 🔴 Policy Engine (leichtgewichtig statt OPA/Rego) — `policy.ts` mit JSON-Policies, deny-by-default (2026-04-05)
 - [x] 🔴 Standard-Policies: skill.execute (allow), credential.share (approval), skill.install (approval) (2026-04-05)
 - [x] 🟠 Policy-Verteilung über Mesh — exportForSync/importFromPeer in policy.ts (2026-04-05)

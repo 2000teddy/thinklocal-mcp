@@ -8,6 +8,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.49 (Cleanup, KEIN Deploy, keine Verhaltensänderung) — chore(policy): `policy.ts`/`PolicyEngine` als @deprecated/Legacy markieren
+
+Totes Modul `policy.ts` (`PolicyEngine`, 0 Produktions-Importeure — nur `policy.test.ts`) trug
+einen irreführenden Header („zur Laufzeit evaluiert") — nie an den Request-Pfad angeschlossen.
+Jetzt klar als Legacy markiert (gleiches Muster wie `cert-rotation.ts`/#221).
+
+- **`policy.ts`**: Header → prominenter `@deprecated`-Block + Klassen-Tag, die den **real verdrahteten** AUTHZ-Pfad benennen (mTLS/Trust + `isApprovedPeerSender` ADR-026 + Vault-Approval-Flow; place-or-refuse = Kapazität). CR-HIGH-Korrektur: `approval-gates.ts` ist ebenfalls unverdrahtet → nicht als kanonisch zitiert. **Keine Logik-Änderung** (nur Kommentare, git-diff-belegt).
+- **Markieren statt löschen:** PolicyEngine bleibt testbarer Entwurf (signierte Policy-Verteilung „Phase 2"); Anschließen via ADR oder Entfernen = Folge-Slice.
+- **`policy.test.ts`** (+2 Guards): 0 Produktions-Importeure (schließt lebendes `discovery-policy.ts` aus) + Modul bleibt @deprecated-markiert. `TODO.md` §3.4 nachgezogen.
+- Volle Suite **106 Files / 1297 grün**, tsc 0. Guard-bewiesen (Marker entfernt ⇒ Test rot). (`require()`-eslint-Errors in policy.ts = Baseline seit 2026-04-05, nicht im Slice.)
+
 ### v0.34.48 (Cleanup, KEIN Deploy, keine Verhaltensänderung) — chore(cert): `cert-rotation.ts` als @deprecated/Legacy markieren
 
 Totes Modul `cert-rotation.ts` (0 Produktions-Importeure, RE-CHECK B) trug einen irreführenden

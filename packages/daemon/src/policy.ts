@@ -1,20 +1,29 @@
 /**
- * policy.ts — Leichtgewichtige Policy Engine fuer das Mesh
+ * policy.ts — @deprecated LEGACY Policy-Engine, NICHT der Laufzeit-Pfad.
  *
- * Definiert Regeln wer was im Mesh darf:
- * - Welche Agents duerfen welche Skills abfragen?
- * - Welche Agents duerfen Skills installieren?
- * - Welche Agents duerfen Credentials teilen?
- * - Welche Task-Typen brauchen Human Approval?
+ * ⚠️ TOTES MODUL (Stand 2026-06-30): **kein** Produktionscode (daemon/cli) importiert
+ * `PolicyEngine` — der einzige Importeur ist `policy.test.ts`. Die frühere Behauptung
+ * „wird zur Laufzeit evaluiert" war nie verdrahtet (Phase-1-Entwurf, der nie an den
+ * Request-Pfad angeschlossen wurde — vgl. T2.4-Notiz „PolicyEngine ist ungenutztes totes
+ * Modul" und das Cert-Verdikt).
  *
- * Statt OPA/Rego nutzen wir ein einfaches JSON-Format
- * das zur Laufzeit evaluiert wird. Policies koennen ueber
- * das Mesh signiert verteilt werden (Phase 2).
+ * KANONISCHER Autorisierungs-Pfad (das, was real verdrahtet durchsetzt):
+ * - **mTLS + Trust-Store** (Zero-Trust): nur gepairte/CA-validierte Peers reden mit.
+ * - **`isApprovedPeerSender`** (ADR-026 AUTHZ-Gate, `mesh.ts` → `index.ts`): wer
+ *   Mesh-State/SKILL_ANNOUNCE/Tasks senden darf.
+ * - **Vault-Approval-Flow** (`vault.createApprovalRequest`/`approveRequest`, `index.ts`):
+ *   Human-Approval für Credential-Sharing (deny-bis-genehmigt).
+ * - **place-or-refuse** (`task-executor.ts`/T2.4): Kapazitäts-Gate (kein AUTHZ, aber Routing).
  *
- * Architektur:
- * - Default-Policies sind eingebaut (deny-by-default fuer Credentials)
- * - Custom-Policies aus config/policies.json
- * - Jede Policy hat: action, subject, resource, effect (allow/deny)
+ * Hinweis: `approval-gates.ts` ist ebenfalls ein unverdrahtetes Legacy-Modul — NICHT der
+ * Live-Pfad (nicht als kanonisch zitieren).
+ *
+ * Diese Datei bleibt vorerst als Entwurf erhalten (`exportForSync`/`importFromPeer` etc.
+ * sind testbare, in sich geschlossene Operationen ohne aktuelle Verdrahtung). Bei Bedarf
+ * an den Request-Pfad anschließen (eigenes ADR — „signierte Policy-Verteilung Phase 2")
+ * ODER in einem Folge-Slice entfernen — bis dahin: **nicht neu verdrahten** ohne ADR.
+ *
+ * @deprecated Nutze mTLS/Trust + `isApprovedPeerSender` (ADR-026) + Vault-Approval-Flow.
  */
 
 import { readFileSync, existsSync } from 'node:fs';
@@ -127,6 +136,11 @@ const DEFAULT_POLICIES: Policy[] = [
 
 // --- Policy Engine ---
 
+/**
+ * @deprecated Totes Modul — nicht an den Request-Pfad verdrahtet. Autorisierung läuft real
+ * über mTLS/Trust + `isApprovedPeerSender` (ADR-026) + Vault-Approval-Flow. Nicht neu
+ * verdrahten ohne ADR (s. Datei-Header).
+ */
 export class PolicyEngine {
   private policies: Policy[] = [];
 
