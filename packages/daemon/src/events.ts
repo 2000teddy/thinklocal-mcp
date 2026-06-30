@@ -35,6 +35,8 @@ export type MeshEventType =
   | 'system:shutdown'
   // T2.1: Live-Cert-Ablauf-Alert (warn/critical) vom periodischen Monitor.
   | 'system:cert_expiry'
+  // T2.2: Skill-Health-State-Flip (flap-gedämpft durch Hysterese) für den Alert-Sink.
+  | 'system:skill_health'
   // ADR-007/008 Phase A+B: governance + capability lifecycle events
   | 'inbox:new'
   | 'approval:created'

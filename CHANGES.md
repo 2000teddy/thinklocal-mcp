@@ -8,6 +8,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.41 (T2.2 / V5 Spur 2 — Bugfix + Observability, KEIN Deploy) — fix(influx): Health-Probe `/health`→`/ping`-Fallback + Skill-Health-Alert-Event
+
+Behebt die InfluxDB-Health-Probe, die **22.786 Fehlversuche bei gesundem Dienst**
+meldete. Root-Cause: `/health` existiert erst ab InfluxDB **1.8** → auf älteren 1.x
+**404** → gesunder Dienst dauerhaft als unhealthy. Fix: Fallback auf den universellen,
+auth-freien **`/ping`** (204) über alle 1.x/2.x. Zusätzlich emittiert `onTransition`
+jetzt ein flap-gedämpftes `system:skill_health`-Event für den Alert-Sink.
+
+- **`builtin-skills/influxdb.ts`**: `/health` zuerst, bei nicht-ok/Fehler `/ping`-Fallback; geteiltes AbortSignal, gibt immer Boolean zurück. `/ping` = Liveness (dokumentiert).
+- **`events.ts`** `system:skill_health`; **`index.ts`** `onTransition` emittiert es (nur bei debouncten Flips; listener-isoliert via try/catch). Flap-Dämpfung kommt aus der bestehenden `SkillHealthMonitor`-Hysterese.
+- **Scope-Grenze:** Push-Zustellung an Hermes/Telegram = Admin/Hermes-Seite; Event liegt bereit.
+- Tests: `influxdb.test.ts` (neu, 6); volle Suite **102 Files / 1222 grün**, tsc 0, eslint 0. Empirisch guard-bewiesen (/ping-Fallback entfernt ⇒ 3 rot). CR: Claude-Subagent **APPROVE-WITH-NITS** (Probe-Fix CORRECT; beide Nits adressiert). Beleg: `changes/2026-06-29_t22-influx-probe-alert-sink.md`.
+
 ### v0.34.40 (T2.1 / V5 Spur 2 — Observability, KEINE Cert-Rotation, KEIN Deploy) — feat(cert): Live-Cert-Ablauf-Monitor + <30d-Alert
 
 Schließt die im RE-CHECK (v0.34.39) belegte Lücke: der TLS-Node-Cert-Ablauf wurde

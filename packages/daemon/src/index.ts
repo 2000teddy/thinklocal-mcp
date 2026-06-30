@@ -381,6 +381,22 @@ async function main(): Promise<void> {
         'skill',
         t.skillId,
       );
+      // T2.2: Alert-Sink-Event (flap-gedämpft durch die Monitor-Hysterese — feuert
+      // nur bei einem echten, debouncten State-Flip). Push-Zustellung an
+      // Hermes/Telegram übernimmt der Sink (Admin/Hermes-Seite).
+      // Listener-Isolation: MeshEventBus ruft Listener synchron — ein werfender
+      // Sink-Listener darf den nachfolgenden Registry-Republish nicht überspringen.
+      try {
+        eventBus.emit('system:skill_health', {
+          skillId: t.skillId,
+          from: t.from,
+          to: t.to,
+          consecutiveFailures: t.consecutiveFailures,
+          lastError: t.lastError,
+        });
+      } catch (err) {
+        log.warn({ err, skillId: t.skillId }, '[skill-health] system:skill_health-Emit fehlgeschlagen');
+      }
       // Sofortiger Registry-Push, damit das Mesh den State-Flip schnell sieht (ADR-020 Resync).
       void registrySync.coordinator
         .republish()
