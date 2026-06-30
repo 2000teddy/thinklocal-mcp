@@ -143,6 +143,16 @@ export interface DaemonConfig {
    */
   placement: {
     refuse_ram_percent: number;
+    /**
+     * T2.4-Folge: CPU-Last-Schwelle (%, 0..100). `0` = deaktiviert. Übersteigt die
+     * (geglättete) CPU-Last diese Schwelle, lehnt der Knoten neue Platzierung ab.
+     */
+    refuse_cpu_percent: number;
+    /**
+     * T2.4-Folge: max. lokale Agenten-Anzahl. `0` = deaktiviert. Übersteigt
+     * `agent_count` diese Schwelle, lehnt der Knoten neue Platzierung ab.
+     */
+    refuse_agent_count: number;
     resource_refresh_interval_ms: number;
   };
 }
@@ -205,6 +215,8 @@ const DEFAULTS: DaemonConfig = {
   },
   placement: {
     refuse_ram_percent: 90,
+    refuse_cpu_percent: 0, // deaktiviert per Default (opt-in) — CPU-Last ist spiky
+    refuse_agent_count: 0, // deaktiviert per Default (opt-in) — deployment-spezifisch
     resource_refresh_interval_ms: 15_000, // 15 s
   },
 };
@@ -348,6 +360,19 @@ export function loadConfig(configPath?: string): DaemonConfig {
       cfg.placement.resource_refresh_interval_ms,
     );
   }
+  // T2.4-Folge: CPU-/agent_count-Schwellen (0 = deaktiviert → readNonNegativeInt).
+  if (env['TLMCP_PLACE_REFUSE_CPU_PERCENT']) {
+    cfg.placement.refuse_cpu_percent = readNonNegativeInt(
+      'TLMCP_PLACE_REFUSE_CPU_PERCENT',
+      cfg.placement.refuse_cpu_percent,
+    );
+  }
+  if (env['TLMCP_PLACE_REFUSE_AGENT_COUNT']) {
+    cfg.placement.refuse_agent_count = readNonNegativeInt(
+      'TLMCP_PLACE_REFUSE_AGENT_COUNT',
+      cfg.placement.refuse_agent_count,
+    );
+  }
 
   // LOW-FIX (CR-Review): CIDRs validieren — fail fast statt silent.
   // Typos wie "10.10.10.0/33" oder "10.10.10.0/24foo" muessen sofort
@@ -375,6 +400,18 @@ export function loadConfig(configPath?: string): DaemonConfig {
   if (cfg.placement.refuse_ram_percent <= 0 || cfg.placement.refuse_ram_percent > 100) {
     throw new Error(
       `Ungueltige placement.refuse_ram_percent (${cfg.placement.refuse_ram_percent}): erwartet 1..100.`,
+    );
+  }
+  // T2.4-Folge: CPU-Schwelle in 0..100 (0 = deaktiviert). >100 = nie, <0 = sinnlos.
+  if (cfg.placement.refuse_cpu_percent < 0 || cfg.placement.refuse_cpu_percent > 100) {
+    throw new Error(
+      `Ungueltige placement.refuse_cpu_percent (${cfg.placement.refuse_cpu_percent}): erwartet 0..100 (0 = aus).`,
+    );
+  }
+  // T2.4-Folge: agent_count-Schwelle >= 0 (0 = deaktiviert).
+  if (cfg.placement.refuse_agent_count < 0) {
+    throw new Error(
+      `Ungueltige placement.refuse_agent_count (${cfg.placement.refuse_agent_count}): erwartet >= 0 (0 = aus).`,
     );
   }
 

@@ -554,6 +554,9 @@ async function main(): Promise<void> {
     trustedCaBundle: trustStoreNotifier?.current(),
     log,
     rateLimiter,
+    // T2.4-Folge: Self-Resource-Attribute (cache-bewusst) über die Agent-Card exponieren,
+    // damit Peers die place-or-refuse-relevante Kapazität sehen. Quelle = Registry-Side-Map.
+    getNodeResources: () => registry.getNodeResources(selfIdentityUri),
     // ADR-022: tolerante, PeerID-gekeyte Auflösung (behebt Root-Cause (a) des
     // SKILL_ANNOUNCE-403 „Unknown sender"). Auflösung via mesh, nicht via
     // OS-/Hostname-URI. Siehe MeshManager.resolvePeerPublicKey.
@@ -786,6 +789,14 @@ async function main(): Promise<void> {
     // T2.4 place-or-refuse: bei RAM > Schwelle keine neue Platzierung annehmen.
     getRamUsedPercent: () => readRamUsedPercent(),
     refuseRamPercent: config.placement.refuse_ram_percent,
+    // T2.4-Folge: CPU/agent_count-Dimensionen (opt-in, Default-Schwellen 0 = aus).
+    // CPU aus der periodisch aktualisierten Side-Map (kein si.currentLoad pro Request);
+    // agent_count instant aus dem AgentRegistry. Closures werden erst zur Task-Zeit
+    // (post-Startup) aufgerufen → agentRegistry/registry sind dann initialisiert.
+    getCpuLoad: () => registry.getNodeResources(selfIdentityUri)?.cpu_load ?? null,
+    refuseCpuPercent: config.placement.refuse_cpu_percent,
+    getAgentCount: () => agentRegistry.size(),
+    refuseAgentCount: config.placement.refuse_agent_count,
   });
 
   // 8c. Pairing-Routen registrieren (pairingStore wurde oben bereits erzeugt,

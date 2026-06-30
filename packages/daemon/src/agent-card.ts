@@ -16,6 +16,7 @@ import type { Logger } from 'pino';
 import type { Libp2pRuntimeState } from './libp2p-runtime.js';
 import { authorizeHttpsSender, spiffeUrisFromSubjectAltName, attestedPeerIdFromCert } from './peer-identity.js';
 import type { BuildInfo } from './build-info.js';
+import type { NodeResourceRecord } from './registry.js';
 
 export interface AgentCard {
   name: string;
@@ -48,6 +49,20 @@ export interface AgentCard {
     completed_tasks: number;
     failed_tasks: number;
     load_percent: number; // 0-100, basierend auf aktiven Tasks vs. Kapazitaet
+  };
+  /**
+   * T2.4-Folge: place-or-refuse-relevante Auslastung (cache-bewusst), gespiegelt aus der
+   * Registry-Side-Map des eigenen Knotens — single source of truth mit dem place-or-refuse-Gate
+   * (`ram_used_percent` rechnet cache-bereinigt, anders als `health.memory_percent`).
+   * So sehen Peers über die Agent-Card dieselbe Kapazität, nach der der Knoten ablehnt.
+   * Optional — fehlt, solange noch kein Resource-Snapshot vorliegt.
+   */
+  resources?: {
+    free_ram_bytes: number;
+    ram_used_percent: number;
+    cpu_load: number;
+    agent_count: number;
+    updated_at: string;
   };
   mesh: {
     joined_at: string;
@@ -123,6 +138,11 @@ export interface AgentCardServerOptions {
    */
   trustedCaBundle?: string[];
   log?: Logger;
+  /**
+   * T2.4-Folge: liefert die place-or-refuse-Resource-Attribute des eigenen Knotens
+   * (aus der Registry-Side-Map) für die Mesh-Exposition in der Agent-Card. Optional.
+   */
+  getNodeResources?: () => NodeResourceRecord | undefined;
   /** Map von bekannten Peer-Public-Keys (agentId → PEM) für Signaturprüfung */
   getPeerPublicKey?: (agentId: string) => string | undefined;
   /**
@@ -510,6 +530,8 @@ export class AgentCardServer {
         failed_tasks: this.workerStats.failed,
         load_percent: Math.min(100, Math.round((this.workerStats.active / Math.max(1, this.workerStats.capacity)) * 100)),
       },
+      // T2.4-Folge: Self-Resource-Snapshot aus der Side-Map (undefined, falls noch keiner vorliegt).
+      resources: this.opts.getNodeResources?.(),
       mesh: {
         joined_at: this.joinedAt,
         trust_level: this.useTls ? 'mtls-self-signed' : 'none',

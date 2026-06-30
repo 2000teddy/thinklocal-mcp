@@ -1239,4 +1239,14 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-06-30 13:30 — v0.34.44 perf(daemon): Start tsx → node dist/ (T1.1 / V5 Spur 1).*
+## Session 2026-06-30 14:32 — v0.34.45 feat(placement): CPU/agent_count-Heuristik + Mesh-Exposition (T2.4-Folge / V5 Spur 2)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|------------------------------------|
+| v0.34.45 | (offen, base=main) | 2026-06-30 14:32 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | CR Claude-Subagent APPROVE, 0× HIGH/CRITICAL; **CR-MEDIUM** (asymmetrisches fail-open CPU/agent-Reader) gefixt+getestet, **CR-LOW** (Wrapper-Divergenz dokumentiert + Test RAM-throw+CPU ergänzt), NIT (Funktion zwischen Imports) bereinigt; empirisch guard-bewiesen |
+
+**CO/CG:** n/a — benannter T2.4-Folge-Slice (Out-of-scope-Liste aus #215), keine offene Design-Frage. **TS:** `place-or-refuse.test.ts` (+11, jetzt 25): `evaluatePlacementMetrics` (CPU/agents-Grenzen, ==→accept, 0=aus, null-skip, RAM→CPU→agents-Priorität), Executor-Integration (CPU/agent_count refuse + Fehlertext; deaktiviert→inert; **RAM-throw+CPU→CPU greift**; **CPU-Reader-throw→übersprungen, kein Crash**), config CPU/agent Defaults/Env/Range; `agent-card.test.ts` (neu, 3): `resources`-Exposition via Fastify-`inject()` (present/undefined-Snapshot/ohne Option). Volle Suite **105 Files / 1270 grün**, tsc 0, authored-files eslint 0 Errors. Empirischer Beleg: `exceeds` `>`→`>=` mutiert ⇒ 3 Grenz-Tests (RAM/CPU/agents) rot, restauriert ⇒ grün. **CR:** unabhängiger **Claude**-Subagent (nur claude/codex/agy — `agy` fehlt im Env). APPROVE, 0× HIGH/CRITICAL; CR-MEDIUM (per-Dimension fail-open der CPU/agent-Reader via `safeReadDimension`) gefixt+getestet, CR-LOW (Wrapper-`<=0`-Divergenz dokumentiert; RAM-throw+CPU-Test ergänzt), NIT (describeLimit zwischen Imports) bereinigt. **PC:** manuell (tsc/eslint-authored/Suite grün, `git diff` reviewed) — `agy`-Backend fehlt. **DO:** CHANGES (v0.34.45), COMPLIANCE, `changes/2026-06-30_t24-cpu-agentcount-mesh-resource.md`. **Status:** Repo-Slice durch; Peer-Resource-basierte Routing-Auswahl (Anfrager wählt least-loaded) = Folge-Slice. Kein Deploy.
+
+---
+
+*Letzte Aktualisierung: 2026-06-30 14:32 — v0.34.45 feat(placement): CPU/agent_count-Heuristik + Mesh-Exposition (T2.4-Folge / V5 Spur 2).*

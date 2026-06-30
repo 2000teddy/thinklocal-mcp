@@ -48,16 +48,79 @@ export async function readResourceMetrics(): Promise<ResourceMetrics> {
 export interface PlacementDecision {
   refuse: boolean;
   reason?: 'capacity';
+  /** Welche Dimension die Ablehnung ausgelöst hat (für Log/Audit/Event). */
+  limit?: 'ram' | 'cpu' | 'agents';
   ramUsedPercent: number;
 }
 
 /**
- * Reine Entscheidung: Platzierung ablehnen, wenn die RAM-Auslastung die Schwelle
- * **überschreitet** (strikt `>`). Bei genau `== refuseRamPercent` wird akzeptiert.
+ * T2.4-Folge: aktueller Auslastungs-Snapshot für die place-or-refuse-Entscheidung.
+ * Jede Dimension ist optional/nullable — eine nicht gemessene Dimension (null/undefined)
+ * wird übersprungen (fail-open pro Dimension), nicht als 0 behandelt.
+ */
+export interface PlacementMetrics {
+  /** Cache-bewusste RAM-Auslastung 0..100. */
+  ramUsedPercent?: number | null;
+  /** CPU-Last 0..100 (geglätteter si.currentLoad-Snapshot). */
+  cpuLoad?: number | null;
+  /** Anzahl lokal registrierter Agenten. */
+  agentCount?: number | null;
+}
+
+/**
+ * T2.4-Folge: Schwellen pro Dimension. `0`/undefined = Dimension deaktiviert
+ * (kein Refuse). RAM ist per config immer aktiv (1..100); CPU/agent_count sind
+ * standardmäßig deaktiviert und per config/env opt-in.
+ */
+export interface PlacementLimits {
+  refuseRamPercent?: number;
+  refuseCpuPercent?: number;
+  refuseAgentCount?: number;
+}
+
+/** Eine Dimension ist überschritten, wenn die Schwelle aktiv (>0) und der Wert strikt größer ist. */
+function exceeds(value: number | null | undefined, limit: number | undefined): boolean {
+  return (
+    typeof limit === 'number' &&
+    limit > 0 &&
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    value > limit
+  );
+}
+
+/**
+ * Reine Multi-Dimension-Entscheidung: lehnt ab, sobald die ERSTE aktive Schwelle
+ * (Priorität RAM → CPU → agent_count) strikt überschritten ist. Bei `==` wird
+ * akzeptiert. Nicht gemessene/deaktivierte Dimensionen werden übersprungen.
+ */
+export function evaluatePlacementMetrics(
+  metrics: PlacementMetrics,
+  limits: PlacementLimits,
+): PlacementDecision {
+  const ram = typeof metrics.ramUsedPercent === 'number' ? metrics.ramUsedPercent : NaN;
+  if (exceeds(metrics.ramUsedPercent, limits.refuseRamPercent)) {
+    return { refuse: true, reason: 'capacity', limit: 'ram', ramUsedPercent: ram };
+  }
+  if (exceeds(metrics.cpuLoad, limits.refuseCpuPercent)) {
+    return { refuse: true, reason: 'capacity', limit: 'cpu', ramUsedPercent: ram };
+  }
+  if (exceeds(metrics.agentCount, limits.refuseAgentCount)) {
+    return { refuse: true, reason: 'capacity', limit: 'agents', ramUsedPercent: ram };
+  }
+  return { refuse: false, ramUsedPercent: ram };
+}
+
+/**
+ * Reine Entscheidung (RAM-only, Back-Compat-Wrapper): Platzierung ablehnen, wenn die
+ * RAM-Auslastung die Schwelle **überschreitet** (strikt `>`). Bei genau
+ * `== refuseRamPercent` wird akzeptiert. Delegiert an {@link evaluatePlacementMetrics}.
+ *
+ * Hinweis: für gültige Schwellen (config erzwingt RAM 1..100) identisch zum alten
+ * Verhalten. Bewusste Abweichung nur bei `refuseRamPercent <= 0`: das gilt jetzt als
+ * „deaktiviert" (kein Refuse) statt „immer Refuse" — konsistent mit der 0-=-aus-Semantik
+ * der neuen CPU/agent_count-Dimensionen. Über config unerreichbar.
  */
 export function evaluatePlacement(ramUsedPercent: number, refuseRamPercent: number): PlacementDecision {
-  if (Number.isFinite(ramUsedPercent) && ramUsedPercent > refuseRamPercent) {
-    return { refuse: true, reason: 'capacity', ramUsedPercent };
-  }
-  return { refuse: false, ramUsedPercent };
+  return evaluatePlacementMetrics({ ramUsedPercent }, { refuseRamPercent });
 }

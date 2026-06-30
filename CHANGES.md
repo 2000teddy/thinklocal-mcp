@@ -8,6 +8,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.45 (T2.4-Folge / V5 Spur 2 — Kapazitäts-Schutz + Observability, KEIN Deploy) — feat(placement): CPU/agent_count-Heuristik + Mesh-Exposition der Resource-Attribute
+
+Das place-or-refuse-Gate gatet jetzt zusätzlich über **CPU-Last** und **agent_count**
+(Basis-T2.4 nur RAM), und die Resource-Attribute werden über die Agent-Card im Mesh exponiert.
+
+- **`resource-metrics.ts`**: `evaluatePlacementMetrics(metrics, limits)` — Priorität RAM→CPU→agent_count, strikt `>`, `reason:'capacity'` + `limit`-Diskriminator; pro Dimension fail-open (null/NaN-skip) und 0=deaktiviert. Alte `evaluatePlacement` bleibt Back-Compat-Wrapper.
+- **`task-executor.ts`**: RAM frisch/await (fail-open), CPU aus 15s-Side-Map, agent_count instant; CPU/agent-Reader via `safeReadDimension` crash-sicher. `reason:'capacity'` → 503-Mapping bleibt.
+- **`config.ts`**: `refuse_cpu_percent` (0..100, Default 0=aus), `refuse_agent_count` (>=0, Default 0=aus) + Env + Range-Checks. **Opt-in** — RAM-Verhalten unverändert.
+- **`agent-card.ts`**: optionaler `resources`-Block in `/.well-known/agent-card.json` (cache-bewusst, Quelle = Self-Side-Map) → Peers sehen dieselbe Kapazität, nach der abgelehnt wird.
+- **Tests**: `place-or-refuse.test.ts` (+11), `agent-card.test.ts` (neu, 3). Volle Suite **105 Files / 1270 grün**, tsc 0. Guard-bewiesen (`>`→`>=` ⇒ 3 Grenz-Tests rot). CR: Claude-Subagent APPROVE, CR-MEDIUM (fail-open-Garantie) gefixt+getestet.
+
 ### v0.34.44 (T1.1 / V5 Spur 1 — Runtime-Umstellung, KEIN Deploy) — perf(daemon): Start von tsx auf kompiliertes `node dist/` (Launch-Configs)
 
 Der langlaufende Daemon startet jetzt überall aus kompiliertem `dist/index.js` statt via
