@@ -1,8 +1,17 @@
+/**
+ * policy.test.ts — Verhaltens-Tests für die @deprecated LEGACY `PolicyEngine` (`policy.ts`),
+ * ein totes Modul (0 Produktions-Importeure). Die Tests bleiben erhalten, damit die Engine
+ * ihr dokumentiertes Verhalten behält, solange sie nicht entfernt wird. Der reale,
+ * verdrahtete Autorisierungs-Pfad ist mTLS/Trust + `isApprovedPeerSender` (ADR-026) +
+ * Vault-Approval-Flow — NICHT diese Engine (und auch nicht das ebenfalls unverdrahtete
+ * `approval-gates.ts`). Siehe `policy.ts`-Header.
+ */
 import { describe, it, expect } from 'vitest';
 import { PolicyEngine } from './policy.js';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 describe('PolicyEngine', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'policy-test-'));
@@ -98,5 +107,42 @@ describe('PolicyEngine', () => {
     });
     expect(engine.removePolicy('temp-policy')).toBe(true);
     expect(engine.removePolicy('nonexistent')).toBe(false);
+  });
+});
+
+describe('policy.ts ist totes Modul + @deprecated markiert (Cleanup-Guard)', () => {
+  it('kein Produktions-Source (daemon/cli) importiert policy.ts', () => {
+    const here = dirname(fileURLToPath(import.meta.url)); // packages/daemon/src
+    const repoRoot = resolve(here, '../../..');
+    const roots = [resolve(repoRoot, 'packages/daemon/src'), resolve(repoRoot, 'packages/cli/src')];
+    const importers: string[] = [];
+    for (const root of roots) {
+      let files: string[];
+      try {
+        files = readdirSync(root, { recursive: true }) as string[];
+      } catch {
+        continue; // cli optional
+      }
+      for (const rel of files) {
+        if (!rel.endsWith('.ts') || rel.endsWith('.test.ts')) continue;
+        if (rel.endsWith('policy.ts')) continue; // die Definition selbst
+        // discovery-policy.ts ist ein ANDERES, lebendes Modul → nicht mitzählen
+        if (rel.endsWith('discovery-policy.ts')) continue;
+        const src = readFileSync(join(root, rel), 'utf8');
+        if (/from\s+['"][^'"]*\/policy(\.js)?['"]/.test(src)) {
+          importers.push(rel);
+        }
+      }
+    }
+    expect(importers).toEqual([]);
+  });
+
+  it('policy.ts ist als @deprecated/Legacy markiert + zeigt auf den kanonischen AUTHZ-Pfad', () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const src = readFileSync(resolve(here, 'policy.ts'), 'utf8');
+    expect(src, 'Deprecation-Marker fehlt').toMatch(/@deprecated/);
+    // Verweise auf den REAL verdrahteten AUTHZ-Pfad (nicht das unverdrahtete approval-gates).
+    expect(src, 'Verweis auf isApprovedPeerSender fehlt').toMatch(/isApprovedPeerSender/);
+    expect(src, 'Verweis auf den Vault-Approval-Flow fehlt').toMatch(/createApprovalRequest/);
   });
 });
