@@ -1,3 +1,11 @@
+/**
+ * cert-rotation.test.ts — Verhaltens-Tests für die @deprecated LEGACY-Utilities in
+ * `cert-rotation.ts` (totes Modul, kein Produktions-Importeur — siehe
+ * `cert-rotation-recheck.test.ts`). Die Tests bleiben erhalten, damit die manuell
+ * aufrufbaren Utilities (trustReset/auditCerts/rotateCert) ihr dokumentiertes Verhalten
+ * behalten, solange sie nicht entfernt werden. Der LAUFZEIT-Pfad ist `loadOrCreateTlsBundle`
+ * (Reissue beim Start) + `cert-expiry-monitor.ts` (Live-Alert, T2.1) — NICHT dieses Modul.
+ */
 import { describe, it, expect } from 'vitest';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
