@@ -8,6 +8,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.43 (T2.2-Follow-up / V5 Spur 2 — Observability-Lücke, KEIN Deploy) — fix(telegram): Alert-Events in den Daemon-Telegram-Sink verdrahten
+
+Die in T2.1 (#213) und T2.2 (#214) emittierten Alert-Events `system:cert_expiry` und
+`system:skill_health` erreichten **keinen Operator**: der `TelegramGateway`-Forwarding-Switch
+kannte sie nicht, sie fielen durch. Dieser Fix stellt sie über den bereits vorhandenen
+Daemon-Telegram-Sink zu.
+
+- **`telegram-gateway.ts`**: Switch-Logik in reine, testbare Funktion `formatMeshEventForTelegram(event, ts)` extrahiert (Konstruktor startet echtes Bot-Polling → reine Funktion ohne Bot testbar). Sechs bestehende Cases byte-identisch übernommen.
+- **Zwei neue Cases**: `system:cert_expiry` (🟠 warn / 🔴 critical + Neustart-Hinweis, `daysLeft`); `system:skill_health` (⚠️ ungesund / ✅ wieder gesund, `from→to`, `consecutiveFailures`, optional `lastError`).
+- Flap-Dämpfung bleibt upstream (Hysterese / Schwellwert-Check) — hier keine nötig.
+- **`telegram-gateway.test.ts`** (neu, 11 Tests, erste Testdatei des Moduls): beide Alert-Cases inkl. Tier-Verzweigung, Recovery, Regression der sechs alten Cases, `null`-Spam-Unterdrückung.
+- Volle Suite **104 Files / 1249 grün**, tsc 0, eslint 0. Scope-Grenze: breiteres Hermes-Operator-Routing bleibt Admin/Hermes-Seite.
+
 ### v0.34.42 (T2.4 / V5 Spur 2 — Kapazitäts-Schutz + Observability, KEIN Deploy) — feat(placement): Resource-Attribute in Registry + place-or-refuse (>90 % RAM)
 
 Knoten kennen jetzt ihre eigene Auslastung routing-wirksam und lehnen neue

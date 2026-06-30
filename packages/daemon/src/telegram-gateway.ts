@@ -51,6 +51,53 @@ export interface TelegramGatewayConfig {
   fetchDispatcher?: unknown;
 }
 
+/**
+ * Bildet ein Mesh-Event auf eine Telegram-Notification-Zeile ab.
+ * Gibt `null` zurueck, wenn das Event NICHT weitergeleitet wird
+ * (Spam-Vermeidung: Heartbeats, capability:synced, etc.).
+ *
+ * Reine Funktion — testbar ohne Bot/Polling. Die Flap-Daempfung der
+ * Alert-Events (system:skill_health, system:cert_expiry) passiert upstream
+ * (SkillHealthMonitor-Hysterese bzw. Schwellwert-Check im cert-expiry-monitor),
+ * daher hier kein zusaetzliches Rate-Limiting noetig.
+ */
+export function formatMeshEventForTelegram(event: MeshEvent, ts: string): string | null {
+  const d = event.data;
+  switch (event.type) {
+    case 'peer:join':
+      return `🟢 [${ts}] Peer beigetreten: ${d['agentId'] ?? 'unknown'}`;
+    case 'peer:leave':
+      return `🔴 [${ts}] Peer verlassen: ${d['agentId'] ?? 'unknown'}`;
+    case 'task:completed':
+      return `✅ [${ts}] Task abgeschlossen: ${d['skillId'] ?? 'unknown'}`;
+    case 'task:failed':
+      return `❌ [${ts}] Task fehlgeschlagen: ${d['skillId'] ?? ''} — ${d['error'] ?? ''}`;
+    case 'system:startup':
+      return `🚀 [${ts}] Daemon gestartet: ${d['agentId'] ?? ''}`;
+    case 'system:shutdown':
+      return `⏹️ [${ts}] Daemon gestoppt`;
+    // T2.1: Live-Cert-Ablauf-Alert (warn/critical) vom periodischen Monitor.
+    case 'system:cert_expiry': {
+      const critical = d['tier'] === 'critical';
+      const head = critical ? '🔴 KRITISCH' : '🟠 WARNUNG';
+      const hint = critical ? ' — Neustart fuer Reissue erforderlich' : '';
+      return `${head} [${ts}] TLS-Node-Cert laeuft ab: noch ${d['daysLeft'] ?? '?'} Tag(e)${hint}`;
+    }
+    // T2.2: Skill-Health-State-Flip (flap-gedaempft) fuer den Alert-Sink.
+    case 'system:skill_health': {
+      const recovered = d['to'] === 'healthy';
+      const icon = recovered ? '✅' : '⚠️';
+      const label = recovered ? 'wieder gesund' : 'ungesund';
+      const err = d['lastError'] ? ` — ${d['lastError']}` : '';
+      return `${icon} [${ts}] Skill ${d['skillId'] ?? 'unknown'} ${label} ` +
+        `(${d['from']}→${d['to']}, ${d['consecutiveFailures'] ?? 0} Fehler)${err}`;
+    }
+    default:
+      // Heartbeats, capability:synced etc. werden NICHT gesendet (zu viel Spam).
+      return null;
+  }
+}
+
 export class TelegramGateway {
   private bot: TelegramBot;
   private chatId: string | null;
@@ -346,32 +393,11 @@ export class TelegramGateway {
   // --- Event-Bridge: Mesh → Telegram ---
 
   private setupEventBridge(): void {
-    this.eventHandler = (event: MeshEvent) => {
+    this.eventHandler = (event: MeshEvent): void => {
       if (!this.chatId) return;
-
-      // Nur relevante Events weiterleiten (kein Spam)
-      const ts = timestamp();
-      switch (event.type) {
-        case 'peer:join':
-          this.sendNotification(`🟢 [${ts}] Peer beigetreten: ${event.data['agentId'] ?? 'unknown'}`);
-          break;
-        case 'peer:leave':
-          this.sendNotification(`🔴 [${ts}] Peer verlassen: ${event.data['agentId'] ?? 'unknown'}`);
-          break;
-        case 'task:completed':
-          this.sendNotification(`✅ [${ts}] Task abgeschlossen: ${event.data['skillId'] ?? 'unknown'}`);
-          break;
-        case 'task:failed':
-          this.sendNotification(`❌ [${ts}] Task fehlgeschlagen: ${event.data['skillId'] ?? ''} — ${event.data['error'] ?? ''}`);
-          break;
-        case 'system:startup':
-          this.sendNotification(`🚀 [${ts}] Daemon gestartet: ${event.data['agentId'] ?? ''}`);
-          break;
-        case 'system:shutdown':
-          this.sendNotification(`⏹️ [${ts}] Daemon gestoppt`);
-          break;
-        // Heartbeats, capability:synced etc. werden NICHT gesendet (zu viel Spam)
-      }
+      // Mapping in reiner Funktion (testbar); null = nicht weiterleiten.
+      const msg = formatMeshEventForTelegram(event, timestamp());
+      if (msg) this.sendNotification(msg);
     };
     this.eventBus.onAny(this.eventHandler);
   }
