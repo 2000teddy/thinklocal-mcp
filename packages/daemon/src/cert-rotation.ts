@@ -24,6 +24,7 @@
 
 import { existsSync, unlinkSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import forge from 'node-forge';
 import { getCertDaysLeft } from './tls.js';
 import type { Logger } from 'pino';
 
@@ -165,7 +166,6 @@ export function auditCerts(dataDir: string, _log?: Logger): CertAuditResult {
 
     for (const file of files) {
       try {
-        const forge = require('node-forge');
         const certPem = readFileSync(resolve(certsDir, file), 'utf-8');
         const cert = forge.pki.certificateFromPem(certPem);
         const now = new Date();

@@ -108,6 +108,27 @@ describe('PolicyEngine', () => {
     expect(engine.removePolicy('temp-policy')).toBe(true);
     expect(engine.removePolicy('nonexistent')).toBe(false);
   });
+
+  // Deckt den konvertierten createHash-Pfad ab (require → import).
+  it('getVersion liefert stabilen 16-stelligen Hash, der sich bei Änderung ändert', () => {
+    const engine = new PolicyEngine(tempDir);
+    const v1 = engine.getVersion();
+    expect(v1).toMatch(/^[0-9a-f]{16}$/);
+    expect(engine.getVersion()).toBe(v1); // deterministisch
+    engine.addPolicy({ name: 'v-test', description: 'x', action: 'skill.execute', subject: '*', resource: 'z.*', effect: 'deny' });
+    expect(engine.getVersion()).not.toBe(v1); // Änderung wirkt
+  });
+
+  // Deckt den konvertierten writeFileSync-Pfad ab (require → import).
+  it('save schreibt nur Custom-Policies nach policies.json', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'policy-save-'));
+    const engine = new PolicyEngine(dir);
+    engine.addPolicy({ name: 'custom-x', description: 'x', action: 'skill.execute', subject: '*', resource: 'z.*', effect: 'deny' });
+    engine.save();
+    const written = JSON.parse(readFileSync(join(dir, 'policies.json'), 'utf8')) as Array<{ name: string }>;
+    expect(written.some((p) => p.name === 'custom-x')).toBe(true);
+    expect(written.some((p) => p.name.startsWith('default-'))).toBe(false); // nur Custom
+  });
 });
 
 describe('policy.ts ist totes Modul + @deprecated markiert (Cleanup-Guard)', () => {

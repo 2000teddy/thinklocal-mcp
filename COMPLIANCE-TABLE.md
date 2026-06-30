@@ -1289,4 +1289,14 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-06-30 17:38 — v0.34.49 chore(policy): policy.ts/PolicyEngine deprecaten (Cleanup).*
+## Session 2026-06-30 18:36 — v0.34.50 chore(lint): require()→import in Legacy-Modulen
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|------------------------------------|
+| v0.34.50 | (offen, base=main) | 2026-06-30 18:36 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | CR Claude-Subagent APPROVE, 0× HIGH/CRITICAL/MEDIUM; semantische Äquivalenz bestätigt, kein Verhaltens-Change; CR-NIT (getVersion/save untested) adressiert (+2 Tests) |
+
+**CO/CG:** n/a — Lint-Quality-Slice (require→import), keine Design-Frage, keine Verhaltensänderung. **TS:** `policy.test.ts` (+2): `getVersion` (deterministischer 16-Hex-Hash, ändert sich bei Policy-Änderung → konvertierter `createHash`-Pfad) + `save` (nur Custom-Policies → konvertierter `writeFileSync`-Pfad); `cert-rotation.test.ts auditCerts` übt den `forge`-Pfad. Volle Suite **106 Files / 1299 grün**, tsc 0. Empirischer Beleg: eslint auf `policy.ts`+`cert-rotation.ts` **3 Errors → 0** (Datei-Level). **CR:** unabhängiger **Claude**-Subagent (nur claude/codex/agy — `agy` fehlt im Env). APPROVE, 0× HIGH/CRITICAL/MEDIUM; bestätigt default-/named-Imports korrekt, eager node-forge-Import sicher (harte Dependency), kein Leftover-`require`. **PC:** manuell (tsc/eslint/Suite grün, `git diff` reviewed) — `agy`-Backend fehlt. **DO:** CHANGES (v0.34.50), COMPLIANCE, `changes/2026-06-30_require-to-import-lint.md`. **Status:** Module bleiben @deprecated (nur Import-Mechanik geändert). Kein Deploy.
+
+---
+
+*Letzte Aktualisierung: 2026-06-30 18:36 — v0.34.50 chore(lint): require()→import in Legacy-Modulen.*
