@@ -58,6 +58,69 @@ describe('POST /api/tasks/execute — T2.4 place-or-refuse → 503', () => {
   });
 });
 
+describe('GET /api/peers — T2.4-Folge: resources-Exposition für least-loaded-Routing', () => {
+  it('liefert agent_card.resources aus der gespeicherten Peer-Card', async () => {
+    const resources = {
+      free_ram_bytes: 4e9,
+      ram_used_percent: 42.5,
+      cpu_load: 12.3,
+      agent_count: 3,
+      updated_at: '2026-06-30T12:00:00.000Z',
+    };
+    const mesh = {
+      getOnlinePeers: () => [
+        {
+          agentId: 'spiffe://thinklocal/node/peerA',
+          name: 'peerA',
+          host: '10.10.10.80',
+          port: 9440,
+          status: 'online',
+          lastSeen: 0,
+          agentCard: {
+            name: 'peerA',
+            version: '1',
+            capabilities: { agents: [], skills: [], services: [], connectors: [] },
+            health: { cpu_percent: 5, memory_percent: 40, disk_percent: 10, uptime_seconds: 100 },
+            resources,
+          },
+        },
+      ],
+    };
+    const { app } = buildApp({ mesh: mesh as never });
+    const res = await app.inject({ method: 'GET', url: '/api/peers' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.peers[0].agent_card.resources).toEqual(resources);
+    await app.close();
+  });
+
+  it('Peer ohne resources im Card → resources: null (kein Fehler)', async () => {
+    const mesh = {
+      getOnlinePeers: () => [
+        {
+          agentId: 'spiffe://thinklocal/node/peerB',
+          name: 'peerB',
+          host: '10.10.10.81',
+          port: 9440,
+          status: 'online',
+          lastSeen: 0,
+          agentCard: {
+            name: 'peerB',
+            version: '1',
+            capabilities: { agents: [], skills: [], services: [], connectors: [] },
+            health: { cpu_percent: 5, memory_percent: 40, disk_percent: 10, uptime_seconds: 100 },
+            // kein resources-Block
+          },
+        },
+      ],
+    };
+    const { app } = buildApp({ mesh: mesh as never });
+    const res = await app.inject({ method: 'GET', url: '/api/peers' });
+    expect(res.json().peers[0].agent_card.resources).toBeNull();
+    await app.close();
+  });
+});
+
 describe('POST /api/registry/republish (ADR-020 v1 safety valve)', () => {
   it('triggers registrySyncRepublish, audits REGISTRY_REPUBLISH, returns ok', async () => {
     const republish = vi.fn().mockResolvedValue(undefined);
