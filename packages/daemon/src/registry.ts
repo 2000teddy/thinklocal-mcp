@@ -50,6 +50,20 @@ export interface AvailabilityRecord {
   consecutive_failures: number;
 }
 
+/**
+ * T2.4: Per-Node Resource-Attribute (free_ram, cpu_load, agent_count). Owner-
+ * authoritativ + schnell veränderlich + routing-relevant → wie `availability`
+ * bewusst in einer NICHT-replizierten Side-Map, NICHT im Automerge-CRDT (sonst
+ * „relay-witness-wins" statt „owner-wins").
+ */
+export interface NodeResourceRecord {
+  free_ram_bytes: number;
+  ram_used_percent: number;
+  cpu_load: number;
+  agent_count: number;
+  updated_at: string;
+}
+
 /** Automerge-Dokument-Schema für die Registry */
 export interface RegistryDoc {
   /** Map: skill_key → Capability (key = `${agent_id}::${skill_id}`) */
@@ -181,6 +195,8 @@ export class CapabilityRegistry {
   private availability = new Map<string, AvailabilityRecord>();
   /** ADR-020 v2.2: Zähler verworfener fremd-owner availability-Writes (Metrik/Observability). */
   private rejectedForeignWrites = 0;
+  /** T2.4: Per-Node Resource-Attribute (Key = agentId/Node-URI), non-repliziert. */
+  private nodeResources = new Map<string, NodeResourceRecord>();
 
   constructor(private log?: Logger) {
     this.doc = loadGenesisDoc();
@@ -251,6 +267,30 @@ export class CapabilityRegistry {
       this.log?.info({ skill: skillId, agent: agentId, availability }, '[skill-health] availability aktualisiert (Side-Map, direct-only)');
     }
     return changed;
+  }
+
+  /**
+   * T2.4: Setzt die Resource-Attribute eines Knotens in der non-replizierten
+   * Side-Map (owner-authoritativ). `updated_at` wird ergänzt, falls nicht übergeben.
+   */
+  setNodeResources(agentId: string, r: Omit<NodeResourceRecord, 'updated_at'> & { updated_at?: string }): void {
+    this.nodeResources.set(agentId, {
+      free_ram_bytes: r.free_ram_bytes,
+      ram_used_percent: r.ram_used_percent,
+      cpu_load: r.cpu_load,
+      agent_count: r.agent_count,
+      updated_at: r.updated_at ?? new Date().toISOString(),
+    });
+  }
+
+  /** T2.4: Resource-Attribute eines Knotens, oder undefined wenn unbekannt. */
+  getNodeResources(agentId: string): NodeResourceRecord | undefined {
+    return this.nodeResources.get(agentId);
+  }
+
+  /** T2.4: Alle bekannten Per-Node Resource-Attribute (Key = agentId). */
+  getAllNodeResources(): Record<string, NodeResourceRecord> {
+    return Object.fromEntries(this.nodeResources);
   }
 
   /**

@@ -15,6 +15,7 @@ import type { TaskManager } from './tasks.js';
 import type { SkillManager } from './skills.js';
 import type { AuditLog } from './audit.js';
 import type { MeshEventBus } from './events.js';
+import { evaluatePlacement } from './resource-metrics.js';
 import {
   systemHealth,
   systemProcesses,
@@ -36,6 +37,13 @@ export interface TaskExecutorDeps {
   eventBus: MeshEventBus;
   agentId: string;
   log?: Logger;
+  /**
+   * T2.4 place-or-refuse: liefert die aktuelle RAM-Auslastung in Prozent. Optional —
+   * ohne Reader/Schwelle ist das Gate inert (Default-Verhalten unverändert).
+   */
+  getRamUsedPercent?: () => Promise<number>;
+  /** T2.4: RAM-Schwelle (%), oberhalb derer neue Platzierung abgelehnt wird (>). */
+  refuseRamPercent?: number;
 }
 
 type SkillHandler = (input: Record<string, unknown>) => Promise<Record<string, unknown>>;
@@ -58,8 +66,30 @@ export class TaskExecutor {
     skillId: string,
     input: Record<string, unknown>,
     requester: string,
-  ): Promise<{ accepted: boolean; result?: Record<string, unknown>; error?: string }> {
-    const { tasks, audit, eventBus, agentId, log } = this.deps;
+  ): Promise<{ accepted: boolean; result?: Record<string, unknown>; error?: string; reason?: 'capacity' }> {
+    const { tasks, audit, eventBus, agentId, log, getRamUsedPercent, refuseRamPercent } = this.deps;
+
+    // T2.4 place-or-refuse: bei Überlast (RAM > Schwelle) keine neue Platzierung
+    // annehmen — VOR dem Skill-Check, damit ein überlasteter Knoten gar nichts erst
+    // einreiht. Gate ist inert, solange Reader + Schwelle nicht gesetzt sind.
+    if (getRamUsedPercent && typeof refuseRamPercent === 'number') {
+      // Fail-OPEN: kann die RAM-Auslastung nicht gemessen werden (flakiges
+      // si.mem()), darf das NICHT jede Platzierung blockieren — lieber annehmen
+      // als wegen eines Mess-Fehlers den Knoten lahmlegen.
+      let ramUsedPercent: number | null = null;
+      try {
+        ramUsedPercent = await getRamUsedPercent();
+      } catch (err) {
+        log?.warn({ err, taskId, skillId }, '[place-or-refuse] RAM-Messung fehlgeschlagen — fail-open (Task wird angenommen)');
+      }
+      if (ramUsedPercent !== null && evaluatePlacement(ramUsedPercent, refuseRamPercent).refuse) {
+        const msg = `Knoten überlastet: RAM ${ramUsedPercent.toFixed(1)}% > ${refuseRamPercent}% (place-or-refuse)`;
+        log?.warn({ taskId, skillId, requester, ramUsedPercent, refuseRamPercent }, '[place-or-refuse] Task abgelehnt — RAM über Schwelle');
+        audit.append('TASK_DELEGATE', requester, `${skillId} refused: RAM ${ramUsedPercent.toFixed(1)}% > ${refuseRamPercent}%`);
+        eventBus.emit('task:refused', { taskId, skillId, requester, reason: 'capacity', ramUsedPercent });
+        return { accepted: false, error: msg, reason: 'capacity' };
+      }
+    }
 
     // Pruefen ob wir den Skill haben
     const handler = this.handlers.get(skillId);

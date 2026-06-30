@@ -236,6 +236,12 @@ export function registerDashboardApi(server: FastifyInstance, deps: DashboardApi
       );
 
       if (!result.accepted) {
+        // T2.4: Kapazitäts-Ablehnung (place-or-refuse) → 503 Service Unavailable,
+        // damit der Aufrufer „später erneut versuchen" von „Skill gibt es nicht" (404)
+        // unterscheiden kann.
+        if (result.reason === 'capacity') {
+          return reply.code(503).send({ error: result.error ?? 'Knoten überlastet', reason: 'capacity' });
+        }
         return reply.code(404).send({ error: result.error ?? 'Skill nicht verfuegbar' });
       }
 

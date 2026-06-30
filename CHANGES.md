@@ -8,6 +8,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.42 (T2.4 / V5 Spur 2 — Kapazitäts-Schutz + Observability, KEIN Deploy) — feat(placement): Resource-Attribute in Registry + place-or-refuse (>90 % RAM)
+
+Knoten kennen jetzt ihre eigene Auslastung routing-wirksam und lehnen neue
+Task-Platzierung bei **RAM > 90 %** ab.
+
+- **Resource-Attribute** (`free_ram`, `cpu_load`, `agent_count`) pro Knoten in einer **non-replizierten** Registry-Side-Map (`NodeResourceRecord`) — wie `availability` bewusst NICHT im Automerge-CRDT. Periodischer Updater in `index.ts` (Default 15 s, `unref`/Shutdown-clear).
+- **place-or-refuse-Gate** in `TaskExecutor.handleTaskRequest` (der reale Chokepoint): RAM > Schwelle → Ablehnung mit `reason:'capacity'` → **HTTP 503** (statt 404). **Cache-bewusst** (`(total−available)/total`, sonst zählt Linux-Cache als belegt). **Fail-open** bei Mess-Fehler.
+- **`config.ts`** `[placement]` (`refuse_ram_percent`=90, `resource_refresh_interval_ms`=15000) + Env + Range-Check; **`events.ts`** `task:refused`.
+- Tests: `place-or-refuse.test.ts` (neu, 14) + dashboard-api 503/404 (+2). Volle Suite **103 Files / 1238 grün**, tsc 0, eslint 0. Empirisch guard-bewiesen. CR: Claude-Subagent **APPROVE-WITH-NITS** (Gate+Side-Map CORRECT; CR-MEDIUM fail-open gefixt). Beleg: `changes/2026-06-30_t24-resource-attrs-place-or-refuse.md`.
+
 ### v0.34.41 (T2.2 / V5 Spur 2 — Bugfix + Observability, KEIN Deploy) — fix(influx): Health-Probe `/health`→`/ping`-Fallback + Skill-Health-Alert-Event
 
 Behebt die InfluxDB-Health-Probe, die **22.786 Fehlversuche bei gesundem Dienst**
