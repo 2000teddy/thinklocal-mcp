@@ -2,7 +2,7 @@
  * peer-selection.test.ts — T2.4-Folge: least-loaded-Auswahllogik.
  */
 import { describe, it, expect } from 'vitest';
-import { compareLoad, pickLeastLoaded, buildLoadMap, type PeerLoad } from './peer-selection.js';
+import { compareLoad, pickLeastLoaded, buildLoadMap, chooseTargetAgent, type PeerLoad, type PeerEntry } from './peer-selection.js';
 
 const load = (ram: number, cpu: number, agents: number): PeerLoad => ({
   ram_used_percent: ram,
@@ -97,6 +97,15 @@ describe('buildLoadMap (defensiv gegen fehlerhafte Peer-Resources — Zero-Trust
     expect(Object.keys(m)).toEqual(['ok']);
   });
 
+  it('Self-Eintrag (ohne host/port, wie aus /api/status) konkurriert + gewinnt bei geringster Last', () => {
+    // mcp-stdio ergänzt den lokalen Knoten als synthetischen Eintrag aus /api/status.
+    const m = buildLoadMap([
+      { agent_id: 'remote', agent_card: { resources: { ram_used_percent: 70, cpu_load: 40, agent_count: 3 } } },
+      { agent_id: 'self', agent_card: { resources: { ram_used_percent: 15, cpu_load: 5, agent_count: 1 } } },
+    ]);
+    expect(pickLeastLoaded(['remote', 'self'], m).agentId).toBe('self');
+  });
+
   it('integriert mit pickLeastLoaded: garbage-Peer wird übersprungen, valider gewinnt', () => {
     const m = buildLoadMap([
       { agent_id: 'garbage', agent_card: { resources: { ram_used_percent: NaN, cpu_load: 0, agent_count: 0 } } },
@@ -104,5 +113,58 @@ describe('buildLoadMap (defensiv gegen fehlerhafte Peer-Resources — Zero-Trust
     ]);
     // 'garbage' hat scheinbar 0-Last, ist aber NaN → nicht in der Map → 'good' gewinnt
     expect(pickLeastLoaded(['garbage', 'good'], m).agentId).toBe('good');
+  });
+});
+
+describe('chooseTargetAgent (execute_remote_skill-Entscheidung, rein/testbar)', () => {
+  const remoteLoaded: PeerEntry = {
+    agent_id: 'remote',
+    agent_card: { resources: { ram_used_percent: 80, cpu_load: 60, agent_count: 5 } },
+  };
+  const selfIdle: PeerEntry = {
+    agent_id: 'self',
+    agent_card: { resources: { ram_used_percent: 10, cpu_load: 5, agent_count: 1 } },
+  };
+
+  it('explizites target unter den Kandidaten → dieses (byLoad=false)', () => {
+    const r = chooseTargetAgent(['self', 'remote'], [remoteLoaded], selfIdle, 'remote');
+    expect(r).toMatchObject({ agentId: 'remote', byLoad: false });
+  });
+
+  it('explizites target NICHT unter den Kandidaten → null (hat Skill nicht)', () => {
+    expect(chooseTargetAgent(['self'], [], selfIdle, 'fremd')).toBeNull();
+  });
+
+  it('ohne target: self konkurriert + gewinnt, wenn am wenigsten ausgelastet', () => {
+    const r = chooseTargetAgent(['self', 'remote'], [remoteLoaded], selfIdle);
+    expect(r?.agentId).toBe('self');
+    expect(r?.byLoad).toBe(true);
+  });
+
+  it('ohne target: ausgelasteter self → least-loaded remote gewinnt', () => {
+    const selfBusy: PeerEntry = {
+      agent_id: 'self',
+      agent_card: { resources: { ram_used_percent: 95, cpu_load: 90, agent_count: 9 } },
+    };
+    const remoteIdle: PeerEntry = {
+      agent_id: 'remote',
+      agent_card: { resources: { ram_used_percent: 20, cpu_load: 10, agent_count: 1 } },
+    };
+    const r = chooseTargetAgent(['self', 'remote'], [remoteIdle], selfBusy);
+    expect(r?.agentId).toBe('remote');
+  });
+
+  it('FAIL-OPEN: keine Resource-Daten (self=null, Peers ohne resources) → erster Kandidat', () => {
+    const r = chooseTargetAgent(['self', 'remote'], [{ agent_id: 'remote' }], null);
+    expect(r).toMatchObject({ agentId: 'self', byLoad: false });
+  });
+
+  it('self mit NaN-resources → ausgeschlossen, remote (mit Daten) gewinnt', () => {
+    const selfNaN: PeerEntry = {
+      agent_id: 'self',
+      agent_card: { resources: { ram_used_percent: NaN, cpu_load: 0, agent_count: 0 } },
+    };
+    const r = chooseTargetAgent(['self', 'remote'], [remoteLoaded], selfNaN);
+    expect(r?.agentId).toBe('remote'); // self verworfen trotz scheinbarer 0-Last
   });
 });
