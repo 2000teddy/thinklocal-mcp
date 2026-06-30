@@ -1219,4 +1219,14 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-06-30 06:18 — v0.34.42 feat(placement): Resource-Attribute + place-or-refuse (T2.4 / V5 Spur 2).*
+## Session 2026-06-30 12:40 — v0.34.43 fix(telegram): Alert-Events in Daemon-Telegram-Sink verdrahten (T2.2-Follow-up / V5 Spur 2)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|------------------------------------|
+| v0.34.43 | (offen, base=main) | 2026-06-30 12:40 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | CR Claude-Subagent APPROVE, 0× HIGH/CRITICAL, Regression-Preservation der 6 alten Cases bestätigt; 1 LOW-Nit (daysLeft-Guard) adressiert; empirisch guard-bewiesen |
+
+**CO/CG:** n/a — gezielter Bugfix einer Observability-Lücke (zwei gemergte Alert-Events fielen durch den Telegram-Switch); keine Architektur-Frage. **TS:** `telegram-gateway.test.ts` (neu, 11 — erste Testdatei des Moduls): skill_health ungesund/Recovery, cert_expiry warn/critical (Tier + Reissue-Hinweis), Regression der 6 bestehenden Cases, `null`-Spam-Unterdrückung (4 Typen). Volle Suite **104 Files / 1249 grün**, tsc 0, eslint 0. Empirischer Beleg: `system:skill_health`-Case entfernt ⇒ 2 rot, restauriert ⇒ 11 grün. **CR:** unabhängiger **Claude**-Subagent (nur claude/codex/agy — `agy` fehlt im Env). APPROVE, 0× HIGH/CRITICAL; Regression-Preservation der 6 alten Cases byte-identisch bestätigt; LOW-Nit (`daysLeft ?? '?'`) adressiert. **PC:** manuell (tsc/eslint/Suite grün, `git diff` reviewed — `agy`-Backend fehlt). **DO:** CHANGES (v0.34.43), COMPLIANCE, `changes/2026-06-30_t22-telegram-alert-sink-wire.md`. **Status:** Daemon-Sink durch; breiteres Hermes-Operator-Routing = Admin/Hermes-Seite. Kein Deploy.
+
+---
+
+*Letzte Aktualisierung: 2026-06-30 12:40 — v0.34.43 fix(telegram): Alert-Events in Daemon-Telegram-Sink (T2.2-Follow-up / V5 Spur 2).*
