@@ -136,6 +136,9 @@ export function registerDashboardApi(server: FastifyInstance, deps: DashboardApi
             build: p.agentCard.build ?? null,
             capabilities: p.agentCard.capabilities,
             health: p.agentCard.health,
+            // T2.4-Folge: place-or-refuse-Resource-Attribute für least-loaded-Routing
+            // (#218 exponiert sie in der Peer-Card; null, solange kein Snapshot vorliegt).
+            resources: p.agentCard.resources ?? null,
           }
         : null,
     }));

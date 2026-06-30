@@ -1249,4 +1249,14 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-06-30 14:32 — v0.34.45 feat(placement): CPU/agent_count-Heuristik + Mesh-Exposition (T2.4-Folge / V5 Spur 2).*
+## Session 2026-06-30 15:23 — v0.34.46 feat(routing): Peer-Resource-basierte least-loaded-Auswahl (T2.4-Folge / V5 Spur 2)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|------------------------------------|
+| v0.34.46 | (offen, base=main) | 2026-06-30 15:23 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | CR Claude-Subagent APPROVE, 0× HIGH/CRITICAL; **CR-MEDIUM** (peer-gelieferte resources ungeprüft → NaN-Vergleichs-Gift, Zero-Trust-LAN) gefixt via `buildLoadMap`-finite-Validierung + Regression-Test; LOW/NIT (self-Last-Grenze, volle Card-Shape) dokumentiert; empirisch guard-bewiesen |
+
+**CO/CG:** n/a — benannter T2.4-Folge-Slice (least-loaded-Routing), keine offene Design-Frage. **TS:** `peer-selection.test.ts` (neu, 13): `compareLoad`-Ordnung, `pickLeastLoaded` (Min-Last/Gleichstand→früher/fail-open/partiell/Einzel/leer→wirft), `buildLoadMap` (valide/fehlend/**NaN/string/fehlendes-Feld ausgelassen**/Integration garbage-übersprungen); `dashboard-api.test.ts` (+2): `/api/peers` resources + null. Volle Suite **106 Files / 1285 grün**, tsc 0, authored-files eslint 0. Empirischer Beleg: Auswahl-Reduce invertiert ⇒ 3 Auswahl-Tests rot, restauriert ⇒ grün. **CR:** unabhängiger **Claude**-Subagent (nur claude/codex/agy — `agy` fehlt im Env). APPROVE, 0× HIGH/CRITICAL; CR-MEDIUM (Zero-Trust-Validierung der Peer-resources) via `buildLoadMap` gefixt+getestet. **PC:** manuell (tsc/eslint-authored/Suite grün, `git diff` reviewed) — `agy`-Backend fehlt. **DO:** CHANGES (v0.34.46), COMPLIANCE, `changes/2026-06-30_t24-least-loaded-routing.md`. **Status:** Repo-Slice durch; Self-Last-Einbeziehung + Live-Zwei-Peer-Routing-Beweis (deploy-gegated) = Folge. Kein Deploy.
+
+---
+
+*Letzte Aktualisierung: 2026-06-30 15:23 — v0.34.46 feat(routing): Peer-Resource-basierte least-loaded-Auswahl (T2.4-Folge / V5 Spur 2).*

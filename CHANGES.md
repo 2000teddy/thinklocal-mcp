@@ -8,6 +8,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.46 (T2.4-Folge / V5 Spur 2 — Routing/Lastverteilung, KEIN Deploy) — feat(routing): Peer-Resource-basierte least-loaded-Auswahl
+
+Bei mehreren fähigen Peers wählt der Anfrager (`execute_remote_skill`) jetzt den **am
+wenigsten ausgelasteten** Knoten anhand der seit #218 exponierten Resource-Attribute.
+**Fail-open:** ohne Resource-Daten unverändert (erster Kandidat).
+
+- **`peer-selection.ts`** (neu, rein/testbar): `compareLoad` (lexikografisch RAM→CPU→agent_count), `pickLeastLoaded` (Min-Last, Gleichstand→früher, fail-open), `buildLoadMap` (defensiv: nur finite Zahlen — Zero-Trust gegen NaN/null aus Peer-Cards).
+- **`dashboard-api.ts`**: `/api/peers` liefert `agent_card.resources` (null ohne Snapshot).
+- **`mcp-stdio.ts`** `execute_remote_skill`: wählt via `pickLeastLoaded`(`buildLoadMap(/api/peers)`) statt `candidates[0]`; expliziter `target_agent` + Lokal-Fallback unverändert.
+- **Tests**: `peer-selection.test.ts` (neu, 13), `dashboard-api.test.ts` (+2). Volle Suite **106 Files / 1285 grün**, tsc 0. Guard-bewiesen (Auswahl invertiert ⇒ 3 Tests rot). CR: Claude-Subagent APPROVE, CR-MEDIUM (NaN-Defense via `buildLoadMap`) gefixt+getestet.
+- Scope: Self-Last (lokale Card) + Live-Zwei-Peer-Beweis (deploy-gegated) = Folge.
+
 ### v0.34.45 (T2.4-Folge / V5 Spur 2 — Kapazitäts-Schutz + Observability, KEIN Deploy) — feat(placement): CPU/agent_count-Heuristik + Mesh-Exposition der Resource-Attribute
 
 Das place-or-refuse-Gate gatet jetzt zusätzlich über **CPU-Last** und **agent_count**
