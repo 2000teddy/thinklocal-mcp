@@ -1279,4 +1279,14 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-06-30 16:39 — v0.34.48 chore(cert): cert-rotation.ts deprecaten (Cleanup).*
+## Session 2026-06-30 17:38 — v0.34.49 chore(policy): policy.ts/PolicyEngine deprecaten (Cleanup)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|------------------------------------|
+| v0.34.49 | (#222, base=main) | 2026-06-30 17:38 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | CR Claude-Subagent APPROVE; **CR-HIGH** (Doku zitierte unverdrahtetes `approval-gates.ts` als kanonisch) gefixt → Pfad auf `isApprovedPeerSender`+Vault-Approval-Flow korrigiert (Header/Guard/Doku mitgezogen); empirisch guard-bewiesen |
+
+**CO/CG:** n/a — Cleanup/Doku-Slice (totes Modul markieren), keine Design-Frage, keine Verhaltensänderung. **TS:** `policy.test.ts` (+2 Guards): 0 Produktions-Importeure (scannt daemon/cli, schließt lebendes `discovery-policy.ts` aus) + Modul bleibt `@deprecated`-markiert + zeigt auf `isApprovedPeerSender`/`createApprovalRequest`. Volle Suite **106 Files / 1297 grün**, tsc 0. Empirischer Beleg: `@deprecated`-Marker entfernt ⇒ Guard-Test rot, restauriert ⇒ grün. (Vorbestehende `require()`-eslint-Errors in `policy.ts` Z206/247 = Baseline seit 2026-04-05, git-blame-belegt, nicht im Slice.) **CR:** unabhängiger **Claude**-Subagent (nur claude/codex/agy — `agy` fehlt im Env). APPROVE; CR-HIGH (Doku-Genauigkeit: `approval-gates.ts` selbst unverdrahtet) gefixt; bestätigt: comment-only (0 ausführbare Zeilen), 0 Importeure, `isApprovedPeerSender` real verdrahtet (`mesh.ts:357`→`index.ts:618`), `@deprecated` bricht Build nicht. **PC:** manuell (tsc/Suite grün, `git diff` reviewed) — `agy`-Backend fehlt. **DO:** CHANGES (v0.34.49), COMPLIANCE, `changes/2026-06-30_policy-engine-deprecate.md`, TODO.md §3.4. **Status:** Markiert; hartes Entfernen / ADR-Anschluss = Folge-Slice. Kein Deploy.
+
+---
+
+*Letzte Aktualisierung: 2026-06-30 17:38 — v0.34.49 chore(policy): policy.ts/PolicyEngine deprecaten (Cleanup).*
