@@ -19,11 +19,11 @@
     <key>GroupName</key>
     <string>{{RUN_GROUP}}</string>
 
+    <!-- T1.1: kompiliertes dist/ statt tsx (Installer baut dist/ vor dem Start) — spart RSS + Loader-Prozess. -->
     <key>ProgramArguments</key>
     <array>
         <string>{{NODE_BIN}}</string>
-        <string>{{REPO}}/packages/daemon/node_modules/.bin/tsx</string>
-        <string>{{REPO}}/packages/daemon/src/index.ts</string>
+        <string>{{REPO}}/packages/daemon/dist/index.js</string>
     </array>
 
     <key>EnvironmentVariables</key>

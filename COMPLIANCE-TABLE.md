@@ -1229,4 +1229,14 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-06-30 12:40 — v0.34.43 fix(telegram): Alert-Events in Daemon-Telegram-Sink (T2.2-Follow-up / V5 Spur 2).*
+## Session 2026-06-30 13:30 — v0.34.44 perf(daemon): Start tsx → node dist/ (T1.1 / V5 Spur 1)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|------------------------------------|
+| v0.34.44 | (offen, base=main) | 2026-06-30 13:30 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | CR Claude-Subagent APPROVE-WITH-FINDINGS; **CR-HIGH** (service.sh ohne Build vor bootstrap) gefixt+getestet, **CR-MEDIUM** (.ps1 Daemon-tsx) gefixt, **CR-LOW** (install.sh/.service-Regression-Test) ergänzt; empirisch guard-bewiesen |
+
+**CO/CG:** n/a — vorgegebener V5-T1.1-Slice (Runtime-Umstellung), keine offene Design-Frage. **Belegt-erst (V5 §H):** RSS ~265→~166 MB (−~100 MB/−37 %), 2→1 Prozess, Boot ~1.1→~0.7 s (2 Läufe je Variante, reproduzierbare Harness). **TS:** `start-path.test.ts` (+6: install.sh-ExecStart+Build-Guard, statisches `.service`, Legacy-Plist, `service.sh ensure_daemon_built` inkl. Reihenfolge-Check = CR-HIGH-Regression, `ssh-bootstrap`-pkill, `.ps1`-Entry) + `launchd-plist.test.ts` (+1: gerendertes `ProgramArguments == [node, dist/index.js]`). Volle Suite **104 Files / 1256 grün**, tsc 0, eslint 0, bash -n grün. Empirischer Beleg: Plist-Template auf tsx zurückmutiert ⇒ T1.1-Test rot, restauriert ⇒ grün; Smoke `node dist/index.js` bootet voll durch. **CR:** unabhängiger **Claude**-Subagent (nur claude/codex/agy — `agy` fehlt im Env). APPROVE-WITH-FINDINGS, 0× CRITICAL; CR-HIGH (service.sh) + CR-MEDIUM (.ps1) gefixt+getestet, CR-LOW (Regression-Coverage) ergänzt. **PC:** manuell (tsc/eslint/Suite/bash -n grün, `git diff` reviewed). **DO:** CHANGES (v0.34.44), COMPLIANCE, `changes/2026-06-30_t11-node-dist-start.md`. **Status:** Repo-Umstellung durch; scharfe Service-Neuinstallation = Christians Deploy-Gate. Kein Deploy.
+
+---
+
+*Letzte Aktualisierung: 2026-06-30 13:30 — v0.34.44 perf(daemon): Start tsx → node dist/ (T1.1 / V5 Spur 1).*

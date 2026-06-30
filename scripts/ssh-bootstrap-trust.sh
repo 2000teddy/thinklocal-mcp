@@ -249,7 +249,7 @@ jq '. | length as $n | "Anzahl gepairte Peers: \($n)", (.[] | "  - \(.hostname) 
 log ""
 log "═══ Naechste Schritte ═══"
 log "  1. Lokalen Daemon neu starten (laedt neue CAs in den Trust-Store):"
-log "     pkill -f 'tsx.*src/index.ts' && bash /tmp/start-tlmcp-lan.sh"
+log "     pkill -f 'daemon/dist/index.js' && bash /tmp/start-tlmcp-lan.sh"
 log "  2. Daemons auf den Peers neu starten:"
 for PEER in "${PEERS[@]}"; do
   log "     ssh $PEER_SSH_USER@$PEER 'launchctl kickstart -k gui/\$(id -u)/com.thinklocal.daemon || pkill -HUP -f thinklocal'"

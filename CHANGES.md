@@ -8,6 +8,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.44 (T1.1 / V5 Spur 1 — Runtime-Umstellung, KEIN Deploy) — perf(daemon): Start von tsx auf kompiliertes `node dist/` (Launch-Configs)
+
+Der langlaufende Daemon startet jetzt überall aus kompiliertem `dist/index.js` statt via
+`tsx` (Laufzeit-Transpilation). **Belegt:** RSS ~265 MB → ~166 MB (**−~100 MB / −37 %**),
+2 Prozesse → 1 (kein esbuild-Loader), Boot ~1.1 s → ~0.7 s (**−35 %**). Zudem behebt es
+einen echten Fehler: `tsx` ist devDependency → `npm install --omit=dev` würde einen
+tsx-Start brechen.
+
+- **`install.sh`**: `npx tsc`-Build + `dist/index.js`-Guard in `install_deps` (vor Service-Install); generierter systemd-ExecStart → `node dist/index.js` (TSX_PATH entfernt).
+- **Statische Templates**: `thinklocal-daemon.service`, `com.thinklocal.daemon.plist(.template)` → `dist/index.js`.
+- **`service.sh`** (macOS Legacy, CR-HIGH): `ensure_daemon_built`-Guard vor `bootstrap`. **`thinklocal-daemon.ps1`** (Windows, CR-MEDIUM) → `dist\index.js`. **`ssh-bootstrap-trust.sh`**: pkill-Hinweis → `daemon/dist/index.js`.
+- Bewusst auf tsx belassen (out of scope): CLI `thinklocal.ts` + `mcp-stdio.ts`-Bridge (on-demand).
+- **Tests**: `start-path.test.ts` +6 (install.sh/.service/Plist/service.sh-Guard/ssh-bootstrap/.ps1), `launchd-plist.test.ts` +1. Volle Suite **104 Files / 1256 grün**, tsc 0, eslint 0.
+
 ### v0.34.43 (T2.2-Follow-up / V5 Spur 2 — Observability-Lücke, KEIN Deploy) — fix(telegram): Alert-Events in den Daemon-Telegram-Sink verdrahten
 
 Die in T2.1 (#213) und T2.2 (#214) emittierten Alert-Events `system:cert_expiry` und

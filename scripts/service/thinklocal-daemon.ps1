@@ -19,8 +19,8 @@ param(
 $TaskName = "thinklocal-daemon"
 $InstallDir = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $NodePath = (Get-Command node -ErrorAction SilentlyContinue).Source
-$TsxPath = Join-Path $InstallDir "packages\daemon\node_modules\.bin\tsx.cmd"
-$EntryPoint = Join-Path $InstallDir "packages\daemon\src\index.ts"
+# T1.1: kompiliertes dist/ statt tsx (vor dem Task-Start `npm run daemon:build` ausfuehren).
+$EntryPoint = Join-Path $InstallDir "packages\daemon\dist\index.js"
 $DataDir = Join-Path $env:USERPROFILE ".thinklocal"
 $LogDir = Join-Path $DataDir "logs"
 
@@ -28,7 +28,7 @@ if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Forc
 
 switch ($Action) {
     "install" {
-        $argString = "$TsxPath $EntryPoint"
+        $argString = "$EntryPoint"
         $trigger = New-ScheduledTaskTrigger -AtLogon
         $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
         $action = New-ScheduledTaskAction -Execute $NodePath -Argument $argString -WorkingDirectory $InstallDir
