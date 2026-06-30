@@ -1209,4 +1209,14 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-06-29 18:40 — v0.34.41 fix(influx): Health-Probe-Fix + Skill-Health-Alert-Event (T2.2 / V5 Spur 2).*
+## Session 2026-06-30 06:18 — v0.34.42 feat(placement): Resource-Attribute + place-or-refuse (T2.4 / V5 Spur 2)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|----|
+| v0.34.42 | (#215, base=main) | 2026-06-30 06:18 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | CR Claude-Subagent APPROVE-WITH-NITS, Gate+Side-Map CORRECT; CR-MEDIUM (fail-open) gefixt+getestet; empirisch guard-bewiesen |
+
+**CO/CG:** n/a — Implementierung gemäß vorgegebener V5-T2.4-Spec; Scope-Map (Explore) statt Design-Frage. **TS:** `place-or-refuse.test.ts` (neu, 14): computeRamUsedPercent (cache-bewusst/robust), evaluatePlacement (`>`-Grenzen, ==90→accept), Executor-Gate-Integration (RAM>90→capacity VOR Skill-Check, <90→normal, Mess-Fehler→fail-open), Registry-Side-Map, config Defaults/Env/Range; `dashboard-api.test.ts` +2 (503/404). Volle Suite **103 Files / 1238 grün**, tsc 0, eslint 0. Empirischer Beleg: Gate `>`→`>=` mutiert ⇒ ==90-Test rot, restauriert ⇒ grün. **CR:** unabhängiger **Claude**-Subagent (nur claude/codex/agy — `agy` fehlt im Env). APPROVE-WITH-NITS, 0× HIGH/CRITICAL; CR-MEDIUM (Gate ohne try/catch) → fail-open gefixt. **PC:** `pal:precommit` (s. PR-Body). **DO:** CHANGES (v0.34.42), COMPLIANCE, `changes/2026-06-30_t24-resource-attrs-place-or-refuse.md`. **Status:** Repo-Slice durch; Mesh-Exposition der Attribute + CPU/agent_count-Heuristik = Folge-Slices. Kein Deploy.
+
+---
+
+*Letzte Aktualisierung: 2026-06-30 06:18 — v0.34.42 feat(placement): Resource-Attribute + place-or-refuse (T2.4 / V5 Spur 2).*

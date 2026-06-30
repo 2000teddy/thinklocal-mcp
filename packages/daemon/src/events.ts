@@ -23,6 +23,8 @@ export type MeshEventType =
   | 'task:accepted'
   | 'task:completed'
   | 'task:failed'
+  // T2.4: Platzierung abgelehnt (place-or-refuse, z. B. RAM > Schwelle).
+  | 'task:refused'
   | 'task:timeout'
   | 'capability:registered'
   | 'capability:removed'

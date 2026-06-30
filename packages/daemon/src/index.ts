@@ -6,6 +6,7 @@ import { createLogger } from './logger.js';
 import { loadOrCreateIdentity } from './identity.js';
 import { loadOrCreateTlsBundle, getCertDaysLeft, extractSpiffeUris, verifyPeerCert, selectTrustDistributionCa, type NodeCertBundle } from './tls.js';
 import { startCertExpiryMonitor } from './cert-expiry-monitor.js';
+import { readRamUsedPercent, readResourceMetrics } from './resource-metrics.js';
 import { existsSync as fsExistsSync } from 'node:fs';
 import { AuditLog } from './audit.js';
 import { MdnsDiscovery } from './discovery.js';
@@ -782,6 +783,9 @@ async function main(): Promise<void> {
     eventBus,
     agentId: selfIdentityUri,
     log,
+    // T2.4 place-or-refuse: bei RAM > Schwelle keine neue Platzierung annehmen.
+    getRamUsedPercent: () => readRamUsedPercent(),
+    refuseRamPercent: config.placement.refuse_ram_percent,
   });
 
   // 8c. Pairing-Routen registrieren (pairingStore wurde oben bereits erzeugt,
@@ -921,6 +925,30 @@ async function main(): Promise<void> {
     log,
   });
   agentRegistry.start();
+
+  // T2.4: periodisch die Resource-Attribute des eigenen Knotens (free_ram, cpu_load,
+  // agent_count) in die non-replizierte Registry-Side-Map schreiben. Owner-authoritativ,
+  // try/catch-gekapselt (ein Mess-Fehler darf den Daemon nie crashen). unref + clear im Shutdown.
+  const refreshNodeResources = async (): Promise<void> => {
+    try {
+      const m = await readResourceMetrics();
+      registry.setNodeResources(selfIdentityUri, {
+        free_ram_bytes: m.free_ram_bytes,
+        ram_used_percent: m.ram_used_percent,
+        cpu_load: m.cpu_load,
+        agent_count: agentRegistry.size(),
+      });
+    } catch (err) {
+      log.warn({ err }, '[resource-attrs] Aktualisierung fehlgeschlagen');
+    }
+  };
+  void refreshNodeResources();
+  const resourceRefreshTimer = setInterval(
+    () => void refreshNodeResources(),
+    config.placement.resource_refresh_interval_ms,
+  );
+  resourceRefreshTimer.unref();
+
   registerAgentApi(cardServer.getServer(), {
     registry: agentRegistry,
     audit,
@@ -1355,6 +1383,7 @@ async function main(): Promise<void> {
     log.info({ signal }, 'Shutdown eingeleitet...');
     clearInterval(storageMaintenanceTimer); // ADR-030 (T1.3)
     clearInterval(certExpiryTimer); // T2.1
+    clearInterval(resourceRefreshTimer); // T2.4
     telegramGateway?.stop();
     skillHealthMonitor.stop();
     gossip.stop();

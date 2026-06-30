@@ -18,6 +18,46 @@ function buildApp(overrides: Partial<DashboardApiDeps> = {}): { app: ReturnType<
   return { app, append };
 }
 
+describe('POST /api/tasks/execute — T2.4 place-or-refuse → 503', () => {
+  it('Kapazitäts-Ablehnung (reason=capacity) → 503, nicht 404', async () => {
+    const handleTaskRequest = vi.fn().mockResolvedValue({
+      accepted: false,
+      reason: 'capacity',
+      error: 'Knoten überlastet: RAM 95.0% > 90%',
+    });
+    const { app } = buildApp({
+      executor: { handleTaskRequest } as never,
+      tasks: { createRequest: () => ({ id: 't1' }) } as never,
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/tasks/execute',
+      payload: { skill_id: 'demo.skill' },
+    });
+    expect(res.statusCode).toBe(503);
+    expect(res.json()).toMatchObject({ reason: 'capacity' });
+    await app.close();
+  });
+
+  it('Skill fehlt (kein reason) → weiterhin 404', async () => {
+    const handleTaskRequest = vi.fn().mockResolvedValue({
+      accepted: false,
+      error: "Skill 'x' nicht verfuegbar",
+    });
+    const { app } = buildApp({
+      executor: { handleTaskRequest } as never,
+      tasks: { createRequest: () => ({ id: 't2' }) } as never,
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/tasks/execute',
+      payload: { skill_id: 'x' },
+    });
+    expect(res.statusCode).toBe(404);
+    await app.close();
+  });
+});
+
 describe('POST /api/registry/republish (ADR-020 v1 safety valve)', () => {
   it('triggers registrySyncRepublish, audits REGISTRY_REPUBLISH, returns ok', async () => {
     const republish = vi.fn().mockResolvedValue(undefined);

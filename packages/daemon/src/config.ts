@@ -135,6 +135,16 @@ export interface DaemonConfig {
     expiry_critical_days: number;
     expiry_check_interval_ms: number;
   };
+  /**
+   * T2.4: place-or-refuse. Übersteigt die (cache-bewusste) RAM-Auslastung diese
+   * Schwelle (%), lehnt der Knoten neue Task-Platzierung ab. `resource_refresh_interval_ms`
+   * steuert, wie oft die Resource-Attribute (free_ram/cpu_load/agent_count) in die
+   * Registry geschrieben werden.
+   */
+  placement: {
+    refuse_ram_percent: number;
+    resource_refresh_interval_ms: number;
+  };
 }
 
 const DEFAULTS: DaemonConfig = {
@@ -192,6 +202,10 @@ const DEFAULTS: DaemonConfig = {
     expiry_warn_days: 30,
     expiry_critical_days: 7,
     expiry_check_interval_ms: 43_200_000, // 12 h
+  },
+  placement: {
+    refuse_ram_percent: 90,
+    resource_refresh_interval_ms: 15_000, // 15 s
   },
 };
 
@@ -321,6 +335,20 @@ export function loadConfig(configPath?: string): DaemonConfig {
     );
   }
 
+  // T2.4: place-or-refuse.
+  if (env['TLMCP_PLACE_REFUSE_RAM_PERCENT']) {
+    cfg.placement.refuse_ram_percent = readPositiveInt(
+      'TLMCP_PLACE_REFUSE_RAM_PERCENT',
+      cfg.placement.refuse_ram_percent,
+    );
+  }
+  if (env['TLMCP_RESOURCE_REFRESH_INTERVAL_MS']) {
+    cfg.placement.resource_refresh_interval_ms = readPositiveInt(
+      'TLMCP_RESOURCE_REFRESH_INTERVAL_MS',
+      cfg.placement.resource_refresh_interval_ms,
+    );
+  }
+
   // LOW-FIX (CR-Review): CIDRs validieren — fail fast statt silent.
   // Typos wie "10.10.10.0/33" oder "10.10.10.0/24foo" muessen sofort
   // sichtbar sein, sonst publish/browse-Verhalten ist stillschweigend kaputt.
@@ -339,6 +367,14 @@ export function loadConfig(configPath?: string): DaemonConfig {
     throw new Error(
       `Ungueltige Cert-Schwellen: expiry_warn_days (${cfg.cert.expiry_warn_days}) ` +
         `muss > expiry_critical_days (${cfg.cert.expiry_critical_days}) sein.`,
+    );
+  }
+
+  // T2.4 (CR-Stil): RAM-Schwelle muss in (0, 100] liegen — sonst lehnt der Knoten
+  // entweder nie (>100) oder immer (<=0) ab, beides stillschweigend falsch.
+  if (cfg.placement.refuse_ram_percent <= 0 || cfg.placement.refuse_ram_percent > 100) {
+    throw new Error(
+      `Ungueltige placement.refuse_ram_percent (${cfg.placement.refuse_ram_percent}): erwartet 1..100.`,
     );
   }
 
