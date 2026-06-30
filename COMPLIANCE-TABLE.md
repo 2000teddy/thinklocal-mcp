@@ -1259,4 +1259,14 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-06-30 15:23 — v0.34.46 feat(routing): Peer-Resource-basierte least-loaded-Auswahl (T2.4-Folge / V5 Spur 2).*
+## Session 2026-06-30 16:09 — v0.34.47 feat(routing): Self-Last in der least-loaded-Auswahl (T2.4-Folge / V5 Spur 2)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|------------------------------------|
+| v0.34.47 | (offen, base=main) | 2026-06-30 16:09 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | CR Claude-Subagent merge-fähig, 0× HIGH/CRITICAL; Drei-Wege-Key-Match (write/read/candidate = selfIdentityUri) verifiziert; **CR-MEDIUM** (Wiring-Entscheidung untestbar) via reine `chooseTargetAgent`-Extraktion + 6 Tests gefixt; empirisch guard-bewiesen |
+
+**CO/CG:** n/a — direkte #219-Folge (Self-Last), keine offene Design-Frage. **TS:** `peer-selection.test.ts` (+6, jetzt 20): `chooseTargetAgent` (explizit gefunden/nicht-Kandidat→null, self gewinnt bei geringster Last, ausgelasteter self→remote, fail-open→erster Kandidat, self-NaN→ausgeschlossen); `dashboard-api.test.ts` (+2): `/api/status` `resources` + Self-Key-Assertion + null. Volle Suite **106 Files / 1294 grün**, tsc 0, authored-files eslint 0. Empirischer Beleg: Self-Merge in `chooseTargetAgent` entfernt ⇒ „self gewinnt"-Test rot, restauriert ⇒ grün. **CR:** unabhängiger **Claude**-Subagent (nur claude/codex/agy — `agy` fehlt im Env). Merge-fähig, 0× HIGH/CRITICAL; CR-MEDIUM (untestbare `execute_remote_skill`-Entscheidung) via reine `chooseTargetAgent` extrahiert + getestet. **PC:** manuell (tsc/eslint-authored/Suite grün, `git diff` reviewed) — `agy`-Backend fehlt. **DO:** CHANGES (v0.34.47), COMPLIANCE, `changes/2026-06-30_t24-selfload-routing.md`. **Status:** Repo-Slice durch; Live-Zwei-Peer-Routing-Beweis (deploy-gegated) = Folge. Kein Deploy.
+
+---
+
+*Letzte Aktualisierung: 2026-06-30 16:09 — v0.34.47 feat(routing): Self-Last in der least-loaded-Auswahl (T2.4-Folge / V5 Spur 2).*

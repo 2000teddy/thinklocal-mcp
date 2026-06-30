@@ -121,6 +121,42 @@ describe('GET /api/peers — T2.4-Folge: resources-Exposition für least-loaded-
   });
 });
 
+describe('GET /api/status — T2.4-Folge: Self-Resources für least-loaded-Routing', () => {
+  function statusDeps(getNodeResources: (id: string) => unknown) {
+    return {
+      identity: { spiffeUri: 'spiffe://thinklocal/node/self' },
+      selfIdentityUri: 'spiffe://thinklocal/node/self',
+      config: {
+        daemon: { hostname: 'self', port: 9440, bind_host: '0.0.0.0', runtime_mode: 'lan', tls_enabled: true, agent_type: 'claude-code' },
+        libp2p: { enabled: false, listen_port: 0 },
+      },
+      mesh: { getOnlinePeers: () => [] },
+      registry: { getAllCapabilities: () => [], getNodeResources },
+      tasks: { getActiveTasks: () => [] },
+      audit: { append: vi.fn(), count: () => 0 },
+    } as never;
+  }
+
+  it('liefert die eigenen resources (Side-Map des selfIdentityUri)', async () => {
+    const resources = { free_ram_bytes: 8e9, ram_used_percent: 33.3, cpu_load: 7, agent_count: 2, updated_at: '2026-06-30T12:00:00.000Z' };
+    const getNodeResources = vi.fn().mockReturnValue(resources);
+    const { app } = buildApp(statusDeps(getNodeResources));
+    const res = await app.inject({ method: 'GET', url: '/api/status' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().resources).toEqual(resources);
+    // mit dem self-Key abgefragt (matcht setNodeResources(selfIdentityUri))
+    expect(getNodeResources).toHaveBeenCalledWith('spiffe://thinklocal/node/self');
+    await app.close();
+  });
+
+  it('ohne Snapshot → resources: null', async () => {
+    const { app } = buildApp(statusDeps(() => undefined));
+    const res = await app.inject({ method: 'GET', url: '/api/status' });
+    expect(res.json().resources).toBeNull();
+    await app.close();
+  });
+});
+
 describe('POST /api/registry/republish (ADR-020 v1 safety valve)', () => {
   it('triggers registrySyncRepublish, audits REGISTRY_REPUBLISH, returns ok', async () => {
     const republish = vi.fn().mockResolvedValue(undefined);

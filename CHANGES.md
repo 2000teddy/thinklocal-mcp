@@ -8,6 +8,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.47 (T2.4-Folge / V5 Spur 2 — Routing/Lastverteilung, KEIN Deploy) — feat(routing): Self-Last in der least-loaded-Auswahl
+
+#219 wählte den least-loaded **Remote**-Peer, der **lokale** Knoten (nicht in `/api/peers`)
+konkurrierte aber nicht → lokal ausführbare Skills konnten unnötig remote geroutet werden.
+Jetzt konkurriert der lokale Knoten fair mit.
+
+- **`dashboard-api.ts`**: `/api/status` liefert `resources` = `getNodeResources(ownAgentId)` (Self-Side-Map; `ownAgentId == selfIdentityUri` = Key von `setNodeResources` **und** Self-Kandidat in `/api/capabilities`).
+- **`peer-selection.ts`**: neue reine `chooseTargetAgent(candidates, peers, self, explicit?)` kapselt die gesamte Auswahl (explizit / least-loaded inkl. Self-Eintrag via `buildLoadMap`).
+- **`mcp-stdio.ts`** `execute_remote_skill`: holt `/api/status`, ergänzt Self als synthetischen Eintrag, delegiert an `chooseTargetAgent` → wählt lokal, wenn lokal am wenigsten ausgelastet (spart den Hop). Fail-open mehrstufig (try/catch + finite-Validierung + candidates[0]).
+- **Tests**: `peer-selection.test.ts` (+6: `chooseTargetAgent`), `dashboard-api.test.ts` (+2). Volle Suite **106 Files / 1294 grün**, tsc 0. Guard-bewiesen (Self-Merge entfernt ⇒ Test rot). CR: Claude-Subagent merge-fähig, CR-MEDIUM (untestbare Wiring-Entscheidung) via `chooseTargetAgent`-Extraktion gefixt.
+
 ### v0.34.46 (T2.4-Folge / V5 Spur 2 — Routing/Lastverteilung, KEIN Deploy) — feat(routing): Peer-Resource-basierte least-loaded-Auswahl
 
 Bei mehreren fähigen Peers wählt der Anfrager (`execute_remote_skill`) jetzt den **am

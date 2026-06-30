@@ -71,6 +71,29 @@ export function compareLoad(a: PeerLoad, b: PeerLoad): number {
 }
 
 /**
+ * Vollständige Ziel-Auswahl für `execute_remote_skill` (testbar, ohne I/O):
+ * - explizites `target` → dieses, sofern es ein Kandidat ist (sonst null = „hat Skill nicht").
+ * - sonst least-loaded unter allen Kandidaten, wobei der lokale Knoten (`self`, aus
+ *   /api/status — steht nicht in /api/peers) als zusätzlicher Eintrag fair mitkonkurriert.
+ *
+ * Fail-open erbt von {@link pickLeastLoaded}: ohne Resource-Daten → erster Kandidat.
+ */
+export function chooseTargetAgent(
+  candidateAgentIds: string[],
+  peers: PeerEntry[],
+  self: PeerEntry | null,
+  explicitTarget?: string,
+): LeastLoadedResult | null {
+  if (explicitTarget) {
+    return candidateAgentIds.includes(explicitTarget)
+      ? { agentId: explicitTarget, reason: 'explizit (target_agent)', byLoad: false }
+      : null;
+  }
+  const loadByAgent = buildLoadMap(self ? [...peers, self] : peers);
+  return pickLeastLoaded(candidateAgentIds, loadByAgent);
+}
+
+/**
  * Wählt unter den fähigen Kandidaten den am wenigsten ausgelasteten Peer.
  *
  * @param candidateAgentIds Reihenfolge wie vom Aufrufer geliefert (bei Gleichstand

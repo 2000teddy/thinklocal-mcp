@@ -25,7 +25,7 @@ import {
   __resetDaemonClientCache,
 } from './local-daemon-client.js';
 import { parseRuntimeMode } from './runtime-mode.js';
-import { pickLeastLoaded, buildLoadMap, type PeerLoad } from './peer-selection.js';
+import { chooseTargetAgent, type PeerLoad, type PeerEntry } from './peer-selection.js';
 
 const DATA_DIR = process.env['TLMCP_DATA_DIR'] ?? getDefaultDataDir();
 const DAEMON_PORT = Number(process.env['TLMCP_PORT'] ?? '9440');
@@ -277,20 +277,28 @@ server.tool(
     };
 
     // Ziel waehlen: explizit (target_agent) ODER least-loaded unter den faehigen
-    // Kandidaten (T2.4-Folge). FAIL-OPEN: liegen keine Resource-Daten vor, faellt
-    // pickLeastLoaded auf den ersten Kandidaten zurueck = bisheriges Verhalten.
-    let target: typeof candidates[number] | undefined;
-    if (target_agent) {
-      target = candidates.find((c) => c.agent_id === target_agent);
-    } else {
-      // Last-Map aus den Peer-Cards (defensiv via buildLoadMap — verwirft NaN/fehlende
-      // Werte). Hinweis: der lokale Knoten steht nicht in /api/peers → seine Last fliesst
-      // hier (noch) nicht ein; das passt zu diesem remote-orientierten Tool. Self-Last
-      // einbeziehen = benannter Folge-Slice.
-      const loadByAgent = buildLoadMap(peersData.peers);
-      const sel = pickLeastLoaded(candidates.map((c) => c.agent_id), loadByAgent);
-      target = candidates.find((c) => c.agent_id === sel.agentId);
+    // Kandidaten (T2.4-Folge). Der lokale Knoten steht nicht in /api/peers, daher
+    // seine eigenen Resource-Attribute aus /api/status holen und als synthetischen
+    // Eintrag mitkonkurrieren lassen — so waehlt least-loaded lokal, wenn lokal am
+    // wenigsten ausgelastet (spart den Hop). FAIL-OPEN: ohne Resource-Daten → erster
+    // Kandidat (chooseTargetAgent/pickLeastLoaded). Die gesamte Entscheidung ist in der
+    // reinen, getesteten chooseTargetAgent gekapselt.
+    let self: PeerEntry | null = null;
+    if (!target_agent) {
+      try {
+        const status = await fetchDaemon('/api/status') as {
+          agent_id?: string;
+          resources?: Partial<PeerLoad> | null;
+        };
+        if (status.agent_id) {
+          self = { agent_id: status.agent_id, agent_card: { resources: status.resources } };
+        }
+      } catch {
+        // fail-open: ohne Self-Status bleibt es bei den Peer-Daten (bisheriges Verhalten).
+      }
     }
+    const sel = chooseTargetAgent(candidates.map((c) => c.agent_id), peersData.peers, self, target_agent);
+    const target = sel ? candidates.find((c) => c.agent_id === sel.agentId) : undefined;
 
     if (!target) {
       return { content: [{ type: 'text' as const, text: JSON.stringify({ error: `Agent '${target_agent}' hat Skill '${skill_id}' nicht` }) }] };

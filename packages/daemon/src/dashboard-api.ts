@@ -96,6 +96,10 @@ export function registerDashboardApi(server: FastifyInstance, deps: DashboardApi
       capabilities_count: registry.getAllCapabilities().length,
       active_tasks: tasks.getActiveTasks().length,
       audit_events: audit.count(),
+      // T2.4-Folge: eigene place-or-refuse-Resource-Attribute, damit der lokale Knoten
+      // in der least-loaded-Auswahl fair gegen Remote-Peers konkurriert (er steht nicht
+      // in /api/peers). null, solange noch kein Snapshot vorliegt.
+      resources: registry.getNodeResources(ownAgentId) ?? null,
       registry_sync: deps.getRegistrySyncStatus?.() ?? {},
       skills: deps.getSkillHealth?.() ?? [],
     };
