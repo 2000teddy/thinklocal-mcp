@@ -17,6 +17,7 @@ import { generateKeyPairSync } from 'node:crypto';
 import {
   computeRamUsedPercent,
   evaluatePlacement,
+  evaluatePlacementMetrics,
 } from './resource-metrics.js';
 import { CapabilityRegistry } from './registry.js';
 import { TaskExecutor } from './task-executor.js';
@@ -60,6 +61,51 @@ describe('evaluatePlacement (strikte > Schwelle)', () => {
   });
 });
 
+describe('evaluatePlacementMetrics (RAM + CPU + agent_count)', () => {
+  it('CPU > Schwelle → refuse limit=cpu; == → accept; 0=deaktiviert → übersprungen', () => {
+    expect(evaluatePlacementMetrics({ cpuLoad: 96 }, { refuseCpuPercent: 95 })).toMatchObject({
+      refuse: true,
+      reason: 'capacity',
+      limit: 'cpu',
+    });
+    expect(evaluatePlacementMetrics({ cpuLoad: 95 }, { refuseCpuPercent: 95 }).refuse).toBe(false);
+    // 0 = deaktiviert: selbst hohe Last refused nicht
+    expect(evaluatePlacementMetrics({ cpuLoad: 99 }, { refuseCpuPercent: 0 }).refuse).toBe(false);
+  });
+
+  it('agent_count > Schwelle → refuse limit=agents; == → accept', () => {
+    expect(evaluatePlacementMetrics({ agentCount: 21 }, { refuseAgentCount: 20 })).toMatchObject({
+      refuse: true,
+      limit: 'agents',
+    });
+    expect(evaluatePlacementMetrics({ agentCount: 20 }, { refuseAgentCount: 20 }).refuse).toBe(false);
+    expect(evaluatePlacementMetrics({ agentCount: 999 }, { refuseAgentCount: 0 }).refuse).toBe(false);
+  });
+
+  it('Priorität RAM → CPU → agents (RAM gewinnt, wenn mehrere überschritten)', () => {
+    const d = evaluatePlacementMetrics(
+      { ramUsedPercent: 95, cpuLoad: 99, agentCount: 99 },
+      { refuseRamPercent: 90, refuseCpuPercent: 95, refuseAgentCount: 20 },
+    );
+    expect(d).toMatchObject({ refuse: true, limit: 'ram' });
+  });
+
+  it('null/undefined-Dimension wird übersprungen (fail-open pro Dimension)', () => {
+    // RAM nicht gemessen (null), aber CPU überschritten → CPU greift
+    const d = evaluatePlacementMetrics(
+      { ramUsedPercent: null, cpuLoad: 99 },
+      { refuseRamPercent: 90, refuseCpuPercent: 95 },
+    );
+    expect(d).toMatchObject({ refuse: true, limit: 'cpu' });
+    // keine Dimension überschritten → accept
+    expect(evaluatePlacementMetrics({ ramUsedPercent: null, cpuLoad: null, agentCount: null }, {
+      refuseRamPercent: 90,
+      refuseCpuPercent: 95,
+      refuseAgentCount: 20,
+    }).refuse).toBe(false);
+  });
+});
+
 describe('TaskExecutor place-or-refuse gate', () => {
   let dir: string;
   let registry: CapabilityRegistry;
@@ -79,6 +125,30 @@ describe('TaskExecutor place-or-refuse gate', () => {
       agentId: 'agent',
       getRamUsedPercent: async () => ramUsedPercent,
       refuseRamPercent: 90,
+    });
+  }
+
+  /** Executor mit allen drei Dimensionen (CPU/agent_count opt-in). RAM unter Schwelle (40). */
+  function buildExecutorMulti(opts: {
+    cpuLoad?: number | null;
+    refuseCpuPercent?: number;
+    agentCount?: number;
+    refuseAgentCount?: number;
+  }): TaskExecutor {
+    registry = new CapabilityRegistry();
+    audit = new AuditLog(dir, makeKey(), 'spiffe://test/host/x/agent/y');
+    return new TaskExecutor({
+      tasks: new TaskManager(),
+      skills: new SkillManager(dir, 'agent', registry),
+      audit,
+      eventBus: new MeshEventBus(),
+      agentId: 'agent',
+      getRamUsedPercent: async () => 40, // RAM unauffällig
+      refuseRamPercent: 90,
+      getCpuLoad: () => opts.cpuLoad ?? null,
+      refuseCpuPercent: opts.refuseCpuPercent ?? 0,
+      getAgentCount: () => opts.agentCount ?? 0,
+      refuseAgentCount: opts.refuseAgentCount ?? 0,
     });
   }
 
@@ -125,6 +195,78 @@ describe('TaskExecutor place-or-refuse gate', () => {
     expect(r.reason).toBeUndefined();
     expect(r.error).toMatch(/nicht verfuegbar/);
   });
+
+  it('CPU > Schwelle (RAM ok) → abgelehnt mit reason=capacity, error nennt CPU', async () => {
+    const exec = buildExecutorMulti({ cpuLoad: 97, refuseCpuPercent: 95 });
+    const r = await exec.handleTaskRequest('t4', 'irgendein.skill', {}, 'remote');
+    expect(r.accepted).toBe(false);
+    expect(r.reason).toBe('capacity');
+    expect(r.error).toMatch(/CPU/);
+  });
+
+  it('agent_count > Schwelle (RAM ok) → abgelehnt mit reason=capacity, error nennt agent_count', async () => {
+    const exec = buildExecutorMulti({ agentCount: 25, refuseAgentCount: 20 });
+    const r = await exec.handleTaskRequest('t5', 'irgendein.skill', {}, 'remote');
+    expect(r.accepted).toBe(false);
+    expect(r.reason).toBe('capacity');
+    expect(r.error).toMatch(/agent_count/);
+  });
+
+  it('CPU/agent_count deaktiviert (Schwelle 0) → Gate inert trotz hoher Werte', async () => {
+    const exec = buildExecutorMulti({ cpuLoad: 99, refuseCpuPercent: 0, agentCount: 999, refuseAgentCount: 0 });
+    const r = await exec.handleTaskRequest('t6', 'does.not.exist', {}, 'remote');
+    expect(r.reason).toBeUndefined(); // keine Capacity-Ablehnung → normaler Skill-fehlt-Pfad
+    expect(r.error).toMatch(/nicht verfuegbar/);
+  });
+
+  it('CPU unbekannt (Reader liefert null) → CPU-Dimension übersprungen, kein Refuse', async () => {
+    const exec = buildExecutorMulti({ cpuLoad: null, refuseCpuPercent: 95 });
+    const r = await exec.handleTaskRequest('t7', 'does.not.exist', {}, 'remote');
+    expect(r.reason).toBeUndefined();
+  });
+
+  it('RAM-Reader WIRFT, aber CPU > Schwelle → RAM übersprungen, CPU greift (per-Dimension fail-open)', async () => {
+    registry = new CapabilityRegistry();
+    audit = new AuditLog(dir, makeKey(), 'spiffe://test/host/x/agent/y');
+    const exec = new TaskExecutor({
+      tasks: new TaskManager(),
+      skills: new SkillManager(dir, 'agent', registry),
+      audit,
+      eventBus: new MeshEventBus(),
+      agentId: 'agent',
+      getRamUsedPercent: async () => {
+        throw new Error('si.mem flaky');
+      },
+      refuseRamPercent: 90,
+      getCpuLoad: () => 98,
+      refuseCpuPercent: 95,
+    });
+    const r = await exec.handleTaskRequest('t8', 'irgendein.skill', {}, 'remote');
+    expect(r.accepted).toBe(false);
+    expect(r.reason).toBe('capacity');
+    expect(r.error).toMatch(/CPU/); // RAM-Dimension übersprungen, CPU löst aus
+  });
+
+  it('CPU-Reader WIRFT → CPU-Dimension übersprungen (kein Crash, kein Refuse)', async () => {
+    registry = new CapabilityRegistry();
+    audit = new AuditLog(dir, makeKey(), 'spiffe://test/host/x/agent/y');
+    const exec = new TaskExecutor({
+      tasks: new TaskManager(),
+      skills: new SkillManager(dir, 'agent', registry),
+      audit,
+      eventBus: new MeshEventBus(),
+      agentId: 'agent',
+      getRamUsedPercent: async () => 40,
+      refuseRamPercent: 90,
+      getCpuLoad: () => {
+        throw new Error('side-map boom');
+      },
+      refuseCpuPercent: 95,
+    });
+    const r = await exec.handleTaskRequest('t9', 'does.not.exist', {}, 'remote');
+    expect(r.reason).toBeUndefined(); // Reader-Crash darf Request nicht crashen/ablehnen
+    expect(r.error).toMatch(/nicht verfuegbar/);
+  });
 });
 
 describe('CapabilityRegistry node-resources side-map (T2.4)', () => {
@@ -149,7 +291,12 @@ describe('CapabilityRegistry node-resources side-map (T2.4)', () => {
 });
 
 describe('config — T2.4 placement section', () => {
-  const KEYS = ['TLMCP_PLACE_REFUSE_RAM_PERCENT', 'TLMCP_RESOURCE_REFRESH_INTERVAL_MS'];
+  const KEYS = [
+    'TLMCP_PLACE_REFUSE_RAM_PERCENT',
+    'TLMCP_RESOURCE_REFRESH_INTERVAL_MS',
+    'TLMCP_PLACE_REFUSE_CPU_PERCENT',
+    'TLMCP_PLACE_REFUSE_AGENT_COUNT',
+  ];
   function withEnv(overrides: Record<string, string>, fn: () => void): void {
     const saved = new Map<string, string | undefined>();
     for (const k of KEYS) saved.set(k, process.env[k]);
@@ -166,17 +313,35 @@ describe('config — T2.4 placement section', () => {
     }
   }
 
-  it('Defaults: refuse_ram_percent=90, refresh=15s', () => {
+  it('Defaults: refuse_ram_percent=90, refresh=15s, CPU/agent_count=0 (aus)', () => {
     withEnv({}, () => {
       const cfg = loadConfig(NO_TOML);
       expect(cfg.placement.refuse_ram_percent).toBe(90);
       expect(cfg.placement.resource_refresh_interval_ms).toBe(15_000);
+      expect(cfg.placement.refuse_cpu_percent).toBe(0);
+      expect(cfg.placement.refuse_agent_count).toBe(0);
     });
   });
 
-  it('Env-Override greift', () => {
-    withEnv({ TLMCP_PLACE_REFUSE_RAM_PERCENT: '85' }, () => {
-      expect(loadConfig(NO_TOML).placement.refuse_ram_percent).toBe(85);
+  it('Env-Override greift (RAM/CPU/agent_count)', () => {
+    withEnv(
+      {
+        TLMCP_PLACE_REFUSE_RAM_PERCENT: '85',
+        TLMCP_PLACE_REFUSE_CPU_PERCENT: '95',
+        TLMCP_PLACE_REFUSE_AGENT_COUNT: '32',
+      },
+      () => {
+        const cfg = loadConfig(NO_TOML);
+        expect(cfg.placement.refuse_ram_percent).toBe(85);
+        expect(cfg.placement.refuse_cpu_percent).toBe(95);
+        expect(cfg.placement.refuse_agent_count).toBe(32);
+      },
+    );
+  });
+
+  it('CPU-Schwelle außerhalb 0..100 wird abgelehnt', () => {
+    withEnv({ TLMCP_PLACE_REFUSE_CPU_PERCENT: '150' }, () => {
+      expect(() => loadConfig(NO_TOML)).toThrow(/refuse_cpu_percent/);
     });
   });
 

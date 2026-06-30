@@ -15,7 +15,8 @@ import type { TaskManager } from './tasks.js';
 import type { SkillManager } from './skills.js';
 import type { AuditLog } from './audit.js';
 import type { MeshEventBus } from './events.js';
-import { evaluatePlacement } from './resource-metrics.js';
+import { evaluatePlacementMetrics } from './resource-metrics.js';
+import type { PlacementMetrics, PlacementLimits, PlacementDecision } from './resource-metrics.js';
 import {
   systemHealth,
   systemProcesses,
@@ -29,6 +30,42 @@ import {
   influxdbWrite,
   influxdbHealthCheck,
 } from './builtin-skills/influxdb.js';
+
+/** Formatiert die ausgelöste place-or-refuse-Dimension für Log/Audit/Fehlertext. */
+function describeLimit(
+  limit: PlacementDecision['limit'],
+  m: PlacementMetrics,
+  l: PlacementLimits,
+): string {
+  switch (limit) {
+    case 'cpu':
+      return `CPU ${(m.cpuLoad ?? 0).toFixed(1)}% > ${l.refuseCpuPercent}%`;
+    case 'agents':
+      return `agent_count ${m.agentCount ?? 0} > ${l.refuseAgentCount}`;
+    case 'ram':
+    default:
+      return `RAM ${(m.ramUsedPercent ?? 0).toFixed(1)}% > ${l.refuseRamPercent}%`;
+  }
+}
+
+/**
+ * Liest eine synchrone Dimension (CPU/agent_count) fail-closed-gegen-Crash: wirft der
+ * Reader wider Erwarten, wird die Dimension übersprungen (null) statt den Request zu
+ * crashen — symmetrisch zum RAM-fail-open. (MEDIUM-CR: Garantie statt Annahme.)
+ */
+function safeReadDimension(
+  read: (() => number | null) | undefined,
+  log: Logger | undefined,
+  name: string,
+): number | null {
+  if (!read) return null;
+  try {
+    return read() ?? null;
+  } catch (err) {
+    log?.warn({ err, dimension: name }, '[place-or-refuse] Reader fehlgeschlagen — Dimension übersprungen');
+    return null;
+  }
+}
 
 export interface TaskExecutorDeps {
   tasks: TaskManager;
@@ -44,6 +81,18 @@ export interface TaskExecutorDeps {
   getRamUsedPercent?: () => Promise<number>;
   /** T2.4: RAM-Schwelle (%), oberhalb derer neue Platzierung abgelehnt wird (>). */
   refuseRamPercent?: number;
+  /**
+   * T2.4-Folge: aktuelle CPU-Last (0..100) aus der periodisch aktualisierten
+   * Registry-Side-Map (kein teures si.currentLoad() pro Request). `null` = unbekannt
+   * → CPU-Dimension wird übersprungen. Optional.
+   */
+  getCpuLoad?: () => number | null;
+  /** T2.4-Folge: CPU-Schwelle (%), oberhalb derer abgelehnt wird (>). `0`/undefined = aus. */
+  refuseCpuPercent?: number;
+  /** T2.4-Folge: aktuelle lokale Agenten-Anzahl (instant aus dem AgentRegistry). Optional. */
+  getAgentCount?: () => number;
+  /** T2.4-Folge: agent_count-Schwelle, oberhalb derer abgelehnt wird (>). `0`/undefined = aus. */
+  refuseAgentCount?: number;
 }
 
 type SkillHandler = (input: Record<string, unknown>) => Promise<Record<string, unknown>>;
@@ -67,26 +116,42 @@ export class TaskExecutor {
     input: Record<string, unknown>,
     requester: string,
   ): Promise<{ accepted: boolean; result?: Record<string, unknown>; error?: string; reason?: 'capacity' }> {
-    const { tasks, audit, eventBus, agentId, log, getRamUsedPercent, refuseRamPercent } = this.deps;
+    const {
+      tasks, audit, eventBus, agentId, log,
+      getRamUsedPercent, refuseRamPercent,
+      getCpuLoad, refuseCpuPercent, getAgentCount, refuseAgentCount,
+    } = this.deps;
 
-    // T2.4 place-or-refuse: bei Überlast (RAM > Schwelle) keine neue Platzierung
-    // annehmen — VOR dem Skill-Check, damit ein überlasteter Knoten gar nichts erst
-    // einreiht. Gate ist inert, solange Reader + Schwelle nicht gesetzt sind.
+    // T2.4 place-or-refuse (RAM + CPU + agent_count): bei Überlast keine neue
+    // Platzierung annehmen — VOR dem Skill-Check, damit ein überlasteter Knoten gar
+    // nichts erst einreiht. Gate ist inert, solange RAM-Reader + Schwelle nicht gesetzt
+    // sind (back-compat: CPU/agent_count sind opt-in, Default-Schwellen 0 = aus).
     if (getRamUsedPercent && typeof refuseRamPercent === 'number') {
-      // Fail-OPEN: kann die RAM-Auslastung nicht gemessen werden (flakiges
-      // si.mem()), darf das NICHT jede Platzierung blockieren — lieber annehmen
-      // als wegen eines Mess-Fehlers den Knoten lahmlegen.
+      // Fail-OPEN: kann die RAM-Auslastung nicht gemessen werden (flakiges si.mem()),
+      // darf das NICHT jede Platzierung blockieren — lieber annehmen als wegen eines
+      // Mess-Fehlers den Knoten lahmlegen. CPU/agent_count sind billige Reader (Side-Map
+      // bzw. Registry-Size), die nicht werfen.
       let ramUsedPercent: number | null = null;
       try {
         ramUsedPercent = await getRamUsedPercent();
       } catch (err) {
-        log?.warn({ err, taskId, skillId }, '[place-or-refuse] RAM-Messung fehlgeschlagen — fail-open (Task wird angenommen)');
+        log?.warn({ err, taskId, skillId }, '[place-or-refuse] RAM-Messung fehlgeschlagen — fail-open (RAM-Dimension übersprungen)');
       }
-      if (ramUsedPercent !== null && evaluatePlacement(ramUsedPercent, refuseRamPercent).refuse) {
-        const msg = `Knoten überlastet: RAM ${ramUsedPercent.toFixed(1)}% > ${refuseRamPercent}% (place-or-refuse)`;
-        log?.warn({ taskId, skillId, requester, ramUsedPercent, refuseRamPercent }, '[place-or-refuse] Task abgelehnt — RAM über Schwelle');
-        audit.append('TASK_DELEGATE', requester, `${skillId} refused: RAM ${ramUsedPercent.toFixed(1)}% > ${refuseRamPercent}%`);
-        eventBus.emit('task:refused', { taskId, skillId, requester, reason: 'capacity', ramUsedPercent });
+      const cpuLoad = safeReadDimension(getCpuLoad, log, 'cpu');
+      const agentCount = safeReadDimension(getAgentCount, log, 'agent_count');
+      const decision = evaluatePlacementMetrics(
+        { ramUsedPercent, cpuLoad, agentCount },
+        { refuseRamPercent, refuseCpuPercent, refuseAgentCount },
+      );
+      if (decision.refuse) {
+        const detail = describeLimit(decision.limit, { ramUsedPercent, cpuLoad, agentCount }, { refuseRamPercent, refuseCpuPercent, refuseAgentCount });
+        const msg = `Knoten überlastet: ${detail} (place-or-refuse)`;
+        log?.warn(
+          { taskId, skillId, requester, limit: decision.limit, ramUsedPercent, cpuLoad, agentCount, refuseRamPercent, refuseCpuPercent, refuseAgentCount },
+          '[place-or-refuse] Task abgelehnt — Auslastung über Schwelle',
+        );
+        audit.append('TASK_DELEGATE', requester, `${skillId} refused: ${detail}`);
+        eventBus.emit('task:refused', { taskId, skillId, requester, reason: 'capacity', limit: decision.limit, ramUsedPercent, cpuLoad, agentCount });
         return { accepted: false, error: msg, reason: 'capacity' };
       }
     }
