@@ -54,6 +54,18 @@ resolve_node() {
   die "node nicht gefunden — ist Node.js installiert?"
 }
 
+# T1.1: das Plist startet `node dist/index.js` (nicht tsx). Stellt sicher, dass dist/
+# existiert, bevor der Service bootstrapped wird — sonst startet launchd ein fehlendes
+# File. Baut bei Bedarf via `npx tsc`; bricht fail-closed ab, wenn dist danach fehlt.
+ensure_daemon_built() {
+  local entry="$INSTALL_DIR/packages/daemon/dist/index.js"
+  if [ ! -f "$entry" ]; then
+    log "dist/index.js fehlt — kompiliere Daemon (npx tsc)..."
+    ( cd "$INSTALL_DIR/packages/daemon" && npx tsc ) || die "Daemon-Build fehlgeschlagen (npx tsc)"
+  fi
+  [ -f "$entry" ] || die "Daemon-Build unvollstaendig: $entry fehlt"
+}
+
 render_plist() {
   local node_path="$1"
   mkdir -p "$LAUNCH_AGENTS_DIR" "$LOG_DIR"
@@ -78,6 +90,7 @@ cmd_install() {
   log "Node: $node_path"
   log "Install-Dir: $INSTALL_DIR"
 
+  ensure_daemon_built   # T1.1: dist/index.js muss vor dem bootstrap existieren
   render_plist "$node_path"
 
   # Falls schon geladen — erst raus, dann rein.

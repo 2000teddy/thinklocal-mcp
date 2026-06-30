@@ -280,6 +280,17 @@ install_deps() {
     info "Installiere alle Dependencies (Root + Daemon + Dashboard)..."
     npm install
     ok "Alle Dependencies installiert"
+
+    # T1.1: Daemon nach dist/ vorkompilieren. Die Runtime laeuft via `node dist/index.js`
+    # (nicht via tsx) — spart ~100 MB RSS + einen esbuild-Loader-Prozess pro Daemon und
+    # startet schneller (Messung im PR). Build MUSS vor dem Service-Start laufen, sonst
+    # fehlt dist/index.js.
+    info "Kompiliere Daemon nach dist/ (T1.1: Runtime via node dist/)..."
+    ( cd "$INSTALL_DIR/packages/daemon" && npx tsc )
+    if [ ! -f "$INSTALL_DIR/packages/daemon/dist/index.js" ]; then
+        error "Daemon-Build fehlgeschlagen: dist/index.js fehlt"
+    fi
+    ok "Daemon kompiliert (dist/index.js)"
 }
 
 # --- Datenverzeichnis erstellen ---
@@ -410,8 +421,8 @@ install_linux_service() {
     fi
     # Absoluten Pfad sicherstellen (realpath folgt Symlinks)
     NODE_PATH=$(realpath "$NODE_PATH" 2>/dev/null || readlink -f "$NODE_PATH" 2>/dev/null || echo "$NODE_PATH")
-    local TSX_PATH="$INSTALL_DIR/packages/daemon/node_modules/.bin/tsx"
-    local INDEX_PATH="$INSTALL_DIR/packages/daemon/src/index.ts"
+    # T1.1: kompiliertes dist/ statt tsx (Build in install_deps). Spart RSS + Loader-Prozess.
+    local INDEX_PATH="$INSTALL_DIR/packages/daemon/dist/index.js"
     local SERVICE_DST="$HOME/.config/systemd/user/thinklocal-daemon.service"
 
     mkdir -p "$HOME/.config/systemd/user"
@@ -441,7 +452,7 @@ Wants=network-online.target
 ${SKILL_DEP_LINES}
 [Service]
 Type=simple
-ExecStart=$NODE_PATH $TSX_PATH $INDEX_PATH
+ExecStart=$NODE_PATH $INDEX_PATH
 Environment=TLMCP_CONFIG=$INSTALL_DIR/config/daemon.toml
 Environment=TLMCP_DATA_DIR=$HOME/.thinklocal
 Environment=TLMCP_RUNTIME_MODE=$RUNTIME_MODE

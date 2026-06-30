@@ -8,9 +8,9 @@
     <key>ProgramArguments</key>
     <array>
         <!-- Wird vom Installer durch den tatsaechlichen Pfad ersetzt -->
+        <!-- T1.1: kompiliertes dist/ statt tsx (Installer baut dist/ vor dem Start) — spart RSS + Loader-Prozess. -->
         <string>__NODE_PATH__</string>
-        <string>__INSTALL_DIR__/packages/daemon/node_modules/.bin/tsx</string>
-        <string>__INSTALL_DIR__/packages/daemon/src/index.ts</string>
+        <string>__INSTALL_DIR__/packages/daemon/dist/index.js</string>
     </array>
 
     <key>EnvironmentVariables</key>

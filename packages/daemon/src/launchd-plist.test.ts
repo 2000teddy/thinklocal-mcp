@@ -84,6 +84,24 @@ describe('renderLaunchDaemonPlist', () => {
     expect(out).toContain('<string>/Users/svc-thinklocal/.thinklocal/logs/daemon.error.log</string>');
   });
 
+  // T1.1: der Daemon startet aus kompiliertem dist/, NICHT via tsx (RSS/Loader-Ersparnis).
+  it('startet den Daemon via node dist/index.js — kein tsx, kein src/index.ts', () => {
+    const out = renderLaunchDaemonPlist(TEMPLATE, validCtx());
+    expect(out).toContain('<string>/opt/thinklocal-mcp/packages/daemon/dist/index.js</string>');
+    // ProgramArguments = genau [node, dist/index.js] (2 Einträge, kein Loader-Argument dazwischen).
+    const args = out.match(/<key>ProgramArguments<\/key>\s*<array>([\s\S]*?)<\/array>/);
+    expect(args).not.toBeNull();
+    const block = args?.[1] ?? '';
+    // Im ausführbaren Argument-Block KEIN tsx-Loader / kein src/index.ts mehr (T1.1-Regression).
+    expect(block).not.toMatch(/tsx/);
+    expect(block).not.toMatch(/src\/index\.ts/);
+    const strings = [...block.matchAll(/<string>(.*?)<\/string>/g)].map((m) => m[1]);
+    expect(strings).toEqual([
+      '/opt/homebrew/bin/node',
+      '/opt/thinklocal-mcp/packages/daemon/dist/index.js',
+    ]);
+  });
+
   it('wirft fail-closed bei ungültigem Kontext (relativer nodeBin)', () => {
     expect(() => renderLaunchDaemonPlist(TEMPLATE, { ...validCtx(), nodeBin: 'node' })).toThrow(/ungültiger Kontext/);
   });
