@@ -8,6 +8,29 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.53 (Pure-Test, KEIN Deploy, keine Runtime-Änderung) — test(mtls): dedizierter Issuer-Fingerprint-Integrationstest (127c)
+
+TODO #127(c): die bisher nur **live bewiesene** mTLS-Invariante `issuerCertificate.fingerprint256 ===
+certFingerprint(ca.crt.pem)` mit einem echten Handshake automatisiert festnageln.
+
+- **Warum:** Die ADR-022-PeerID-Attestierung (`agent-card.ts` → `attestedPeerIdFromCert`) verlässt sich
+  darauf, dass der aus der eigenen Mesh-CA **abgeleitete** Pin (`resolveAttestingCaFingerprints` →
+  `certFingerprint`) == dem im mTLS-Handshake **beobachteten** `issuerCertificate.fingerprint256` ist.
+  Node liefert Uppercase-Colon-Hex, `certFingerprint` lowercase-no-colon; `normalizeFingerprint`
+  rekonziliert. Bräche das, schlüge die Attestierung **still** fehl. Bestehende Unit-Tests nutzten nur
+  **synthetische** Fingerprints.
+- **Neu:** `packages/daemon/src/mtls-issuer-fingerprint.test.ts` — echter `node:tls`-mTLS-Handshake
+  (Server `requestCert+rejectUnauthorized`, Client-Cert; Chain scharf), beide Seiten lesen
+  `getPeerCertificate(true)` (wie `agent-card.ts` in Produktion). Assertions exerzieren den
+  **Produktionspfad** (`resolveAttestingCaFingerprints → isAttestingIssuer → attestedPeerIdFromCert`):
+  beide `authorized`, Wire-Issuer normalisiert == derived-Pin, E2E-PeerID-Attestierung, plus
+  Negativkontrolle (fremde CA attestiert NICHT) und explizite Format-Divergenz-Assertion.
+- **Ort:** in `packages/daemon/src/` (nicht `tests/integration/`), da der CI-Daemon-Job nur
+  `packages/daemon` testet → nur so gatet der Test.
+- **Beleg:** 6/6 grün, volle Suite **105 Files / 1293 grün**, `tsc` 0, `eslint` (neue Datei) 0, build grün.
+  Keine Runtime-Datei berührt. CR: Claude-Test-Review — solide, kein HIGH/CRITICAL; 1 LOW (Format-
+  Divergenz selbst-dokumentieren) übernommen.
+
 ### v0.34.52 (Security-Hardening, KEIN Deploy) — fix(tls): token-onboarded Bundle fail-closed gegen `ca.crt.pem` validieren (127b)
 
 Pre-existing CR-MEDIUM (TODO #127b): Der **token-onboarded Zweig** in `tls.ts loadOrCreateTlsBundle`
