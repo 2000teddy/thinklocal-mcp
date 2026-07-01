@@ -10,8 +10,9 @@
  *     `daysLeft > 7` (+ Identität/CA/Key-Match) — sonst REISSUE. Es gibt KEINEN
  *     laufenden Timer/Scheduler: auf einem durchlaufenden Daemon „rotiert"
  *     nichts; erst der nächste Start erneuert ein ablaufendes Cert.
- *  B) `cert-rotation.ts` ist totes Modul: KEIN Produktionscode (daemon/cli)
- *     importiert es — nur sein eigener Test. Es ist daher NICHT der scharfe Pfad.
+ *  B) `cert-rotation.ts` WAR totes Modul (0 Produktions-Importeure) und wurde am
+ *     2026-07-01 hart entfernt (Legacy-Cleanup). RE-CHECK B hält jetzt nur noch den
+ *     Zustand „Datei weg + kein Importeur" (Removal-Guard).
  *
  * Folge: Für einen langlebigen Daemon, der nicht neu startet, IST der
  * Cert-Ablauf (z.B. 2026-09-02) ein reales Risiko → rechtfertigt T2.1
@@ -26,6 +27,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  existsSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
@@ -123,8 +125,17 @@ describe('RE-CHECK A — reale Rotation = startup-load reissue (tls.ts), KEIN Ti
   });
 });
 
-describe('RE-CHECK B — cert-rotation.ts ist totes Modul (NICHT der scharfe Pfad)', () => {
-  it('Kein Produktions-Source (daemon/cli) importiert cert-rotation', () => {
+describe('RE-CHECK B — cert-rotation.ts wurde hart entfernt (Legacy-Cleanup)', () => {
+  // Das Modul war totes Legacy (0 Produktions-Importeure) und wurde entfernt. Diese
+  // Guards halten den Zustand: die Datei bleibt weg UND niemand fügt einen Importeur
+  // eines `cert-rotation`-Moduls wieder hinzu (sonst liest sich tote Altverdrahtung
+  // erneut wie der scharfe Pfad — genau die Verwechslung, die den RE-CHECK auslöste).
+  it('cert-rotation.ts existiert nicht mehr im Source-Baum', () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    expect(existsSync(resolve(here, 'cert-rotation.ts'))).toBe(false);
+  });
+
+  it('kein Produktions-Source (daemon/cli) importiert ein cert-rotation-Modul', () => {
     const here = dirname(fileURLToPath(import.meta.url)); // packages/daemon/src
     const repoRoot = resolve(here, '../../..');
     const roots = [
@@ -141,7 +152,6 @@ describe('RE-CHECK B — cert-rotation.ts ist totes Modul (NICHT der scharfe Pfa
       }
       for (const rel of files) {
         if (!rel.endsWith('.ts') || rel.endsWith('.test.ts')) continue;
-        if (rel.endsWith('cert-rotation.ts')) continue; // die Definition selbst
         const src = readFileSync(join(root, rel), 'utf8');
         if (/from\s+['"][^'"]*cert-rotation(\.js)?['"]/.test(src)) {
           importers.push(rel);
@@ -149,16 +159,5 @@ describe('RE-CHECK B — cert-rotation.ts ist totes Modul (NICHT der scharfe Pfa
       }
     }
     expect(importers).toEqual([]);
-  });
-
-  it('cert-rotation.ts ist als @deprecated/Legacy markiert + zeigt auf den kanonischen Pfad', () => {
-    // Solange das Modul tot ist (kein Importeur, s.o.), MUSS die Deprecation-Markierung
-    // bleiben — sonst liest sich tote Altverdrahtung wieder wie der scharfe Pfad
-    // (genau die Verwechslung, die den RE-CHECK ausgelöst hat).
-    const here = dirname(fileURLToPath(import.meta.url));
-    const src = readFileSync(resolve(here, 'cert-rotation.ts'), 'utf8');
-    expect(src, 'Deprecation-Marker fehlt').toMatch(/@deprecated/);
-    expect(src, 'Verweis auf den kanonischen Erneuerungs-Pfad fehlt').toMatch(/loadOrCreateTlsBundle/);
-    expect(src, 'Verweis auf den Live-Alert-Pfad fehlt').toMatch(/cert-expiry-monitor/);
   });
 });

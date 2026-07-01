@@ -8,6 +8,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.51 (Cleanup Hard-Remove, KEIN Deploy, kein Laufzeit-Change) — chore(cleanup): tote Legacy-Module `cert-rotation.ts` + `policy.ts` entfernen
+
+Abschluss der Deprecations #221/#222: beide Module (0 Produktions-Importeure, read-first auf
+`main @ 91a3b8b` erneut verifiziert) hart entfernt.
+
+- **Entfernt:** `cert-rotation.ts` + `cert-rotation.test.ts`, `policy.ts` + `policy.test.ts`.
+- **`cert-rotation-recheck.test.ts`**: RE-CHECK A (kanonischer Reissue-Pfad via `tls.ts`) **bleibt**; RE-CHECK B von „totes Modul/@deprecated-Guard" zu **Removal-Guard** (Datei weg + kein Importeur) umgeschrieben.
+- **NICHT angetastet:** `tls.ts loadOrCreateTlsBundle`, `cert-expiry-monitor.ts`, `crl.ts`, mTLS/Trust, `isApprovedPeerSender`, Vault-Approval-Flow, `discovery-policy.ts` (anderes lebendes Modul). `TODO.md` nachgezogen.
+- **Beleg:** tsc **0** (keine verwaisten Importe); volle Suite **106 Files / 1281 grün** (−18 = genau die gelöschten Tests); Removal-Guard empirisch bewiesen (Stub anlegen ⇒ rot).
+
 ### v0.34.50 (Lint-Cleanup, KEIN Deploy, keine Verhaltensänderung) — chore(lint): `require()` → ESM-`import` in Legacy-Modulen
 
 Drei `@typescript-eslint/no-require-imports`-Baseline-Errors (seit 2026-04-05) in den
