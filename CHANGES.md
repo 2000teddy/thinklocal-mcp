@@ -8,6 +8,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.50 (Lint-Cleanup, KEIN Deploy, keine Verhaltensänderung) — chore(lint): `require()` → ESM-`import` in Legacy-Modulen
+
+Drei `@typescript-eslint/no-require-imports`-Baseline-Errors (seit 2026-04-05) in den
+deprecateten Modulen beseitigt; das Paket ist `"type": "module"`.
+
+- **`cert-rotation.ts`**: `import forge from 'node-forge'` (wie `tls.ts`/`cert-issuer.ts`), inline-`require` raus.
+- **`policy.ts`**: `import { createHash } from 'node:crypto'` + `writeFileSync` zum `node:fs`-Import; beide inline-`require` raus.
+- **Verhaltens-identisch** (reine Import-Mechanik); node-forge ist harte Dependency → eager Import sicher.
+- **Beleg:** eslint auf beiden Dateien **3 Errors → 0**; tsc 0; volle Suite **106 Files / 1299 grün**.
+- **Tests**: `policy.test.ts` (+2: `getVersion`/`save` decken die konvertierten `createHash`/`writeFileSync`-Pfade). CR: Claude-Subagent APPROVE, 0× HIGH/CRITICAL; CR-NIT (getVersion/save untested) adressiert.
+
 ### v0.34.49 (Cleanup, KEIN Deploy, keine Verhaltensänderung) — chore(policy): `policy.ts`/`PolicyEngine` als @deprecated/Legacy markieren
 
 Totes Modul `policy.ts` (`PolicyEngine`, 0 Produktions-Importeure — nur `policy.test.ts`) trug

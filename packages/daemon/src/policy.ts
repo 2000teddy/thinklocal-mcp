@@ -26,8 +26,9 @@
  * @deprecated Nutze mTLS/Trust + `isApprovedPeerSender` (ADR-026) + Vault-Approval-Flow.
  */
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { createHash } from 'node:crypto';
 import type { Logger } from 'pino';
 
 // --- Policy-Typen ---
@@ -208,7 +209,6 @@ export class PolicyEngine {
       .map((p) => `${p.name}:${p.action}:${p.subject}:${p.resource}:${p.effect}:${p.priority ?? 0}`)
       .sort()
       .join('|');
-    const { createHash } = require('node:crypto');
     return createHash('sha256').update(data).digest('hex').slice(0, 16);
   }
 
@@ -249,7 +249,6 @@ export class PolicyEngine {
   save(): void {
     const policyPath = resolve(this.dataDir, 'policies.json');
     const custom = this.policies.filter((p) => !p.name.startsWith('default-'));
-    const { writeFileSync } = require('node:fs');
     writeFileSync(policyPath, JSON.stringify(custom, null, 2));
     this.log?.info({ count: custom.length }, 'Policies gespeichert');
   }
