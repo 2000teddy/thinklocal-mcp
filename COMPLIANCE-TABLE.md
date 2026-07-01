@@ -1309,4 +1309,14 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-07-01 06:10 — v0.34.51 chore(cleanup): tote Legacy-Module hart entfernen.*
+## Session 2026-07-01 12:17 — v0.34.52 fix(tls): token-onboarded Bundle fail-closed gegen ca.crt.pem validieren (127b)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|------------------------------------|
+| v0.34.52 | (offen, base=main) | 2026-07-01 12:17 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | CR Claude-Security-Subagent: 1× MEDIUM (falscher caCertPem-Anchor auf entferntem Retention-Fallback) — behoben durch Entfernen des Fallbacks; Re-Review APPROVE, 0× HIGH/MEDIUM offen |
+
+**CO/CG:** n/a — Security-Hardening-Bugfix (pre-existing CR-MEDIUM, TODO #127b), kein Architektur-Neuentwurf. **TS:** neuer `describe`-Block „127b — Token-onboarded Bundle" in `tls.test.ts` (der token-onboarded Zweig war **komplett ungetestet**): 6 Regressionstests (gültig-durchgereicht+Anchor-verifiziert, kanonisches Onboard, sowie fail-closed für nicht-signiert/Cert-Key-Mismatch/abgelaufene-CA/inkonsistenter-Anchor). `tls.test.ts` **38/38**, volle Suite **104 Files / 1287 grün**, `tsc` **0**, `npm run build` grün. **CR:** unabhängiger **Claude**-Security-Subagent (nur claude/codex/agy — `agy` fehlt im Env); fand 1× MEDIUM → aufgelöst durch Design-Vereinfachung (Fallback entfernt); Re-Review bestätigt kein Live-Node-Bruch, keine neuen Findings. **PC:** manuell (tsc/Build/Suite grün, Secret-Scan sauber, `git diff`/`status` reviewed) — `agy`-Backend fehlt. **DO:** `changes/2026-07-01_tls-token-onboard-ca-validate.md`, COMPLIANCE. **Status:** Nur Verhaltensänderung für **inkonsistente/ungültige** Token-Bundles (fail-closed throw statt still servieren); gültige Bundles unverändert. Kein Deploy, kein Gerät, kein Christian-Gate.
+
+---
+
+*Letzte Aktualisierung: 2026-07-01 12:17 — v0.34.52 fix(tls): token-onboarded Bundle fail-closed validieren (127b).*
