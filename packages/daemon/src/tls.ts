@@ -278,11 +278,53 @@ export function loadOrCreateTlsBundle(
     // Token-onboarded node: has CA cert + node cert from admin, but no CA key.
     // This is correct — the CA key stays on the admin node. We use the
     // existing certs directly without generating anything new.
-    log?.info('Token-onboarded Node erkannt (CA-Cert ohne CA-Key) — verwende vorhandene Zertifikate');
     const certPem = readFileSync(nodeCertPath, 'utf-8');
     const keyPem = readFileSync(nodeKeyPath, 'utf-8');
     const caCertPem = readFileSync(caCertPath, 'utf-8');
-    return { certPem, keyPem, caCertPem };
+
+    // SECURITY (127b, CR-MEDIUM pre-existing): Ein token-onboarded Node hat KEINEN
+    // CA-Key und kann sein Node-Cert deshalb NICHT selbst neu ausstellen. Das
+    // gelieferte Bundle wird darum beim Laden fail-closed validiert, statt ein
+    // ungeprüftes Cert durchzureichen, das Peers ohnehin ablehnen (stiller
+    // Mesh-Ausfall). Die gelieferte `ca.crt.pem` IST der Trust-Anchor dieses
+    // Nodes — analog zum Frisch-Gen-Primärpfad prüfen wir:
+    //   (1) Node-Cert von genau dieser CA signiert + Leaf/CA zeitlich gültig
+    //       (verifyPeerCert, fail-closed auch auf CA-Gültigkeit, ADR-024 MEDIUM-1);
+    //   (2) Cert<->Key-Paar konsistent (kein gemischter node.crt/node.key-Stand).
+    // Ein kanonisch (von einer Attesting-CA) signiertes Cert wird korrekt token-
+    // onboarded, indem der Admin ebendiese Attesting-CA als `ca.crt.pem` mitliefert
+    // → (1) greift. Eine `ca.crt.pem`, die das Node-Cert NICHT verifiziert, ist ein
+    // inkonsistentes Bundle und wird abgewiesen (kein still gemischter Anchor).
+    let certKeyMatches = false;
+    try {
+      const privKey = forge.pki.privateKeyFromPem(keyPem) as forge.pki.rsa.PrivateKey;
+      const certPubKey = forge.pki.certificateFromPem(certPem).publicKey as forge.pki.rsa.PublicKey;
+      certKeyMatches = privKey.n.equals(certPubKey.n) && privKey.e.equals(certPubKey.e);
+    } catch {
+      certKeyMatches = false;
+    }
+
+    const signedByShippedCa = verifyPeerCert(caCertPem, certPem);
+
+    if (certKeyMatches && signedByShippedCa) {
+      log?.info(
+        'Token-onboarded Node erkannt (CA-Cert ohne CA-Key) — Bundle validiert, verwende vorhandene Zertifikate',
+      );
+      return { certPem, keyPem, caCertPem };
+    }
+
+    // Fail-closed: ohne CA-Key keine Selbst-Reissue möglich. Ein invalides Bundle
+    // (falsche/abgelaufene CA, fremder Key, Signatur-Mismatch) darf nicht als
+    // gültig durchgereicht werden — der Node muss per Admin-Token neu onboarden.
+    log?.error(
+      { signedByShippedCa, certKeyMatches },
+      'Token-onboarded Bundle ungültig: node.crt.pem verifiziert nicht gegen ca.crt.pem (Signatur/Gültigkeit/Key-Mismatch) — Re-Onboarding nötig',
+    );
+    throw new Error(
+      'Token-onboarded TLS-Bundle ungültig: node.crt.pem verifiziert nicht gegen ca.crt.pem ' +
+        '(Signatur, Gültigkeitsfenster oder Cert-Key-Mismatch). Ohne CA-Key ist keine Selbst-Reissue ' +
+        'möglich — bitte den Node per Admin-Token neu onboarden.',
+    );
   } else {
     needsCaReissue = true;
   }

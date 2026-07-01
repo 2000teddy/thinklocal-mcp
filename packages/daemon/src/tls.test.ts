@@ -248,6 +248,96 @@ describe('ADR-024 — Canonical-Cert-Retention', () => {
   });
 });
 
+// 127b (CR-MEDIUM pre-existing): Der token-onboarded Zweig (ca.crt.pem vorhanden, ca.key.pem
+// FEHLT — Key bleibt beim Admin) reichte das gelieferte Bundle bisher UNGEPRÜFT durch. Ohne
+// CA-Key kann der Node nicht selbst neu ausstellen → ein invalides Bundle muss fail-closed
+// abgewiesen werden, statt Peers ein ablehnbares Cert zu servieren (stiller Mesh-Ausfall).
+describe('127b — Token-onboarded Bundle: fail-closed Validierung (kein CA-Key)', () => {
+  const adminCa = createMeshCA('thinklocal', 'admin94');
+  const otherCa = createMeshCA('thinklocal', 'rogue');
+  const NODE = 'spiffe://thinklocal/host/th01/agent/claude-code';
+  const CANON = 'spiffe://thinklocal/node/12D3KooWTokenTEST';
+
+  // Token-onboard-Layout: ca.crt.pem vorhanden, ca.key.pem FEHLT, node.crt/node.key vom Admin.
+  function setupTokenOnboard(caCertPem: string, nodeCertPem: string, nodeKeyPem: string): string {
+    const dir = mkdtempSync(join(tmpdir(), 'tlmcp-127b-'));
+    const tls = join(dir, 'tls');
+    mkdirSync(tls, { recursive: true });
+    writeFileSync(join(tls, 'ca.crt.pem'), caCertPem);
+    // KEIN ca.key.pem — genau das triggert den token-onboarded Zweig.
+    writeFileSync(join(tls, 'node.crt.pem'), nodeCertPem);
+    writeFileSync(join(tls, 'node.key.pem'), nodeKeyPem);
+    return dir;
+  }
+
+  it('gültiges Bundle (node.crt von gelieferter CA signiert) → unverändert übernommen', () => {
+    const node = createNodeCert(adminCa, 'th01', NODE, ['10.10.10.80']);
+    const dir = setupTokenOnboard(adminCa.caCertPem, node.certPem, node.keyPem);
+    try {
+      const bundle = loadOrCreateTlsBundle(dir, 'th01', NODE, undefined, 'th01');
+      expect(bundle.certPem).toBe(node.certPem); // durchgereicht, NICHT regeneriert
+      expect(bundle.caCertPem).toBe(adminCa.caCertPem);
+      // Der zurückgegebene Anchor MUSS das servierte Cert verifizieren (kein Mismatch).
+      expect(verifyPeerCert(bundle.caCertPem, bundle.certPem)).toBe(true);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it('node.crt NICHT von gelieferter CA signiert → fail-closed throw', () => {
+    // node.crt von otherCa signiert, ca.crt.pem = adminCa → Signatur-Mismatch.
+    const rogueNode = createNodeCert(otherCa, 'th01', NODE, []);
+    const dir = setupTokenOnboard(adminCa.caCertPem, rogueNode.certPem, rogueNode.keyPem);
+    try {
+      expect(() => loadOrCreateTlsBundle(dir, 'th01', NODE, undefined, 'th01')).toThrow(
+        /verifiziert nicht gegen ca\.crt\.pem/,
+      );
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it('cert<->key-Mismatch → fail-closed throw', () => {
+    const node = createNodeCert(adminCa, 'th01', NODE, []);
+    const foreign = createNodeCert(adminCa, 'other', 'spiffe://thinklocal/host/other/agent/x', []);
+    // node.crt korrekt signiert, aber node.key ist FREMD.
+    const dir = setupTokenOnboard(adminCa.caCertPem, node.certPem, foreign.keyPem);
+    try {
+      expect(() => loadOrCreateTlsBundle(dir, 'th01', NODE, undefined, 'th01')).toThrow();
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it('ABGELAUFENE gelieferte CA → fail-closed throw (nicht still servieren)', () => {
+    const expiredCa = mintCaWithValidity(new Date(Date.now() - 400 * DAY), new Date(Date.now() - DAY));
+    const node = createNodeCert(expiredCa, 'th01', NODE, []);
+    const dir = setupTokenOnboard(expiredCa.caCertPem, node.certPem, node.keyPem);
+    try {
+      expect(() => loadOrCreateTlsBundle(dir, 'th01', NODE, undefined, 'th01')).toThrow();
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it('kanonisches Token-Onboard: Admin liefert Attesting-CA als ca.crt.pem → behalten + Anchor verifiziert', () => {
+    // Realistischer kanonischer Token-Onboard: der Admin liefert GENAU die Attesting-CA,
+    // die das kanonische node/<PeerID>-Cert signiert hat, als ca.crt.pem mit. → signedByShippedCa.
+    const canon = createNodeCert(adminCa, 'th01', CANON, ['10.10.10.80']);
+    const dir = setupTokenOnboard(adminCa.caCertPem, canon.certPem, canon.keyPem);
+    try {
+      const bundle = loadOrCreateTlsBundle(dir, 'th01', NODE, undefined, 'th01');
+      expect(bundle.certPem).toBe(canon.certPem); // kanonisches Cert unverändert behalten
+      expect(extractSpiffeUri(bundle.certPem)).toBe(CANON);
+      // Der zurückgegebene Anchor verifiziert das kanonische Cert (index.ts kann den Issuer auflösen).
+      expect(verifyPeerCert(bundle.caCertPem, bundle.certPem)).toBe(true);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it('inkonsistent: ca.crt.pem verifiziert das kanonische node.crt NICHT → fail-closed throw', () => {
+    // ca.crt.pem = otherCa, aber node.crt von adminCa signiert → kein still gemischter Anchor.
+    const canon = createNodeCert(adminCa, 'th01', CANON, ['10.10.10.80']);
+    const dir = setupTokenOnboard(otherCa.caCertPem, canon.certPem, canon.keyPem);
+    try {
+      expect(() => loadOrCreateTlsBundle(dir, 'th01', NODE, undefined, 'th01')).toThrow(
+        /verifiziert nicht gegen ca\.crt\.pem/,
+      );
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+});
+
 describe('TLS — Lokale CA und Zertifikate', () => {
   const ca = createMeshCA('test-mesh');
 
