@@ -1299,4 +1299,14 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-06-30 18:36 — v0.34.50 chore(lint): require()→import in Legacy-Modulen.*
+## Session 2026-07-01 06:10 — v0.34.51 chore(cleanup): tote Legacy-Module hart entfernen
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|------------------------------------|
+| v0.34.51 | (offen, base=main) | 2026-07-01 06:10 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | (Review folgt) Hard-Remove `cert-rotation.ts`+`policy.ts` (read-first: weiterhin 0 Produktions-Importeure); RE-CHECK A behalten, RE-CHECK B → Removal-Guard; empirisch guard-bewiesen |
+
+**CO/CG:** n/a — Cleanup/Hard-Remove-Slice (totes Legacy), keine Design-Frage, kein Laufzeit-Change. **TS:** entfernt `cert-rotation.test.ts` + `policy.test.ts` (Tests der gelöschten Module); `cert-rotation-recheck.test.ts` behält RE-CHECK A (kanonischer Reissue-Pfad via `tls.ts`) + Removal-Guard (Datei weg + kein Importeur). tsc **0** (keine verwaisten Importe). Volle Suite **106 Files / 1281 grün** (−18 = genau die gelöschten `policy.test.ts` (13) + `cert-rotation.test.ts` (5); keine anderen Tests betroffen). Empirischer Beleg: `cert-rotation.ts`-Stub wieder angelegt ⇒ Removal-Guard rot, entfernt ⇒ grün. **CR:** unabhängiger **Claude**-Subagent (nur claude/codex/agy — `agy` fehlt im Env) — s. PR-Body. **PC:** manuell (tsc/Suite grün, `git diff`/`git status` reviewed) — `agy`-Backend fehlt. **DO:** CHANGES (v0.34.51), COMPLIANCE, `changes/2026-07-01_remove-dead-legacy-modules.md`, TODO.md. **Status:** Hard-Remove durch; realer Laufzeitpfad (tls.ts/cert-expiry-monitor/mTLS/isApprovedPeerSender/Vault-Approval) unberührt. Kein Deploy.
+
+---
+
+*Letzte Aktualisierung: 2026-07-01 06:10 — v0.34.51 chore(cleanup): tote Legacy-Module hart entfernen.*

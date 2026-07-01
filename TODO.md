@@ -259,7 +259,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [x] 🟡 Deno-Isolate als dritte Sandbox-Option — `sandbox.ts` fuehrt `runtime=deno` mit `deno run --no-prompt`, expliziten `--allow-*`-Flags und lokalem `DENO_DIR` im Skill-Verzeichnis aus (2026-04-07)
 
 ### 3.4 Policy Engine
-> **⚠️ 2026-06-30: `policy.ts`/`PolicyEngine` als @deprecated/Legacy markiert** (totes Modul, 0 Produktions-Importeure). Nie an den Request-Pfad angeschlossen. Real verdrahtete Autorisierung: mTLS/Trust + `isApprovedPeerSender` (ADR-026) + Vault-Approval-Flow (`vault.createApprovalRequest`). (`approval-gates.ts` ist ebenfalls unverdrahtet — nicht kanonisch.) Anschließen via ADR oder Entfernen = Folge-Slice.
+> **⚠️ 2026-07-01: `policy.ts`/`PolicyEngine` HART ENTFERNT** (war totes Modul, 0 Produktions-Importeure; erst @deprecated #222, dann entfernt). Nie an den Request-Pfad angeschlossen. Real verdrahtete Autorisierung: mTLS/Trust + `isApprovedPeerSender` (ADR-026) + Vault-Approval-Flow (`vault.createApprovalRequest`). Ein künftiger AUTHZ-Policy-Layer braucht ein eigenes ADR (nicht dieses Legacy wiederbeleben).
 - [x] 🔴 Policy Engine (leichtgewichtig statt OPA/Rego) — `policy.ts` mit JSON-Policies, deny-by-default (2026-04-05)
 - [x] 🔴 Standard-Policies: skill.execute (allow), credential.share (approval), skill.install (approval) (2026-04-05)
 - [x] 🟠 Policy-Verteilung über Mesh — exportForSync/importFromPeer in policy.ts (2026-04-05)
@@ -405,7 +405,7 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 - [x] 🔴 Diagnostik: `thinklocal doctor` (Daemon, Keys, Peers, MCP, Certs, Ports) (2026-04-04)
 - [x] 🟠 Recovery-Flows: abgelaufene Certs, Port-Konflikte, umbenannte Hosts — `recovery.ts` runRecoveryChecks() (2026-04-05)
 - [x] 🟠 Versioning: Kompatibilitaetsmatrix, graceful Degradation — `version-compat.ts` + FEATURE_MATRIX (2026-04-05)
-- [x] 🟡 Security-Lifecycle: Cert-Rotation, Revocation, Trust-Reset — `cert-rotation.ts` + `crl.ts` (2026-04-05). **⚠️ 2026-06-30: `cert-rotation.ts` als @deprecated/Legacy markiert** (totes Modul, 0 Produktions-Importeure — RE-CHECK-Verdikt). Kanonisch: Erneuerung via `loadOrCreateTlsBundle` (Reissue beim Start), Live-Alert via `cert-expiry-monitor.ts` (T2.1). `trustReset`/`auditCerts` bleiben unverdrahtete Manuell-Utilities.
+- [x] 🟡 Security-Lifecycle: Cert-Rotation, Revocation, Trust-Reset — `cert-rotation.ts` + `crl.ts` (2026-04-05). **⚠️ 2026-07-01: `cert-rotation.ts` HART ENTFERNT** (war totes Modul, 0 Produktions-Importeure — RE-CHECK-Verdikt; erst @deprecated #221, dann entfernt). Kanonisch: Erneuerung via `loadOrCreateTlsBundle` (Reissue beim Start), Live-Alert via `cert-expiry-monitor.ts` (T2.1). (`crl.ts` bleibt unberührt.)
 - [x] 🟡 Benutzerfreundliche Fehlermeldungen statt Stack-Traces — Farbige CLI-Ausgabe (2026-04-04)
 
 ---
