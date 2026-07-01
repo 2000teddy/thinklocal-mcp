@@ -1339,4 +1339,14 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-07-01 13:47 — v0.34.54 fix(mesh): Peer-Eintrag bei Flip auf kanonische agentId umschlüsseln (127a).*
+## Session 2026-07-01 14:20 — v0.34.55 docs(adr): ADR-031 Tailscale-Transport-Policy — T2.5-Entscheidungsvorlage (Doc-only)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|------------------------------------|
+| v0.34.55 | (offen, base=main) | 2026-07-01 14:20 | konsol. | n/a | n/a | ✅ | ✅ | ✅ | CR Claude-Faithfulness: quellentreu, konfliktfrei, bleibt Optionsvorlage; 1× LOW (Querverweis) präzisiert |
+
+**CO:** konsolidiert — Optionsvorlage aus **zwei** vorhandenen Admin-Decision-Prep-Drafts (06-30 + 07-01), keine neue Konsensrunde (Guardrail); die eigentliche Q4/Q5-Entscheidung bleibt **Christian** (nicht im ADR präjudiziert). **CG/TS:** n/a — Doc-only, kein Code. **CR:** unabhängiger **Claude**-Faithfulness-Subagent (nur claude/codex/agy — `agy` fehlt im Env): Empfehlungslinie A2+B2 quellentreu, Live-Belege/Policy-Schema 1:1 aus den Drafts, Status korrekt `Proposed/DRAFT`, Q4/Q5 offen gehalten, **kein** materieller Draft-Konflikt, keine Halluzination; 1× LOW (HTTPS-Fallback-Querverweis) präzisiert. **PC:** manuell (Quellen-Read-first, `git diff`/`status` reviewed, kein Code/Deploy). **DO:** `docs/architecture/ADR-031-tailscale-transport-policy.md` (neu), `changes/2026-07-01_adr-031-tailscale-transport.md`, CHANGES (v0.34.55). **Status:** reine Entscheidungsvorlage; Q4/Q5-Transport-Entscheidung bleibt Christian-gated. Kein Deploy, kein Transport-Umbau, kein Christian-Ping.
+
+---
+
+*Letzte Aktualisierung: 2026-07-01 14:20 — v0.34.55 docs(adr): ADR-031 Tailscale-Transport-Policy — T2.5-Entscheidungsvorlage.*
