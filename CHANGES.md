@@ -8,6 +8,28 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.56 (remote-forward-only, KEIN Net-Egress, KEIN Deploy) — feat(mcp): Modell-B MCP-Proxy — Share pal+unifi (T3.1) + Live-Ingress-Route /api/mcp/:server (T3.2)
+
+V5 Spur 3 (Modell B, kritischer Pfad), freigeschaltet durch **Christian-Gate Q1 = JA** (remote-forward-only;
+Hub serviert `pal`+`unifi`; local-exec später; `e3dc`/`idm` = knotengebundene Hardware, NICHT im Beta-Forward).
+
+- **T3.1:** `config/daemon.toml` deklariert `pal` + `unifi` als geteilte MCPs (`[[mcp.share]]`, default-open) →
+  Registrierung als `mcp:pal`/`mcp:unifi` (category=`mcp`) über den bereits verdrahteten Start-Pfad → fleet-weit
+  auflösbar. Read-only-Beta → Stufe `self`; schreibende Tools später → `gate` (`deriveExecutionTier`).
+- **T3.2:** `mcp-ingress-api.ts` (`registerMcpIngressApi`) hängt `POST /api/mcp/:server` in den mTLS-`cardServer`.
+  **D3-Sender-Auth** aus dem mTLS-Client-Cert (`extractCanonicalSender`, strikt `isCanonicalNodeUri`): kein/
+  ungültiger/nur-Legacy/malformter Cert → **403** (fail-closed, canonical-only). Danach reiner
+  `handleMcpIngress`-Ablauf (400/503). **Executor bewusst deferred → T3.3:** routbarer Dispatch → **501**
+  (KEIN Net-Egress); `local` → 501 „local-exec deferred (Q1)".
+- **TS:** `mcp-ingress-api.test.ts` (neu, 13), `mcp-share-beta.test.ts` (neu, 3, lädt echte config/daemon.toml),
+  Live-`inject()`-Route-Smoke (403 ohne Cert). Volle Suite **107 Files / 1312 grün**, tsc 0, eslint-authored 0, build 0.
+- **CR:** unabhängiger **Claude**-Subagent (adversarial; nur claude/codex/agy — `agy` fehlt im Env), 0× HIGH/CRITICAL;
+  **CR-M1** (loser SAN-Prefix-Match) → strikte `isCanonicalNodeUri`-Validierung + Regressionstests; **CR-L2**
+  (Self-Forward-1-Hop) als T3.3-Guard-Hinweis vermerkt. **DO:** ADR-028-D4 (T3.1/T3.2-Sektion), COMPLIANCE,
+  `changes/2026-07-01_t31-t32-modell-b-mcp-ingress.md`.
+- **Folge:** T3.3 Live-undici-mTLS-Executor (1-Hop-Guard, D2-Pin, beidseitiges Audit) → T3.4 → T3.5 Zwei-Peer-DoD.
+  **Kein Deploy.**
+
 ### v0.34.55 (Doc-only, KEIN Deploy, keine Entscheidung präjudiziert) — docs(adr): ADR-031 Tailscale-Transport-Policy — T2.5-Entscheidungsvorlage (Q4/Q5)
 
 V5 T2.5: die zwei vorhandenen Admin-Decision-Prep-Drafts (`hermes/reports/2026-06-30-…` +

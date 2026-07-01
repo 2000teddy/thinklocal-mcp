@@ -21,6 +21,7 @@ import { MessageType, encodeAndSign, createEnvelope, serializeSignedMessage, typ
 import { TaskManager } from './tasks.js';
 import { SkillManager, type SkillAnnouncePayload } from './skills.js';
 import { buildSharedMcpCapabilities, registerSharedMcps } from './mcp-registration.js';
+import { registerMcpIngressApi } from './mcp-ingress-api.js';
 import { registerDashboardApi } from './dashboard-api.js';
 import { registerInboxApi } from './inbox-api.js';
 import { AgentRegistry } from './agent-registry.js';
@@ -989,6 +990,20 @@ async function main(): Promise<void> {
         message_id: messageId,
       });
     },
+  });
+
+  // 8c3b. Modell-B MCP-Proxy-Ingress (v5 Spur 3, T3.2): POST /api/mcp/:server.
+  // D3-Sender-Auth aus dem mTLS-Client-Cert (403 bei ungueltigem/fehlendem Cert);
+  // remote-forward-only (Christian-Gate Q1 = JA) — der Live-undici-Executor ist T3.3.
+  registerMcpIngressApi(cardServer.getServer(), {
+    selfAgentId: selfIdentityUri,
+    resolvePeer: (agentId) => {
+      const peer = mesh.getPeer(agentId);
+      return peer ? { agentId, endpoint: peer.endpoint } : undefined;
+    },
+    getCapabilities: () => registry.getAllCapabilities(),
+    requireServerIdentity: outboundConnectPolicy.spiffeServerIdentity,
+    log,
   });
 
   // 8c4. Skill Discovery + Capability Activation (ioBroker-Moment, PR #110)
