@@ -106,3 +106,29 @@ serve_shared = false
 # permissions = ["network.read"]
 # trust_level = 4
 # share = false          # explizit NICHT teilen (opt-out)
+
+# ── v5 Spur 3 / Modell B Beta (T3.1, Christian-Gate Q1 = JA, 2026-07-01) ──
+# remote-forward-only: der Hub (TH01) serviert pal + unifi zentral; Spokes rufen sie
+# ueber ihren lokalen Daemon-Proxy (/api/mcp/<server>) auf. Diese Eintraege NUR auf
+# dem servierenden Hub aktiv lassen — Spoke-Nodes, die selbst nichts servieren,
+# entfernen sie (sonst wuerden sie faelschlich mcp:pal/mcp:unifi announcen).
+# Hardware-gebundene MCPs (e3dc, idm, ...) sind KNOTENGEBUNDEN und NICHT Teil des
+# Beta-Forwards — hier bewusst nicht deklariert.
+# Stufe (self/gate/consensus) wird aus permissions/trust_level abgeleitet; die
+# read-only-Beta (list_clients) ergibt `self`. Schreibende Tools spaeter → write/
+# control/credential in permissions ergaenzen → hebt automatisch auf `gate`.
+[[mcp.share]]
+server = "pal"
+description = "PAL — Multi-Modell-Berater & Reviewer (Konsens, Code-Review, Chat, Planung)"
+tools = ["chat", "consensus", "codereview", "thinkdeep", "planner"]
+version = "1.0.0"
+permissions = ["query"]
+trust_level = 5
+
+[[mcp.share]]
+server = "unifi"
+description = "UniFi-Controller — Netzwerk-Status & Client-Liste"
+tools = ["list_clients", "list_devices", "get_status"]
+version = "1.0.0"
+permissions = ["network.read"]
+trust_level = 4
