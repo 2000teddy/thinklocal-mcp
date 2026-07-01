@@ -8,6 +8,27 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.54 (Kosmetisch/Bookkeeping, KEIN Deploy, keine Autorisierungs-Semantik) — fix(mesh): Peer-Eintrag bei krypto-attestiertem Flip auf kanonische agentId umschlüsseln (127a)
+
+TODO #127(a): Nach einem **krypto-attestierten** Identity-Flip (`markPeerIdVerified`, `senderUri`
+kanonisch = `node/<PeerID>`) blieb der Ziel-Eintrag in `MeshManager.peers` unter seiner **Legacy**-
+agentId (`host/<id>`) gekeyed; Bookkeeping/Logs/`mesh_status` zeigten die veraltete Identität. Die
+Auflösung (`resolvePeerPublicKey`) lief schon immer über `peer.libp2p.peerId + peerIdVerified` —
+**key-unabhängig** (daher „funktional gelöst").
+
+- **Fix:** Im bereits krypto-attestierten kanonischen-Flip-Block (nach der Duplikat-Supersession) wird
+  der Eintrag auf die kanonische agentId (`= senderUri`) umgeschlüsselt (Map-Key + `peer.agentId`).
+  Reine Key-/Darstellungs-Konsistenz, **keine** Änderung an Auflösung/Autorisierung/PeerID-Bindung.
+- **Eng gehalten:** Re-Key NUR im eindeutigen PeerID-Pfad (exakter `senderUri`- oder `byPeerId`-Match),
+  **nicht** im schwächeren `remoteHost`-Host-Bind-Fallback (fragile `.56/.222`-Flip-Nodes) —
+  `targetViaRemoteHost`-Flag; deren Verhalten bleibt unverändert. Defensiver `occupant`-Guard gegen
+  Fremd-/Duplicate-Key-Überschreibung. **Transaktional:** `rollback()` (bei fehlgeschlagener Envelope-
+  Signatur) dreht das Re-Key vollständig zurück (vor dem Restore superseder Duplikate).
+- **Tests:** 3 neue (`mesh.test.ts`): Re-Key, Rollback, keine Fremd-/Duplicate-Key-Korruption; ein
+  bestehender Spoof-Safe-Test auf den kanonischen Key nachgezogen (reine Bookkeeping-Anpassung,
+  Security-Assertion unverändert). `mesh.test.ts` **34/34**, volle Suite **104 Files / 1290 grün**,
+  `tsc` 0, build grün. CR: Claude-Subagent — solide, kein HIGH/CRITICAL/MEDIUM.
+
 ### v0.34.53 (Pure-Test, KEIN Deploy, keine Runtime-Änderung) — test(mtls): dedizierter Issuer-Fingerprint-Integrationstest (127c)
 
 TODO #127(c): die bisher nur **live bewiesene** mTLS-Invariante `issuerCertificate.fingerprint256 ===

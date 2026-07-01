@@ -1329,4 +1329,14 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-07-01 13:19 — v0.34.53 test(mtls): dedizierter Issuer-Fingerprint-Integrationstest (127c).*
+## Session 2026-07-01 13:47 — v0.34.54 fix(mesh): Peer-Eintrag bei krypto-attestiertem Flip auf kanonische agentId umschlüsseln (127a)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|------------------------------------|
+| v0.34.54 | (offen, base=main) | 2026-07-01 13:47 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | CR Claude-Subagent: solide, 0× HIGH/CRITICAL/MEDIUM; 2× LOW (occupant-Guard-Test praktisch unerreichbar/Defensiv, Rollback-Kommentar) — Kommentar präzisiert |
+
+**CO/CG:** n/a — kosmetischer Bookkeeping-Fix (TODO #127a), keine Design-Frage, keine Autorisierungs-/Binding-Semantik. **TS:** 3 neue `mesh.test.ts`-Tests — (1) krypto-attestierter Flip schlüsselt Legacy-Eintrag auf kanonische agentId um (Key+Feld, kein Offline-Event, Auflösung unverändert), (2) `rollback()` stellt Legacy-Key+agentId+`peerIdVerified=false` wieder her, (3) keine Fremd-/Duplicate-/Orphan-Key-Korruption (fremder Peer unberührt, genau 2 Einträge); ein bestehender Spoof-Safe-Test auf den kanonischen Key nachgezogen (Bookkeeping, Security-Assertion `ok=false` unverändert). `mesh.test.ts` **34/34**, volle Suite **104 Files / 1290 grün**, `tsc` 0, `npm run build` grün. **CR:** unabhängiger **Claude**-Subagent (nur claude/codex/agy — `agy` fehlt im Env); durchgespielt: Re-Key↔Supersession-Reihenfolge, inverse Rollback-Ordnung, Spoof-Schutz + `!targetViaRemoteHost`-Guardrail intakt — solide, kein HIGH/CRITICAL/MEDIUM. **PC:** manuell (tsc/build/suite grün, Diff auf `mesh.ts`+`mesh.test.ts` beschränkt, `git diff`/`status` reviewed) — `agy`-Backend fehlt. **DO:** `changes/2026-07-01_mesh-peer-canonical-rekey.md`, CHANGES (v0.34.54), COMPLIANCE, `TODO.md` #127a. **Status:** Reine Map-/Darstellungs-Konsistenz im bereits verifizierten Flip-Pfad; `.56/.222`-Host-Bind-Pfad + Autorisierung unverändert. Kein Deploy, kein Gerät, kein Christian-Gate, keine ADR-024/.94/cert-SAN/live-flip-Arbeit.
+
+---
+
+*Letzte Aktualisierung: 2026-07-01 13:47 — v0.34.54 fix(mesh): Peer-Eintrag bei Flip auf kanonische agentId umschlüsseln (127a).*
