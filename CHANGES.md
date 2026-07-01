@@ -8,6 +8,23 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.55 (Doc-only, KEIN Deploy, keine Entscheidung präjudiziert) — docs(adr): ADR-031 Tailscale-Transport-Policy — T2.5-Entscheidungsvorlage (Q4/Q5)
+
+V5 T2.5: die zwei vorhandenen Admin-Decision-Prep-Drafts (`hermes/reports/2026-06-30-…` +
+`…2026-07-01_…`) read-first zu **einem** Repo-ADR konsolidiert:
+`docs/architecture/ADR-031-tailscale-transport-policy.md`.
+
+- **Charakter:** reine **Optionsvorlage** (Status `Proposed/DRAFT`) — präjudiziert **keine** Live-
+  Entscheidung, ändert keine Config, stellt keinen Peer um, kein Deploy. Q4/Q5 bleiben ausdrücklich
+  Christians Entscheid.
+- **Empfehlungslinie (nicht bindend):** A2 (pro-peer Failover) + B2 (Tailscale-only DERP, kein
+  Beta-`relay_service` auf TH01); mTLS/SPIFFE bleibt über allen Transporten die AuthN/AuthZ-Schicht.
+- Enthält Live-Belege (TH01 2026-07-01: TS wählt auf dem LAN den Direktpfad ~2–4 ms, `fra`-DERP nur
+  Roaming-Fallback), das Policy-Schema (`preferred`/`fallback`/`identity`/`relay`) + Beta-Defaults und
+  die offenen Christian-Entscheide (Q4/Q5, Tailnet-ACL, HTTPS-Fallback).
+- Die zwei Quell-Drafts sind materiell konsistent (kein Konflikt). CR: Claude-Faithfulness-Review —
+  quellentreu, konfliktfrei, bleibt Optionsvorlage; 1× LOW (Querverweis) präzisiert.
+
 ### v0.34.54 (Kosmetisch/Bookkeeping, KEIN Deploy, keine Autorisierungs-Semantik) — fix(mesh): Peer-Eintrag bei krypto-attestiertem Flip auf kanonische agentId umschlüsseln (127a)
 
 TODO #127(a): Nach einem **krypto-attestierten** Identity-Flip (`markPeerIdVerified`, `senderUri`
