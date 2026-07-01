@@ -1319,4 +1319,14 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-07-01 12:17 — v0.34.52 fix(tls): token-onboarded Bundle fail-closed validieren (127b).*
+## Session 2026-07-01 13:19 — v0.34.53 test(mtls): dedizierter Issuer-Fingerprint-Integrationstest (127c)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|------------------------------------|
+| v0.34.53 | (offen, base=main) | 2026-07-01 13:19 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | CR Claude-Test-Review: solide, 0× HIGH/CRITICAL; 1× LOW (Format-Divergenz selbst-dokumentieren) übernommen |
+
+**CO/CG:** n/a — Pure-Test-Slice (TODO #127c), keine Design-Frage, keine Runtime-Änderung. **TS:** IST der Slice — neue `packages/daemon/src/mtls-issuer-fingerprint.test.ts`: echter `node:tls`-mTLS-Handshake, exerziert den Produktionspfad (`resolveAttestingCaFingerprints → isAttestingIssuer → attestedPeerIdFromCert`) gegen die Wire-Werte `getPeerCertificate(true).issuerCertificate.fingerprint256` + `subjectaltname` (wie `agent-card.ts`); 6 Assertions inkl. Negativkontrolle (fremde CA) + Format-Divergenz. **6/6** grün, volle Suite **105 Files / 1293 grün**, `tsc` 0, `eslint` (neue Datei) 0, `npm run build` grün. **CR:** unabhängiger **Claude**-Test-Subagent (nur claude/codex/agy — `agy` fehlt im Env) — verifizierte Kernannahmen gegen `dist/` (Wire divergiert real, kein Tautologie-Grün); solide, kein HIGH/CRITICAL. **PC:** manuell (tsc/build/suite/lint grün, Secret-Scan sauber, `git diff`/`status` reviewed) — `agy`-Backend fehlt. **DO:** `changes/2026-07-01_mtls-issuer-fingerprint-test.md`, CHANGES (v0.34.53), COMPLIANCE, `TODO.md` #127c. **Status:** Reine Testabdeckung; kein Produktionscode berührt. Kein Deploy, kein Gerät, kein Christian-Gate.
+
+---
+
+*Letzte Aktualisierung: 2026-07-01 13:19 — v0.34.53 test(mtls): dedizierter Issuer-Fingerprint-Integrationstest (127c).*
