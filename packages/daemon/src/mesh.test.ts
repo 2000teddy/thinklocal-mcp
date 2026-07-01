@@ -194,6 +194,62 @@ describe('MeshManager — ADR-022 Phase-3 Identity-Supersession (CR gpt-5.5 HIGH
     expect(mesh.resolvePeerPublicKey(canonical)).toBe('KEY-V');
   });
 
+  it('127a: krypto-attestierter Flip schlüsselt den Legacy-Eintrag auf die kanonische agentId um (kosmetisch)', () => {
+    const { mesh, offline } = mkOffline();
+    // Nur der Legacy-Eintrag existiert (Discovery-Lag: kanonische mDNS-Ankündigung noch nicht da).
+    mesh.addPeer(disc({ agentId: LEGACY, p2pPeerId: PID }));
+    mesh.updateAgentCard(LEGACY, card('KEY-V', LEGACY));
+    const res = mesh.markPeerIdVerified(PID, canonical);
+    expect(res.ok).toBe(true);
+    // Umgeschlüsselt: unter kanonischer agentId auffindbar (Key UND Feld), Legacy-Key weg …
+    const peer = mesh.getPeer(canonical);
+    expect(peer).toBeDefined();
+    expect(peer!.agentId).toBe(canonical);
+    expect(mesh.getPeer(LEGACY)).toBeUndefined();
+    // … aber NICHT offline gesetzt (Re-Key ist kein removePeer) …
+    expect(offline).not.toContain(LEGACY);
+    // … und funktional unverändert: die Auflösung klappt weiter (peerId + verified).
+    expect(mesh.resolvePeerPublicKey(canonical)).toBe('KEY-V');
+  });
+
+  it('127a: rollback() dreht das Re-Key zurück (Legacy-Key + agentId zurück, Sig-Fehler-Pfad)', () => {
+    const { mesh } = mkOffline();
+    mesh.addPeer(disc({ agentId: LEGACY, p2pPeerId: PID }));
+    mesh.updateAgentCard(LEGACY, card('KEY-V', LEGACY));
+    const res = mesh.markPeerIdVerified(PID, canonical);
+    expect(res.ok).toBe(true);
+    expect(mesh.getPeer(canonical)).toBeDefined();
+    // agent-card.ts ruft rollback() bei fehlgeschlagener Envelope-Signatur → alles zurück.
+    res.rollback();
+    const peer = mesh.getPeer(LEGACY);
+    expect(peer).toBeDefined();
+    expect(peer!.agentId).toBe(LEGACY);
+    expect(mesh.getPeer(canonical)).toBeUndefined();
+    expect(peer!.libp2p.peerIdVerified).toBe(false); // auch die tentative Bindung zurückgedreht
+  });
+
+  it('127a: Re-Key korrumpiert keine fremden Einträge und erzeugt keinen Duplicate-/Orphan-Key', () => {
+    const { mesh } = mkOffline();
+    const OTHER_PID = '12D3KooWOtherPeerAbc123def456ghi789jkl012mno345pqr';
+    const OTHER_LEGACY = 'spiffe://thinklocal/host/otherhost/agent/claude-code';
+    // Ziel-Peer (Legacy, PID) + ein FREMDER Peer (andere PeerID, anderer Key/Host).
+    mesh.addPeer(disc({ agentId: LEGACY, p2pPeerId: PID }));
+    mesh.updateAgentCard(LEGACY, card('KEY-V', LEGACY));
+    mesh.addPeer(disc({ agentId: OTHER_LEGACY, p2pPeerId: OTHER_PID, host: '10.10.10.20' }));
+    mesh.updateAgentCard(OTHER_LEGACY, card('OTHER-KEY', OTHER_LEGACY));
+    // Nur den Ziel-Peer flippen.
+    expect(mesh.markPeerIdVerified(PID, canonical).ok).toBe(true);
+    // Ziel umgeschlüsselt …
+    expect(mesh.getPeer(canonical)!.agentId).toBe(canonical);
+    expect(mesh.getPeer(LEGACY)).toBeUndefined();
+    // … der FREMDE Peer bleibt vollständig unberührt (Key + agentId) …
+    const other = mesh.getPeer(OTHER_LEGACY);
+    expect(other).toBeDefined();
+    expect(other!.agentId).toBe(OTHER_LEGACY);
+    // … und es bleiben GENAU zwei Einträge (keine Verwaisung, keine Dopplung).
+    expect(mesh.getOnlinePeers().length).toBe(2);
+  });
+
   it('Fallback ohne senderUri bleibt fail-closed bei Ambiguität (Rückwärtskompatibilität)', () => {
     const mesh = mkMesh();
     const aaa = 'spiffe://thinklocal/host/aaa/agent/claude-code';
@@ -244,9 +300,13 @@ describe('MeshManager.markPeerIdVerified — Bug #2: Host-Bind der attestierten 
     mesh.addPeer(disc({ agentId: LEGACY, host: '10.10.10.80', p2pPeerId: OTHER }));
     mesh.updateAgentCard(LEGACY, card('K', LEGACY));
     mesh.markPeerIdVerified(OTHER, peerIdToSpiffeUri(OTHER), '10.10.10.80'); // erst auf OTHER verifiziert
+    // 127a: Der OTHER-Flip läuft über den eindeutigen PeerID-Pfad → der Eintrag wird auf die
+    // kanonische node/OTHER-agentId umgeschlüsselt (Legacy-Key weg). Die Security-Semantik ändert
+    // sich NICHT — der folgende Spoof-Versuch bleibt abgelehnt.
+    const otherCanon = peerIdToSpiffeUri(OTHER);
     // Versuch, denselben Host-Eintrag auf eine FREMDE PeerID umzubinden → abgelehnt.
     expect(mesh.markPeerIdVerified(PID, canonical, '10.10.10.80').ok).toBe(false);
-    expect(mesh.getPeer(LEGACY)!.libp2p.peerId).toBe(OTHER);
+    expect(mesh.getPeer(otherCanon)!.libp2p.peerId).toBe(OTHER);
   });
 
   it('CR-HIGH transaktional: rollback() macht Host-Bind + Supersession rückgängig (Sig-Fehler-Pfad)', () => {

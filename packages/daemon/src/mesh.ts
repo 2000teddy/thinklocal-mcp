@@ -400,6 +400,11 @@ export class MeshManager {
         const byPeerId = [...this.peers.values()].filter((p) => p.libp2p.peerId === peerId);
         if (byPeerId.length === 1) target = byPeerId[0] ?? null;
       }
+      // 127a: Merkt, ob das Ziel über den schwächeren Host-Bind-Fallback (3) gefunden wurde.
+      // In DIESEM Pfad (fragile .56/.222-Flip-Nodes, deren kanonische Identität via mDNS/Card
+      // noch nicht propagiert ist) wird NICHT umgeschlüsselt — nur die eindeutige, bereits
+      // PeerID-konsistente Entdeckung (1)/(2) ist ein sicheres Re-Key-Signal.
+      let targetViaRemoteHost = false;
       // (3) Bug #2 (.56/.222): Empfänger ohne gelernte PeerID (kein mDNS-TXT/static_peer, stale
       // Card) → (1)/(2) greifen nicht. Die Cert-Attestierung BEWEIST die PeerID kryptografisch;
       // `remoteHost` ist die TLS-authentifizierte Source-IP DIESER Verbindung. Binde an den
@@ -416,7 +421,10 @@ export class MeshManager {
               (p.libp2p.peerId === null || p.libp2p.peerId === peerId) &&
               !(p.libp2p.peerIdVerified && p.libp2p.peerId !== peerId),
           );
-          if (cands.length === 1) target = cands[0] ?? null;
+          if (cands.length === 1) {
+            target = cands[0] ?? null;
+            if (target) targetViaRemoteHost = true;
+          }
         }
       }
       if (!target) return NOOP;
@@ -439,6 +447,9 @@ export class MeshManager {
       // Krypto-attestierte Supersession (nur bei kanonischem Sender = echter Flip): alte
       // Duplikate derselben PeerID entfernen. Entfernte Einträge werden für Rollback gesichert.
       const removed: Array<[string, MeshPeer]> = [];
+      // 127a (kosmetisch): Re-Key des Eintrags auf die kanonische agentId (Rollback-Info).
+      const priorAgentId = t.agentId;
+      let rekeyedFromLegacy = false;
       if (spiffeUriToPeerId(senderUri) === peerId) {
         for (const [id, p] of [...this.peers.entries()]) {
           if (p !== t && p.libp2p.peerId === peerId) {
@@ -447,12 +458,40 @@ export class MeshManager {
             this.removePeer(id);
           }
         }
+        // 127a: Nach dem KRYPTO-ATTESTIERTEN Flip trägt der Eintrag noch die LEGACY-agentId
+        // (+ Map-Key). Auf die kanonische agentId (= `senderUri`) umschlüsseln, damit
+        // Bookkeeping/Logs/mesh_status die wahre Identität zeigen. Funktional war die Auflösung
+        // schon via verifizierte PeerID gelöst — dies ist reine Key-/Darstellungs-Konsistenz.
+        // Sicher NUR hier (issuer-gepinnt attestiert, nicht im rohen mDNS-Pfad). Der Zielschlüssel
+        // ist nach der Supersession-Schleife frei (Duplikate mit dieser PeerID sind entfernt);
+        // defensiv nur re-keyen, wenn `senderUri` frei oder bereits `t` ist. Transaktional.
+        if (t.agentId !== senderUri && !targetViaRemoteHost) {
+          const occupant = this.peers.get(senderUri);
+          if (!occupant || occupant === t) {
+            this.peers.delete(priorAgentId);
+            t.agentId = senderUri;
+            this.peers.set(senderUri, t);
+            rekeyedFromLegacy = true;
+            this.log?.info(
+              { from: priorAgentId, to: senderUri, peerId },
+              'ADR-022 Flip: Peer-Eintrag auf kanonische agentId umgeschlüsselt (127a)',
+            );
+          }
+        }
       }
       return {
         ok: true,
         rollback: () => {
           t.libp2p.peerId = prior.peerId;
           t.libp2p.peerIdVerified = prior.verified;
+          // 127a: Re-Key VOR dem Restore der Duplikate zurückdrehen — sonst könnte ein
+          // superseded Duplikat, das ursprünglich unter `senderUri` lag, beim Restore mit dem
+          // noch-re-gekeyten `t` kollidieren. Erst `senderUri` freigeben, dann Duplikate zurück.
+          if (rekeyedFromLegacy) {
+            this.peers.delete(senderUri);
+            t.agentId = priorAgentId;
+            this.peers.set(priorAgentId, t);
+          }
           for (const [id, p] of removed) if (!this.peers.has(id)) this.peers.set(id, p);
         },
       };
