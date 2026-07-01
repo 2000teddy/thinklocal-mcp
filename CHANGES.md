@@ -8,6 +8,30 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.52 (Security-Hardening, KEIN Deploy) — fix(tls): token-onboarded Bundle fail-closed gegen `ca.crt.pem` validieren (127b)
+
+Pre-existing CR-MEDIUM (TODO #127b): Der **token-onboarded Zweig** in `tls.ts loadOrCreateTlsBundle`
+(Node besitzt `ca.crt.pem` + `node.crt.pem`/`node.key.pem` vom Admin, aber **keinen** `ca.key.pem`)
+reichte das gelieferte Bundle bisher **ungeprüft** durch — im Gegensatz zum Frisch-Gen-/Reuse-Pfad,
+der Signatur, Zeitfenster und Cert↔Key-Match validiert. Ein beschädigtes/abgelaufenes/fremd-signiertes
+Bundle wurde als gültig serviert → Peers lehnen es in der mTLS-Handshake ab → **stiller Mesh-Ausfall**.
+Ohne CA-Key kann der Node nicht selbst neu ausstellen.
+
+- **Fix:** Die gelieferte `ca.crt.pem` **ist** der Trust-Anchor. Analog zum Frisch-Gen-Primärpfad
+  fail-closed validieren: `certKeyMatches && verifyPeerCert(caCertPem, certPem)` (Signatur + Leaf- +
+  CA-Gültigkeit, ADR-024 MEDIUM-1) → sonst **`throw`** mit Operator-Meldung. Der zurückgegebene Anchor
+  verifiziert das Cert damit **immer** (`index.ts` kann den Issuer auflösen und kanonisch flippen).
+- **Kanonische Nodes (ADR-024):** korrekt onboarded, indem der Admin die Attesting-CA (z. B. `.94`) als
+  `ca.crt.pem` mitliefert → greift. Der own-CA-Fall hat per Definition einen `ca.key` und erreicht diesen
+  Zweig nie. **Keine Verhaltensänderung für gültige Bundles**; nur inkonsistente/ungültige werden abgewiesen.
+- **Tests:** neuer `describe`-Block „127b" (Zweig war **ungetestet**) — 6 Regressionstests
+  (gültig-durchgereicht +Anchor-verifiziert, kanonisches Onboard, sowie fail-closed für nicht-signiert /
+  Cert-Key-Mismatch / abgelaufene-CA / inkonsistenter-Anchor). `tls.test.ts` **38/38**, volle Suite
+  **104 Files / 1287 grün**, `tsc` **0**, `npm run build` grün.
+- **CR:** Claude-Security-Subagent — 1× MEDIUM (falscher `caCertPem`-Anchor auf einem `retainableCanonical`-
+  Fallback) → **Fallback entfernt** (widersprüchlicher Zustand ohne realen Onboarding-Weg); Re-Review APPROVE,
+  0× HIGH/MEDIUM offen. (`agy`-Backend im Env nicht verfügbar → Claude-Subagent statt `pal:codereview`.)
+
 ### v0.34.51 (Cleanup Hard-Remove, KEIN Deploy, kein Laufzeit-Change) — chore(cleanup): tote Legacy-Module `cert-rotation.ts` + `policy.ts` entfernen
 
 Abschluss der Deprecations #221/#222: beide Module (0 Produktions-Importeure, read-first auf
