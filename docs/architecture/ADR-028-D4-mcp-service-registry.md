@@ -153,3 +153,35 @@ behalten).
 
 **NICHT enthalten (Christians Gate):** der echte undici-mTLS-Forward-Executor (Net-Egress), das
 Fastify-Route-Wiring in den Live-`cardServer`, das lokale Serving und das 3-Stufen-Enforcement (D4-d).
+
+### T3.1 + T3.2 — Live-Ingress-Wiring + Beta-Share (v5 Spur 3, Modell B; Christian-Gate Q1 = **JA**)
+
+**Gate-Öffnung (2026-07-01):** v5-WORKING §9 Q1 = **JA — remote-forward-only; local-exec später**
+(Hub serviert zentral `pal` + `unifi`; `e3dc`/`idm` usw. sind knotengebundene Hardware und **NICHT**
+Teil des Beta-Forwards). Das schaltet Spur 3 frei (T3.1 → T3.2 → T3.3 → T3.4 → T3.5, strikt linear).
+Damit ersetzt Christians Q1-Entscheid das bisherige „Christian-Gate" aus den D4-b-Prep-Slices; die
+Architektur ist unverändert die aus ADR-028 D4 (kein neuer Konsens nötig).
+
+**T3.1 — `[[mcp.share]]` für `pal` + `unifi` (remote-forward-only):** `config/daemon.toml` deklariert
+die beiden Hub-servierten MCPs als geteilt (`share=true`, default-open). Beim Start registriert der
+bereits verdrahtete Pfad (`buildSharedMcpCapabilities`/`registerSharedMcps`, index.ts) sie als
+`mcp:pal` / `mcp:unifi` (category=`mcp`) in der replizierten Registry → fleet-weit auflösbar. **Scope:**
+nur Hub-Deployment (Spoke-Nodes, die nichts servieren, nehmen die Einträge heraus). Hardware-gebundene
+MCPs (`e3dc`, `idm`, …) werden bewusst **nicht** deklariert. Beta-`permissions`/`trust_level` spiegeln
+den read-only-DoD (`list_clients`) → abgeleitete Stufe `self`; sobald schreibende Tools ergänzt werden,
+heben `write`/`control`/`credential`-Permissions die Stufe automatisch auf `gate` (`deriveExecutionTier`).
+
+**T3.2 — Fastify-Route `POST /api/mcp/:server` + D3-Sender-Auth aus mTLS-Cert:** `mcp-ingress-api.ts`
+(`registerMcpIngressApi`) hängt den Ingress in den Live-`cardServer` (mTLS, `requestCert`+
+`rejectUnauthorized`). **D3-Auth:** `extractCanonicalSender(socket)` liest den bereits CA-validierten
+Client-Cert-SAN (`request.raw.socket`, nur `authorized===true`; `getPeerCertificate(true)` →
+`spiffeUrisFromSubjectAltName`) und wählt die **kanonische** `spiffe://thinklocal/node/<PeerID>`-SAN.
+Kein/ungültiger/nur-Legacy-Cert → `senderUri=null` → `handleMcpIngress` antwortet **403** (neuer
+Endpoint = canonical-only, kein Legacy-Kompat). `isAuthorizedSender = authorizeHttpsSender(u, san).ok`
+bindet den Aufrufer kryptografisch an die Verbindung. Danach der reine `handleMcpIngress`-Ablauf
+(#199): 400 leerer Server → resolve/plan/spec/dispatch → 503 `none`.
+
+**Executor (bewusst deferred → T3.3):** remote-forward-only. Der injizierte `execute` quittiert einen
+routbaren Dispatch **fail-closed mit 501** — KEIN Net-Egress, KEIN local-exec (`local` → 501
+„local-exec deferred (Q1)"). Der echte persistente undici-mTLS-Forward (Streaming/Cancel/Timeout/
+**1-Hop-Guard**) ist **T3.3**; der Zwei-Peer-`tools/call`-Beweis + beidseitiges Audit ist **T3.5**.

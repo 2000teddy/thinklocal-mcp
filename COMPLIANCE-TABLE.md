@@ -1359,6 +1359,16 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
+## Session 2026-07-01 21:15 — v0.34.56 feat(mcp): Modell-B MCP-Proxy — Share pal+unifi (T3.1) + Live-Ingress /api/mcp/:server (T3.2)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|------------------------------------|
+| v0.34.56 | #229 (offen, base=main) | 2026-07-01 21:15 | s.u. | n/a | ✅ | ✅ | ✅ | ✅ | CR Claude adversarial: 0× HIGH/CRIT; CR-M1 (loser SAN-Match)→strikt+Test; CR-L2 (Self-1-Hop)→T3.3-Hinweis |
+
+**CO:** ersetzt durch **Christian-Gate Q1 = JA** (v5-WORKING §9) + bestehender ADR-028-D4-Konsens — die Architektur ist unverändert die konsentierte; keine neue Design-Frage, daher keine neue Konsensrunde. **CG:** n/a — kein Boilerplate/Type-Ableitung delegiert. **TS:** `mcp-ingress-api.test.ts` (neu, 13): `extractCanonicalSender` (kein Socket/nicht-authorized/kein-Cert/nur-Legacy/**CR-M1 malform**→null; canonical>legacy), Handler 403 (unauth/legacy/**CR-M1 node/evil/extra**), 400, 503, 501-remote (`/T3\.3/`), 501-local (`/local-exec deferred/`); `mcp-share-beta.test.ts` (neu, 3): lädt **echte** config/daemon.toml (pal+unifi geteilt, e3dc/idm NICHT, Bau ohne Skip). Live-`fastify.inject()`-Route-Smoke: 403 ohne Client-Cert. Volle Suite **107 Files / 1312 grün**, tsc 0, authored-eslint 0, build 0. **CR:** unabhängiger **Claude**-Subagent (adversarial Security+Correctness; nur claude/codex/agy — `agy` fehlt im Env): Gate fail-closed & korrekt, 0× HIGH/CRITICAL; **CR-M1 (MEDIUM)** loser `node/`-Prefix-Match → strikte `isCanonicalNodeUri`-Validierung + 2 Regressionstests; **CR-L2 (LOW)** Self-Forward-1-Hop als T3.3-Executor-Guard-Hinweis vermerkt (heute inert, 501). **PC:** manuell (tsc/authored-eslint/Suite/Build grün, `git diff` reviewed) — `agy`-Backend fehlt. **DO:** `config/daemon.toml`, `docs/architecture/ADR-028-D4-*` (T3.1/T3.2-Sektion), CHANGES (v0.34.56), COMPLIANCE, `changes/2026-07-01_t31-t32-modell-b-mcp-ingress.md`. **Status:** remote-forward-only, **kein Net-Egress, kein Deploy**; T3.3 (Live-undici-Executor, 1-Hop-Guard, D2-Pin, beidseitiges Audit) → T3.4 → T3.5 Zwei-Peer-DoD folgen strikt linear.
+
+---
+
 ## Session 2026-07-02 08:18 — v0.34.60 fix(agent): Registrierung node/-fähig + präzise Register-Diagnose (Mesh-Messaging A1)
 
 | #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
