@@ -22,8 +22,14 @@ import { influxdbQuery, influxdbDatabases, influxdbMeasurements, influxdbWrite }
 import {
   getDefaultDataDir,
   requestDaemonJson,
+  requestDaemon,
   __resetDaemonClientCache,
 } from './local-daemon-client.js';
+import {
+  formatRegisterOutcome,
+  formatUnregisterOutcome,
+  type DaemonCallOutcome,
+} from './agent-register-format.js';
 import { parseRuntimeMode } from './runtime-mode.js';
 import { chooseTargetAgent, type PeerLoad, type PeerEntry } from './peer-selection.js';
 
@@ -450,8 +456,14 @@ server.tool(
  * Best-effort: if the daemon is unreachable, we continue anyway.
  */
 async function registerWithDaemon(): Promise<void> {
+  // A1: Low-Level requestDaemon → HTTP-Status + Body sichtbar. Ein 500 (z.B. der
+  // buildInstanceSpiffe-Misconfig) darf NICHT mehr als „daemon unreachable" verschluckt
+  // werden; nur ein echter Transport-Fehler ist „unreachable".
+  let outcome: DaemonCallOutcome;
   try {
-    await requestDaemonJson(`${DAEMON_URL}/api/agent/register`, {
+    const res = await requestDaemon('/api/agent/register', {
+      baseUrl: DAEMON_URL,
+      dataDir: DATA_DIR,
       method: 'POST',
       body: {
         agent_type: AGENT_TYPE,
@@ -459,11 +471,14 @@ async function registerWithDaemon(): Promise<void> {
         metadata: { pid: process.pid, started_at: new Date().toISOString() },
       },
     });
-    process.stderr.write(`[mcp-stdio] registered as ${INSTANCE_ID}\n`);
-  } catch {
-    // Daemon may not be running yet — that's OK
-    process.stderr.write(`[mcp-stdio] registration skipped (daemon unreachable)\n`);
+    outcome =
+      res.status >= 200 && res.status < 300
+        ? { kind: 'ok' }
+        : { kind: 'http', status: res.status, body: res.body };
+  } catch (err) {
+    outcome = { kind: 'error', message: err instanceof Error ? err.message : String(err) };
   }
+  process.stderr.write(`${formatRegisterOutcome(INSTANCE_ID, outcome)}\n`);
 }
 
 /**
@@ -472,17 +487,30 @@ async function registerWithDaemon(): Promise<void> {
  */
 function unregisterFromDaemon(): void {
   try {
-    // Synchronous-ish: we use a fire-and-forget fetch.
-    // Can't await in 'exit' handler, so we use the sync pattern.
-    requestDaemonJson(`${DAEMON_URL}/api/agent/unregister`, {
+    // Fire-and-forget (kein await im 'exit'-Handler). A1: bei non-2xx / Transport-Fehler
+    // eine präzise Zeile schreiben statt still zu schlucken.
+    requestDaemon('/api/agent/unregister', {
+      baseUrl: DAEMON_URL,
+      dataDir: DATA_DIR,
       method: 'POST',
       body: {
         agent_type: AGENT_TYPE,
         instance_id: INSTANCE_ID,
       },
-    }).catch(() => {
-      // Best-effort — don't block shutdown
-    });
+    })
+      .then((res) => {
+        if (res.status < 200 || res.status >= 300) {
+          const msg = formatUnregisterOutcome(INSTANCE_ID, { kind: 'http', status: res.status, body: res.body });
+          if (msg) process.stderr.write(`${msg}\n`);
+        }
+      })
+      .catch((err) => {
+        const msg = formatUnregisterOutcome(INSTANCE_ID, {
+          kind: 'error',
+          message: err instanceof Error ? err.message : String(err),
+        });
+        if (msg) process.stderr.write(`${msg}\n`);
+      });
     process.stderr.write(`[mcp-stdio] unregister sent for ${INSTANCE_ID}\n`);
   } catch {
     // Ignore — we're shutting down

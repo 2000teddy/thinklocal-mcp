@@ -24,6 +24,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Logger } from 'pino';
 import { AgentRegistryFullError, type AgentRegistry, type AgentRegistryEntry } from './agent-registry.js';
 import type { AuditLog } from './audit.js';
+import { parseSpiffeUri, buildInstanceUri } from './spiffe-uri.js';
 
 export interface AgentApiDeps {
   registry: AgentRegistry;
@@ -73,20 +74,41 @@ function requireLocal(request: FastifyRequest, reply: FastifyReply): boolean {
  * instead of silently emitting a mangled URI. (Gemini-Pro CR finding
  * 2026-04-09, LOW)
  */
-function buildInstanceSpiffe(
+/**
+ * Leitet die Instanz-SPIFFE-URI aus der Daemon-Identität ab. Akzeptiert BEIDE
+ * Daemon-Grammatiken (ADR-028 D1): kanonisch `node/<PeerID>` (nach dem ADR-022-Flip)
+ * **und** Legacy `host/<stableNodeId>/agent/<type>`.
+ *
+ * **Instanz-URI-Schema (bewusste Entscheidung, konsistent zu ADR-005/ADR-028):**
+ * Instanzen leben ausschließlich in der **host-Grammatik** — `parseSpiffeUri` erlaubt
+ * für `node/` strikt nur 2 Tokens (`node/<PeerID>`), eine `node/<PeerID>/agent/…`-Form
+ * ist absichtlich nicht parsebar. Daher wird der **Node-Identifier** (die PeerID bei
+ * kanonischer Identität, sonst die stableNodeId) in den Node-Slot der host-Grammatik
+ * gesetzt: `host/<nodeIdentifier>/agent/<type>/instance/<id>`. Das bleibt vollständig
+ * parsebar (`getAgentInstance`, `normalizeAgentId`, Inbox-`for_instance`) und kollidiert
+ * NICHT mit der Daemon-Identität `node/<PeerID>` (verschiedene Grammatik-Präfixe).
+ *
+ * `null` nur bei wirklich malformter Daemon-URI (echter Misconfig → 500) oder wenn
+ * `agentType`/`instanceId` das erlaubte Zeichenset verletzen (am Handler bereits
+ * vorvalidiert → in der Praxis nur die Misconfig-Ursache). Exportiert für Unit-Tests.
+ */
+export function buildInstanceSpiffe(
   daemonSpiffeUri: string,
   agentType: string,
   instanceId: string,
 ): string | null {
-  // daemonSpiffeUri looks like: spiffe://thinklocal/host/<node>/agent/<type>
-  const parts = daemonSpiffeUri.replace(/\/$/, '').split('/');
-  const hostIdx = parts.lastIndexOf('host');
-  if (hostIdx < 0 || hostIdx + 1 >= parts.length) {
-    return null;
+  let nodeIdentifier: string;
+  try {
+    const parsed = parseSpiffeUri(daemonSpiffeUri);
+    nodeIdentifier = parsed.kind === 'node' ? parsed.nodePeerId : parsed.stableNodeId;
+  } catch {
+    return null; // malformte Daemon-URI → echter Misconfig
   }
-  const nodeId = parts[hostIdx + 1];
-  if (!nodeId) return null;
-  return `spiffe://thinklocal/host/${nodeId}/agent/${agentType}/instance/${instanceId}`;
+  try {
+    return buildInstanceUri(nodeIdentifier, agentType, instanceId);
+  } catch {
+    return null; // ungültige agentType/instanceId-Zeichen (Handler validiert bereits vor)
+  }
 }
 
 function isNonEmptyString(value: unknown): value is string {
