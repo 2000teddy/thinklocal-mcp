@@ -21,13 +21,13 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Logger } from 'pino';
 import type { Capability } from './registry.js';
 import type { McpForwardPeer } from './mcp-forward.js';
-import type { McpForwardDispatch } from './mcp-forward-dispatch.js';
-import { handleMcpIngress, type McpIngressResponse } from './mcp-ingress.js';
+import { handleMcpIngress } from './mcp-ingress.js';
 import {
   spiffeUrisFromSubjectAltName,
   authorizeHttpsSender,
   isCanonicalNodeUri,
 } from './peer-identity.js';
+import { MCP_HOP_HEADER, type McpDispatchExecutor } from './mcp-forward-executor.js';
 
 /** Minimaler TLS-Socket-Ausschnitt fuer die Cert-Extraktion (testbar ohne echtes TLS). */
 export interface PeerCertSocket {
@@ -59,6 +59,13 @@ export function extractCanonicalSender(socket: PeerCertSocket | undefined | null
   return sans.find((u) => isCanonicalNodeUri(u)) ?? null;
 }
 
+/** Audit-Hook fuer den Ingress (RX / Reject) — im Daemon `audit.append`-basiert. */
+export type McpIngressAuditFn = (
+  event: 'MCP_PROXY_RX' | 'MCP_FORWARD_REJECT',
+  peerId: string,
+  details: string,
+) => void;
+
 export interface McpIngressApiDeps {
   /** Eigene (kanonische) SPIFFE-Identitaet — Provider-Vergleich + Forward-Sender (D3). */
   selfAgentId: string;
@@ -66,50 +73,52 @@ export interface McpIngressApiDeps {
   resolvePeer: (agentId: string) => McpForwardPeer | undefined;
   /** Snapshot der replizierten Registry-Capabilities (im Daemon: registry.getAllCapabilities). */
   getCapabilities: () => readonly Capability[];
-  /** Wert von `TLMCP_SPIFFE_SERVER_IDENTITY` (Default false = TOFU) — reicht zu T3.3 durch. */
+  /** Wert von `TLMCP_SPIFFE_SERVER_IDENTITY` (Default false = TOFU) — D2-Pin-Schalter. */
   requireServerIdentity?: boolean;
+  /** Live-Executor (T3.3, `createMcpForwardExecutor`). Fehlt er, greift der 501-Stub. */
+  execute?: McpDispatchExecutor;
+  /** Ingress-seitiges (RX/Reject) Audit — bildet mit dem Executor-TX-Audit das beidseitige Audit. */
+  audit?: McpIngressAuditFn;
   log?: Logger;
 }
 
 /**
- * remote-forward-only Executor-Platzhalter (Christian-Gate Q1 = JA). T3.2 verdrahtet
- * Route + D3-Auth; der echte Executor ist T3.3. Bis dahin fail-closed 501:
- * - `remote` → Live-undici-mTLS-Forward noch nicht verdrahtet (T3.3),
- * - `local`  → local-exec ist per Q1 zurueckgestellt (remote-forward-only).
- * `none` ist typseitig ausgeschlossen (handleMcpIngress faengt es als 503 ab).
+ * 501-Stub-Executor (falls kein Live-Executor injiziert ist — z.B. reine
+ * Route/Auth-Tests). Beide Zweige fail-closed 501: `local` = local-exec per Q1
+ * zurueckgestellt; `remote` = kein Live-Executor verdrahtet.
  */
-async function deferredExecutor(
-  dispatch: Exclude<McpForwardDispatch, { kind: 'none' }>,
-): Promise<McpIngressResponse> {
+const deferredExecutor: McpDispatchExecutor = async (dispatch) => {
   if (dispatch.kind === 'local') {
     return {
       status: 501,
       body: { error: 'local-exec deferred (Q1: remote-forward-only)', server: dispatch.server },
     };
   }
-  // CR-L2 (T3.3): Wenn selfAgentId (Migration: evtl. Legacy-Form) NICHT dem
-  // Registry-`agent_id` entspricht, kann ein eigener Eintrag als `remote` statt
-  // `local` geplant werden → Forward an sich selbst. Der T3.3-Live-Executor MUSS
-  // einen 1-Hop-Guard tragen, der self==target erkennt und nicht ueber mTLS
-  // zurueck-dialt (Loop-Schutz). Hier (501) noch inert.
   return {
     status: 501,
-    body: {
-      error: 'mcp remote-forward executor not yet wired (T3.3)',
-      target: dispatch.request.targetAgentId,
-    },
+    body: { error: 'mcp remote-forward executor not wired', target: dispatch.request.targetAgentId },
   };
+};
+
+/** Liest die eingehende Hop-Zahl aus dem Header (fehlt/ungueltig → 0 = direkter Client-Call). */
+function readIncomingHop(request: FastifyRequest): number {
+  const raw = request.headers[MCP_HOP_HEADER];
+  const val = Array.isArray(raw) ? raw[0] : raw;
+  const n = val !== undefined ? Number.parseInt(val, 10) : 0;
+  return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
 /** Baut den Fastify-Handler fuer `POST /api/mcp/:server` (exportiert fuer Unit-Tests). */
 export function makeMcpIngressHandler(
   deps: McpIngressApiDeps,
 ): (request: FastifyRequest, reply: FastifyReply) => Promise<void> {
+  const executor = deps.execute ?? deferredExecutor;
   return async function mcpIngressHandler(request, reply): Promise<void> {
     const server = (request.params as { server?: string } | undefined)?.server ?? '';
     // D3: Sender-Principal ausschliesslich aus dem mTLS-Client-Cert (nicht aus dem Body).
     const socket = request.raw.socket as unknown as PeerCertSocket;
     const senderUri = extractCanonicalSender(socket);
+    const incomingHop = readIncomingHop(request);
 
     const result = await handleMcpIngress(
       { server, senderUri, capabilities: deps.getCapabilities(), payload: request.body },
@@ -120,14 +129,21 @@ export function makeMcpIngressHandler(
         // Cert-SAN, authorizeHttpsSender vergleicht dessen PeerID mit dem Cert → ok.
         isAuthorizedSender: (u) => (senderUri ? authorizeHttpsSender(u, senderUri).ok : false),
         requireServerIdentity: deps.requireServerIdentity,
-        execute: deferredExecutor,
+        // Der Executor bekommt den Hop + das Payload + den Servernamen via Closure.
+        execute: (dispatch) => executor(dispatch, { incomingHop, payload: request.body, server }),
       },
     );
 
-    deps.log?.info(
-      { server, sender: senderUri, status: result.status },
-      '[mcp-ingress] request',
-    );
+    // Beidseitiges Audit (RX-Seite): 403 (Sender) bzw. 5xx (Guard/Exec-Reject: 500/501/
+    // 502/503/508) → REJECT; ein akzeptierter Proxy-Call → RX. (CR-L1: Reject-Stati nicht
+    // als „RX" verschleiern, damit Audit-Queries Loop-/Auth-Fehlversuche finden.)
+    if (result.status === 403 || result.status >= 500) {
+      deps.audit?.('MCP_FORWARD_REJECT', senderUri ?? 'unknown', `${server} status=${result.status}`);
+    } else {
+      deps.audit?.('MCP_PROXY_RX', senderUri ?? 'unknown', `${server} status=${result.status} hop=${incomingHop}`);
+    }
+
+    deps.log?.info({ server, sender: senderUri, hop: incomingHop, status: result.status }, '[mcp-ingress] request');
     await reply.code(result.status).send(result.body);
   };
 }

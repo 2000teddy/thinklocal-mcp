@@ -22,6 +22,7 @@ import { TaskManager } from './tasks.js';
 import { SkillManager, type SkillAnnouncePayload } from './skills.js';
 import { buildSharedMcpCapabilities, registerSharedMcps } from './mcp-registration.js';
 import { registerMcpIngressApi } from './mcp-ingress-api.js';
+import { createMcpForwardExecutor, createUndiciMcpForward } from './mcp-forward-executor.js';
 import { registerDashboardApi } from './dashboard-api.js';
 import { registerInboxApi } from './inbox-api.js';
 import { AgentRegistry } from './agent-registry.js';
@@ -992,9 +993,21 @@ async function main(): Promise<void> {
     },
   });
 
-  // 8c3b. Modell-B MCP-Proxy-Ingress (v5 Spur 3, T3.2): POST /api/mcp/:server.
+  // 8c3b. Modell-B MCP-Proxy-Ingress (v5 Spur 3, T3.2 + T3.3): POST /api/mcp/:server.
   // D3-Sender-Auth aus dem mTLS-Client-Cert (403 bei ungueltigem/fehlendem Cert);
-  // remote-forward-only (Christian-Gate Q1 = JA) — der Live-undici-Executor ist T3.3.
+  // remote-forward-only (Christian-Gate Q1 = JA). T3.3: Live-undici-mTLS-Executor mit
+  // per-Owner-Agent, D2-Server-Pin, Timeout/Cancel, 1-Hop-Guard + beidseitigem Audit.
+  const mcpForwardHttp = createUndiciMcpForward({
+    tls: tlsBundle ? { ca: initialCaBundle, cert: tlsBundle.certPem, key: tlsBundle.keyPem } : undefined,
+    outboundPolicy: outboundConnectPolicy,
+    log,
+  });
+  const mcpForwardExecutor = createMcpForwardExecutor({
+    selfAgentId: selfIdentityUri,
+    httpForward: mcpForwardHttp.forward,
+    audit: (event, peerId, details) => audit.append(event, peerId, details),
+    log,
+  });
   registerMcpIngressApi(cardServer.getServer(), {
     selfAgentId: selfIdentityUri,
     resolvePeer: (agentId) => {
@@ -1003,6 +1016,8 @@ async function main(): Promise<void> {
     },
     getCapabilities: () => registry.getAllCapabilities(),
     requireServerIdentity: outboundConnectPolicy.spiffeServerIdentity,
+    execute: mcpForwardExecutor,
+    audit: (event, peerId, details) => audit.append(event, peerId, details),
     log,
   });
 
@@ -1420,6 +1435,7 @@ async function main(): Promise<void> {
     vault.close();
     agentInbox.close();
     rateLimiter.stop();
+    mcpForwardHttp.close(); // T3.3: per-Owner undici-Agents abraeumen
     staticPeerReconciler?.stop();
     discovery.stop();
     await registrySync.coordinator.stop();

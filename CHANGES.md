@@ -8,6 +8,30 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.57 (remote-forward-only, KEIN Deploy) — feat(mcp): Modell-B T3.3 — Live-Forward-Executor (undici-mTLS, D2-Pin, 1-Hop-Guard, beidseitiges Audit)
+
+V5 Spur 3 (Modell B, kritischer Pfad) T3.3 — strikt linear nach T3.1/T3.2 (#229). Ersetzt den 501-Stub
+durch den echten remote-forward-Executor.
+
+- **`mcp-forward-executor.ts`:** `createMcpForwardExecutor` (konsumiert `buildMcpExecSpec`) +
+  `createUndiciMcpForward` (reale undici-mTLS-Primitive, `fetch` injizierbar). Persistenter Agent
+  **pro Owner**, Payload-Passthrough, `AbortSignal.timeout` (Cancel/Timeout).
+- **D2-Server-Pin:** per-Owner `verifyMeshServerIdentity`-Pin (aktiver Pin) bzw. TOFU.
+- **1-Hop-Guard:** ausgehender `x-tlmcp-mcp-hop=incomingHop+1`; eingehender `hop>=1` → 502; `target==self` → 508.
+- **Beidseitiges Audit:** `MCP_FORWARD_TX`/`MCP_FORWARD_REJECT` (Sender) + `MCP_PROXY_RX`/`MCP_FORWARD_REJECT`
+  (Owner/Ingress); neue AuditEventTypes.
+- **Wiring:** `index.ts` baut+injiziert Executor (+ Audit), `close()` im Shutdown; `mcp-ingress-api.ts`
+  reicht Hop/Payload/Server + Audit durch.
+- **TS:** `mcp-forward-executor.test.ts` (neu, 13), `mcp-forward-executor-pin.test.ts` (neu, 4, CR-H1/H2),
+  `mcp-ingress-api.test.ts` (+6), dist-Live-Smoke (hop=1/200, Self-Loop 508, Route-403). Suite **108/1332 grün**,
+  tsc 0, authored-eslint 0, build 0.
+- **CR:** unabhängiger **Claude**-Subagent (adversarial), 0× CRITICAL; **CR-H1** (Cache-Key) + **CR-H2**
+  (Connector-Pin-Policy aus Request → kein TOFU-Downgrade) → gefixt + Regressionstests; **CR-M4** (Audit
+  reject/fail) + **CR-L1/L4** gefixt; **CR-M1/M2** (Hop untrusted, forwarder-basierte Attribution) +
+  **CR-L2** (Body-Read-Deadline) in ADR-028-D4 dokumentiert.
+- **Folge:** T3.4 `mcp-stdio`-Proxy-Tools → T3.5 Zwei-Peer-DoD. Owner-local-exec bleibt per Q1 zurückgestellt.
+  **Kein Deploy.**
+
 ### v0.34.56 (remote-forward-only, KEIN Net-Egress, KEIN Deploy) — feat(mcp): Modell-B MCP-Proxy — Share pal+unifi (T3.1) + Live-Ingress-Route /api/mcp/:server (T3.2)
 
 V5 Spur 3 (Modell B, kritischer Pfad), freigeschaltet durch **Christian-Gate Q1 = JA** (remote-forward-only;
