@@ -3,10 +3,60 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import type { Capability } from './registry.js';
-import { buildSharedMcpCapabilities, registerSharedMcps } from './mcp-registration.js';
+import {
+  buildSharedMcpCapabilities,
+  registerSharedMcps,
+  guardSharedMcpAnnounce,
+  type SharedMcpBuildResult,
+} from './mcp-registration.js';
 
 const AGENT = 'spiffe://thinklocal/node/12D3KooWA000000000000000000000000000000000000000';
 const TS = '2026-06-20T16:00:00.000Z';
+
+describe('guardSharedMcpAnnounce (ADR-032 Phantom-Announce-Guard)', () => {
+  const result = (): SharedMcpBuildResult =>
+    buildSharedMcpCapabilities(
+      [{ server: 'unifi', description: 'UniFi', permissions: ['network.read'], trust_level: 4 }],
+      AGENT,
+      TS,
+    );
+
+  it('serve_shared=true → Ergebnis unveraendert durchgereicht (Provider)', () => {
+    const r = result();
+    expect(guardSharedMcpAnnounce(true, r)).toBe(r);
+  });
+
+  it('serve_shared=false → KEINE Capabilities announced; deklarierte wandern mit Grund nach skipped', () => {
+    const guarded = guardSharedMcpAnnounce(false, result());
+    expect(guarded.capabilities).toEqual([]);
+    expect(guarded.skipped).toHaveLength(1);
+    expect(guarded.skipped[0]?.server).toBe('mcp:unifi');
+    expect(guarded.skipped[0]?.reason).toMatch(/phantom-announce-guard/);
+  });
+
+  it('serve_shared=false, nichts deklariert → leer (kein Rauschen)', () => {
+    expect(guardSharedMcpAnnounce(false, { capabilities: [], skipped: [] })).toEqual({ capabilities: [], skipped: [] });
+  });
+
+  it('serve_shared=false erhaelt bestehende skipped-Eintraege', () => {
+    const guarded = guardSharedMcpAnnounce(false, { capabilities: [], skipped: [{ server: 'x', reason: 'bad' }] });
+    expect(guarded.skipped).toEqual([{ server: 'x', reason: 'bad' }]);
+  });
+
+  it('end-to-end: registerSharedMcps mit geguardetem Ergebnis registriert NICHTS', () => {
+    const registry = { register: vi.fn() };
+    const n = registerSharedMcps(registry, guardSharedMcpAnnounce(false, result()), { warn: vi.fn(), info: vi.fn() } as never);
+    expect(n).toBe(0);
+    expect(registry.register).not.toHaveBeenCalled();
+  });
+
+  it('end-to-end: serve_shared=true registriert die deklarierten Capabilities (kein Provider-Regress)', () => {
+    const registry = { register: vi.fn() };
+    const n = registerSharedMcps(registry, guardSharedMcpAnnounce(true, result()), { warn: vi.fn(), info: vi.fn() } as never);
+    expect(n).toBe(1);
+    expect(registry.register).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe('buildSharedMcpCapabilities', () => {
   it('composes enabled shared MCPs into base Capabilities (default-open, execution_tier stripped)', () => {

@@ -61,6 +61,28 @@ export function buildSharedMcpCapabilities(rawShareConfig: unknown, agentId: str
   return { capabilities, skipped };
 }
 
+/**
+ * Phantom-Announce-Guard (ADR-032): filtert das Build-Ergebnis fürs Announcen.
+ * `serve_shared=true` → unverändert durchreichen (dieser Node ist Provider);
+ * `serve_shared=false` → KEINE Capabilities announcen (die deklarierten wandern
+ * mit klarem Grund nach `skipped`), damit ein Nicht-Provider (Spoke, der nur das
+ * fleet-weite Template ausliefert) keine `mcp:*`-Phantom-Provider ins CRDT gossipt.
+ *
+ * Bewusst NUR eine Provider-Designation, keine Reachability-Probe: solange local-exec
+ * (Q1) zurückgestellt ist, gibt es keinen lokalen Serve-Prozess zu proben. Eine echte
+ * Liveness-Probe supersediert diesen Gate, sobald das lokale Serving landet.
+ */
+export function guardSharedMcpAnnounce(serveShared: boolean, result: SharedMcpBuildResult): SharedMcpBuildResult {
+  if (serveShared) return result;
+  return {
+    capabilities: [],
+    skipped: [
+      ...result.capabilities.map((c) => ({ server: c.skill_id, reason: 'serve_shared=false (phantom-announce-guard)' })),
+      ...result.skipped,
+    ],
+  };
+}
+
 /** Minimale Registry-Schnittstelle für den Registrar (injizierbar/testbar). */
 export interface CapabilityRegistrar {
   register(capability: Capability): void;

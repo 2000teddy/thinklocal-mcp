@@ -1349,4 +1349,14 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-07-01 14:20 — v0.34.55 docs(adr): ADR-031 Tailscale-Transport-Policy — T2.5-Entscheidungsvorlage.*
+## Session 2026-07-02 07:22 — v0.34.59 fix(mcp): Phantom-Announce-Guard für geteilte MCP-Server (serve_shared, ADR-032)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|------------------------------------|
+| v0.34.59 | (offen, base=main) | 2026-07-02 07:22 | s.u. | n/a | ✅ | ✅ | ✅ | ✅ | CR Claude adversarial: APPROVE-WITH-NITS, 0× HIGH/CRIT; CR-L1 (non-boolean TOML umgeht Guard) → strikte Coercion + Test; L2 kosmetisch |
+
+**CO:** kein neuer Architektur-Konsens nötig — Hardening zu ADR-028 D4 (fixt den MEDIUM aus dem #229-Review); Design in **ADR-032** (neu). **CG:** n/a. **TS:** `mcp-registration.test.ts` (+6): `guardSharedMcpAnnounce` (true-passthrough per Identity, false→0 Caps + skip-Grund, leer-in/leer-out, bestehende skipped erhalten, E2E false→0 register, E2E true→N register); `config-mcp-share.test.ts` (+4): serve_shared Default false, TOML true, **non-boolean TOML → false (CR-L1)**, Env 1/0 + Env-schlägt-TOML. Volle Suite **1306 grün**, tsc 0, authored-eslint 0, build 0. dist-Smoke: guard off unterdrückt (0 caps + Grund), on reicht durch. **CR:** unabhängiger **Claude**-Subagent (adversarial Security+Correctness; nur claude/codex/agy — `agy` fehlt im Env): **APPROVE-WITH-NITS**, 0× CRITICAL/HIGH; Guard schließt das Loch (einzige Gate am einzigen registerSharedMcps-Callsite, kein Bypass), Default fail-safe über alle 3 Ebenen, Provider-Passthrough per Identity (kein Regress). **CR-L1** (non-boolean TOML-`serve_shared` truthy → Guard-Bypass) → strikte `=== true`-Coercion + Regressionstest. **L2** (skip.server `mcp:unifi` vs `unifi` Asymmetrie) kosmetisch, per Test fixiert. **PC:** manuell (tsc/authored-eslint/Suite/Build grün, `git diff` reviewed) — `agy` fehlt. **DO:** `docs/architecture/ADR-032-*` (neu), CHANGES (v0.34.59), COMPLIANCE, `changes/2026-07-02_mcp-phantom-announce-guard.md`. **Status:** eigenständig gegen `main`, mergebar **vor** T3.3 (#230); default-off (fail-safe), Hub setzt `serve_shared=true`. Kein Deploy.
+
+---
+
+*Letzte Aktualisierung: 2026-07-02 07:22 — v0.34.59 fix(mcp): Phantom-Announce-Guard (serve_shared, ADR-032).*
