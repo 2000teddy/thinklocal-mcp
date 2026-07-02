@@ -78,11 +78,19 @@ announce_multiaddrs = []        # Optional: oeffentliche oder Relay-Multiaddrs e
 [logging]
 level = "info"           # trace, debug, info, warn, error, fatal
 
+# ADR-032: Phantom-Announce-Guard. Dieses Config-Template wird fleet-weit ausgeliefert.
+# `serve_shared` designiert diesen Node als Provider: nur dann werden die unten
+# deklarierten `[[mcp.share]]`-MCPs tatsaechlich als `mcp:<server>` announced. Default
+# false (fail-safe) → ein Spoke, der nur das Template ausliefert, announced KEINE
+# Phantom-Provider. Der Hub setzt `serve_shared = true` (oder Env TLMCP_MCP_SERVE_SHARED=1).
+[mcp]
+serve_shared = false
+
 # ADR-028 D4-a: geteilte MCP-Server (Discovery default-open).
 # Jeder hier deklarierte MCP wird beim Start als mesh-Capability `mcp:<server>`
-# registriert und ist fleet-weit aufloesbar (kein SSH). Default-open: ein Eintrag
-# ist geteilt, ausser `share = false`. `description` ist Pflicht. `permissions` +
-# `trust_level` bestimmen spaeter die Ausfuehrungsstufe (self/gate/consensus).
+# registriert (NUR wenn serve_shared=true, s.o.) und ist fleet-weit aufloesbar (kein
+# SSH). Default-open: ein Eintrag ist geteilt, ausser `share = false`. `description`
+# ist Pflicht. `permissions` + `trust_level` bestimmen die Ausfuehrungsstufe.
 # Beispiel:
 # [[mcp.share]]
 # server = "markitdown"

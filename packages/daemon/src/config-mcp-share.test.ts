@@ -28,6 +28,36 @@ describe('loadConfig: mcp.share (ADR-028 D4-a)', () => {
     expect(cfg.mcp.share).toEqual([]);
   });
 
+  it('ADR-032: serve_shared default false (fail-safe, kein Phantom-Announce)', () => {
+    const cfg = loadConfig(NO_TOML);
+    expect(cfg.mcp.serve_shared).toBe(false);
+  });
+
+  it('ADR-032: [mcp] serve_shared aus TOML gelesen', () => {
+    const cfg = loadConfig(writeToml('[mcp]\nserve_shared = true\n'));
+    expect(cfg.mcp.serve_shared).toBe(true);
+  });
+
+  it('ADR-032 CR-L1: non-boolean TOML-Wert umgeht den Guard NICHT (fail-safe → false)', () => {
+    // `serve_shared = "true"` (String) ist truthy — darf den Security-Guard NICHT aktivieren.
+    const cfg = loadConfig(writeToml('[mcp]\nserve_shared = "true"\n'));
+    expect(cfg.mcp.serve_shared).toBe(false);
+  });
+
+  it('ADR-032: Env TLMCP_MCP_SERVE_SHARED überschreibt (1 → true, 0 → false)', () => {
+    const prev = process.env['TLMCP_MCP_SERVE_SHARED'];
+    try {
+      process.env['TLMCP_MCP_SERVE_SHARED'] = '1';
+      expect(loadConfig(NO_TOML).mcp.serve_shared).toBe(true);
+      process.env['TLMCP_MCP_SERVE_SHARED'] = '0';
+      // Env schlägt TOML: TOML setzt true, Env=0 → false.
+      expect(loadConfig(writeToml('[mcp]\nserve_shared = true\n')).mcp.serve_shared).toBe(false);
+    } finally {
+      if (prev === undefined) delete process.env['TLMCP_MCP_SERVE_SHARED'];
+      else process.env['TLMCP_MCP_SERVE_SHARED'] = prev;
+    }
+  });
+
   it('liest [[mcp.share]]-Einträge roh in config.mcp.share', () => {
     const toml = [
       '[[mcp.share]]',

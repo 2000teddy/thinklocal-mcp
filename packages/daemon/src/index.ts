@@ -20,7 +20,7 @@ import { RateLimiter } from './ratelimit.js';
 import { MessageType, encodeAndSign, createEnvelope, serializeSignedMessage, type MessageEnvelope } from './messages.js';
 import { TaskManager } from './tasks.js';
 import { SkillManager, type SkillAnnouncePayload } from './skills.js';
-import { buildSharedMcpCapabilities, registerSharedMcps } from './mcp-registration.js';
+import { buildSharedMcpCapabilities, registerSharedMcps, guardSharedMcpAnnounce } from './mcp-registration.js';
 import { registerDashboardApi } from './dashboard-api.js';
 import { registerInboxApi } from './inbox-api.js';
 import { AgentRegistry } from './agent-registry.js';
@@ -349,9 +349,21 @@ async function main(): Promise<void> {
   // Boot zu crashen: Shared-MCPs sind ein optionales Discovery-Feature, kein Grund den
   // Core-Daemon (Identity/Mesh/Skills) zu stoppen.
   try {
+    // ADR-032 Phantom-Announce-Guard: nur ein designierter Provider (serve_shared=true,
+    // typ. der Hub) announced die deklarierten Shared-MCPs. Ein Spoke, der nur das
+    // fleet-weite Template ausliefert, announced sonst mcp:*-Phantom-Provider.
+    if (!config.mcp.serve_shared && config.mcp.share.length > 0) {
+      log.info(
+        { declared: config.mcp.share.length },
+        '[mcp-share] serve_shared=false → deklarierte Shared-MCPs werden NICHT announced (Phantom-Announce-Guard; Hub setzt TLMCP_MCP_SERVE_SHARED=1)',
+      );
+    }
     registerSharedMcps(
       registry,
-      buildSharedMcpCapabilities(config.mcp.share, selfIdentityUri, new Date().toISOString()),
+      guardSharedMcpAnnounce(
+        config.mcp.serve_shared,
+        buildSharedMcpCapabilities(config.mcp.share, selfIdentityUri, new Date().toISOString()),
+      ),
       log,
     );
   } catch (err) {

@@ -113,6 +113,14 @@ export interface DaemonConfig {
    */
   mcp: {
     share: unknown[];
+    /**
+     * Phantom-Announce-Guard (ADR-032): dieser Node announced seine deklarierten
+     * `[[mcp.share]]`-MCPs NUR, wenn er als Provider designiert ist. Default `false`
+     * (fail-safe) — das fleet-weite Config-Template deklariert MCPs (default-open),
+     * aber nur der Hub setzt `serve_shared=true` (bzw. Env `TLMCP_MCP_SERVE_SHARED=1`)
+     * und announced sie tatsächlich. Verhindert Phantom-Provider im CRDT.
+     */
+    serve_shared: boolean;
   };
   /**
    * ADR-030 (T1.3): SQLite-Wartung. `checkpoint_interval_ms` steuert den
@@ -202,6 +210,7 @@ const DEFAULTS: DaemonConfig = {
   },
   mcp: {
     share: [],
+    serve_shared: false,
   },
   retention: {
     checkpoint_interval_ms: 3_600_000, // 1 h
@@ -309,6 +318,15 @@ export function loadConfig(configPath?: string): DaemonConfig {
   if (env['TLMCP_AUTO_REGISTER_AUTH_PEERS']) {
     cfg.discovery.auto_register_authenticated_peers = env['TLMCP_AUTO_REGISTER_AUTH_PEERS'] !== '0';
   }
+
+  // ADR-032: Phantom-Announce-Guard. Nur ein designierter Provider (Hub) announced
+  // seine deklarierten Shared-MCPs. Default false; Hub setzt TLMCP_MCP_SERVE_SHARED=1.
+  if (env['TLMCP_MCP_SERVE_SHARED']) {
+    cfg.mcp.serve_shared = env['TLMCP_MCP_SERVE_SHARED'] === '1';
+  }
+  // CR-L1 (fail-safe Coercion): ein non-boolean TOML-Wert (z.B. `serve_shared = "true"`)
+  // darf den Security-Guard NICHT truthy umgehen — nur echtes boolean `true` aktiviert.
+  cfg.mcp.serve_shared = cfg.mcp.serve_shared === true;
 
   // ADR-030 (T1.3): SQLite-Checkpoint/Retention.
   if (env['TLMCP_RETENTION_CHECKPOINT_MS']) {

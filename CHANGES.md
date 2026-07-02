@@ -8,6 +8,25 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.59 (Hardening, KEIN Deploy) — fix(mcp): Phantom-Announce-Guard für geteilte MCP-Server (serve_shared, ADR-032)
+
+Hardening zu ADR-028 D4-a / MEDIUM aus dem #229-Review: das fleet-weite Config-Template deklariert
+Shared-MCPs default-open, und `registerSharedMcps` announced sie **ohne Provider-Prüfung** → jeder
+Spoke würde `mcp:pal`/`mcp:unifi` als **Phantom-Provider** ins CRDT gossippen.
+
+- Neues `[mcp] serve_shared` (bool, Default **false**) + Env `TLMCP_MCP_SERVE_SHARED`. Nur ein
+  designierter Provider (Hub, `serve_shared=true`) announced seine deklarierten Shared-MCPs.
+- Reine `guardSharedMcpAnnounce(serveShared, result)` (`mcp-registration.ts`) filtert vor der
+  Registrierung (false → 0 Capabilities, deklarierte → `skipped` mit Grund, laut geloggt); gegatet in
+  `index.ts`. `config/daemon.toml` um `[mcp] serve_shared = false` + Kommentar ergänzt.
+- Orthogonal zu „Discovery default-open" (entscheidet nur **ob** Provider, nicht **wer** auflösen darf).
+  Keine Reachability-Probe (local-exec/Q1 deferred → kein Serve-Prozess zu proben); Liveness-Probe
+  supersediert später.
+- **TS:** `mcp-registration.test.ts` (+5, guard passthrough/suppress/skip-Erhalt/E2E), `config-mcp-share.test.ts`
+  (+3, Default/TOML/Env). Suite **1304 grün**, tsc 0, authored-eslint 0, build 0. dist-Smoke: off unterdrückt, on reicht durch.
+- **CR:** unabhängiger **Claude**-Subagent. **DO:** ADR-032 (neu), CHANGES, COMPLIANCE, `changes/2026-07-02_mcp-phantom-announce-guard.md`.
+- **Bezug:** eigenständig gegen `main`, mergebar **vor** T3.3 (#230). **Kein Deploy.**
+
 ### v0.34.55 (Doc-only, KEIN Deploy, keine Entscheidung präjudiziert) — docs(adr): ADR-031 Tailscale-Transport-Policy — T2.5-Entscheidungsvorlage (Q4/Q5)
 
 V5 T2.5: die zwei vorhandenen Admin-Decision-Prep-Drafts (`hermes/reports/2026-06-30-…` +
