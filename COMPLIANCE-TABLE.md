@@ -1380,3 +1380,17 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 ---
 
 *Letzte Aktualisierung: 2026-07-02 08:43 — v0.34.61 feat(mesh): ADR-004 Inbox-Empfangs-Loop-Primitive (A3).*
+
+---
+
+## Session 2026-07-02 10:40 — v0.34.62 perf(daemon): T1.1 RSS/CPU-Mess-Slice (tsx→node dist Vorher/Nachher, code-only)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|------------------------------------|
+| v0.34.62 | #235 (offen, base=main) | 2026-07-02 10:40 | s.u. | n/a | ✅ | ✅ | ✅ | ✅ | CR Claude: APPROVE-WITH-NITS, 0× HIGH/CRIT; M1+L2/L3/L4/L5 · **Review-Blocker Prozessbaum (Single-PID→Baum) gefixt** |
+
+**CO:** kein neuer Konsens — die T1.1-Startumstellung ist bereits gemergt (PR #217); dieser Slice liefert nur den DoD-Mess-Teil (Auswertungs-Primitive + Runbook). **CG:** n/a. **TS:** `rss-cpu-stats.test.ts` (12): `percentile` (Grenzen q=0/0.5/0.95/1, keine Mutation, Fehler leer/ungültig-q), `computeStats` (leer/non-finite wirft), `parsePsSample` (KiB→Bytes, null bei unparsebar), `summarizeSamples`, `formatComparison` (Δ-Vorzeichen, before=0→n/a, **CR-M1** non-finite→wirft). Volle Suite **1349 grün**, tsc 0, authored-eslint 0, build 0. Live-Smoke: Sampler misst echten PID, `--compare` erzeugt Tabelle, kaputte JSON→klarer Fehler (kein NaN), bad args→Usage-Exit. **CR:** unabhängiger **Claude**-Subagent (adversarial; nur claude/codex/agy — `agy` fehlt im Env): **APPROVE-WITH-NITS**, 0× CRITICAL/HIGH; Stats korrekt (nearest-rank ohne Off-by-one/Mutation), ehrlich zum Scope. **CR-M1** (NaN-Leck in `--compare` bei hand-editierter JSON) → `assertFiniteSummary`-Guard + Regressionstest + CLI-Guard. **CR-L2** (Arg-Validierung positive Ganzzahl), **CR-L3** (parsePsSample einzeilig-Kommentar), **CR-L4** (`LC_ALL=C` in `ps` + Runbook), **CR-L5** (Runbook `pgrep` statt `$!`). **PC:** manuell (tsc/authored-eslint/Suite/Build grün, `git diff` reviewed) — `agy` fehlt. **DO:** `docs/operations/T1.1-rss-cpu-measurement.md` (neu), CHANGES (v0.34.62), COMPLIANCE, `changes/2026-07-02_t11-rss-cpu-measurement.md`. **Review-Blocker #235 (2026-07-02 11:08, funktional):** Sampler maß nur Single-PID, während `tsx` ein Prozessbaum ist (node + esbuild-Kind) vs. `node dist/` Einzelprozess → irreführender Vergleich. **Gefixt:** `parsePidPpid`/`collectProcessTree` (root+Nachfahren, zyklen-sicher) + `aggregateTreeSample` (Σ RSS/CPU); Sampler misst pro Tick den ganzen Baum. +7 Tests (jetzt 19). Suite **1356 grün**; Live-Tree-Smoke bestätigt. **Status:** code-only, **kein Deploy**; Live-Erhebung der realen RSS/CPU-Zahlen (idle+Last, before/after) = Deploy-Schritt, danach Ergebnis-Tabelle in den T1.1-Abschluss.
+
+---
+
+*Letzte Aktualisierung: 2026-07-02 10:40 — v0.34.62 perf(daemon): T1.1 RSS/CPU-Mess-Slice.*
