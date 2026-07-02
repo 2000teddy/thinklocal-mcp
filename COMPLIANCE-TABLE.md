@@ -1369,4 +1369,14 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-07-02 08:18 — v0.34.60 fix(agent): Registrierung node/-fähig + Register-Diagnose (A1).*
+## Session 2026-07-02 08:43 — v0.34.61 feat(mesh): ADR-004 Inbox-Empfangs-Loop-Primitive (Mesh-Messaging A3, code-only)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|------------------------------------|
+| v0.34.61 | (offen, base=main) | 2026-07-02 08:43 | s.u. | n/a | ✅ | ✅ | ✅ | ✅ | CR Claude adversarial: APPROVE-WITH-NITS, 0× HIGH/CRIT; M1 (Counter-Split markFailed) + M2 (JSON-Fehler + I/O-Coverage) + L1/L2 umgesetzt |
+
+**CO:** kein neuer Konsens — Umsetzung von ADR-004 (Empfangs-Loop); Mechanismus-Entscheidung (reine Poller-Primitive im Repo, Session-Zustellung Agent-Home) im changes/ + Code dokumentiert. **CG:** n/a. **TS:** `inbox-poller.test.ts` (13): `pollInboxOnce` (leer, happy+Reihenfolge, at-least-once-Zustell-Fehler→failed, **CR-M1** markRead-Fehler→markFailed), `createInboxPoller` (start/stop, **Nicht-Überlappung unter async**, Fetch-Fehler crasht Loop nicht), `buildDaemonInboxDeps` (Endpoint + for_instance-Enkodierung, non-2xx→wirft, **CR-M2** malformter JSON→klarer Fehler, defensives messages-Array, mark-read POST/Fehler) via vi.mock. Volle Suite **1319 grün**, tsc 0, authored-eslint 0, build 0. dist-Smoke: at-least-once (boom bleibt ungelesen). **CR:** unabhängiger **Claude**-Subagent (adversarial; nur claude/codex/agy — `agy` fehlt im Env): **APPROVE-WITH-NITS**, 0× CRITICAL/HIGH; at-least-once korrekt (kein mark-without-deliver, kein Message-Loss), Nicht-Überlappung hält unter async, for_instance enkodiert, kein Body-Logging. **CR-M1** (failed konflierte Zustell-/mark-Fehler) → eigenes `markFailed`-Feld. **CR-M2** (malformter JSON log-ununterscheidbar von „down"; buildDaemonInboxDeps uncovered) → klarer Fehler + vi.mock-Coverage. **CR-L1** (`as`-Cast trusted-source) + **CR-L2** (`stop()` kein Quiesce) im Code dokumentiert. **PC:** manuell (tsc/authored-eslint/Suite/Build grün, `git diff` reviewed) — `agy` fehlt. **DO:** CHANGES (v0.34.61), COMPLIANCE, `changes/2026-07-02_a3-inbox-poller.md`. **Status:** code-only, **kein Deploy**; Deploy-Zeit (Agent-Home): Poller in Supervisor/Hook einhängen (deliver→Session, forInstance aus A1). A2 Rollout + A4 Runbook folgen; E2E send-to-instance (CR-M1 aus A1) beim DoD-Probelauf.
+
+---
+
+*Letzte Aktualisierung: 2026-07-02 08:43 — v0.34.61 feat(mesh): ADR-004 Inbox-Empfangs-Loop-Primitive (A3).*
