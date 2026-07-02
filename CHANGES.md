@@ -30,6 +30,25 @@ Mesh-Messaging-Auftrag Slice A1. Behebt zwei live verifizierte Blocker:
   CR-L2 (PeerID-Fixture) umgesetzt. **DO:** CHANGES (v0.34.60), COMPLIANCE, `changes/2026-07-02_a1-agent-register-node-spiffe.md`.
 - **Folge:** A2 Rollout (Deploy-Gate) → A3 Empfangs-Loop → A4 Runbook + DoD-Probelauf. **Kein Deploy.**
 
+### v0.34.61 (Feature, KEIN Deploy) — feat(mesh): ADR-004 Inbox-Empfangs-Loop-Primitive (Mesh-Messaging A3)
+
+Code-only Slice A3: wiederverwendbare, deploy-agnostische Empfangs-Loop-Primitive `inbox-poller.ts`
+(`unread → deliver → mark-read`). Session-Zustellung (Hook/agent-send) bleibt bewusst Agent-Home.
+
+- **`pollInboxOnce`** at-least-once (mark-read erst nach erfolgreichem deliver → kein Message-Loss;
+  Redelivery + Dedupe per message_id), pro-Nachricht fehler-isoliert.
+- **`createInboxPoller`** Interval-Runner: nicht-überlappend (inFlight-Guard), fehler-gekapselt,
+  unref, start/stop idempotent (Timer injizierbar).
+- **`buildDaemonInboxDeps`/`createDaemonInboxPoller`** gegen `requestDaemon`
+  (`GET /api/inbox?unread=true[&for_instance]`, `POST /api/inbox/mark-read`); `for_instance` = A1-Instanz-URI.
+- **TS:** `inbox-poller.test.ts` (13: pollInboxOnce inkl. markFailed-Split, Interval-Runner-Nichtüberlappung,
+  Daemon-I/O via vi.mock). Suite **1319 grün**, tsc 0, authored-eslint 0, build 0. dist-Smoke bestätigt.
+- **CR:** unabhängiger **Claude**-Subagent APPROVE-WITH-NITS, 0× HIGH/CRITICAL; CR-M1 (Counter-Split
+  `markFailed`) + CR-M2 (klarer JSON-Fehler + buildDaemonInboxDeps-Coverage) + CR-L1/L2 (Doc) umgesetzt.
+  **DO:** CHANGES (v0.34.61), COMPLIANCE, `changes/2026-07-02_a3-inbox-poller.md`.
+- **Folge:** A2 Rollout (Deploy) → A4 Runbook; Deploy-Zeit: Poller in Agent-Supervisor einhängen.
+  **Kein Deploy.**
+
 ### v0.34.59 (Hardening, KEIN Deploy) — fix(mcp): Phantom-Announce-Guard für geteilte MCP-Server (serve_shared, ADR-032)
 
 Hardening zu ADR-028 D4-a / MEDIUM aus dem #229-Review: das fleet-weite Config-Template deklariert
