@@ -103,6 +103,28 @@ Spoke würde `mcp:pal`/`mcp:unifi` als **Phantom-Provider** ins CRDT gossippen.
 - **CR:** unabhängiger **Claude**-Subagent. **DO:** ADR-032 (neu), CHANGES, COMPLIANCE, `changes/2026-07-02_mcp-phantom-announce-guard.md`.
 - **Bezug:** eigenständig gegen `main`, mergebar **vor** T3.3 (#230). **Kein Deploy.**
 
+### v0.34.58 (remote-forward-only, KEIN Deploy) — feat(mcp): Modell-B T3.4 — client-seitige MCP-Proxy-Tools in mcp-stdio (tools/list / tools/call)
+
+V5 Spur 3 (Modell B) T3.4 — strikt linear nach T3.3 (#230). Der lokale Agent ruft geteilte Hub-MCPs
+(pal/unifi) transparent über seinen lokalen Daemon-Proxy auf.
+
+- **`mcp-proxy-client.ts` (neu):** reine Helfer — `buildToolsListRpc`/`buildToolsCallRpc` (JSON-RPC 2.0),
+  `parseMcpResponseBody`, `extractSharedMcpServers` (Filter `category=mcp`+`mcp:`, defensiv), `callMcpProxy`
+  (POST `/api/mcp/<server>`, `encodeURIComponent`, Status+Body durchgereicht).
+- **`mcp-stdio.ts`:** 3 Tools — `mcp_list_servers`, `mcp_list_tools({server})`, `mcp_call_tool({server,name,args})`.
+  Bewusst Low-Level `requestDaemon` → 501/502/503/403 erreichen den Agenten als `{status,body}` (kein Throw).
+  Auth via eigenes mTLS-Node-Cert (loopback) → D3-Sender daemon-seitig aus dem Cert; kein Sender-Spoofing.
+- **Security:** Servername `encodeURIComponent`-enkodiert → Path-Traversal (`../peers`→`..%2Fpeers`) neutralisiert,
+  reiner Registry-Lookup-Key.
+- **TS:** `mcp-proxy-client.test.ts` (neu, 15: JSON-RPC, Body-Parse inkl. Scalar, defensiver Extract inkl.
+  unpräfixiert, callMcpProxy Pfad/Status inkl. 501/503, Traversal-Encoding); Test-getriebener Fix eines
+  null-Eintrag-Crashs. dist-Live-Smoke (list 200, call 501-Passthrough, servers geparst). Suite **109/1347 grün**,
+  tsc 0, authored-eslint 0, build 0.
+- **CR:** unabhängiger **Claude**-Subagent (adversarial), 0× HIGH/CRITICAL; Zusatz-Tests umgesetzt; M1/M2
+  (Fehlermodus-Konsistenz / daemon-seitige Name-Kanonisierung) dokumentiert.
+- **Folge:** T3.5 Zwei-Peer-DoD (echter Ende-zu-Ende-Beweis). Owner-local-exec bleibt per Q1 zurückgestellt.
+  **Kein Deploy.**
+
 ### v0.34.57 (remote-forward-only, KEIN Deploy) — feat(mcp): Modell-B T3.3 — Live-Forward-Executor (undici-mTLS, D2-Pin, 1-Hop-Guard, beidseitiges Audit)
 
 V5 Spur 3 (Modell B, kritischer Pfad) T3.3 — strikt linear nach T3.1/T3.2 (#229). Ersetzt den 501-Stub
