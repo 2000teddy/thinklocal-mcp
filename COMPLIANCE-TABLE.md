@@ -1380,3 +1380,17 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 ---
 
 *Letzte Aktualisierung: 2026-07-02 08:43 — v0.34.61 feat(mesh): ADR-004 Inbox-Empfangs-Loop-Primitive (A3).*
+
+---
+
+## Session 2026-07-02 10:40 — v0.34.62 perf(daemon): T1.1 RSS/CPU-Mess-Slice (tsx→node dist Vorher/Nachher, code-only)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|------------------------------------|
+| v0.34.62 | (offen, base=main) | 2026-07-02 10:40 | s.u. | n/a | ✅ | ✅ | ✅ | ✅ | CR Claude adversarial: APPROVE-WITH-NITS, 0× HIGH/CRIT; M1 (NaN-Leck→Finite-Guard) + L2/L3/L4/L5 umgesetzt |
+
+**CO:** kein neuer Konsens — die T1.1-Startumstellung ist bereits gemergt (PR #217); dieser Slice liefert nur den DoD-Mess-Teil (Auswertungs-Primitive + Runbook). **CG:** n/a. **TS:** `rss-cpu-stats.test.ts` (12): `percentile` (Grenzen q=0/0.5/0.95/1, keine Mutation, Fehler leer/ungültig-q), `computeStats` (leer/non-finite wirft), `parsePsSample` (KiB→Bytes, null bei unparsebar), `summarizeSamples`, `formatComparison` (Δ-Vorzeichen, before=0→n/a, **CR-M1** non-finite→wirft). Volle Suite **1349 grün**, tsc 0, authored-eslint 0, build 0. Live-Smoke: Sampler misst echten PID, `--compare` erzeugt Tabelle, kaputte JSON→klarer Fehler (kein NaN), bad args→Usage-Exit. **CR:** unabhängiger **Claude**-Subagent (adversarial; nur claude/codex/agy — `agy` fehlt im Env): **APPROVE-WITH-NITS**, 0× CRITICAL/HIGH; Stats korrekt (nearest-rank ohne Off-by-one/Mutation), ehrlich zum Scope. **CR-M1** (NaN-Leck in `--compare` bei hand-editierter JSON) → `assertFiniteSummary`-Guard + Regressionstest + CLI-Guard. **CR-L2** (Arg-Validierung positive Ganzzahl), **CR-L3** (parsePsSample einzeilig-Kommentar), **CR-L4** (`LC_ALL=C` in `ps` + Runbook), **CR-L5** (Runbook `pgrep` statt `$!`). **PC:** manuell (tsc/authored-eslint/Suite/Build grün, `git diff` reviewed) — `agy` fehlt. **DO:** `docs/operations/T1.1-rss-cpu-measurement.md` (neu), CHANGES (v0.34.62), COMPLIANCE, `changes/2026-07-02_t11-rss-cpu-measurement.md`. **Status:** code-only, **kein Deploy**; Live-Erhebung der realen RSS/CPU-Zahlen (idle+Last, before/after) = Deploy-Schritt, danach Ergebnis-Tabelle in den T1.1-Abschluss.
+
+---
+
+*Letzte Aktualisierung: 2026-07-02 10:40 — v0.34.62 perf(daemon): T1.1 RSS/CPU-Mess-Slice.*
