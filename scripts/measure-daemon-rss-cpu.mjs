@@ -10,12 +10,35 @@
  *   Vergleich: node scripts/measure-daemon-rss-cpu.mjs --compare before.json after.json
  *              → Markdown-Vergleichstabelle auf stdout.
  *
- * KEIN Deploy, keine Zahlen-Erfindung — misst nur den angegebenen Prozess.
+ * Misst den **Prozessbaum** (root + alle Nachfahren) — fair für den tsx-Start (node +
+ * esbuild-Transform-Kind) vs. `node dist/` (Einzelprozess). KEIN Deploy, keine
+ * Zahlen-Erfindung — misst nur den angegebenen Prozessbaum.
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { summarizeSamples, parsePsSample, formatComparison, assertFiniteSummary } from '../packages/daemon/dist/rss-cpu-stats.js';
+import {
+  summarizeSamples,
+  parsePsSample,
+  parsePidPpid,
+  collectProcessTree,
+  aggregateTreeSample,
+  formatComparison,
+  assertFiniteSummary,
+} from '../packages/daemon/dist/rss-cpu-stats.js';
+
+/** `ps` mit erzwungenem C-Locale (Punkt-Dezimale) — wirft bei Fehler (Prozess weg). */
+function ps(args) {
+  return execFileSync('ps', args, { encoding: 'utf-8', env: { ...process.env, LC_ALL: 'C' } });
+}
+
+/** Ein Prozessbaum-Sample: root+Nachfahren via `ps -e`, dann Σ RSS/CPU. */
+function sampleTree(rootPid) {
+  const pairs = ps(['-e', '-o', 'pid=,ppid=']).split('\n').map(parsePidPpid).filter(Boolean);
+  const pids = collectProcessTree(rootPid, pairs);
+  const per = ps(['-o', 'rss=,%cpu=', '-p', pids.join(',')]).split('\n').map(parsePsSample).filter(Boolean);
+  return aggregateTreeSample(per); // wirft, wenn kein Prozess des Baums messbar
+}
 
 function arg(name, fallback) {
   const i = process.argv.indexOf(name);
@@ -36,19 +59,12 @@ function intArg(name, fallback) {
 async function sampleMode(pid, samples, intervalMs) {
   const collected = [];
   for (let i = 0; i < samples; i++) {
-    let out;
     try {
-      // LC_ALL=C erzwingt Punkt-Dezimale (parsePsSample matcht keine Komma-Locale).
-      out = execFileSync('ps', ['-o', 'rss=,%cpu=', '-p', String(pid)], {
-        encoding: 'utf-8',
-        env: { ...process.env, LC_ALL: 'C' },
-      });
+      collected.push(sampleTree(pid)); // Σ RSS/CPU über den ganzen Prozessbaum
     } catch {
-      process.stderr.write(`[measure] ps failed for pid ${pid} (process gone?) — stopping after ${collected.length} samples\n`);
+      process.stderr.write(`[measure] ps/tree failed for root pid ${pid} (process gone?) — stopping after ${collected.length} samples\n`);
       break;
     }
-    const s = parsePsSample(out);
-    if (s) collected.push(s);
     if (i < samples - 1) await sleep(intervalMs);
   }
   if (collected.length === 0) {

@@ -22,16 +22,25 @@ reproduzierbar erhoben und ehrlich (nur gemessen) berichtet werden.
   `formatComparison` (Vorher/Nachher-Markdown-Tabelle, RSS in MiB, Δ%, before=0 → n/a),
   `assertFiniteSummary` (**CR-M1:** verweigert nicht-finite/kaputte Summary → kein `NaN` in der
   Tabelle = keine erfundenen Zahlen).
-- **`scripts/measure-daemon-rss-cpu.mjs` (neu):** Sampler (`--pid --samples --interval-ms`, `ps`
-  mit `LC_ALL=C`, Prozess-weg → sauberer Stop) + `--compare before.json after.json` (Guard vor
-  Render). Positive-Integer-Arg-Validierung (kein stiller „0 samples").
+- **Prozessbaum-Messung (Review-Blocker #235, funktional):** `parsePidPpid` + `collectProcessTree`
+  (root + alle transitiven Nachfahren, BFS zyklen-sicher) + `aggregateTreeSample` (Σ RSS/CPU pro Tick).
+  Nötig, weil der `tsx`-Start ein **Baum** ist (node + esbuild-Transform-Kind) und `node dist/` ein
+  Einzelprozess — Single-PID hätte die tsx-Seite untertrieben (irreführender Vergleich, genau der
+  T1.1/#217-Grund). Der Sampler misst jetzt pro Tick `ps -e -o pid=,ppid=` → Baum → `ps -o rss=,%cpu=
+  -p <alle>` → Summe.
+- **`scripts/measure-daemon-rss-cpu.mjs` (neu):** **Prozessbaum**-Sampler (`--pid --samples
+  --interval-ms`, `ps` mit `LC_ALL=C`, Prozess-weg → sauberer Stop) + `--compare before.json after.json`
+  (Guard vor Render). Positive-Integer-Arg-Validierung (kein stiller „0 samples").
 - **`docs/operations/T1.1-rss-cpu-measurement.md` (neu):** Runbook — Build-Prereq, zwei Läufe
-  (before=`start:tsx`, after=`daemon:start`), **echte Daemon-PID via `pgrep`** (nicht `$!`),
-  Warmup, n≥60, `LC_ALL=C`, Vergleichstabelle, Akzeptanz. Explizit: **kein Zahlen-Erfinden**.
+  (before=`start:tsx`, after=`daemon:start`), **echte root-Daemon-PID via `pgrep`** (nicht `$!`),
+  **Prozessbaum-Messung** (Σ node+esbuild vs node dist), Warmup, n≥60, `LC_ALL=C`, Vergleichstabelle,
+  Akzeptanz. Explizit: **kein Zahlen-Erfinden**.
 
 ## Tests
 
-- **`rss-cpu-stats.test.ts`** (12): percentile (Grenzen/keine Mutation/Fehler), computeStats
+- **`rss-cpu-stats.test.ts`** (19): +Prozessbaum (`parsePidPpid`, `collectProcessTree` inkl.
+  Fremdprozess-Ausschluss + Zyklus-Schutz + Einzelprozess, `aggregateTreeSample` Σ/leer). percentile
+  (Grenzen/keine Mutation/Fehler), computeStats
   (leer/non-finite), parsePsSample (happy/null), summarizeSamples, formatComparison (Δ-Vorzeichen,
   n/a, **CR-M1** non-finite→wirft). Volle Suite **1349 grün**, tsc 0, authored-eslint 0, build 0.
 - **Live-Smoke:** Sampler misst einen echten PID; `--compare` erzeugt die Tabelle; kaputte JSON →

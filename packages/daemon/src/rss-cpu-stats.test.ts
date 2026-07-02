@@ -8,6 +8,9 @@ import {
   summarizeSamples,
   parsePsSample,
   formatComparison,
+  parsePidPpid,
+  collectProcessTree,
+  aggregateTreeSample,
   type ProcSample,
 } from './rss-cpu-stats.js';
 
@@ -49,6 +52,50 @@ describe('parsePsSample', () => {
     expect(parsePsSample('garbage')).toBeNull();
     expect(parsePsSample('')).toBeNull();
     expect(parsePsSample('123 abc')).toBeNull();
+  });
+});
+
+describe('parsePidPpid', () => {
+  it('parst "  1234  1000" → {pid,ppid}', () => {
+    expect(parsePidPpid('  1234  1000')).toEqual({ pid: 1234, ppid: 1000 });
+  });
+  it('null bei unparsebar', () => {
+    expect(parsePidPpid('x y')).toBeNull();
+    expect(parsePidPpid('1234')).toBeNull();
+  });
+});
+
+describe('collectProcessTree', () => {
+  // 100 -> 200 (esbuild-Kind) ; 300 unabhängig
+  const pairs = [
+    { pid: 100, ppid: 1 },
+    { pid: 200, ppid: 100 },
+    { pid: 250, ppid: 200 }, // Enkel
+    { pid: 300, ppid: 1 },
+  ];
+  it('root + transitive Nachfahren (tsx-Baum), Fremdprozess NICHT enthalten', () => {
+    expect(collectProcessTree(100, pairs).sort((a, b) => a - b)).toEqual([100, 200, 250]);
+    expect(collectProcessTree(100, pairs)).not.toContain(300);
+  });
+  it('Einzelprozess (node dist) → nur root', () => {
+    expect(collectProcessTree(300, pairs)).toEqual([300]);
+  });
+  it('zyklen-sicher (pid==ppid o.ä.) → kein Endlos-Loop', () => {
+    const cyclic = [{ pid: 5, ppid: 5 }, { pid: 6, ppid: 5 }, { pid: 5, ppid: 6 }];
+    const tree = collectProcessTree(5, cyclic).sort((a, b) => a - b);
+    expect(tree).toEqual([5, 6]);
+  });
+});
+
+describe('aggregateTreeSample', () => {
+  it('summiert RSS + CPU über den Baum', () => {
+    expect(aggregateTreeSample([
+      { rssBytes: 100, cpuPercent: 1.5 },
+      { rssBytes: 250, cpuPercent: 0.5 },
+    ])).toEqual({ rssBytes: 350, cpuPercent: 2 });
+  });
+  it('wirft bei leerem Prozess-Set', () => {
+    expect(() => aggregateTreeSample([])).toThrow(/empty/);
   });
 });
 

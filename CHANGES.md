@@ -16,13 +16,16 @@ offenen DoD-Teil „RSS/CPU vorher/nachher **gemessen**" als reproduzierbare, de
 - **`rss-cpu-stats.ts` (neu, rein):** `percentile`/`computeStats`/`summarizeSamples`/`parsePsSample`
   (`ps -o rss=,%cpu=`, KiB→Bytes)/`formatComparison` (Vorher/Nachher-Markdown, RSS MiB, Δ%) +
   `assertFiniteSummary` (kein `NaN` in der Tabelle = keine erfundenen Zahlen).
-- **`scripts/measure-daemon-rss-cpu.mjs` (neu):** Sampler (`--pid/--samples/--interval-ms`, `ps` mit
-  `LC_ALL=C`) + `--compare`; positive-Int-Arg-Validierung.
+- **Prozessbaum-Messung (#235-Review-Blocker):** `parsePidPpid`/`collectProcessTree` (root+Nachfahren,
+  zyklen-sicher) + `aggregateTreeSample` (Σ RSS/CPU) — fair für tsx (node+esbuild-Kind) vs. node dist
+  (Einzelprozess); Single-PID hätte den Vergleich verzerrt.
+- **`scripts/measure-daemon-rss-cpu.mjs` (neu):** Prozessbaum-Sampler (`--pid/--samples/--interval-ms`,
+  `ps` mit `LC_ALL=C`) + `--compare`; positive-Int-Arg-Validierung.
 - **`docs/operations/T1.1-rss-cpu-measurement.md` (neu):** Runbook (before=`start:tsx`, after=`daemon:start`,
-  echte PID via `pgrep`, Warmup, n≥60, **kein Zahlen-Erfinden**).
-- **TS:** `rss-cpu-stats.test.ts` (12). Suite **1349 grün**, tsc 0, authored-eslint 0, build 0. Live-Smoke bestätigt.
-- **CR:** unabhängiger **Claude**-Subagent APPROVE-WITH-NITS, 0× HIGH/CRITICAL; CR-M1 (NaN-Leck → Finite-Guard
-  + Test) + CR-L2/L3/L4/L5 umgesetzt. **DO:** CHANGES (v0.34.62), COMPLIANCE, `changes/2026-07-02_t11-rss-cpu-measurement.md`.
+  root-PID via `pgrep`, Prozessbaum-Messung, Warmup, n≥60, **kein Zahlen-Erfinden**).
+- **TS:** `rss-cpu-stats.test.ts` (19). Suite **1356 grün**, tsc 0, authored-eslint 0, build 0. Live-Smoke bestätigt.
+- **CR:** unabhängiger **Claude**-Subagent APPROVE-WITH-NITS, 0× HIGH/CRITICAL; CR-M1 (NaN-Leck → Finite-Guard)
+  + CR-L2/L3/L4/L5 umgesetzt; **Review-Blocker Prozessbaum (Single-PID → Baum-Summe) gefixt**. **DO:** CHANGES (v0.34.62), COMPLIANCE, `changes/2026-07-02_t11-rss-cpu-measurement.md`.
 - **Folge:** Live-Erhebung der realen Zahlen = Deploy-Schritt (nicht in diesem PR). **Kein Deploy.**
 
 ### v0.34.60 (Bug-Fix, KEIN Deploy) — fix(agent): Registrierung node/-fähig (buildInstanceSpiffe) + präzise Register-Diagnose (Mesh-Messaging A1)

@@ -91,6 +91,63 @@ export function parsePsSample(line: string): ProcSample | null {
   return { rssBytes: rssKib * 1024, cpuPercent };
 }
 
+/** Ein `pid`→`ppid`-Paar aus `ps -e -o pid=,ppid=`. */
+export interface PidPpid {
+  pid: number;
+  ppid: number;
+}
+
+/** Parst eine `ps -e -o pid=,ppid=`-Zeile (`  1234  1000`). `null` bei unparsebar. */
+export function parsePidPpid(line: string): PidPpid | null {
+  const m = line.trim().match(/^(\d+)\s+(\d+)$/);
+  if (!m) return null;
+  const pid = Number(m[1]);
+  const ppid = Number(m[2]);
+  if (!Number.isInteger(pid) || !Number.isInteger(ppid)) return null;
+  return { pid, ppid };
+}
+
+/**
+ * Sammelt den **Prozessbaum**: `rootPid` + alle transitiven Nachfahren (BFS,
+ * zyklen-sicher via `seen`). `pairs` = die pid→ppid-Liste ALLER Prozesse (aus
+ * `ps -e -o pid=,ppid=`). Nötig für einen fairen Vorher/Nachher-Vergleich: der
+ * `tsx`-Start hat ein Transform-Kind (esbuild), `node dist/` ist ein Einzelprozess —
+ * nur die Baum-Summe ist vergleichbar. Reine Funktion; `rootPid` ist immer enthalten.
+ */
+export function collectProcessTree(rootPid: number, pairs: readonly PidPpid[]): number[] {
+  const childrenByPpid = new Map<number, number[]>();
+  for (const { pid, ppid } of pairs) {
+    const arr = childrenByPpid.get(ppid);
+    if (arr) arr.push(pid);
+    else childrenByPpid.set(ppid, [pid]);
+  }
+  const out: number[] = [];
+  const seen = new Set<number>();
+  const queue: number[] = [rootPid];
+  while (queue.length > 0) {
+    const pid = queue.shift() as number;
+    if (seen.has(pid)) continue;
+    seen.add(pid);
+    out.push(pid);
+    for (const child of childrenByPpid.get(pid) ?? []) {
+      if (!seen.has(child)) queue.push(child);
+    }
+  }
+  return out;
+}
+
+/**
+ * Summiert die Per-Prozess-Samples eines Baums zu EINEM Baum-Sample (Σ RSS, Σ CPU)
+ * für einen Messzeitpunkt. Wirft bei leerer Eingabe (Aufrufer überspringt den Tick).
+ */
+export function aggregateTreeSample(perProcess: readonly ProcSample[]): ProcSample {
+  if (perProcess.length === 0) throw new Error('aggregateTreeSample: empty process set');
+  return {
+    rssBytes: perProcess.reduce((sum, s) => sum + s.rssBytes, 0),
+    cpuPercent: perProcess.reduce((sum, s) => sum + s.cpuPercent, 0),
+  };
+}
+
 function isFiniteStats(m: MetricStats | undefined): boolean {
   return (
     m !== undefined &&
