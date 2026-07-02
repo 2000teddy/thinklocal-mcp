@@ -8,6 +8,23 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.64 (Test-only, KEIN Deploy) — test(mcp): MCP-Forward-Naht-Integrationstest (T3.2+T3.3)
+
+Schließt eine reale Coverage-Lücke im MCP-Proxy-Forward-Pfad: die bestehenden Unit-Tests mocken je
+die angrenzende Schicht (Ingress mit gemocktem Executor; Executor mit gemocktem `httpForward`/`fetch`).
+Die **Naht** der drei realen Module war ungetestet.
+
+- **`mcp-forward-integration.test.ts` (neu, 5):** verdrahtet die **echten** `makeMcpIngressHandler` →
+  `createMcpForwardExecutor` → `createUndiciMcpForward` und stubbt **nur** `fetch` (kein `vi.mock`,
+  kein Net-Egress). Beweist: realer ausgehender Hop = incomingHop+1, URL/Payload/Servername-Durchreichung,
+  Owner-Antwort-Passthrough (JSON/Non-JSON/5xx), beidseitiges Audit (TX+RX), 1-Hop-Guard (502), local-exec
+  deferred (501) — je ohne Fetch wo erwartet.
+- **TS:** neuer Test 5/5; volle Suite **114 Files / 1412 grün**, tsc 0, authored-eslint 0, build 0.
+- **CR:** unabhängiger **Claude**-Subagent APPROVE-WITH-NITS, 0× HIGH/MEDIUM/LOW; quellen-verifiziert
+  kein False-Green (realer Modulgraph, Connector real gebaut, hop='1' aus realem +1). **DO:** CHANGES,
+  COMPLIANCE, `changes/2026-07-02_t3x-mcp-forward-seam-integration-test.md`.
+- **Scope:** de-riskt den deploy-gated **T3.5**-Zwei-Peer-DoD, ersetzt ihn NICHT. **Kein Deploy.**
+
 ### v0.34.63 (Evidence/Messung, KEIN Deploy) — docs(ops): T1.1 RSS/CPU-Live-Messung tsx→node dist (DoD-Abschluss)
 
 Schließt den offenen DoD-Teil von T1.1 („RSS/CPU vorher/nachher **gemessen**", von v0.34.62 als

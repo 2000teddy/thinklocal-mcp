@@ -1437,4 +1437,14 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-07-02 13:14 — v0.34.58 feat(mcp): Modell-B T3.4 client-seitige MCP-Proxy-Tools (restacked auf T3.3/#237 nach #229-Merge).*
+## Session 2026-07-02 15:37 — v0.34.64 test(mcp): MCP-Forward-Naht-Integrationstest (T3.2+T3.3)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|------------------------------------|
+| v0.34.64 | (offen, base=main) | 2026-07-02 15:37 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | Test-only; CR Claude adversarial APPROVE-WITH-NITS, 0× HIGH/MED/LOW, kein False-Green (echte Naht) |
+
+**Typ:** Test-only, ungated, kein Produktionscode/Deploy. **CO/CG:** n/a. **TS:** `mcp-forward-integration.test.ts` (neu, 5) — schließt die Naht-Coverage-Lücke: verdrahtet die **echten** `makeMcpIngressHandler` → `createMcpForwardExecutor` → `createUndiciMcpForward` (kein `vi.mock`, nur `fetch` gestubbt). Beweist realer Hop=incomingHop+1, URL/Payload/Servername-Durchreichung, Owner-Passthrough (JSON/Non-JSON/503), beidseitiges Audit (TX+RX), 1-Hop-Guard 502 (kein Fetch), local-exec 501 (kein Fetch). Volle Suite **114 Files / 1412 grün** (+5), tsc 0, authored-eslint 0, build 0. **CR:** unabhängiger **Claude**-Subagent (adversarial, Fokus False-Green; `agy` fehlt im Env): **APPROVE-WITH-NITS**, 0× HIGH/MEDIUM/LOW; quellen-verifiziert kein `vi.mock`, realer Modulgraph, Undici-Connector real gebaut (synthetisches PEM wirft erst beim nie stattfindenden Handshake), `hop='1'` aus realem `+1`, Audit-Assertions decken den Kontrollfluss. NIT: Audit-`details`-String-Kopplung (inhärent, akzeptiert). **PC:** manuell (tsc/authored-eslint/Suite/Build grün, `git diff` reviewed) — `agy` fehlt. **DO:** CHANGES (v0.34.64), COMPLIANCE, `changes/2026-07-02_t3x-mcp-forward-seam-integration-test.md`. **Scope:** de-riskt den deploy-gated **T3.5**-Zwei-Peer-DoD, ersetzt ihn NICHT. **Kein Deploy.**
+
+---
+
+*Letzte Aktualisierung: 2026-07-02 15:37 — v0.34.64 test(mcp): MCP-Forward-Naht-Integrationstest (T3.2+T3.3).*
