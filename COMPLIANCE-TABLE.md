@@ -1427,4 +1427,14 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-07-02 13:14 — v0.34.57 feat(mcp): Modell-B T3.3 Live-Forward-Executor (restacked auf main nach #229-Merge).*
+## Session 2026-07-02 06:44 — v0.34.58 feat(mcp): Modell-B T3.4 — client-seitige MCP-Proxy-Tools in mcp-stdio (tools/list / tools/call)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|------------------------------------|
+| v0.34.58 | #231 (offen, base=#237 T3.3, restacked) | 2026-07-02 06:44 | s.u. | n/a | ✅ | ✅ | ✅ | ✅ | CR Claude adversarial: 0× HIGH/CRIT; Zusatz-Tests (Traversal/503/unpräfixiert/Scalar); Test-getriebener null-Crash-Fix; M1/M2 dokumentiert |
+
+**CO:** Christian-Gate Q1 = JA + ADR-028-D4-Konsens (benannter strikt-linearer Slice T3.4) — keine neue Konsensrunde. **CG:** n/a. **TS:** `mcp-proxy-client.test.ts` (neu, 15): JSON-RPC-Bau (list/call, args-default), Body-Parsing (JSON/Non-JSON/leer/Scalar), `extractSharedMcpServers` (Filter, defensiv null/garbage, unpräfixierter skill_id ausgeschlossen), `callMcpProxy` (Pfad-Enkodierung, Status-Durchreichung inkl. 501/503, **Security Path-Traversal `../peers`→`..%2Fpeers`**). Test-getriebener Fix: null-Array-Eintrag-Crash in `extractSharedMcpServers` → object/null-Guard. dist-Live-Smoke: `mcp_list_servers` parst, `tools/list`→200, `tools/call`→501-Passthrough; 3 Tools in `dist/mcp-stdio.js`. Volle Suite **109 Files / 1347 grün**, tsc 0, authored-eslint 0, build 0. **CR:** unabhängiger **Claude**-Subagent (adversarial Security+Correctness; nur claude/codex/agy — `agy` fehlt im Env): 0× CRITICAL/HIGH; Passthrough/Fehler-Surfacing korrekt, **kein Path-Traversal** (encodeURIComponent; Servername = Registry-Lookup-Key), Trust-Modell intakt (kein Sender-Spoofing). Umgesetzt: Zusatz-Tests (Traversal-Encoding, 502/503-Passthrough, unpräfixierter skill_id, Scalar-JSON). Bewusst belassen+dokumentiert: **M1** `mcp_list_servers` gleicher `fetchDaemon`-Fehlermodus wie alle GET-List-Tools (Konsistenz); **M2** Servername daemon-seitig kanonisiert. **PC:** manuell (tsc/authored-eslint/Suite/Build grün, `git diff` reviewed) — `agy`-Backend fehlt. **DO:** `docs/architecture/ADR-028-D4-*` (T3.4-Sektion), CHANGES (v0.34.58), COMPLIANCE, `changes/2026-07-02_t34-mcp-stdio-proxy-tools.md`. **Status:** remote-forward-only, **kein Deploy**; T3.5 (Zwei-Peer-DoD) = echter Ende-zu-Ende-Beweis; Owner-local-exec bleibt per Q1 zurückgestellt.
+
+---
+
+*Letzte Aktualisierung: 2026-07-02 13:14 — v0.34.58 feat(mcp): Modell-B T3.4 client-seitige MCP-Proxy-Tools (restacked auf T3.3/#237 nach #229-Merge).*

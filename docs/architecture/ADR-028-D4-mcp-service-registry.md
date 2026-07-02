@@ -225,3 +225,27 @@ routbaren Dispatch **fail-closed mit 501** — KEIN Net-Egress, KEIN local-exec 
 `tools/call`-Passthrough); **T3.5** Zwei-Peer-DoD (.52 → TH01-`unifi` `list_clients` ohne stunnel,
 Audit beidseitig verifiziert). Das lokale Serving auf dem Owner (local-exec) bleibt per **Q1**
 zurueckgestellt.
+
+### T3.4 — Client-seitige MCP-Proxy-Tools in `mcp-stdio` (tools/list / tools/call Passthrough)
+
+`mcp-proxy-client.ts` (reine, seiteneffektfreie Helfer) + drei neue Tools in `mcp-stdio.ts`:
+- **`mcp_list_servers`** — liest `/api/capabilities?category=mcp`, `extractSharedMcpServers` filtert
+  `category=mcp`+`mcp:`-Praefix → `{server, agent_id, health, description}`.
+- **`mcp_list_tools({server})`** / **`mcp_call_tool({server, name, args})`** — bauen JSON-RPC 2.0
+  (`tools/list` bzw. `tools/call {name, arguments}`) und POSTen via `callMcpProxy` an den **lokalen**
+  Daemon-Proxy `POST /api/mcp/<server>`. Der Daemon routet remote-forward-only zum Owner (T3.3);
+  der Agent hat **keinen** direkten Peer-Kontakt.
+- **Fehler-/Status-Transparenz:** bewusst das Low-Level `requestDaemon` (Status + Body durchgereicht)
+  statt `requestDaemonJson` (das bei non-2xx wirft) — ein `501` (local-exec deferred), `502/503`
+  (Owner nicht erreichbar) oder `403` erreicht den Agenten als lesbares `{status, body}`, kein Throw.
+- **Auth:** der loopback-Call traegt via `local-daemon-client` das eigene mTLS-Node-Cert → der
+  Daemon-Ingress leitet den D3-Sender aus diesem Cert ab (nicht aus dem Body). Der Client kann
+  keinen fremden Sender faelschen; Enforcement (D3 / execution_tier) bleibt im Daemon.
+- **Sicherheit:** Servername wird `encodeURIComponent`-enkodiert → Path-Traversal (`../peers`) wird zu
+  `..%2Fpeers` neutralisiert und dient nur als Registry-Lookup-Key (kein FS/kein Outbound-Pfad).
+- **CR (T3.4):** unabhaengiger Claude-Review 0× HIGH/CRITICAL; Zusatz-Tests (Traversal-Encoding,
+  502/503-Passthrough, unpraefixierter `skill_id`, Scalar-JSON). `mcp_list_servers` nutzt bewusst den
+  gleichen `fetchDaemon`-Fehlermodus wie alle GET-List-Tools der Datei (Konsistenz).
+
+Der echte Ende-zu-Ende-Beweis (mcp-stdio → Daemon → Owner-`tools/call`) ist **T3.5** (Zwei-Peer-DoD);
+Owner-lokales Serving (local-exec) bleibt per **Q1** zurueckgestellt (heute `local` → 501).

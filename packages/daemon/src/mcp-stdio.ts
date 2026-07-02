@@ -30,6 +30,13 @@ import {
   formatUnregisterOutcome,
   type DaemonCallOutcome,
 } from './agent-register-format.js';
+import {
+  buildToolsListRpc,
+  buildToolsCallRpc,
+  callMcpProxy,
+  extractSharedMcpServers,
+  type McpProxyRequester,
+} from './mcp-proxy-client.js';
 import { parseRuntimeMode } from './runtime-mode.js';
 import { chooseTargetAgent, type PeerLoad, type PeerEntry } from './peer-selection.js';
 
@@ -102,6 +109,49 @@ server.tool('mesh_status', 'Zeigt den Gesamtstatus des Mesh-Daemons', {}, async 
   const data = await fetchDaemon('/api/status');
   return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
 });
+
+// --- Modell-B MCP-Proxy (v5 Spur 3, T3.4): geteilte MCP-Server des Hubs (z.B. pal,
+// unifi) transparent ueber den lokalen Daemon-Proxy (/api/mcp/<server>) aufrufen.
+// remote-forward-only: der Daemon routet zum Owner (T3.3). Kein direkter Peer-Kontakt.
+
+/** POST an den lokalen Daemon-Proxy (Low-Level: Status auch bei 501/502/503 durchgereicht). */
+const mcpProxyRequester: McpProxyRequester = (path, body) =>
+  requestDaemon(path, { baseUrl: DAEMON_URL, dataDir: DATA_DIR, method: 'POST', body });
+
+server.tool(
+  'mcp_list_servers',
+  'Listet die im Mesh geteilten MCP-Server (z.B. pal, unifi) mit servierendem Node, Health und Beschreibung. Aus diesen Servern kann mit mcp_list_tools/mcp_call_tool gearbeitet werden.',
+  {},
+  async () => {
+    const data = await fetchDaemon('/api/capabilities?category=mcp');
+    const servers = extractSharedMcpServers(data);
+    return { content: [{ type: 'text' as const, text: JSON.stringify(servers, null, 2) }] };
+  },
+);
+
+server.tool(
+  'mcp_list_tools',
+  'Listet die Tools eines geteilten MCP-Servers (JSON-RPC tools/list, transparent ueber den lokalen Daemon-Proxy an den Owner geroutet).',
+  { server: z.string().describe('Servername, z.B. "unifi" oder "pal"') },
+  async ({ server: mcpServer }) => {
+    const res = await callMcpProxy(mcpServer, buildToolsListRpc(), mcpProxyRequester);
+    return { content: [{ type: 'text' as const, text: JSON.stringify(res, null, 2) }] };
+  },
+);
+
+server.tool(
+  'mcp_call_tool',
+  'Ruft ein Tool eines geteilten MCP-Servers auf (JSON-RPC tools/call, transparent ueber den lokalen Daemon-Proxy an den Owner geroutet). Antwort enthaelt den HTTP-Status des Proxy (200 = ok; 501 = local-exec noch deferred; 502/503 = Owner nicht erreichbar).',
+  {
+    server: z.string().describe('Servername, z.B. "unifi" oder "pal"'),
+    name: z.string().describe('Name des aufzurufenden MCP-Tools'),
+    args: z.record(z.string(), z.unknown()).optional().describe('Argumente des Tools (JSON-Objekt)'),
+  },
+  async ({ server: mcpServer, name, args }) => {
+    const res = await callMcpProxy(mcpServer, buildToolsCallRpc(name, args), mcpProxyRequester);
+    return { content: [{ type: 'text' as const, text: JSON.stringify(res, null, 2) }] };
+  },
+);
 
 // --- Agent-to-Agent Messaging ---
 
