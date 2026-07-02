@@ -39,7 +39,14 @@ export type AuditEventType =
   // ADR-021: Skill-Health-Lifecycle State-Transition
   | 'SKILL_HEALTH_TRANSITION'
   // T2.1: TLS-Node-Cert läuft bald ab (Live-Monitor; Reissue erst beim Neustart).
-  | 'CERT_EXPIRY_WARNING';
+  | 'CERT_EXPIRY_WARNING'
+  // ADR-028 D4 / v5 Spur 3 (Modell B): MCP-Proxy-Audit, beidseitig.
+  // RX = eingehender (autorisierter) /api/mcp-Proxy-Call auf diesem Node.
+  // TX = dieser Node forwardet einen MCP-Call an den Owner-Peer (remote-forward).
+  // REJECT = MCP-Proxy-Call abgelehnt (unauth. Sender / 1-Hop-Guard / Self-Loop).
+  | 'MCP_PROXY_RX'
+  | 'MCP_FORWARD_TX'
+  | 'MCP_FORWARD_REJECT';
 
 /**
  * ADR-007 Phase A: Entity types for structured audit querying.

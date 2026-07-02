@@ -1414,3 +1414,17 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 ---
 
 *Letzte Aktualisierung: 2026-07-02 12:48 — v0.34.63 docs(ops): T1.1 RSS/CPU-Live-Messung (DoD-Abschluss).*
+
+---
+
+## Session 2026-07-02 06:24 — v0.34.57 feat(mcp): Modell-B T3.3 — Live-Forward-Executor (undici-mTLS, D2-Pin, 1-Hop-Guard, beidseitiges Audit)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|------------------------------------|
+| v0.34.57 | (offen, base=main, restacked nach #229-Merge) | 2026-07-02 06:24 | s.u. | n/a | ✅ | ✅ | ✅ | ✅ | CR Claude adversarial: 0× CRIT; 2× HIGH (H1 Cache-Key, H2 Pin-Downgrade)→gefixt+Tests; M4/L1/L4→gefixt; M1/M2/L2→ADR dokumentiert |
+
+**CO:** Christian-Gate Q1 = JA + ADR-028-D4-Konsens (unveränderte konsentierte Architektur, benannter strikt-linearer Slice T3.3) — keine neue Konsensrunde. **CG:** n/a. **TS:** `mcp-forward-executor.test.ts` (neu, 13: remote hop+1/Payload/Audit-TX, Pin-Durchreichung, Self-Loop 508, 1-Hop 502, local 501, reject 500, CR-M4-Audit; undici-Forward mit injiziertem fetch: Success/Non-JSON/502/503/Cache), `mcp-forward-executor-pin.test.ts` (neu, 4: CR-H2 Connector-Pin aus Request + kein TOFU-Downgrade, CR-H1 Cache-Key inkl. expectedSpiffeId), `mcp-ingress-api.test.ts` (+6: Hop/Payload/Server-Durchreichung, RX/Reject-Audit). dist-Live-Smoke: Forward hop=1→200+Body, Self-Loop 508, Route-D3-403. Volle Suite **108 Files / 1332 grün**, tsc 0, authored-eslint 0, build 0. **CR:** unabhängiger **Claude**-Subagent (adversarial Security+Correctness; nur claude/codex/agy — `agy` fehlt im Env): 0× CRITICAL. **CR-H1** (Agent-Cache nur nach targetAgentId → Stale-Pin-Reuse) → Cache-Key `target|pin|expectedSpiffeId` + Tests. **CR-H2** (Connector-Policy aus globaler statt Request-Policy → möglicher stiller TOFU-Downgrade) → Policy aus Request abgeleitet + Tests. **CR-M4** (reject/local/fail-Pfade nicht auditiert) + **CR-L1** (5xx-RX→REJECT) + **CR-L4** (close().catch) gefixt. **CR-M1/M2** (Hop untrusted → Loop-Sicherheit am Owner-Terminus; Origin-Attribution forwarder-basiert in Beta) + **CR-L2** (Body-Read-Deadline optional) in ADR-028-D4 als bewusste Entscheidung dokumentiert. **PC:** manuell (tsc/authored-eslint/Suite/Build grün, `git diff` reviewed) — `agy`-Backend fehlt. **DO:** `docs/architecture/ADR-028-D4-*` (T3.3-Sektion + Trust-Modell), CHANGES (v0.34.57), COMPLIANCE, `changes/2026-07-02_t33-mcp-forward-executor.md`. **Status:** remote-forward-only, **kein Deploy**; T3.4 (`mcp-stdio`-Proxy-Tools) → T3.5 (Zwei-Peer-DoD) folgen; Owner-local-exec bleibt per Q1 zurückgestellt.
+
+---
+
+*Letzte Aktualisierung: 2026-07-02 13:14 — v0.34.57 feat(mcp): Modell-B T3.3 Live-Forward-Executor (restacked auf main nach #229-Merge).*

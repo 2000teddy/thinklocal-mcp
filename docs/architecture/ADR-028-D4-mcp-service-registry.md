@@ -185,3 +185,43 @@ bindet den Aufrufer kryptografisch an die Verbindung. Danach der reine `handleMc
 routbaren Dispatch **fail-closed mit 501** — KEIN Net-Egress, KEIN local-exec (`local` → 501
 „local-exec deferred (Q1)"). Der echte persistente undici-mTLS-Forward (Streaming/Cancel/Timeout/
 **1-Hop-Guard**) ist **T3.3**; der Zwei-Peer-`tools/call`-Beweis + beidseitiges Audit ist **T3.5**.
+
+### T3.3 — Live-Forward-Executor (undici-mTLS, D2-Pin, 1-Hop-Guard, beidseitiges Audit)
+
+`mcp-forward-executor.ts` ersetzt den 501-Stub durch den echten Executor (remote-forward-only):
+`createMcpForwardExecutor(deps)` konsumiert `buildMcpExecSpec(dispatch)` und
+`createUndiciMcpForward(deps)` liefert die undici-mTLS-Netzwerk-Primitive (injizierbar → testbar).
+
+- **Remote-Forward:** `fetch(<owner>/api/mcp/<server>)` ueber einen **persistenten undici-Agent
+  pro Owner** (Connection-Reuse), Body = MCP-JSON-RPC-Payload durchgereicht, `AbortSignal.timeout`
+  (Cancel/Timeout, Default 30 s). Antwort (Status+Body) wird zurueckgereicht.
+- **D2-Server-Pin:** die per-Owner-`checkServerIdentity`-Closure pinnt via `verifyMeshServerIdentity`
+  auf die erwartete Owner-SPIFFE-Identitaet **genau dann, wenn** der Pin aktiv ist (sonst TOFU).
+  **CR-H2:** die Connector-Policy `spiffeServerIdentity` wird aus dem **Request**
+  (`requireServerIdentity`) abgeleitet, NICHT aus der globalen `outboundPolicy` — sonst koennte ein
+  aktiver Pin still zu TOFU downgraden. **CR-H1:** der Agent-Cache-Key = `target|pin|expectedSpiffeId`
+  (kein Stale-Pin-Reuse bei kuenftig per-Request variierendem Pin).
+- **1-Hop-Guard:** ausgehender Hop-Header `x-tlmcp-mcp-hop = incomingHop+1`; ein eingehender Call mit
+  `hop>=1` wird NICHT erneut geforwardet (→ 502), ein Forward an sich selbst (`target==self`) → 508.
+  Terminus ist immer der Owner (`local`), nie ein Re-Forward → keine Loops/Amplifikation.
+- **Beidseitiges Audit:** Sender-Seite `MCP_FORWARD_TX` (+ `MCP_FORWARD_REJECT` bei Guard-Trip /
+  reject / fehlgeschlagenem Forward 5xx); Owner-/Ingress-Seite `MCP_PROXY_RX` (akzeptiert) bzw.
+  `MCP_FORWARD_REJECT` (403 / 5xx).
+
+**Trust-Modell (Beta-Entscheidungen, CR-M1/M2 explizit gemacht):**
+- Der Hop-Header ist **untrusted** (Angreifer-kontrollierbar). Die Loop-Sicherheit ruht NICHT auf dem
+  Header, sondern auf dem **Owner-Terminus** (`local`→501, kein Re-Forward) + dem Self-Loop-Guard.
+  Negative/garbage-Hops clampen auf 0 (max 1 Hop), `>=1` → 502.
+- **Origin-Attribution ist in der Beta forwarder-basiert:** der Owner autorisiert/auditiert den
+  **forwardenden Node** (dessen mTLS-Cert), nicht den urspruenglichen Aufrufer — Trust-Modell „jeder
+  authentifizierte Mesh-Peer darf forwarden". Ende-zu-Ende-Attribution (signierter Origin-Header) ist
+  ein Folge-Slice (M-Phase), falls gewuenscht.
+- **Kein caller-kontrolliertes SSRF:** URL/Target stammen aus der replizierten Registry (Owner-
+  `agent_id`→Endpoint) + Route-Param, HTTPS-erzwungen; ein poisoned-Endpoint wird durch den D2-Pin
+  abgefangen. **L2 (bekannt):** der Body-Read haengt am selben `AbortSignal` wie `fetch` (undici) —
+  eine dedizierte Body-Read-Deadline ist eine optionale Haertung.
+
+**Weiterhin Folge (strikt linear):** **T3.4** client-seitige `mcp-stdio`-Proxy-Tools (`tools/list`/
+`tools/call`-Passthrough); **T3.5** Zwei-Peer-DoD (.52 → TH01-`unifi` `list_clients` ohne stunnel,
+Audit beidseitig verifiziert). Das lokale Serving auf dem Owner (local-exec) bleibt per **Q1**
+zurueckgestellt.
