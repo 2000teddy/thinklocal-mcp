@@ -60,7 +60,13 @@ export interface ParsedNodeUri {
 /** Legacy identity: `spiffe://thinklocal/host/<stableNodeId>/agent/<agentType>[/instance/<id>]`. */
 export interface ParsedHostUri {
   readonly kind: 'host';
-  /** stable 16-hex node identifier (not the mDNS hostname). */
+  /**
+   * Node identifier — historisch eine stabile 16-hex-ID (nicht der mDNS-Hostname).
+   * HINWEIS (A1): bei Instanz-URIs, die aus einer kanonischen `node/<PeerID>`-Daemon-
+   * Identität abgeleitet wurden (`buildInstanceSpiffe`, agent-api.ts), steht hier die
+   * **base58btc-PeerID** im Node-Slot. Dieses Feld ist ein opaker String —
+   * keine Hex-/Längen-Annahme treffen. Nur `SPIFFE_COMPONENT_REGEX`-validiert.
+   */
   readonly stableNodeId: string;
   /** Agent family: `claude-code`, `codex`, `gemini-cli`, … */
   readonly agentType: string;

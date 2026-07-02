@@ -1359,4 +1359,14 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-07-02 07:22 — v0.34.59 fix(mcp): Phantom-Announce-Guard (serve_shared, ADR-032).*
+## Session 2026-07-02 08:18 — v0.34.60 fix(agent): Registrierung node/-fähig + präzise Register-Diagnose (Mesh-Messaging A1)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|------------------------------------|
+| v0.34.60 | (offen, base=main) | 2026-07-02 08:18 | s.u. | n/a | ✅ | ✅ | ✅ | ✅ | CR Claude adversarial: APPROVE-WITH-NITS, 0× HIGH/CRIT; M1 (E2E send-to-instance = A2/A3) festgezurrt; L1/L2 umgesetzt |
+
+**CO:** kein neuer Konsens — Bug-Fix auf bestehender ADR-005/ADR-028-D1-Grammatik; Instanz-URI-Schema-Entscheidung (host-Grammatik, PeerID im Node-Slot) im Code + changes/ dokumentiert. **CG:** n/a. **TS:** `agent-api.test.ts`: node/<PeerID>-Daemon → register **200** (Regression zum 500), **register→heartbeat→unregister-Round-Trip** unter node-URI, `buildInstanceSpiffe`-Unit (legacy-host, node→host-instance, malformed→null, bad-chars→null, **Zwei-Grammatik-Split** normalizeAgentId≠node-Identität); `agent-register-format.test.ts` (neu, 7): register ok / **http-500-NICHT-unreachable** / transport-error, Body-Kürzung/Einzeilung, unregister ok→null/http/error. Volle Suite **1320 grün**, tsc 0, authored-eslint 0, build 0. dist-Smoke: node→host-instance, malformed→null, 500 sichtbar. **CR:** unabhängiger **Claude**-Subagent (adversarial; nur claude/codex/agy — `agy` fehlt im Env): **APPROVE-WITH-NITS**, 0× CRITICAL/HIGH; Schema sicher (Instanz-URI kollidiert nicht mit node-Identität; normalizeAgentId nur auf echte Cert-SANs), null-Vertrag tight, Fehler-Surfacing korrekt, unregister async-safe. **CR-M1** (Cross-Grammatik-E2E-Adressierung) = **A2/A3-Scope** (Deploy + Receive-Loop, DoD) → per Split- + Round-Trip-Test festgezurrt. **CR-L1** (Doc: `stableNodeId` kann base58-PeerID halten) → Kommentar in spiffe-uri.ts. **CR-L2** (repräsentative 51-Zeichen-PeerID-Fixture). **CR-L3** (dataDir jetzt durchgereicht) = bewusste Korrektur, kein Regress. **PC:** manuell (tsc/authored-eslint/Suite/Build grün, `git diff` reviewed) — `agy` fehlt. **DO:** CHANGES (v0.34.60), COMPLIANCE, `changes/2026-07-02_a1-agent-register-node-spiffe.md`. **Status:** eigenständig gegen `main`; A2 Rollout (Deploy-Gate) → A3 Empfangs-Loop → A4 Runbook + DoD-Probelauf. Kein Deploy.
+
+---
+
+*Letzte Aktualisierung: 2026-07-02 08:18 — v0.34.60 fix(agent): Registrierung node/-fähig + Register-Diagnose (A1).*

@@ -8,6 +8,28 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.60 (Bug-Fix, KEIN Deploy) — fix(agent): Registrierung node/-fähig (buildInstanceSpiffe) + präzise Register-Diagnose (Mesh-Messaging A1)
+
+Mesh-Messaging-Auftrag Slice A1. Behebt zwei live verifizierte Blocker:
+
+- **`POST /api/agent/register` 500 → gefixt:** `buildInstanceSpiffe()` (agent-api.ts) parste nur die
+  Legacy-`host/`-Grammatik → mit kanonischer `node/<PeerID>`-Daemon-Identität (ADR-022-Flip) null → 500,
+  fleet-weit keine Agent-Registrierung, inbox.db leer. Fix via `parseSpiffeUri`+`buildInstanceUri`
+  (beide Grammatiken). **Instanz-URI-Schema (ADR-005/ADR-028-konsistent):** Instanzen leben in der
+  host-Grammatik → node-Daemon ergibt `host/<PeerID>/agent/<type>/instance/<id>` (PeerID im Node-Slot,
+  parsebar, kollisionsfrei zur node-Identität).
+- **Präzise Register-Diagnose:** `registerWithDaemon`/`unregisterFromDaemon` (mcp-stdio.ts) verschluckten
+  jeden Fehler als „daemon unreachable" (auch 500). Jetzt Low-Level `requestDaemon` + reines
+  `agent-register-format.ts`: ok / http-non-2xx (Status+Body) / transport-error sauber getrennt; dataDir
+  korrekt durchgereicht.
+- **TS:** `agent-api.test.ts` (node-Daemon register→200-Regression, register→heartbeat→unregister-Round-Trip,
+  buildInstanceSpiffe-Unit inkl. Zwei-Grammatik-Split), `agent-register-format.test.ts` (neu, 7). Suite
+  **1320 grün**, tsc 0, authored-eslint 0, build 0. dist-Smoke bestätigt.
+- **CR:** unabhängiger **Claude**-Subagent APPROVE-WITH-NITS, 0× HIGH/CRITICAL; CR-M1 (Ende-zu-Ende
+  send-to-instance = A2/A3-Scope) via Split+Round-Trip-Test festgezurrt; CR-L1 (Doc `stableNodeId`) +
+  CR-L2 (PeerID-Fixture) umgesetzt. **DO:** CHANGES (v0.34.60), COMPLIANCE, `changes/2026-07-02_a1-agent-register-node-spiffe.md`.
+- **Folge:** A2 Rollout (Deploy-Gate) → A3 Empfangs-Loop → A4 Runbook + DoD-Probelauf. **Kein Deploy.**
+
 ### v0.34.59 (Hardening, KEIN Deploy) — fix(mcp): Phantom-Announce-Guard für geteilte MCP-Server (serve_shared, ADR-032)
 
 Hardening zu ADR-028 D4-a / MEDIUM aus dem #229-Review: das fleet-weite Config-Template deklariert
