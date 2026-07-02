@@ -1393,4 +1393,14 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-07-02 10:40 — v0.34.62 perf(daemon): T1.1 RSS/CPU-Mess-Slice.*
+## Session 2026-07-02 12:48 — v0.34.63 docs(ops): T1.1 RSS/CPU-Live-Messung tsx→node dist (DoD-Abschluss)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|------------------------------------|
+| v0.34.63 | (offen, base=main) | 2026-07-02 12:48 | n/a | n/a | ✅ | n/a | ✅ | ✅ | Doc-only Evidence-Slice; reale Live-Zahlen n=60: RSS -40.2%, CPU -45.5% |
+
+**Typ:** Doc-only/Evidence — kein Produktionscode, keine Konfig, kein Deploy. Nach CLAUDE.md darf eine Doc-only-PR CO/CG/CR auslassen; TS ist hier der **Live-Mess-Beleg** selbst. **CO/CG:** n/a (keine Architektur-/Boilerplate-Frage). **TS:** kein neuer Code → keine neuen Unit-Tests; die **genutzte** Mess-Primitive `rss-cpu-stats.ts` ist grün (`rss-cpu-stats.test.ts` **19**), tsc 0. Der eigentliche TS-Nachweis dieses Slices ist der **reproduzierbare Live-Lauf**: isolierte Instanz (`TLMCP_RUNTIME_MODE=local`, libp2p/mDNS aus, Port 9460, temp data dir — stört Produktiv-Daemon 9440 + LAN-Mesh NICHT), je **n=60** Samples @1s, 20s Warmup, Prozessbaum-Sampling. Ergebnis: **RSS 215.8→129.1 MiB (-40.2%)**, **CPU 4.82→2.63% (-45.5%)**; Roh-JSONs eingebettet, kein Zahlen-Erfinden. **CR:** n/a (Doc-only; Zahlen sind Sampler-Output, keine Logik). **PC:** manuell (tsc 0, Primitive-Test grün, keine Streu-Prozesse/Ports, Produktiv-9440 unberührt, `git diff` reviewed) — `agy` fehlt. **DO:** `docs/operations/T1.1-rss-cpu-measurement.md` (Ergebnis-Sektion), `changes/2026-07-02_t11-rss-cpu-live-measurement.md`, CHANGES (v0.34.63), COMPLIANCE. **Caveat:** Absolutwerte isoliert < Produktion; das Δ (identische Konfig beider Läufe) ist das DoD-Signal. **Status:** schließt den DoD-Mess-Teil von T1.1 (von v0.34.62/#235 als Folge offengelassen). **Kein Deploy.**
+
+---
+
+*Letzte Aktualisierung: 2026-07-02 12:48 — v0.34.63 docs(ops): T1.1 RSS/CPU-Live-Messung (DoD-Abschluss).*

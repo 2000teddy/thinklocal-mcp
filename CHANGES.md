@@ -8,6 +8,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.63 (Evidence/Messung, KEIN Deploy) — docs(ops): T1.1 RSS/CPU-Live-Messung tsx→node dist (DoD-Abschluss)
+
+Schließt den offenen DoD-Teil von T1.1 („RSS/CPU vorher/nachher **gemessen**", von v0.34.62 als
+Folge-Schritt offengelassen) mit realen, reproduzierbaren Zahlen. Doku-only, kein Code-Change.
+
+- **Live-Lauf (TH01):** isolierte Mess-Instanz (`TLMCP_RUNTIME_MODE=local`, libp2p/mDNS aus, Port 9460,
+  temp data dir) — stört Produktiv-Daemon (9440) und LAN-Mesh nicht. Je **n=60** Samples @1s, 20s Warmup,
+  Prozessbaum-Sampling via `measure-daemon-rss-cpu.mjs`.
+- **Ergebnis:** RSS mean **215.8 → 129.1 MiB (-40.2%)**, CPU mean **4.82 → 2.63% (-45.5%)**. `node dist/`
+  spart ~40% RSS (≈87 MiB) + ~46% CPU-Grundlast vs. `tsx` — kein esbuild-Transform/In-Memory-Source zur Laufzeit.
+  Runbook-Erwartung empirisch bestätigt.
+- **Caveat:** Absolutwerte einer isolierten Instanz < Produktions-Daemon; das Δ (identische Konfig beider
+  Läufe) ist das belastbare DoD-Signal. **Kein Zahlen-Erfinden** — Roh-JSONs eingebettet.
+- **DO:** `docs/operations/T1.1-rss-cpu-measurement.md` (Ergebnis-Sektion), `changes/2026-07-02_t11-rss-cpu-live-measurement.md` (Roh-JSONs + Reproduktion), CHANGES, COMPLIANCE. **Kein Deploy.**
+
 ### v0.34.62 (Tooling/Perf-Nachweis, KEIN Deploy) — perf(daemon): T1.1 RSS/CPU-Mess-Slice (tsx→node dist Vorher/Nachher)
 
 Die T1.1-Startumstellung `tsx`→`node dist/` ist bereits gemergt (PR #217). Dieser Slice liefert den
