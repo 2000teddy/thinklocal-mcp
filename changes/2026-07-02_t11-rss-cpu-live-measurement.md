@@ -34,7 +34,8 @@ cd packages/daemon && npx tsc                       # dist bauen
 export TLMCP_RUNTIME_MODE=local TLMCP_LIBP2P_ENABLED=0 TLMCP_MDNS_ENABLED=0 \
        TLMCP_PORT=9460 TLMCP_DATA_DIR=/tmp/t11-measure
 # vorher:
-setsid npx tsx src/index.ts >/tmp/t11-tsx.log 2>&1 & ; sleep 20
+setsid npx tsx src/index.ts >/tmp/t11-tsx.log 2>&1 &
+sleep 20
 DPID=$(ss -ltnp | grep ':9460 ' | grep -oP 'pid=\K[0-9]+' | head -1); ROOT=$(ps -o ppid= -p $DPID)
 node ../../scripts/measure-daemon-rss-cpu.mjs --pid $ROOT --samples 60 --interval-ms 1000 >before-tsx.json
 kill -TERM -$(ps -o pgid= -p $DPID | tr -d ' ')
