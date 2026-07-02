@@ -17,6 +17,7 @@ import {
   type McpIngressApiDeps,
   type PeerCertSocket,
 } from './mcp-ingress-api.js';
+import { MCP_HOP_HEADER, type McpDispatchExecutor, type McpForwardContext } from './mcp-forward-executor.js';
 
 const SELF = 'spiffe://thinklocal/node/12D3KooWSELF';
 const OWNER = 'spiffe://thinklocal/node/12D3KooWOWNER';
@@ -111,10 +112,16 @@ function makeReply(): CapturedReply {
   return captured;
 }
 
-function makeRequest(server: string, socket: PeerCertSocket, body?: unknown): FastifyRequest {
+function makeRequest(
+  server: string,
+  socket: PeerCertSocket,
+  body?: unknown,
+  headers: Record<string, string> = {},
+): FastifyRequest {
   return {
     params: { server },
     body,
+    headers,
     raw: { socket },
   } as unknown as FastifyRequest;
 }
@@ -174,18 +181,65 @@ describe('makeMcpIngressHandler', () => {
     expect(rep.status).toBe(503);
   });
 
-  it('remote-forward-only: routbarer Owner → 501 (Executor deferred, T3.3)', async () => {
+  it('ohne injizierten Executor: routbarer Owner → 501 (Stub)', async () => {
     const rep = await run(makeRequest('unifi', authorizedSocket(CALLER)), baseDeps());
     expect(rep.status).toBe(501);
-    expect((rep.body as { error?: string }).error).toMatch(/T3\.3/);
+    expect((rep.body as { error?: string }).error).toMatch(/not wired/);
   });
 
-  it('local-exec ist zurückgestellt (Q1): eigener Node serviert → 501 local deferred', async () => {
+  it('ohne Executor, eigener Node serviert → 501 local deferred (Q1)', async () => {
     const rep = await run(
       makeRequest('unifi', authorizedSocket(CALLER)),
       baseDeps({ getCapabilities: () => [cap({ agent_id: SELF })] }),
     );
     expect(rep.status).toBe(501);
     expect((rep.body as { error?: string }).error).toMatch(/local-exec deferred/);
+  });
+});
+
+describe('makeMcpIngressHandler — T3.3 Executor-Wiring (Hop, Payload, Audit)', () => {
+  function captureExec(): { ctxs: McpForwardContext[]; exec: McpDispatchExecutor } {
+    const ctxs: McpForwardContext[] = [];
+    const exec: McpDispatchExecutor = async (_dispatch, ctx) => {
+      ctxs.push(ctx);
+      return { status: 200, body: { ok: true } };
+    };
+    return {
+      ctxs,
+      exec,
+    };
+  }
+  function captureAudit(): { events: Array<[string, string, string]>; fn: McpIngressApiDeps['audit'] } {
+    const events: Array<[string, string, string]> = [];
+    return { events, fn: (e, p, d) => events.push([e, p, d]) };
+  }
+
+  it('reicht incomingHop (aus Header), Payload und Servername an den Executor durch', async () => {
+    const cap0 = captureExec();
+    const payload = { jsonrpc: '2.0', method: 'tools/call' };
+    const rep = await run(
+      makeRequest('unifi', authorizedSocket(CALLER), payload, { [MCP_HOP_HEADER]: '1' }),
+      baseDeps({ execute: cap0.exec }),
+    );
+    expect(rep.status).toBe(200);
+    expect(cap0.ctxs[0]?.incomingHop).toBe(1);
+    expect(cap0.ctxs[0]?.payload).toEqual(payload);
+    expect(cap0.ctxs[0]?.server).toBe('unifi');
+  });
+
+  it('fehlender/ungültiger Hop-Header → incomingHop 0', async () => {
+    const cap0 = captureExec();
+    await run(makeRequest('unifi', authorizedSocket(CALLER), {}, { [MCP_HOP_HEADER]: 'garbage' }), baseDeps({ execute: cap0.exec }));
+    expect(cap0.ctxs[0]?.incomingHop).toBe(0);
+  });
+
+  it('Audit RX bei akzeptiertem Call, REJECT bei 403', async () => {
+    const okAudit = captureAudit();
+    await run(makeRequest('unifi', authorizedSocket(CALLER)), baseDeps({ execute: captureExec().exec, audit: okAudit.fn }));
+    expect(okAudit.events.some(([e]) => e === 'MCP_PROXY_RX')).toBe(true);
+
+    const rejAudit = captureAudit();
+    await run(makeRequest('unifi', { authorized: false }), baseDeps({ execute: captureExec().exec, audit: rejAudit.fn }));
+    expect(rejAudit.events.some(([e]) => e === 'MCP_FORWARD_REJECT')).toBe(true);
   });
 });
