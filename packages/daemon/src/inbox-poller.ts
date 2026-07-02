@@ -15,6 +15,7 @@
  */
 import type { Logger } from 'pino';
 import { requestDaemon } from './local-daemon-client.js';
+import { getAgentInstance } from './spiffe-uri.js';
 
 /** Eine aus der Inbox gepollte Nachricht (Teilmenge von GET /api/inbox). */
 export interface PolledMessage {
@@ -153,11 +154,37 @@ export function createInboxPoller(deps: InboxPollerDeps, opts: InboxPollerOption
 export interface DaemonInboxPollerConfig {
   baseUrl: string;
   dataDir: string;
-  /** Kanonische Instanz-URI (A1) → nur an diese Instanz adressierte Nachrichten pollen. */
+  /**
+   * Instanz-Filter (A1) → nur an diese Instanz adressierte Nachrichten pollen.
+   * Akzeptiert die **volle 4-Komponenten-Instanz-URI** (`instance_spiffe_uri` aus der
+   * A1-Registrierung, `…/agent/<type>/instance/<id>`) — daraus wird die **Instanz-
+   * Komponente `<id>`** extrahiert, weil der Inbox-API-Vertrag (ADR-005,
+   * `for_instance` = `SPIFFE_COMPONENT_REGEX`) genau diese Komponente erwartet und
+   * `to_agent_instance` sie speichert (`getAgentInstance(to)`). Eine bereits nackte
+   * Komponente wird ebenfalls akzeptiert.
+   */
   forInstance?: string;
   deliver: (message: PolledMessage) => Promise<void> | void;
   intervalMs: number;
   log?: Logger;
+}
+
+/**
+ * Leitet die Instanz-Komponente (`<id>`) für den `for_instance`-Query ab — konsistent
+ * zum Inbox-API-Vertrag (ADR-005): der Server speichert/filtert `to_agent_instance`
+ * = `getAgentInstance(to)` = nur die 4. Komponente, nicht die volle URI. Akzeptiert
+ * die volle Instanz-URI (→ Komponente) ODER eine bereits nackte Komponente (→ as-is).
+ * Reine Funktion. Exportiert für Unit-Tests.
+ */
+export function instanceComponentForQuery(forInstance: string): string {
+  try {
+    // Volle 4-Komponenten-URI → die Instanz-Komponente; 3-Komp/node → undefined.
+    const component = getAgentInstance(forInstance);
+    if (component) return component;
+  } catch {
+    // Kein parsebarer SPIFFE-URI → als bereits-nackte Komponente behandeln.
+  }
+  return forInstance;
 }
 
 /**
@@ -171,7 +198,10 @@ export function buildDaemonInboxDeps(
 ): { fetchUnread: () => Promise<PolledMessage[]>; markRead: (messageId: string) => Promise<void> } {
   const fetchUnread = async (): Promise<PolledMessage[]> => {
     const params = ['unread=true'];
-    if (config.forInstance) params.push(`for_instance=${encodeURIComponent(config.forInstance)}`);
+    if (config.forInstance) {
+      // Inbox-API erwartet die Instanz-KOMPONENTE (nicht die volle URI) — sonst 400.
+      params.push(`for_instance=${encodeURIComponent(instanceComponentForQuery(config.forInstance))}`);
+    }
     const res = await requestDaemon(`/api/inbox?${params.join('&')}`, {
       baseUrl: config.baseUrl,
       dataDir: config.dataDir,

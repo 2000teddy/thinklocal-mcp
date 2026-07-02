@@ -15,6 +15,7 @@ import {
   pollInboxOnce,
   createInboxPoller,
   buildDaemonInboxDeps,
+  instanceComponentForQuery,
   type InboxPollerDeps,
   type PolledMessage,
 } from './inbox-poller.js';
@@ -183,6 +184,19 @@ describe('createInboxPoller (Interval-Runner)', () => {
   });
 });
 
+describe('instanceComponentForQuery (for_instance-Vertrag ADR-005)', () => {
+  it('volle 4-Komponenten-Instanz-URI → Instanz-Komponente', () => {
+    expect(instanceComponentForQuery('spiffe://thinklocal/host/HUBID/agent/claude-code/instance/i1')).toBe('i1');
+  });
+  it('bereits nackte Komponente → unverändert', () => {
+    expect(instanceComponentForQuery('abc123')).toBe('abc123');
+  });
+  it('3-Komponenten-Daemon-URI (keine Instanz) → unverändert (kein Crash)', () => {
+    const uri = 'spiffe://thinklocal/host/HUBID/agent/claude-code';
+    expect(instanceComponentForQuery(uri)).toBe(uri);
+  });
+});
+
 describe('buildDaemonInboxDeps (Daemon-I/O gegen requestDaemon)', () => {
   const CFG = { baseUrl: 'https://localhost:9440', dataDir: '/tmp/x' };
   beforeEach(() => requestDaemonMock.mockReset());
@@ -196,12 +210,21 @@ describe('buildDaemonInboxDeps (Daemon-I/O gegen requestDaemon)', () => {
     expect(path).toBe('/api/inbox?unread=true');
   });
 
-  it('fetchUnread: for_instance wird URL-enkodiert angehängt', async () => {
+  it('fetchUnread: volle Instanz-URI → sendet nur die Instanz-KOMPONENTE (API-Vertrag ADR-005)', async () => {
     requestDaemonMock.mockResolvedValueOnce({ status: 200, body: '{"messages":[]}' });
-    const { fetchUnread } = buildDaemonInboxDeps({ ...CFG, forInstance: 'spiffe://thinklocal/host/HUB/agent/claude-code/instance/i1' });
+    const { fetchUnread } = buildDaemonInboxDeps({ ...CFG, forInstance: 'spiffe://thinklocal/host/12D3KooWHubPeerIdAbcDefGhiJkMnPqRsTuVwXyZ23/agent/claude-code/instance/i1' });
     await fetchUnread();
     const [path] = requestDaemonMock.mock.calls[0] as [string, unknown];
-    expect(path).toBe('/api/inbox?unread=true&for_instance=spiffe%3A%2F%2Fthinklocal%2Fhost%2FHUB%2Fagent%2Fclaude-code%2Finstance%2Fi1');
+    // NICHT die volle URI (400), sondern die 4. Komponente `i1`.
+    expect(path).toBe('/api/inbox?unread=true&for_instance=i1');
+  });
+
+  it('fetchUnread: bereits nackte Instanz-Komponente wird as-is gesendet', async () => {
+    requestDaemonMock.mockResolvedValueOnce({ status: 200, body: '{"messages":[]}' });
+    const { fetchUnread } = buildDaemonInboxDeps({ ...CFG, forInstance: 'abc123' });
+    await fetchUnread();
+    const [path] = requestDaemonMock.mock.calls[0] as [string, unknown];
+    expect(path).toBe('/api/inbox?unread=true&for_instance=abc123');
   });
 
   it('fetchUnread: non-2xx → wirft', async () => {
