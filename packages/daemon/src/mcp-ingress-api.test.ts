@@ -242,4 +242,24 @@ describe('makeMcpIngressHandler — T3.3 Executor-Wiring (Hop, Payload, Audit)',
     await run(makeRequest('unifi', { authorized: false }), baseDeps({ execute: captureExec().exec, audit: rejAudit.fn }));
     expect(rejAudit.events.some(([e]) => e === 'MCP_FORWARD_REJECT')).toBe(true);
   });
+
+  // ADR-033 CR-MEDIUM: Tier-Verweigerung im REJECT-Audit-Detail von einer Sender-Auth-Ablehnung
+  // unterscheidbar (beide 403). Die gate-Cap erzwingt eine Tier-403 im Handler (VOR dem Executor).
+  it('Tier-403 wird als REJECT mit `tier=` auditiert (unterscheidbar von Auth-403)', async () => {
+    const tierAudit = captureAudit();
+    const rep = await run(
+      makeRequest('unifi', authorizedSocket(CALLER)),
+      baseDeps({ getCapabilities: () => [cap({ permissions: ['write'] })], execute: captureExec().exec, audit: tierAudit.fn }),
+    );
+    expect(rep.status).toBe(403);
+    const rej = tierAudit.events.find(([e]) => e === 'MCP_FORWARD_REJECT');
+    expect(rej).toBeDefined();
+    expect(rej?.[2]).toContain('tier=gate');
+
+    // Gegenprobe: Auth-403 trägt KEIN tier= (klar unterscheidbar).
+    const authAudit = captureAudit();
+    await run(makeRequest('unifi', { authorized: false }), baseDeps({ execute: captureExec().exec, audit: authAudit.fn }));
+    const authRej = authAudit.events.find(([e]) => e === 'MCP_FORWARD_REJECT');
+    expect(authRej?.[2]).not.toContain('tier=');
+  });
 });
