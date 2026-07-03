@@ -7,7 +7,12 @@ import { describe, it, expect } from 'vitest';
 import type { Capability } from './registry.js';
 import type { McpForwardPeer } from './mcp-forward.js';
 import type { McpForwardDispatch } from './mcp-forward-dispatch.js';
-import { handleMcpIngress, type McpIngressDeps, type McpIngressResponse } from './mcp-ingress.js';
+import {
+  handleMcpIngress,
+  enforceExecutionTier,
+  type McpIngressDeps,
+  type McpIngressResponse,
+} from './mcp-ingress.js';
 
 const SELF = 'spiffe://thinklocal/node/12D3KooWSELF';
 const OWNER = 'spiffe://thinklocal/node/12D3KooWOWNER';
@@ -186,5 +191,81 @@ describe('handleMcpIngress', () => {
     if (!d || d.kind !== 'remote') throw new Error('expected remote');
     expect(d.request.outboundPolicy.spiffeServerIdentity).toBe(false);
     expect(d.request.serverIdentityPolicy.expectedSpiffeId).toBeUndefined();
+  });
+
+  // ── ADR-033: Ausführungsstufen-Durchsetzung am Ingress (Gate 2, fail-closed) ──
+
+  it('Tier-Gate: gate-Stufe (schreibend, remote) → 403, KEIN Dispatch', async () => {
+    const ex = makeExecutor();
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: [cap({ permissions: ['write'] })] },
+      baseDeps({ execute: ex.execute }),
+    );
+    expect(res.status).toBe(403);
+    expect((res.body as { tier?: string }).tier).toBe('gate');
+    expect(ex.calls).toHaveLength(0); // fail-closed VOR dem Executor
+  });
+
+  it('Tier-Gate: consensus-Stufe (kritisch, remote) → 403, KEIN Dispatch', async () => {
+    const ex = makeExecutor();
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: [cap({ permissions: ['admin'] })] },
+      baseDeps({ execute: ex.execute }),
+    );
+    expect(res.status).toBe(403);
+    expect((res.body as { tier?: string }).tier).toBe('consensus');
+    expect(ex.calls).toHaveLength(0);
+  });
+
+  it('Tier-Gate: gate-Stufe auch bei local-Dispatch → 403, KEIN Dispatch', async () => {
+    const ex = makeExecutor();
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: [cap({ agent_id: SELF, permissions: ['control'] })] },
+      baseDeps({ execute: ex.execute }),
+    );
+    expect(res.status).toBe(403);
+    expect((res.body as { tier?: string }).tier).toBe('gate');
+    expect(ex.calls).toHaveLength(0);
+  });
+
+  it('Tier-Gate: consensus-Stufe auch bei local-Dispatch → 403, KEIN Dispatch', async () => {
+    const ex = makeExecutor();
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: [cap({ agent_id: SELF, permissions: ['delete'] })] },
+      baseDeps({ execute: ex.execute }),
+    );
+    expect(res.status).toBe(403);
+    expect((res.body as { tier?: string }).tier).toBe('consensus');
+    expect(ex.calls).toHaveLength(0);
+  });
+
+  it('Tier-Gate (Regression): self-Stufe (lesend) läuft durch → execute', async () => {
+    const ex = makeExecutor();
+    // permissions=["network.read"] wie die reale unifi-Beta-Deklaration → self.
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: [cap({ permissions: ['network.read'] })] },
+      baseDeps({ execute: ex.execute }),
+    );
+    expect(res.status).toBe(200);
+    expect(ex.calls).toHaveLength(1);
+  });
+});
+
+describe('enforceExecutionTier (ADR-033, reine Funktion)', () => {
+  it('self → null (erlaubt)', () => {
+    expect(enforceExecutionTier('self', 'unifi')).toBeNull();
+  });
+
+  it('gate → 403 mit tier+server im Body', () => {
+    const r = enforceExecutionTier('gate', 'unifi');
+    expect(r?.status).toBe(403);
+    expect((r?.body as { tier?: string; server?: string }).tier).toBe('gate');
+    expect((r?.body as { server?: string }).server).toBe('unifi');
+  });
+
+  it('consensus → 403 mit tier im Body', () => {
+    const r = enforceExecutionTier('consensus', 'pal');
+    expect(r?.status).toBe(403);
+    expect((r?.body as { tier?: string }).tier).toBe('consensus');
   });
 });

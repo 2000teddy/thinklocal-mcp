@@ -14,7 +14,7 @@
 import type { Capability } from './registry.js';
 import type { McpForwardPeer } from './mcp-forward.js';
 import type { McpForwardDispatch } from './mcp-forward-dispatch.js';
-import { resolveMcp } from './mcp-service-registry.js';
+import { resolveMcp, type McpExecutionTier } from './mcp-service-registry.js';
 import { planMcpRoute } from './mcp-routing.js';
 import { buildMcpForwardSpec } from './mcp-forward.js';
 import { buildMcpForwardDispatch } from './mcp-forward-dispatch.js';
@@ -22,6 +22,50 @@ import { buildMcpForwardDispatch } from './mcp-forward-dispatch.js';
 export interface McpIngressResponse {
   status: number;
   body: unknown;
+}
+
+/**
+ * ADR-033: Setzt die Ausführungsstufe am Hub-Ingress durch (fail-closed, Beta).
+ * Gate 2 (ENTSCHEIDUNGEN.md, 02.07.): Lese-/Schreib-Stufen je Werkzeug sind Beta-Pflicht.
+ *
+ *  - `self` (lesend)        → `null` (erlaubt) → weiter an den Executor.
+ *  - `gate` (schreibend)    → 403: Freigabe nötig, aber der Meldekanal (Design-Vorgabe 10 /
+ *                             7.8 P6a) ist noch nicht gebaut → eiserne Regel „kein Kanal ⇒ verweigert".
+ *  - `consensus` (kritisch) → 403: Einzel-Freigabe genügt nicht; in der Beta zentral verweigert.
+ *
+ * Reine Funktion, wirft nicht. `null` = erlaubt, sonst die 403-Antwort. Exhaustiv über die
+ * `McpExecutionTier`-Union (eine neue Stufe → Compile-Fehler statt stillem fail-open).
+ */
+export function enforceExecutionTier(
+  tier: McpExecutionTier,
+  server: string,
+): McpIngressResponse | null {
+  switch (tier) {
+    case 'self':
+      return null;
+    case 'gate':
+      return {
+        status: 403,
+        body: {
+          error: 'write-tier tool requires operator approval; approval channel not configured (Beta remote-forward-only)',
+          server,
+          tier,
+        },
+      };
+    case 'consensus':
+      return {
+        status: 403,
+        body: { error: 'critical-tier tool denied in Beta (requires consensus approval)', server, tier },
+      };
+    default: {
+      // Exhaustiveness-Guard: eine neue Stufe MUSS hier bewusst eingeordnet werden.
+      const _exhaustive: never = tier;
+      return {
+        status: 403,
+        body: { error: 'unknown execution tier (fail-closed)', server, tier: String(_exhaustive) },
+      };
+    }
+  }
 }
 
 export interface McpIngressInput {
@@ -57,7 +101,8 @@ export interface McpIngressDeps {
  *  2. ungültiger Servername → 400.
  *  3. resolve → plan → spec → dispatch.
  *  4. `none` (kein Provider / nicht nutzbar / fehlkonfiguriert) → 503, KEIN Dispatch.
- *  5. local/remote → an `execute` weiterreichen (Plan trägt D2-Pin/D3-Sender konsistent zu #195).
+ *  5. Ausführungsstufe (ADR-033): `gate`/`consensus` → 403 fail-closed, KEIN Dispatch.
+ *  6. `self` local/remote → an `execute` weiterreichen (Plan trägt D2-Pin/D3-Sender konsistent zu #195).
  */
 export async function handleMcpIngress(
   input: McpIngressInput,
@@ -96,6 +141,13 @@ export async function handleMcpIngress(
     return { status: 503, body: { error: 'mcp unavailable', server: input.server, reason: dispatch.reason } };
   }
 
-  // 5. local/remote → an den injizierten Executor weiterreichen (kein Net-Egress hier).
+  // 5. ADR-033: Ausführungsstufe durchsetzen (Gate 2) VOR dem Executor. Die Stufe stammt aus
+  //    demselben Dispatch, den der Executor auditiert (keine zweite, driftende Ableitung):
+  //    local trägt sie direkt, remote im request-Plan. gate/consensus → 403 fail-closed.
+  const tier = dispatch.kind === 'local' ? dispatch.execution_tier : dispatch.request.execution_tier;
+  const denied = enforceExecutionTier(tier, input.server);
+  if (denied) return denied;
+
+  // 6. self (lesend) → an den injizierten Executor weiterreichen (kein Net-Egress hier).
   return deps.execute(dispatch);
 }

@@ -1447,4 +1447,14 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
+## Session 2026-07-03 06:34 — feat(mcp): Ausführungsstufen-Durchsetzung am Hub-Ingress (7.8 P6, ADR-033)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|------------------------------------|
+| ADR-033  | (offen, base=main) | 2026-07-03 06:34 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | CR Claude adversarial APPROVE, 0× HIGH/CRIT; 1× MED (Audit-Unterscheidbarkeit) + 1× LOW (consensus×local-Test) gefixt+Test |
+
+**Typ:** Feature (Security-Gate), **repo-only, kein Deploy/Device/systemd**; direkt aus Gate 2 (Lese-/Schreib-Stufen = Beta-Pflicht). **CO:** n/a — Architektur bereits entschieden (Gate 2 + ADR-028-D4-`execution_tier`); ADR-033 dokumentiert die Durchsetzung vor dem Code. **CG:** n/a. **TS:** `mcp-ingress.test.ts` (+8: gate/consensus je remote+local → 403 KEIN Dispatch, self-Regression → execute, 3× reine `enforceExecutionTier`), `mcp-ingress-api.test.ts` (+1: Tier-403 → REJECT `tier=gate`, Gegenprobe Auth-403 ohne `tier=`). Full Suite **114 Files / 1421 grün**, tsc 0, eslint 0. **CR:** unabhängiger **Claude**-Subagent (adversarial, Security; `agy` fehlt im Env): **APPROVE**, 0× HIGH/CRITICAL — Tier-Extraktion local+remote korrekt, fail-closed vor `execute`, kein fail-open, Q1/owner-local-exec unberührt, Exhaustiveness-Guard fail-closed. Gefixt: **MED** (REJECT-Audit `tier=`-Suffix → Tier- vs Auth-403 unterscheidbar) + **LOW** (consensus×local-Test), je mit Test. **PC:** manuell (tsc/eslint/Suite/`git diff` grün) — `agy`-Backend fehlt. **DO:** `docs/architecture/ADR-033-*`, COMPLIANCE, `changes/2026-07-03_mcp-ingress-tier-enforcement.md`. **Q1-Grenze:** Gate sitzt VOR dem Executor; self+local endet unverändert im 501-Stub. Kein Owner-local-exec.
+
+---
+
 *Letzte Aktualisierung: 2026-07-02 15:37 — v0.34.64 test(mcp): MCP-Forward-Naht-Integrationstest (T3.2+T3.3).*

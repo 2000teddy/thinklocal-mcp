@@ -138,7 +138,11 @@ export function makeMcpIngressHandler(
     // 502/503/508) → REJECT; ein akzeptierter Proxy-Call → RX. (CR-L1: Reject-Stati nicht
     // als „RX" verschleiern, damit Audit-Queries Loop-/Auth-Fehlversuche finden.)
     if (result.status === 403 || result.status >= 500) {
-      deps.audit?.('MCP_FORWARD_REJECT', senderUri ?? 'unknown', `${server} status=${result.status}`);
+      // ADR-033 (CR-MEDIUM): eine Tier-Verweigerung (Body trägt `tier`) im Audit-Detail von einer
+      // Sender-Auth-Ablehnung unterscheidbar machen — sonst sind beide „status=403" ununterscheidbar.
+      const tier = (result.body as { tier?: unknown } | undefined)?.tier;
+      const tierSuffix = typeof tier === 'string' ? ` tier=${tier}` : '';
+      deps.audit?.('MCP_FORWARD_REJECT', senderUri ?? 'unknown', `${server} status=${result.status}${tierSuffix}`);
     } else {
       deps.audit?.('MCP_PROXY_RX', senderUri ?? 'unknown', `${server} status=${result.status} hop=${incomingHop}`);
     }
