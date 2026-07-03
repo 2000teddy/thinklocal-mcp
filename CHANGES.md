@@ -8,6 +8,31 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.65 (Security-Gate, KEIN Deploy) — feat(mcp): Ausführungsstufen-Durchsetzung am Hub-Ingress (7.8 P6, ADR-033)
+
+Die Ausführungsstufe `execution_tier` (`self`/`gate`/`consensus`) floss seit ADR-028 D4 durch die
+gesamte MCP-Forward-Kette und wurde **auditiert, aber nirgends durchgesetzt** — `handleMcpIngress`
+reichte jeden routbaren Dispatch **stufen-unabhängig** an den Executor. Dieser Slice macht die Stufe
+am Hub-Eingang zu einem echten Gate (Architektur-**Gate 2**: Lese-/Schreib-Stufen = Beta-Pflicht).
+
+- **`enforceExecutionTier(tier, server)` (neu, rein, exhaustiv über `McpExecutionTier`):** `self` → weiter
+  an den Executor; `gate`/`consensus` → **403 fail-closed**. Verdrahtet in `handleMcpIngress` **nach**
+  dem `none`→503-Guard und **vor** `execute`. Die Stufe kommt aus demselben Dispatch, den der Executor
+  auditiert (`local.execution_tier` / `remote.request.execution_tier`) — keine zweite, driftende Ableitung.
+- **Warum fail-closed:** der echte Schreib-Fluss hängt am Meldekanal (Design-Vorgabe 10 / 7.8 P6a), der
+  noch nicht gebaut ist → eiserne Regel „kein Kanal ⇒ Schreiben verweigert". Sichere Untergrenze von P6.
+- **CR-MEDIUM-Fix:** REJECT-Audit-Detail (`mcp-ingress-api.ts`) trägt bei Tier-Denials `tier=<..>` →
+  Tier-Verweigerung von Sender-Auth-Ablehnung (beide 403) im Audit unterscheidbar.
+- **Q1-Grenze unberührt:** Gate sitzt VOR dem Executor; self+local endet weiter im 501-Stub „local-exec
+  deferred (Q1)". Kein Owner-local-exec. Stufe pro-Server (Steckbrief-`permissions`); pro-Tool-Granularität
+  = eigener Folge-Slice.
+- **TS:** `mcp-ingress.test.ts` +8 (gate/consensus je remote+local → 403 KEIN Dispatch, self-Regression,
+  3× reine `enforceExecutionTier`), `mcp-ingress-api.test.ts` +1 (Tier-403 → REJECT `tier=gate`,
+  Gegenprobe Auth-403 ohne `tier=`); volle Suite **114 Files / 1421 grün**, tsc 0, eslint 0.
+- **CR:** unabhängiger **Claude**-Subagent (adversarial, Security) APPROVE, 0× HIGH/CRITICAL; MED+LOW
+  gefixt+Test. **DO:** `docs/architecture/ADR-033-*`, COMPLIANCE, `changes/2026-07-03_mcp-ingress-tier-enforcement.md`.
+- **Scope:** repo-only, **kein Deploy/Device/systemd**. PR #239.
+
 ### v0.34.64 (Test-only, KEIN Deploy) — test(mcp): MCP-Forward-Naht-Integrationstest (T3.2+T3.3)
 
 Schließt eine reale Coverage-Lücke im MCP-Proxy-Forward-Pfad: die bestehenden Unit-Tests mocken je
