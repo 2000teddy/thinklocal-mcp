@@ -74,3 +74,7 @@ dem noch offenen Kanal-Design.
 - **0** Der Zwei-Rechner-Beweis (7.8 Punkt 5, `list_clients` → `self`) bleibt **unberührt** — self läuft durch.
 - **−** Ein künftiger schreibender MCP wird bis zum Kanal-Design hart verweigert (403), nicht gequeued.
   Das ist beabsichtigt (fail-closed) und dokumentiert.
+- **Audit-Hinweis (CR-M1):** Da die Tier-Verweigerung **vor** dem Executor greift, erzeugt ein
+  abgelehnter Schreib-Aufruf **nur** ein RX-seitiges `MCP_FORWARD_REJECT … tier=<..>` und **kein**
+  `MCP_FORWARD_TX` (es wurde nichts weitergereicht). Das ist korrekt — das Fehlen eines TX-Eintrags ist
+  hier kein Audit-Loch, sondern der Beweis, dass die Bremse vor dem Forward gegriffen hat.

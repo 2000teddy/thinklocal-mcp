@@ -268,4 +268,11 @@ describe('enforceExecutionTier (ADR-033, reine Funktion)', () => {
     expect(r?.status).toBe(403);
     expect((r?.body as { tier?: string }).tier).toBe('consensus');
   });
+
+  // CR-N1: der Exhaustiveness-Guard fällt zur LAUFZEIT fail-closed (403), falls je ein Wert
+  // an der Compile-Zeit-Union vorbei geschleust wird (Cast). Sperrt das Verhalten gegen Refactors.
+  it('unbekannte Stufe (Cast am Typ vorbei) → 403 fail-closed', () => {
+    const r = enforceExecutionTier('mystery' as unknown as Parameters<typeof enforceExecutionTier>[0], 'x');
+    expect(r?.status).toBe(403);
+  });
 });
