@@ -8,6 +8,27 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.67 (RE-CHECK-Verdikt+Test, KEIN Deploy) — docs+test: Cert-Auto-Rotation RE-CHECK (WOCHENPLAN-KW27 §2)
+
+RE-CHECK-Slice (V5 §E.2, vor T2.1): reproduzierbarer Beleg, ob die Cert-Auto-Rotation auf einem
+laufenden Daemon feuert und welcher Pairing-Store-Pfad autoritativ ist.
+
+- **Verdikt (`docs/RECHECK-cert-rotation-2026-07-03.md`, neu):** (1) `cert-rotation.ts` **existiert nicht**
+  — der Plan-Verdacht „`cert-rotation.ts:51` mit `pairing-store.json`" ist stale/Phantom; (2) **kein**
+  Source-File referenziert `pairing-store.json`, autoritativ ist `pairing/paired-peers.json`
+  (`PairingStore`, `pairing.ts:81`); (3) **Auto-Rotation feuert NICHT live** — der einzige verdrahtete
+  Pfad `startCertExpiryMonitor` klassifiziert + alarmiert nur (kein Rotate-Hook in `CertExpiryMonitorDeps`),
+  Reissue bleibt startup-only (`loadOrCreateTlsBundle`, Gate `daysLeft>7`). **By design, kein Pfad-Bug.**
+- **Reproduzierbarer Dry-Run:** neuer Test in `cert-expiry-monitor.test.ts` — abgelaufenes Cert
+  (`daysLeft=-1`) → **nur Alarm, keine In-Process-Rotation** (struktureller Beweis: Deps-Key-Set ohne
+  Rotate-Hook). `npx vitest run cert-expiry-monitor`.
+- **Empfehlung:** T2.1 als „Pfad-Bug-Fix" **nicht gerechtfertigt**; der 2026-09-02-Ablauf ist durch den
+  geplanten Neustart (Fenster 26.08.–01.09.) gemindert; echte In-Process-Rotation = optionales Feature
+  (Christian-Entscheidung), kein Bug.
+- **TS:** `cert-expiry-monitor.test.ts` (+1); volle Suite **115 Files / 1436 grün**, tsc 0, eslint 0.
+- **CR:** unabhängiger **Claude**-Subagent verifiziert alle 4 Claims gegen den Code (**VERIFIED**, Test
+  nicht-tautologisch, keine Overclaims). **Scope:** Verdikt+Test, **kein Deploy**, kein Code-Fix nötig.
+
 ### v0.34.66 (Docs+Config, KEIN Deploy) — docs+feat: A5 Agent-Integration-Kapitel + konfigurierbare Poll-Intervalle
 
 Adoptions-Slice (A5): macht die Kadenz des Agent-Empfangs-Loops (ADR-004) env-konfigurierbar und
