@@ -1457,4 +1457,14 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-07-02 15:37 — v0.34.64 test(mcp): MCP-Forward-Naht-Integrationstest (T3.2+T3.3).*
+## Session 2026-07-03 08:33 — docs+feat: A5 Agent-Integration + konfigurierbare Poll-Intervalle (v0.34.66)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|------------------------------------|
+| v0.34.66 | (offen, base=main) | 2026-07-03 08:33 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | CR Claude adversarial APPROVE, 0× HIGH/CRIT; stop-during-inflight-Test (Nit) nachgezogen |
+
+**Typ:** Adoptions-Slice A5 (Docs+Config), **repo-only, kein Deploy/Device/systemd**. **CO:** n/a (folgt aus Christians A5-Freigabe 2026-07-03 + ADR-004; keine neue Architektur). **CG:** n/a. **TS:** `agent-poll-config.test.ts` (neu, 7: Mode-Defaults, Env-Overrides, fail-safe ungültig/≤0, Invariante maxMs≥initialMs, unknown-Mode), `inbox-poller.test.ts` (+7: adaptiver Backoff/Deckel, Reset-bei-Verkehr, Fehler→Backoff, stop-during-inflight-Drain, maxMs<initialMs-Clamp). Full Suite **115 Files / 1435 grün**, tsc 0, eslint 0. **CR:** unabhängiger **Claude**-Subagent (adversarial, Fokus State-Machine+False-Green; `agy` fehlt im Env): **APPROVE**, 0× HIGH/CRITICAL — kein stop/reschedule-Race, kein inFlight-Deadlock, Backoff-Mathematik korrekt, Clamp in beiden Schichten konsistent, Tests nicht-tautologisch (Delay-Sequenz), `intervalMs` sauber ersetzt ohne Bruch. Nachgezogen: stop-during-inflight-Test. **PC:** manuell (tsc/eslint/Suite/`git diff` grün) — `agy`-Backend fehlt. **DO:** `docs/AGENT-INTEGRATION.md` (neu), README + INSTALL.md (Rotfaden-Verweise), CHANGES (v0.34.66), COMPLIANCE, `changes/2026-07-03_a5-agent-integration-docs.md`. **Abgrenzung:** `TLMCP_AGENT_POLL_*_MS` (Agent-Inbox-Poll, außerhalb LLM) ≠ `TLMCP_HEARTBEAT_MS` (Daemon-Peer-Heartbeat) — explizit dokumentiert. **Scope:** kein Deploy; Poller-Wiring in den Agent-Supervisor = Folge-Slice.
+
+---
+
+*Letzte Aktualisierung: 2026-07-03 08:33 — v0.34.66 docs+feat: A5 Agent-Integration + konfigurierbare Poll-Intervalle.*

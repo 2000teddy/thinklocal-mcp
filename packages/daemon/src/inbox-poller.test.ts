@@ -14,6 +14,7 @@ vi.mock('./local-daemon-client.js', () => ({ requestDaemon: requestDaemonMock })
 import {
   pollInboxOnce,
   createInboxPoller,
+  createAdaptiveInboxPoller,
   buildDaemonInboxDeps,
   instanceComponentForQuery,
   type InboxPollerDeps,
@@ -180,6 +181,159 @@ describe('createInboxPoller (Interval-Runner)', () => {
     t.fire(); // trotz Fehler im ersten Tick läuft der zweite
     await new Promise((r) => setImmediate(r));
     expect(calls).toBe(2);
+    poller.stop();
+  });
+});
+
+describe('createAdaptiveInboxPoller (adaptiver Backoff, ADR-004/A5)', () => {
+  // Manueller setTimeout: fängt Callback + die geplanten Delays, um Backoff deterministisch zu prüfen.
+  function manualTimeout(): {
+    setTimeoutFn: typeof setTimeout;
+    clearTimeoutFn: typeof clearTimeout;
+    fire: () => Promise<void>;
+    delays: () => number[];
+    cleared: () => boolean;
+  } {
+    let cb: (() => void) | undefined;
+    const delays: number[] = [];
+    let cleared = false;
+    return {
+      setTimeoutFn: ((fn: () => void, ms?: number): ReturnType<typeof setTimeout> => {
+        cb = fn;
+        delays.push(ms ?? 0);
+        return { unref: () => undefined } as unknown as ReturnType<typeof setTimeout>;
+      }) as unknown as typeof setTimeout,
+      clearTimeoutFn: (() => {
+        cleared = true;
+      }) as unknown as typeof clearTimeout,
+      fire: async (): Promise<void> => {
+        const c = cb;
+        cb = undefined;
+        c?.();
+        // zwei Mikrotask-Runden: pollInboxOnce (fetch/deliver/markRead) + das Self-Reschedule danach.
+        await new Promise((r) => setImmediate(r));
+        await new Promise((r) => setImmediate(r));
+      },
+      delays: () => delays,
+      cleared: () => cleared,
+    };
+  }
+
+  function depsFor(fetchUnread: () => Promise<ReturnType<typeof msg>[]>): InboxPollerDeps {
+    return { fetchUnread, deliver: () => undefined, markRead: async () => undefined };
+  }
+
+  it('leere Zyklen verdoppeln das Delay bis maxMs (Backoff)', async () => {
+    const t = manualTimeout();
+    const poller = createAdaptiveInboxPoller(depsFor(async () => []), {
+      initialMs: 1000,
+      maxMs: 4000,
+      setTimeoutFn: t.setTimeoutFn,
+      clearTimeoutFn: t.clearTimeoutFn,
+    });
+    poller.start(); // plant initialMs
+    await t.fire(); // leer → 2000
+    await t.fire(); // leer → 4000
+    await t.fire(); // leer → min(8000,4000) = 4000 (gedeckelt)
+    expect(t.delays()).toEqual([1000, 2000, 4000, 4000]);
+    poller.stop();
+  });
+
+  it('Verkehr setzt das Delay zurück auf initialMs', async () => {
+    let hasTraffic = false;
+    const t = manualTimeout();
+    const poller = createAdaptiveInboxPoller(depsFor(async () => (hasTraffic ? [msg('a')] : [])), {
+      initialMs: 1000,
+      maxMs: 8000,
+      setTimeoutFn: t.setTimeoutFn,
+      clearTimeoutFn: t.clearTimeoutFn,
+    });
+    poller.start();
+    await t.fire(); // leer → 2000
+    await t.fire(); // leer → 4000
+    hasTraffic = true;
+    await t.fire(); // Verkehr → reset auf 1000
+    expect(t.delays()).toEqual([1000, 2000, 4000, 1000]);
+    poller.stop();
+  });
+
+  it('Fetch-Fehler → Backoff (nicht schneller), Loop lebt weiter', async () => {
+    let calls = 0;
+    const t = manualTimeout();
+    const poller = createAdaptiveInboxPoller(
+      depsFor(async () => {
+        calls += 1;
+        if (calls === 1) throw new Error('daemon unreachable');
+        return [];
+      }),
+      { initialMs: 1000, maxMs: 8000, setTimeoutFn: t.setTimeoutFn, clearTimeoutFn: t.clearTimeoutFn },
+    );
+    poller.start();
+    await t.fire(); // Fehler → Backoff 2000, kein Crash
+    await t.fire(); // nächster Zyklus läuft (calls=2)
+    expect(calls).toBe(2);
+    expect(t.delays()).toEqual([1000, 2000, 4000]);
+    poller.stop();
+  });
+
+  it('stop() beendet die Schleife (cleared, running=false, kein Reschedule)', async () => {
+    const t = manualTimeout();
+    const poller = createAdaptiveInboxPoller(depsFor(async () => []), {
+      initialMs: 1000,
+      maxMs: 8000,
+      setTimeoutFn: t.setTimeoutFn,
+      clearTimeoutFn: t.clearTimeoutFn,
+    });
+    poller.start();
+    expect(poller.running()).toBe(true);
+    poller.stop();
+    expect(poller.running()).toBe(false);
+    expect(t.cleared()).toBe(true);
+    const before = t.delays().length;
+    await t.fire(); // ein evtl. noch gefeuerter Timer darf NICHT neu planen
+    expect(t.delays().length).toBe(before);
+  });
+
+  it('stop() während eines laufenden Zyklus: Zyklus draint, KEIN Reschedule danach', async () => {
+    const releases: Array<() => void> = [];
+    const deps: InboxPollerDeps = {
+      fetchUnread: async () => {
+        await new Promise<void>((resolve) => releases.push(resolve)); // hängt bis freigegeben
+        return [];
+      },
+      deliver: () => undefined,
+      markRead: async () => undefined,
+    };
+    const t = manualTimeout();
+    const poller = createAdaptiveInboxPoller(deps, {
+      initialMs: 1000,
+      maxMs: 8000,
+      setTimeoutFn: t.setTimeoutFn,
+      clearTimeoutFn: t.clearTimeoutFn,
+    });
+    poller.start();
+    await t.fire(); // Zyklus startet, hängt in fetchUnread (kein Reschedule solange in-flight)
+    const before = t.delays().length; // nur der Start-Timer
+    poller.stop(); // Stop MITTEN im laufenden Zyklus
+    releases.forEach((fn) => fn()); // Zyklus abschließen lassen
+    await new Promise((r) => setImmediate(r));
+    await new Promise((r) => setImmediate(r));
+    expect(t.delays().length).toBe(before); // drained, aber NICHT neu geplant
+    expect(t.cleared()).toBe(true);
+    expect(poller.running()).toBe(false);
+  });
+
+  it('maxMs < initialMs wird auf initialMs geklemmt (kein Sub-initial-Backoff)', async () => {
+    const t = manualTimeout();
+    const poller = createAdaptiveInboxPoller(depsFor(async () => []), {
+      initialMs: 5000,
+      maxMs: 1000, // fehlkonfiguriert
+      setTimeoutFn: t.setTimeoutFn,
+      clearTimeoutFn: t.clearTimeoutFn,
+    });
+    poller.start();
+    await t.fire(); // Backoff min(10000, max(1000,5000)=5000) = 5000
+    expect(t.delays()).toEqual([5000, 5000]);
     poller.stop();
   });
 });
