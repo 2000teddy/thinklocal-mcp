@@ -8,6 +8,27 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.66 (Docs+Config, KEIN Deploy) — docs+feat: A5 Agent-Integration-Kapitel + konfigurierbare Poll-Intervalle
+
+Adoptions-Slice (A5): macht die Kadenz des Agent-Empfangs-Loops (ADR-004) env-konfigurierbar und
+adaptiv, **sauber abgegrenzt vom Daemon-Peer-Heartbeat** (`TLMCP_HEARTBEAT_MS`), und bündelt die
+Agenten-Anbindung zu einem durchgehenden Onboarding-Rotfaden (README → INSTALL → Agent-Integration).
+
+- **`agent-poll-config.ts` (neu, rein):** `resolveAgentPollConfig(env, mode)` → `{initialMs, maxMs}` aus
+  `TLMCP_AGENT_POLL_INITIAL_MS` / `TLMCP_AGENT_POLL_MAX_MS` mit Mode-Defaults (lan 5s→30s, local 2s→15s),
+  fail-safe (ungültig/≤0 → Default), Invariante `maxMs ≥ initialMs`. **Explizit getrennt** von
+  `TLMCP_HEARTBEAT_MS` (`mesh.heartbeat_interval_ms`, Daemon-zu-Daemon-Liveness).
+- **`inbox-poller.ts`:** neuer `createAdaptiveInboxPoller` (self-scheduling `setTimeout`, exponentieller
+  Leerlauf-Backoff bis `maxMs`, Reset auf `initialMs` bei Verkehr, Fehler → Backoff; nicht-überlappend,
+  `unref`, sauberer `stop()`-Drain). `createDaemonInboxPoller` nutzt ihn (`intervalMs` → `poll`).
+- **Doku:** `docs/AGENT-INTEGRATION.md` (neu) — MCP-Anbindung (`mcp-stdio`+Env), Instanz-Registrierung,
+  `node/<PeerID>`-Adressierung, Empfangs-Loop-Muster, **Token-Ökonomie** (Poll läuft außerhalb des LLM →
+  0 Tokens im Leerlauf) + Env-Tabelle mit HEARTBEAT-Abgrenzung. README + INSTALL.md verweisen als Rotfaden.
+- **TS:** `agent-poll-config.test.ts` (neu, 7), `inbox-poller.test.ts` (+7 adaptive: Backoff/Reset/Fehler/
+  stop-drain/Clamp); volle Suite **115 Files / 1435 grün**, tsc 0, eslint 0.
+- **CR:** unabhängiger **Claude**-Subagent (adversarial) **APPROVE**, 0× HIGH/CRITICAL; stop-during-inflight-
+  Test als Nit nachgezogen. **Scope:** Doku+Config, **kein Deploy** (Poller-Wiring in den Supervisor = Folge).
+
 ### v0.34.65 (Security-Gate, KEIN Deploy) — feat(mcp): Ausführungsstufen-Durchsetzung am Hub-Ingress (7.8 P6, ADR-033)
 
 Die Ausführungsstufe `execution_tier` (`self`/`gate`/`consensus`) floss seit ADR-028 D4 durch die

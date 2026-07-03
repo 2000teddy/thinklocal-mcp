@@ -258,6 +258,11 @@ Starte eine neue Claude Code Session und frage:
 > Welche Peers sind im Mesh? Nutze discover_peers.
 ```
 
+> **Nächster Schritt — Agent ans Mesh anbinden:** Sobald der Daemon läuft und die Rechner gepairt
+> sind, beschreibt **[docs/AGENT-INTEGRATION.md](./docs/AGENT-INTEGRATION.md)** den durchgehenden Weg
+> (MCP-Anbindung, Instanz-Registrierung, `node/<PeerID>`-Adressierung, Empfangs-Loop + Token-Ökonomie,
+> Poll-Intervall-Env-Variablen vs. `TLMCP_HEARTBEAT_MS`).
+
 ---
 
 ## Claude Desktop Integration

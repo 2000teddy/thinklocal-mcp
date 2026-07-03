@@ -16,6 +16,7 @@
 import type { Logger } from 'pino';
 import { requestDaemon } from './local-daemon-client.js';
 import { getAgentInstance } from './spiffe-uri.js';
+import type { AgentPollConfig } from './agent-poll-config.js';
 
 /** Eine aus der Inbox gepollte Nachricht (Teilmenge von GET /api/inbox). */
 export interface PolledMessage {
@@ -151,6 +152,84 @@ export function createInboxPoller(deps: InboxPollerDeps, opts: InboxPollerOption
   };
 }
 
+export interface AdaptiveInboxPollerOptions {
+  /** Kürzestes Intervall (aktiver Zustand); Start-Delay + Reset-Ziel nach Verkehr. */
+  initialMs: number;
+  /** Längstes Intervall (Leerlauf-Backoff-Obergrenze). Wird auf ≥ initialMs geklemmt. */
+  maxMs: number;
+  /** Timer-Injektion für Tests; Default globales setTimeout/clearTimeout. */
+  setTimeoutFn?: typeof setTimeout;
+  clearTimeoutFn?: typeof clearTimeout;
+}
+
+/**
+ * Adaptiver Empfangs-Loop (ADR-004, A5): self-scheduling via `setTimeout` mit exponentiellem
+ * Leerlauf-Backoff. Nach einem Zyklus **mit** Verkehr (`total > 0`) wird auf `initialMs`
+ * zurückgesetzt (niedrige Zustell-Latenz); ein **leerer** Zyklus (oder ein Fetch-Fehler,
+ * Daemon evtl. offline) verdoppelt das Delay bis `maxMs`. Spart im Leerlauf REST-Calls (und
+ * damit indirekt Last), ohne je LLM-Tokens zu kosten — der Poll läuft außerhalb des LLM.
+ *
+ * Wie `createInboxPoller`: **nicht-überlappend** (ein noch laufender Zyklus wird nicht erneut
+ * gestartet), fehler-gekapselt (ein Zyklus-Fehler bricht den Loop nie), `unref()` (blockiert
+ * den Prozess-Exit nicht). `stop()` beendet die Schleife; ein bereits laufender Zyklus draint.
+ */
+export function createAdaptiveInboxPoller(
+  deps: InboxPollerDeps,
+  opts: AdaptiveInboxPollerOptions,
+): InboxPoller {
+  const setT = opts.setTimeoutFn ?? setTimeout;
+  const clearT = opts.clearTimeoutFn ?? clearTimeout;
+  const initialMs = opts.initialMs;
+  const maxMs = Math.max(opts.maxMs, initialMs);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let active = false;
+  let inFlight = false;
+  let delay = initialMs;
+
+  const schedule = (ms: number): void => {
+    timer = setT(() => void tick(), ms);
+    (timer as { unref?: () => void }).unref?.();
+  };
+
+  const tick = async (): Promise<void> => {
+    if (!active || inFlight) return; // Überlappungs-Schutz + Stop-Guard
+    inFlight = true;
+    try {
+      const res = await pollInboxOnce(deps);
+      // Verkehr → schnell weiter; leer → Backoff verdoppeln (bis maxMs).
+      delay = res.total > 0 ? initialMs : Math.min(delay * 2, maxMs);
+    } catch (err) {
+      deps.log?.warn(
+        { err: err instanceof Error ? err.message : String(err) },
+        '[inbox-poller] poll cycle failed (daemon unreachable?) — backing off',
+      );
+      delay = Math.min(delay * 2, maxMs);
+    } finally {
+      inFlight = false;
+    }
+    if (active) schedule(delay);
+  };
+
+  return {
+    start(): void {
+      if (active) return;
+      active = true;
+      delay = initialMs;
+      schedule(initialMs);
+    },
+    stop(): void {
+      active = false;
+      if (timer) {
+        clearT(timer);
+        timer = undefined;
+      }
+    },
+    running(): boolean {
+      return active;
+    },
+  };
+}
+
 export interface DaemonInboxPollerConfig {
   baseUrl: string;
   dataDir: string;
@@ -165,7 +244,8 @@ export interface DaemonInboxPollerConfig {
    */
   forInstance?: string;
   deliver: (message: PolledMessage) => Promise<void> | void;
-  intervalMs: number;
+  /** Adaptive Poll-Kadenz (ADR-004/A5) — aus `resolveAgentPollConfig(env, mode)`. */
+  poll: AgentPollConfig;
   log?: Logger;
 }
 
@@ -243,8 +323,8 @@ export function buildDaemonInboxDeps(
  */
 export function createDaemonInboxPoller(config: DaemonInboxPollerConfig): InboxPoller {
   const { fetchUnread, markRead } = buildDaemonInboxDeps(config);
-  return createInboxPoller(
+  return createAdaptiveInboxPoller(
     { fetchUnread, markRead, deliver: config.deliver, log: config.log },
-    { intervalMs: config.intervalMs },
+    { initialMs: config.poll.initialMs, maxMs: config.poll.maxMs },
   );
 }

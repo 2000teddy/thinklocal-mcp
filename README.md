@@ -282,6 +282,14 @@ Die MCP-Tools werden automatisch geladen (via `~/.mcp.json`):
 
 > **Ausfuehrliche Anleitung**: [INSTALL.md](./INSTALL.md) — Installation, Service-Setup, Claude Desktop, Fehlerbehebung, Deinstallation
 
+### Einen Agenten ans Mesh anbinden
+
+Nachdem Daemon (INSTALL.md) + Pairing stehen: **[docs/AGENT-INTEGRATION.md](./docs/AGENT-INTEGRATION.md)**
+zeigt den durchgehenden Weg — MCP-Anbindung (`mcp-stdio` + Env), Instanz-Registrierung, Adressierung
+über `node/<PeerID>`-URIs und das Empfangs-Loop-Muster (ADR-004). Enthält die **Token-Ökonomie** des
+Inbox-Polls (läuft außerhalb des LLM → 0 Tokens im Leerlauf) und die konfigurierbaren Poll-Intervalle
+(`TLMCP_AGENT_POLL_INITIAL_MS`/`_MAX_MS`) — sauber abgegrenzt vom Daemon-Heartbeat `TLMCP_HEARTBEAT_MS`.
+
 ### Runtime-Modi
 
 Es gibt jetzt zwei explizite Betriebsmodi:
