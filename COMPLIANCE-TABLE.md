@@ -1467,4 +1467,14 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-07-03 08:33 — v0.34.66 docs+feat: A5 Agent-Integration + konfigurierbare Poll-Intervalle.*
+## Session 2026-07-03 10:02 — docs+test: Cert-Auto-Rotation RE-CHECK (WOCHENPLAN-KW27 §2, v0.34.67)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|------------------------------------|
+| v0.34.67 | (offen, base=main) | 2026-07-03 10:02 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | CR Claude verifiziert alle 4 Verdikt-Claims VERIFIED, Test nicht-tautologisch, 0 Overclaims |
+
+**Typ:** RE-CHECK-Verdikt + reproduzierbarer Test, **repo-only, kein Deploy, kein Code-Fix**. **CO:** n/a (Investigation/Verdikt, keine Architektur). **CG:** n/a. **TS:** `cert-expiry-monitor.test.ts` (+1: abgelaufenes Cert daysLeft=-1 → nur Alarm, KEINE In-Process-Rotation; struktureller Beweis via Deps-Key-Set). Full Suite **115 Files / 1436 grün**, tsc 0, eslint 0 (1 vorbestehende Warnung an `makeLog`, nicht in diesem Diff). **CR:** unabhängiger **Claude**-Subagent (Verifikation der Verdikt-Claims gegen den Code; `agy` fehlt im Env): **alle 4 VERIFIED** — `cert-rotation.ts` existiert nicht, kein `pairing-store.json`-Ref (autoritativ `pairing/paired-peers.json`), Monitor ohne Rotate-Hook (Reissue startup-only `loadOrCreateTlsBundle` Gate daysLeft>7), Test nicht-tautologisch; 0 Overclaims. **PC:** manuell (tsc/eslint/Suite/`git diff`/Strukturbelege grün) — `agy`-Backend fehlt. **DO:** `docs/RECHECK-cert-rotation-2026-07-03.md` (Verdikt), CHANGES (v0.34.67), COMPLIANCE, `changes/2026-07-03_cert-recheck-kw27.md`. **Verdikt:** Auto-Rotation feuert NICHT (by design); T2.1-als-Pfad-Bug NICHT gerechtfertigt; 2026-09-02-Ablauf durch geplanten Neustart gemindert; In-Process-Rotation = optionales Feature (Christian-Entscheidung).
+
+---
+
+*Letzte Aktualisierung: 2026-07-03 10:02 — v0.34.67 docs+test: Cert-Auto-Rotation RE-CHECK (§2).*

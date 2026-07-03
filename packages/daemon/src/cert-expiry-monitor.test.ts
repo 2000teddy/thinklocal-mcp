@@ -95,6 +95,26 @@ describe('runCertExpiryCheck', () => {
     expect(emits[0]?.data).toMatchObject({ daysLeft: 3, tier: 'critical' });
     expect(log.error).toHaveBeenCalledOnce();
   });
+
+  // WOCHENPLAN-KW27 §2 RE-CHECK (Dry-Run, worst case): Cert BEREITS ABGELAUFEN (daysLeft < 0),
+  // Daemon läuft weiter. Beweist reproduzierbar: der Monitor ROTIERT NICHT in-process — sein
+  // einziger Effekt ist ein Alarm (Audit + EventBus) mit Neustart-Hinweis. Er KANN nicht rotieren:
+  // `CertExpiryMonitorDeps` exponiert keinerlei Rotate-/Reissue-Fähigkeit (nur getDaysLeft/audit/
+  // eventBus/log). Reissue bleibt startup-only (loadOrCreateTlsBundle). → Auto-Rotation feuert NIE live.
+  it('RE-CHECK: abgelaufenes Cert (daysLeft=-1) → NUR Alarm, KEINE In-Process-Rotation', () => {
+    const { deps, appends, emits, log } = makeDeps(-1);
+    // Struktureller Beweis: die Deps haben keinen Rotate-Hook (Compile-/Runtime-Oberfläche).
+    expect(Object.keys(deps).sort()).toEqual(['audit', 'eventBus', 'getDaysLeft', 'log', 'thresholds']);
+
+    expect(runCertExpiryCheck(deps)).toBe('critical');
+    // Einziger Effekt: Alarm mit Neustart-Hinweis — kein Reissue-Pfad existiert.
+    expect(appends).toHaveLength(1);
+    expect(appends[0]?.type).toBe('CERT_EXPIRY_WARNING');
+    expect(appends[0]?.details).toMatch(/Neustart/);
+    expect(appends[0]?.details).toMatch(/KEINE In-Process-Rotation/);
+    expect(emits[0]?.data).toMatchObject({ daysLeft: -1, tier: 'critical' });
+    expect(log.error).toHaveBeenCalledOnce();
+  });
 });
 
 describe('startCertExpiryMonitor', () => {
