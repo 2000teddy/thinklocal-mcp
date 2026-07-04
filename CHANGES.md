@@ -8,6 +8,28 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.68 (Daemon-Code, Deploy folgt getrennt) — feat(tls): Cert-Reissue-Schwelle 30 Tage + konfigurierbar (Wochen-Neustart-Rhythmus)
+
+Daemon-Code-Teil des Wochen-Neustart-Rhythmus (Kap. 13.4 / 3.8-Punkt 7, Christian-Freigabe 04.07.):
+Ein Node-Cert wird beim Daemon-Start schon bei **≤ 30 Tagen** Restlaufzeit neu ausgestellt (statt ≤ 7),
+und die Schwelle ist nicht mehr hart im Code, sondern **Konfiguration**.
+
+- **`tls.ts`:** `loadOrCreateTlsBundle` erhält `renewBeforeDays` (Default via neuer Konstante
+  `DEFAULT_CERT_RENEW_BEFORE_DAYS = 30`); beide Behalten-Gates (legacy-current-ca **und**
+  canonical-attested/ADR-024) nutzen `daysLeft > renewBeforeDays` statt hart `> 7`. Token-onboardete
+  Nodes (kein CA-Key) sind bewusst ausgenommen (kein Self-Reissue) — dokumentiert.
+- **`config.ts`:** neues `cert.renew_before_days` (Default 30) + Env `TLMCP_CERT_RENEW_BEFORE_DAYS`.
+  **Post-Merge-Validierung** (auch TOML-Pfad): Ganzzahl in `[1, NODE_CERT_VALIDITY_DAYS-1]` — 0/negativ
+  wäre fail-open (Behalten bei Ablauf), `≥ 90` erzwänge Reissue-Schleife bei jedem Start.
+- **`index.ts`:** reicht `config.cert.renew_before_days` in `loadOrCreateTlsBundle` durch.
+- **`cert-expiry-monitor.ts`:** Reissue-Hinweistexte auf die konfigurierbare Schwelle (Default 30) angeglichen.
+- **TS:** `tls.test.ts` (+4: ≤30 Reissue, >30 Behalten, Non-Regression `renewBeforeDays=7`, exakte
+  `==`-Grenze), `cert-expiry-monitor.test.ts` (Default 30, Env-Override, Reject 0/≥90, **TOML-0-Reject**),
+  `cert-rotation-recheck.test.ts` (Retain-Fixtures 30→60 d an neue Schwelle angepasst). Suite **1443 grün**, tsc 0.
+- **CR:** unabhängiger **Claude**-Subagent — Erst-Review REQUEST-CHANGES (2 MED + 2 LOW), alle gefixt+getestet,
+  Re-Review **APPROVE** (nicht-tautologische Tests: echtes TOML-0-File, unabhängiger Env-Upper-Bound, echte `==`-Grenze).
+- **Deploy/rollierender Nacht-Neustart folgt GETRENNT** (Timer/Betrieb = Admin/Orchestrator-Lane) — **nicht** in diesem Slice.
+
 ### v0.34.67 (RE-CHECK-Verdikt+Test, KEIN Deploy) — docs+test: Cert-Auto-Rotation RE-CHECK (WOCHENPLAN-KW27 §2)
 
 RE-CHECK-Slice (V5 §E.2, vor T2.1): reproduzierbarer Beleg, ob die Cert-Auto-Rotation auf einem

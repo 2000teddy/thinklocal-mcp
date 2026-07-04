@@ -473,3 +473,90 @@ describe('ADR-024 MEDIUM-2 — selectTrustDistributionCa (Trust-Distribution fai
     expect(ca).toBeNull();
   });
 });
+
+// Wochen-Neustart-Rhythmus (Kap. 13.4 / 3.8-Punkt 7): Reissue-Schwelle beim Start ist konfigurierbar
+// (`renewBeforeDays`, Default 30). Behalten-Gate: `daysLeft > renewBeforeDays`.
+describe('loadOrCreateTlsBundle — Reissue-Schwelle (renewBeforeDays)', () => {
+  const NODE_URI = 'spiffe://thinklocal/node/12D3KooWRenewThreshold';
+
+  // Mintet ein von `ca` signiertes Node-Leaf mit exakt `daysLeft` Restlaufzeit (SAN = NODE_URI),
+  // sodass der legacy-current-ca-Behalten-Pfad greift (signedByCurrentCa + SPIFFE-Match + Key-Match).
+  function mintNodeCertWithDaysLeft(
+    ca: ReturnType<typeof createMeshCA>,
+    daysLeft: number,
+  ): { certPem: string; keyPem: string } {
+    const caCert = forge.pki.certificateFromPem(ca.caCertPem);
+    const caKey = forge.pki.privateKeyFromPem(ca.caKeyPem);
+    const keys = forge.pki.rsa.generateKeyPair(2048);
+    const cert = forge.pki.createCertificate();
+    cert.publicKey = keys.publicKey;
+    cert.serialNumber = '0' + Math.abs(daysLeft * 131 + 7).toString(16);
+    cert.validity.notBefore = new Date(Date.now() - 3600_000);
+    // +12 h Puffer, damit `floor((notAfter-now)/DAY)` EXAKT `daysLeft` ergibt (statt daysLeft-1)
+    // — nötig, damit der Grenzfall `daysLeft == renewBeforeDays` echt geprüft werden kann.
+    cert.validity.notAfter = new Date(Date.now() + daysLeft * DAY + 12 * 3600_000);
+    cert.setSubject([{ name: 'commonName', value: 'node' }]);
+    cert.setIssuer(caCert.subject.attributes);
+    cert.setExtensions([
+      { name: 'basicConstraints', cA: false },
+      { name: 'keyUsage', digitalSignature: true, keyEncipherment: true },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      { name: 'subjectAltName', altNames: [{ type: 6, value: NODE_URI }] as any },
+    ]);
+    cert.sign(caKey, forge.md.sha256.create());
+    return { certPem: forge.pki.certificateToPem(cert), keyPem: forge.pki.privateKeyToPem(keys.privateKey) };
+  }
+
+  function setup(ca: ReturnType<typeof createMeshCA>, node: { certPem: string; keyPem: string }): string {
+    const dir = mkdtempSync(join(tmpdir(), 'tlmcp-renew-'));
+    const tls = join(dir, 'tls');
+    mkdirSync(tls, { recursive: true });
+    writeFileSync(join(tls, 'ca.crt.pem'), ca.caCertPem);
+    writeFileSync(join(tls, 'ca.key.pem'), ca.caKeyPem);
+    writeFileSync(join(tls, 'node.crt.pem'), node.certPem);
+    writeFileSync(join(tls, 'node.key.pem'), node.keyPem);
+    return dir;
+  }
+
+  it('<= 30 Tage: Node-Cert wird NEU ausgestellt (Default-Schwelle 30)', () => {
+    const ca = createMeshCA('thinklocal', 'renew30');
+    const node = mintNodeCertWithDaysLeft(ca, 20); // 20 d <= 30 → reissue
+    const dir = setup(ca, node);
+    try {
+      const bundle = loadOrCreateTlsBundle(dir, 'node', NODE_URI, undefined, 'renew30');
+      expect(bundle.certPem).not.toBe(node.certPem); // neu ausgestellt
+      expect(extractSpiffeUri(bundle.certPem)).toBe(NODE_URI); // Identität erhalten
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it('> 30 Tage: vorhandenes Node-Cert wird BEHALTEN (Default-Schwelle 30)', () => {
+    const ca = createMeshCA('thinklocal', 'renew30keep');
+    const node = mintNodeCertWithDaysLeft(ca, 40); // 40 d > 30 → retain
+    const dir = setup(ca, node);
+    try {
+      const bundle = loadOrCreateTlsBundle(dir, 'node', NODE_URI, undefined, 'renew30keep');
+      expect(bundle.certPem).toBe(node.certPem); // unverändert behalten
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it('Non-Regression: dasselbe 20-Tage-Cert wird bei explizitem renewBeforeDays=7 BEHALTEN', () => {
+    const ca = createMeshCA('thinklocal', 'renew7');
+    const node = mintNodeCertWithDaysLeft(ca, 20); // 20 d > 7 → retain (altes Verhalten)
+    const dir = setup(ca, node);
+    try {
+      const bundle = loadOrCreateTlsBundle(dir, 'node', NODE_URI, undefined, 'renew7', undefined, 7);
+      expect(bundle.certPem).toBe(node.certPem); // die Schwelle entscheidet
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it('Grenze exakt: daysLeft == renewBeforeDays → reissue (strikte > Behalten-Bedingung)', () => {
+    const ca = createMeshCA('thinklocal', 'renewedge');
+    // Helper +12 h → daysLeft ist EXAKT 10; Schwelle 10 → `10 > 10` ist false → reissue.
+    const node = mintNodeCertWithDaysLeft(ca, 10);
+    const dir = setup(ca, node);
+    try {
+      const bundle = loadOrCreateTlsBundle(dir, 'node', NODE_URI, undefined, 'renewedge', undefined, 10);
+      expect(bundle.certPem).not.toBe(node.certPem);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+});

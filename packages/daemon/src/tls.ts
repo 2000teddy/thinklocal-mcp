@@ -27,7 +27,17 @@ export interface NodeCertBundle {
 }
 
 const CA_VALIDITY_DAYS = 365;
-const NODE_CERT_VALIDITY_DAYS = 90;
+export const NODE_CERT_VALIDITY_DAYS = 90;
+
+/**
+ * Restlaufzeit-Schwelle (Tage), unter/bei der ein vorhandenes Node-Cert beim Daemon-Start
+ * NICHT behalten, sondern **neu ausgestellt** wird (Behalten-Gate: `daysLeft > renewBeforeDays`).
+ * Angehoben von 7 → 30 (Wochen-Neustart-Rhythmus, Kap. 13.4 / 3.8-Punkt 7): so erneuern sich
+ * Certs beim ohnehin wöchentlichen Neustart rechtzeitig, statt erst im 7-Tage-Sonderfenster.
+ * Kein hartkodierter Wert im Gate mehr — der Daemon reicht den konfigurierten Wert
+ * (`config.cert.renew_before_days`) herein; dieser Default gilt nur für direkte Aufrufer/Tests.
+ */
+export const DEFAULT_CERT_RENEW_BEFORE_DAYS = 30;
 
 /**
  * Erstellt eine neue Self-Signed CA für das Mesh.
@@ -187,6 +197,7 @@ export function loadOrCreateTlsBundle(
   log?: Logger,
   nodeId?: string,
   retention?: CanonicalRetentionOpts,
+  renewBeforeDays: number = DEFAULT_CERT_RENEW_BEFORE_DAYS,
 ): NodeCertBundle {
   const tlsDir = resolve(dataDir, 'tls');
   mkdirSync(tlsDir, { recursive: true });
@@ -307,6 +318,10 @@ export function loadOrCreateTlsBundle(
     const signedByShippedCa = verifyPeerCert(caCertPem, certPem);
 
     if (certKeyMatches && signedByShippedCa) {
+      // Hinweis (CR): `renewBeforeDays` gilt hier NICHT — ein token-onboardeter Node hat keinen
+      // CA-Key und kann sich nicht selbst neu ausstellen. Er behält sein Cert bis zum tatsächlichen
+      // Ablauf (fail-closed via verifyPeerCert-Zeitfenster) und erneuert sich per Re-Onboarding.
+      // Die proaktive 30-Tage-Erneuerung (Wochen-Neustart-Rhythmus) betrifft nur CA-owner-Nodes.
       log?.info(
         'Token-onboarded Node erkannt (CA-Cert ohne CA-Key) — Bundle validiert, verwende vorhandene Zertifikate',
       );
@@ -399,8 +414,8 @@ export function loadOrCreateTlsBundle(
         certKeyMatches = false;
       }
 
-      if (fullyValid && daysLeft > 7 && certSpiffeUri === spiffeUri && signedByCurrentCa && certKeyMatches) {
-        log?.info({ daysLeft, retainPath: 'legacy-current-ca' }, 'Vorhandenes Node-Zertifikat geladen');
+      if (fullyValid && daysLeft > renewBeforeDays && certSpiffeUri === spiffeUri && signedByCurrentCa && certKeyMatches) {
+        log?.info({ daysLeft, renewBeforeDays, retainPath: 'legacy-current-ca' }, 'Vorhandenes Node-Zertifikat geladen');
         return {
           certPem,
           keyPem,
@@ -416,7 +431,7 @@ export function loadOrCreateTlsBundle(
       // verifiziert (additiv; ohne retention-Opts inert → Default unverändert).
       if (
         fullyValid &&
-        daysLeft > 7 &&
+        daysLeft > renewBeforeDays &&
         certKeyMatches &&
         isRetainableCanonicalCert({
           certPem,
