@@ -17,6 +17,9 @@ import {
   type CertExpiryMonitorDeps,
 } from './cert-expiry-monitor.js';
 import { loadConfig } from './config.js';
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 const THRESH = { warnDays: 30, criticalDays: 7 };
 
@@ -166,6 +169,7 @@ describe('config — T2.1 cert section', () => {
     'TLMCP_CERT_EXPIRY_WARN_DAYS',
     'TLMCP_CERT_EXPIRY_CRITICAL_DAYS',
     'TLMCP_CERT_EXPIRY_CHECK_INTERVAL_MS',
+    'TLMCP_CERT_RENEW_BEFORE_DAYS',
   ];
   const NO_TOML = '/nonexistent/thinklocal-t21-test.toml';
   function withEnv(overrides: Record<string, string>, fn: () => void): void {
@@ -184,12 +188,39 @@ describe('config — T2.1 cert section', () => {
     }
   }
 
-  it('Defaults: warn=30, critical=7, interval=12h', () => {
+  it('Defaults: warn=30, critical=7, interval=12h, renew_before_days=30', () => {
     withEnv({}, () => {
       const cfg = loadConfig(NO_TOML);
       expect(cfg.cert.expiry_warn_days).toBe(30);
       expect(cfg.cert.expiry_critical_days).toBe(7);
       expect(cfg.cert.expiry_check_interval_ms).toBe(43_200_000);
+      // Wochen-Neustart-Rhythmus: Reissue-Schwelle beim Start = 30 Tage (statt 7).
+      expect(cfg.cert.renew_before_days).toBe(30);
+    });
+  });
+
+  it('TLMCP_CERT_RENEW_BEFORE_DAYS override + Ablehnung nicht-positiver Werte', () => {
+    withEnv({ TLMCP_CERT_RENEW_BEFORE_DAYS: '14' }, () => {
+      expect(loadConfig(NO_TOML).cert.renew_before_days).toBe(14);
+    });
+    withEnv({ TLMCP_CERT_RENEW_BEFORE_DAYS: '0' }, () => {
+      expect(() => loadConfig(NO_TOML)).toThrow();
+    });
+  });
+
+  it('renew_before_days >= Cert-Laufzeit (90) → Reject (verhindert Reissue-Schleife)', () => {
+    withEnv({ TLMCP_CERT_RENEW_BEFORE_DAYS: '120' }, () => {
+      expect(() => loadConfig(NO_TOML)).toThrow(/renew_before_days/);
+    });
+  });
+
+  // CR-MEDIUM: der TOML-Pfad umgeht den Env-`readPositiveInt` — ein TOML-`0` MUSS die
+  // Post-Merge-Validierung fangen (sonst fail-open: Cert würde selbst bei Ablauf behalten).
+  it('renew_before_days = 0 via TOML → Reject (schließt TOML-fail-open)', () => {
+    const p = join(tmpdir(), `thinklocal-renew-toml-${Date.now()}.toml`);
+    writeFileSync(p, '[cert]\nrenew_before_days = 0\n', 'utf-8');
+    withEnv({}, () => {
+      expect(() => loadConfig(p)).toThrow(/renew_before_days/);
     });
   });
 

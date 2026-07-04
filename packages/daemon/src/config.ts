@@ -4,6 +4,7 @@ import { homedir, hostname as osHostname } from 'node:os';
 import TOML from '@iarna/toml';
 import { resolveRuntimeSettings, type RuntimeMode } from './runtime-mode.js';
 import { resolveLibp2pEnabled, resolveLibp2pListenPort } from './libp2p-runtime.js';
+import { NODE_CERT_VALIDITY_DAYS } from './tls.js';
 
 /** Strikte CIDR-Validierung (ADR-019). Akzeptiert nur IPv4 a.b.c.d/n mit n in 0..32. */
 function isValidCidr(s: string): boolean {
@@ -142,6 +143,9 @@ export interface DaemonConfig {
     expiry_warn_days: number;
     expiry_critical_days: number;
     expiry_check_interval_ms: number;
+    /** Restlaufzeit-Schwelle (Tage): beim Start wird ein Node-Cert mit `daysLeft <= renew_before_days`
+     *  neu ausgestellt (Behalten nur bei `> renew_before_days`). Default 30 (Wochen-Neustart-Rhythmus). */
+    renew_before_days: number;
   };
   /**
    * T2.4: place-or-refuse. Übersteigt die (cache-bewusste) RAM-Auslastung diese
@@ -221,6 +225,7 @@ const DEFAULTS: DaemonConfig = {
     expiry_warn_days: 30,
     expiry_critical_days: 7,
     expiry_check_interval_ms: 43_200_000, // 12 h
+    renew_before_days: 30, // Reissue beim Start bei <= 30 d Restlaufzeit (Wochen-Neustart-Rhythmus)
   },
   placement: {
     refuse_ram_percent: 90,
@@ -364,6 +369,10 @@ export function loadConfig(configPath?: string): DaemonConfig {
       cfg.cert.expiry_check_interval_ms,
     );
   }
+  // Wochen-Neustart-Rhythmus (Kap. 13.4): Reissue-Schwelle beim Start, konfigurierbar.
+  if (env['TLMCP_CERT_RENEW_BEFORE_DAYS']) {
+    cfg.cert.renew_before_days = readPositiveInt('TLMCP_CERT_RENEW_BEFORE_DAYS', cfg.cert.renew_before_days);
+  }
 
   // T2.4: place-or-refuse.
   if (env['TLMCP_PLACE_REFUSE_RAM_PERCENT']) {
@@ -410,6 +419,22 @@ export function loadConfig(configPath?: string): DaemonConfig {
     throw new Error(
       `Ungueltige Cert-Schwellen: expiry_warn_days (${cfg.cert.expiry_warn_days}) ` +
         `muss > expiry_critical_days (${cfg.cert.expiry_critical_days}) sein.`,
+    );
+  }
+
+  // CR-MEDIUM: `renew_before_days` post-merge validieren (auch der TOML-Pfad, den der
+  // Env-`readPositiveInt` NICHT abdeckt). Ein 0/negativer Wert wäre fail-open (Cert würde
+  // selbst bei Ablauf behalten); ein Wert ≥ Cert-Laufzeit erzwänge Reissue bei JEDEM Start
+  // (frisches Cert sofort unter der Schwelle). Zulässig: Ganzzahl in [1, NODE_CERT_VALIDITY_DAYS-1].
+  if (
+    !Number.isInteger(cfg.cert.renew_before_days) ||
+    cfg.cert.renew_before_days <= 0 ||
+    cfg.cert.renew_before_days >= NODE_CERT_VALIDITY_DAYS
+  ) {
+    throw new Error(
+      `Ungueltige cert.renew_before_days (${cfg.cert.renew_before_days}): muss eine Ganzzahl in ` +
+        `[1, ${NODE_CERT_VALIDITY_DAYS - 1}] sein (0/negativ = fail-open bei Ablauf; ` +
+        `>= ${NODE_CERT_VALIDITY_DAYS} = Reissue-Schleife bei jedem Start).`,
     );
   }
 

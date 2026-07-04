@@ -7,7 +7,9 @@
  * VERDIKT (empirisch hier festgenagelt):
  *  A) Die EINZIGE reale Cert-Erneuerung ist `loadOrCreateTlsBundle()` (tls.ts),
  *     die beim DAEMON-(NEU-)START läuft. Sie behält ein Node-Cert nur, wenn
- *     `daysLeft > 7` (+ Identität/CA/Key-Match) — sonst REISSUE. Es gibt KEINEN
+ *     `daysLeft > renewBeforeDays` (konfigurierbar via `config.cert.renew_before_days`,
+ *     Default **30** seit dem Wochen-Neustart-Rhythmus; + Identität/CA/Key-Match) — sonst
+ *     REISSUE. Es gibt KEINEN
  *     laufenden Timer/Scheduler: auf einem durchlaufenden Daemon „rotiert"
  *     nichts; erst der nächste Start erneuert ein ablaufendes Cert.
  *  B) `cert-rotation.ts` WAR totes Modul (0 Produktions-Importeure) und wurde am
@@ -78,9 +80,9 @@ function setupTlsDir(ca: ReturnType<typeof createMeshCA>, node: { certPem: strin
 }
 
 describe('RE-CHECK A — reale Rotation = startup-load reissue (tls.ts), KEIN Timer', () => {
-  it('Node-Cert mit ~30 Tagen Restlaufzeit → WIRD BEHALTEN (kein vorzeitiges Rotieren)', () => {
+  it('Node-Cert mit ~60 Tagen Restlaufzeit (> Schwelle 30) → WIRD BEHALTEN (kein vorzeitiges Rotieren)', () => {
     const ca = createMeshCA('thinklocal', 'recheck');
-    const node = mintNodeCert(ca, SPIFFE, new Date(Date.now() + 30 * DAY + HOUR));
+    const node = mintNodeCert(ca, SPIFFE, new Date(Date.now() + 60 * DAY + HOUR));
     const dir = setupTlsDir(ca, node);
     try {
       const bundle = loadOrCreateTlsBundle(dir, 'node', SPIFFE, undefined, 'recheck');
@@ -90,7 +92,7 @@ describe('RE-CHECK A — reale Rotation = startup-load reissue (tls.ts), KEIN Ti
     }
   });
 
-  it('Node-Cert mit ~3 Tagen Restlaufzeit (≤7) → REISSUE beim Load (Rotation feuert)', () => {
+  it('Node-Cert mit ~3 Tagen Restlaufzeit (≤ Schwelle 30) → REISSUE beim Load (Rotation feuert)', () => {
     const ca = createMeshCA('thinklocal', 'recheck');
     const node = mintNodeCert(ca, SPIFFE, new Date(Date.now() + 3 * DAY));
     const dir = setupTlsDir(ca, node);
@@ -112,7 +114,7 @@ describe('RE-CHECK A — reale Rotation = startup-load reissue (tls.ts), KEIN Ti
     // schwächere, aber notwendige Komplement: loadOrCreateTlsBundle ist idempotent —
     // ein gültiges Cert wird bei wiederholtem Load stabil wiederverwendet, nicht ersetzt.
     const ca = createMeshCA('thinklocal', 'recheck');
-    const node = mintNodeCert(ca, SPIFFE, new Date(Date.now() + 30 * DAY + HOUR));
+    const node = mintNodeCert(ca, SPIFFE, new Date(Date.now() + 60 * DAY + HOUR));
     const dir = setupTlsDir(ca, node);
     try {
       const a = loadOrCreateTlsBundle(dir, 'node', SPIFFE, undefined, 'recheck');

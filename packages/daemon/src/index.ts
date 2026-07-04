@@ -161,6 +161,7 @@ async function main(): Promise<void> {
       log,
       identity.stableNodeId,
       { canonicalSpiffeUri: canonicalSelfUriForCert, trustedAttestingCaPems: prelimTrustedCaPems },
+      config.cert.renew_before_days,
     );
     log.info('mTLS aktiviert — HTTPS mit gegenseitiger Zertifikatsprüfung');
   } else {

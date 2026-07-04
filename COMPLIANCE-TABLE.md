@@ -1477,4 +1477,14 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-07-03 10:02 — v0.34.67 docs+test: Cert-Auto-Rotation RE-CHECK (§2).*
+## Session 2026-07-04 08:54 — feat(tls): Cert-Reissue-Schwelle 30 Tage + konfigurierbar (Wochen-Neustart-Rhythmus, v0.34.68)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|------------------------------------|
+| v0.34.68 | (offen, base=main) | 2026-07-04 08:54 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | CR Claude: Erst-Review REQUEST-CHANGES (2 MED+2 LOW), alle gefixt+Test, Re-Review APPROVE |
+
+**Typ:** Daemon-Code (Cert-Reissue-Schwelle 30 d + konfigurierbar), **Deploy/Timer folgt getrennt (Admin/Orchestrator-Lane)**. **CO:** n/a (Christian-Freigabe 04.07. „1 ja"; Design Kap. 13.4/3.8; keine neue Architektur-Frage). **CG:** n/a. **TS:** `tls.test.ts` (+4: ≤30 Reissue, >30 Behalten, Non-Regression `renewBeforeDays=7`, exakte `==`-Grenze via +12h-Mint), `cert-expiry-monitor.test.ts` (Default 30, Env-Override, Reject 0/≥90, **echtes TOML-0-Reject**), `cert-rotation-recheck.test.ts` (Retain-Fixtures 30→60 d an neue Schwelle angepasst). Full Suite **115 Files / 1443 grün**, tsc 0; eslint: nur vorbestehende Errors auf main (mit/ohne Diff identisch — CI gated nicht auf eslint, nur tsc+vitest). **CR:** unabhängiger **Claude**-Subagent (adversarial; `agy`/codex nicht im Env, Claude ist zulässig): Erst-Review **REQUEST-CHANGES** — MED1 TOML-Pfad `renew_before_days` unvalidiert (0=fail-open), MED2 Boundary-Test false-green (9>10 statt 10>10), LOW Upper-Bound-Loop, LOW token-onboarded-Doc. **Alle 4 gefixt** (Post-Merge-Validierung `[1,89]` inkl. TOML; +12h-Mint für echte `==`-Grenze; `NODE_CERT_VALIDITY_DAYS` exportiert; token-onboarded-Kommentar) + Tests. **Re-Review APPROVE**, nicht-tautologisch. **PC:** manuell (tsc/Suite/`git diff` grün; eslint-Errors pre-existing) — `agy`-Backend fehlt. **DO:** CHANGES (v0.34.68), COMPLIANCE, `changes/2026-07-04_cert-renew-threshold-config.md`. **Config-Keys:** `cert.renew_before_days` (Default 30, Env `TLMCP_CERT_RENEW_BEFORE_DAYS`). **Grenze:** kein Timer/Betrieb/Deploy in diesem Slice.
+
+---
+
+*Letzte Aktualisierung: 2026-07-04 08:54 — v0.34.68 feat(tls): Cert-Reissue-Schwelle 30 d + konfigurierbar.*

@@ -8,7 +8,8 @@
  *
  * WICHTIG (RE-CHECK-Verdikt): Dieser Monitor ROTIERT NICHT. Der Reissue
  * passiert weiterhin ausschließlich beim (Neu-)Start via
- * `loadOrCreateTlsBundle()` (Behalten-Gate `daysLeft > 7`). Der Monitor macht
+ * `loadOrCreateTlsBundle()` (Behalten-Gate `daysLeft > cert.renew_before_days`,
+ * Default 30 seit dem Wochen-Neustart-Rhythmus). Der Monitor macht
  * den Ablauf nur SICHTBAR (Log + signiertes Audit-Event + EventBus) und sagt im
  * Critical-Fall explizit, dass ein **Neustart** den Reissue auslöst.
  */
@@ -72,7 +73,7 @@ export function runCertExpiryCheck(deps: CertExpiryMonitorDeps): CertExpiryTier 
 
   // warn | critical → sichtbar + durabel.
   const restartHint =
-    'Reissue passiert erst beim Daemon-Neustart (loadOrCreateTlsBundle, daysLeft<=7) — KEINE In-Process-Rotation.';
+    'Reissue passiert erst beim Daemon-Neustart (loadOrCreateTlsBundle, daysLeft <= cert.renew_before_days, Default 30) — KEINE In-Process-Rotation.';
   const details = JSON.stringify({ daysLeft, tier, action: restartHint });
 
   if (tier === 'critical') {
