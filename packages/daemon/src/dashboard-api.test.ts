@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 import { describe, it, expect, vi } from 'vitest';
 import Fastify from 'fastify';
 import { registerDashboardApi, type DashboardApiDeps } from './dashboard-api.js';

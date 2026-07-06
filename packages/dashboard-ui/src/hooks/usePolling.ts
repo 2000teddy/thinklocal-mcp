@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 import { useState, useEffect, useCallback } from 'react';
 
 /** Pollt eine API-Funktion periodisch und gibt die Daten + Ladestatus zurueck */

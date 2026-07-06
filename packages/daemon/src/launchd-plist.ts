@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * launchd-plist.ts — ADR-029 (macOS LaunchDaemon): reiner Renderer + Validator für das
  * System-Domain-LaunchDaemon-Plist aus `scripts/service/com.thinklocal.daemon.plist.template`.

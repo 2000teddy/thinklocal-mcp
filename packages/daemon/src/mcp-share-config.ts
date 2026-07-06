@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * mcp-share-config.ts — ADR-028 D4-a (Teil 2, Config-Vertrag): parst + validiert
  * die operator-seitige Deklaration „welche lokalen MCPs werden geteilt".

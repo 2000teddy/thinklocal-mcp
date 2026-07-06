@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * Unit-Tests für ADR-028 D4-b D2-Forward-Dispatch-Builder (rein, kein I/O/Netz/mTLS).
  */

@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * inbox-poller.ts — ADR-004-Empfangs-Loop (Mesh-Messaging A3, code-only).
  *

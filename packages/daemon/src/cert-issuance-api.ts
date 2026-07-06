@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * cert-issuance-api.ts — ADR-022 Schritt 3 / WS-3: HTTP-API der Admin-CA (.94) für
  * die PoP-basierte `node/<PeerID>`-Cert-Ausstellung.

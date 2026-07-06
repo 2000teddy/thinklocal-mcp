@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * rss-cpu-stats.ts — T1.1 (V5 Spur 1): reine Auswertung von RSS-/CPU-Messreihen für
  * den Vorher/Nachher-Vergleich der Daemon-Startumstellung `tsx` → `node dist/`.

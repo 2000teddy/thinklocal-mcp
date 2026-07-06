@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * token-api.ts — REST-Endpoints fuer Token-basiertes Onboarding (ADR-016 Phase 2)
  *

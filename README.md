@@ -48,7 +48,7 @@ Siehe `CHANGES.md` fuer Details, `COMPLIANCE-TABLE.md` fuer den Review-Status al
 
 ## Übersicht
 
-`thinklocal-mcp` ist eine Open-Source-Infrastruktur, die es AI CLI-Agenten (Claude Code, Codex, Gemini CLI, u.a.) ermöglicht, sich im lokalen Netzwerk gegenseitig zu finden, verschlüsselt zu kommunizieren und Fähigkeiten auszutauschen. Das System kombiniert das [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) für Tool-/Ressourcen-Integration mit [A2A](https://a2a-protocol.org/)-inspirierten Agent Cards für die Capability Discovery.
+`thinklocal-mcp` ist eine source-available Infrastruktur (Elastic License 2.0, frei für den Eigenbetrieb — nicht „Open Source" im OSI-Sinn), die es AI CLI-Agenten (Claude Code, Codex, Gemini CLI, u.a.) ermöglicht, sich im lokalen Netzwerk gegenseitig zu finden, verschlüsselt zu kommunizieren und Fähigkeiten auszutauschen. Das System kombiniert das [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) für Tool-/Ressourcen-Integration mit [A2A](https://a2a-protocol.org/)-inspirierten Agent Cards für die Capability Discovery.
 
 ### Was thinklocal-mcp löst
 
@@ -339,7 +339,7 @@ Fuer parallele Agent-Arbeit wird empfohlen, pro Agent einen eigenen Worktree zu 
 
 ## Lizenz
 
-MIT License — siehe [LICENSE](./LICENSE)
+**Elastic License 2.0 (ELv2)** — source-available, frei für den Eigenbetrieb (privat/kommerziell), aber kein Weiterverkauf/Managed-Service durch Dritte. Ausdrücklich **nicht** „Open Source". Siehe [LICENSE](./LICENSE).
 
 ---
 

@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * mcp-registration.ts — ADR-028 D4-a (Registrierungs-Slice): komponiert den
  * Shared-MCP-Config-Vertrag (`mcp-share-config`) mit dem Capability-Modell

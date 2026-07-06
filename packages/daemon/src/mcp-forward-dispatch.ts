@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * mcp-forward-dispatch.ts — ADR-028 D4-b (D2-Forward, Prep): übersetzt eine `McpForwardSpec`
  * (Output von `buildMcpForwardSpec`, #193) in den **mTLS-Dispatch-Plan**, den der spätere

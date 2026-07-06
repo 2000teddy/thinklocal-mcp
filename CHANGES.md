@@ -8,6 +8,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### chore(license): ELv2 LICENSE + source-available README + Copyright-Header (Vorbereitung, awaiting Christian Gate 4)
+
+ELv2-Lizenz-Verteilung (ENTSCHEIDUNG 12 / Gate 4). Änderung rein Kommentar/Metadaten:
+- `LICENSE`: Elastic License 2.0 neu (es gab keine Datei; README verwies fälschlich auf MIT).
+- `README.md`: „Open-Source-Infrastruktur"/„MIT License" → source-available/ELv2, ausdrücklich **nicht** „Open Source".
+- `package.json`: `license` → `SEE LICENSE IN LICENSE`.
+- Copyright-ELv2-Header in 266 first-party `.ts` (shebang-sicher; `.d.ts`/node_modules/dist ausgenommen).
+- GPL/AGPL-Dep-Scan (57 deps): keine GPL/AGPL. **Nicht mergen bis Christian Gate 4.**
+
 ### v0.34.69 (Daemon-Code, opt-in, kein Roll-out) — feat(tls): Re-Pair-Migrationsstufe Legacy→kanonisch (ADR-034, KW28 §2 A / TL-00a)
 
 Kontrollierte **Übergangsfenster-Stufe** für den `.52`/`.55`-Re-Enroll (Hermes-Risiko 1): ein gültiges

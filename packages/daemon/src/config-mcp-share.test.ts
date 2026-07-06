@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * config-mcp-share.test.ts — ADR-028 D4-a Boot-Verdrahtung: loadConfig liest die
  * `[[mcp.share]]`-Sektion in `config.mcp.share` (roh; Validierung in parseSharedMcpConfig).

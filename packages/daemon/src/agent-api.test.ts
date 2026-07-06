@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * Fastify integration tests for the ADR-004 Phase 2 agent REST API.
  * Uses Fastify's built-in `inject()` harness so no real socket is

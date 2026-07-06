@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * mcp-stdio-remote-skill.test.ts — Regressionstests fuer Bug #2 aus dem
  * ADR-020 Phase 1.1 Bug-Report.

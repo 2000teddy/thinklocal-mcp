@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * mesh-server-identity.ts — ADR-028 D2b: SPIFFE-URI-basierte Server-Identitäts-
  * Verifikation für ausgehende mTLS-Dials (ersetzt den IP-altname-Check).

@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * Unit-Tests für die A1-Registrierungs-Diagnose (`agent-register-format.ts`):
  * ein HTTP-Fehler (z.B. 500) muss als solcher (Status + Body) sichtbar sein,

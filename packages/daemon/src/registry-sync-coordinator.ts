@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * registry-sync-coordinator.ts — Per-Peer Anti-Entropy Sync fuer die
  * Automerge-Capability-Registry. Adressiert den Hauptbug aus ADR-020.

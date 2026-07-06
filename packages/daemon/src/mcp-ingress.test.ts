@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * Unit-Tests für ADR-028 D4-b MCP-Ingress-Handler (rein bis auf injizierten Executor;
  * KEIN Net-Egress). Deckt: Happy-Path (local/remote), Invalid-Plan, Reject-on-Mismatch,

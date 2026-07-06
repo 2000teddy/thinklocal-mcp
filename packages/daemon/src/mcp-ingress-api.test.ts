@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * Unit-Tests für ADR-028 D4-b / v5 Spur 3 T3.2 — Fastify-Live-Wiring des MCP-Ingress
  * (`mcp-ingress-api.ts`). Deckt:

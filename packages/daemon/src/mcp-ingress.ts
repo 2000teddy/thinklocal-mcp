@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * mcp-ingress.ts — ADR-028 D4-b (D2-Ingress, Prep): die Kern-Logik des Daemon-MCP-Proxy-
  * Ingress `/api/mcp/<server>`. Nimmt einen MCP-Aufruf entgegen, autorisiert den Sender (D3),
