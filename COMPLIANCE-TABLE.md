@@ -1487,5 +1487,21 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-07-04 08:54 — v0.34.68 feat(tls): Cert-Reissue-Schwelle 30 d + konfigurierbar.*
+## Session 2026-07-06 06:03 — feat(tls): Re-Pair-Migrationsstufe Legacy→kanonisch (ADR-034, KW28 §2 A / TL-00a, v0.34.69)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|------------------------------------|
+| v0.34.69 | (offen, base=main) | 2026-07-06 06:03 | s.u. | n/a | ✅ | ✅ | ✅ | ✅ | CR Claude adversarial APPROVE 0×HIGH/CRIT; LOW-1/LOW-2/NIT-1 gefixt → Re-Review APPROVE |
+
+**Typ:** Daemon-Code (Cert-Identity-Migration, opt-in), **kein Roll-out/Timer/Live-Aktion**. **CO:** Design-Entscheidung (Lock-Mechanismus, Key-Reuse-vs-Re-Key) als **ADR-034 VOR dem Code** dokumentiert + begründet (statt pal:consensus — agy/codex nicht im Env, MiniMax verboten). **CG:** n/a. **TS:** `tls.test.ts` +7 (Migration+Key-Reuse+Archiv, Idempotenz, Regression-Schalter-AUS bitidentisch, fail-closed-Backup-Fehler, Lock-busy-skip, Lock-stale-steal, bereits-kanonisch-no-op) mit echten geminteten Fixtures. Full Suite **115 Files / 1450 grün**, tsc 0; eslint: 3 Errors/16 Warnings = strikt ⊆ main (22 Probleme) → keine neuen. **CR:** unabhängiger **Claude**-Subagent (adversarial, Fokus Hermes-Risiko-1: keine zwei parallelen Identitäten / Torn-Pair / halbes File): **APPROVE**, 0× HIGH/CRITICAL — Exactly-one-identity, Atomicity (Key-Reuse→Einzeldatei-Swap), Lock (kein Leak/Deadlock), Opt-in-off-Regression, Fail-closed, Detection alle bestätigt. Gefixt: **LOW-2** (non-EEXIST-Lock-Fehler → fail-closed null statt re-key), **LOW-1** (Dir-fsync Durabilität), **NIT-1** (tmp-Cleanup) → Re-Review **APPROVE**. **PC:** manuell (tsc/Suite/`git diff`/eslint-Snapshot grün) — `agy`-Backend fehlt. **DO:** `docs/architecture/ADR-034-*`, CHANGES (v0.34.69), COMPLIANCE, `changes/2026-07-06_repair-migrationsstufe.md`. **Config-Key:** `cert.migrate_legacy_identity` (Default false, Env `TLMCP_CERT_MIGRATE_LEGACY_IDENTITY`). **Grenze:** kein Timer/Roll-out/Enddatum in diesem Slice.
+
+
+## Admin-Lane 2026-07-06 07:04 — chore(license): ELv2-Vorbereitung (#244)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|------------------------------------|
 | ELv2-lic | #244 (base=main) | 2026-07-06 07:04 | n/a | n/a | n/a (rein Kommentar/Metadaten) | claude Sub-Agent GREEN (kein pal:codereview verfügbar) | n/a | ✅ README/LICENSE | ELv2 LICENSE + source-available README + 266 Copyright-Header; GPL/AGPL-Scan sauber; awaiting Christian Gate 4; Merge NICHT autonom (2-Parteien-Review-Gate) |
+
+---
+
+*Letzte Aktualisierung: 2026-07-06 07:04 — #244 ELv2 LICENSE-Vorbereitung (Admin-Lane, Gate 4 erteilt).*

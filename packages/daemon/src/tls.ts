@@ -11,7 +11,19 @@
  */
 
 import forge from 'node-forge';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import {
+  readFileSync,
+  writeFileSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  writeSync,
+  fsyncSync,
+  closeSync,
+  renameSync,
+  unlinkSync,
+  statSync,
+} from 'node:fs';
 import { resolve } from 'node:path';
 import { networkInterfaces } from 'node:os';
 import type { Logger } from 'pino';
@@ -87,20 +99,37 @@ export function createMeshCA(meshName = 'thinklocal', nodeId?: string): CaBundle
 /**
  * Erstellt ein Node-Zertifikat, signiert von der Mesh-CA.
  * Enthält den SPIFFE-URI als SAN (SubjectAlternativeName).
+ *
+ * ADR-034: `existingKeyPem` (optional) reutilisiert ein VORHANDENES Node-Keypair
+ * statt ein neues zu generieren — genutzt von der Re-Pair-Migrationsstufe, damit
+ * nur `node.crt.pem` (nicht `node.key.pem`) getauscht wird → atomarer Einzeldatei-
+ * Swap ohne Torn-Pair-Risiko. Ohne den Parameter: unverändertes Frisch-Gen-Verhalten.
  */
 export function createNodeCert(
   ca: CaBundle,
   hostname: string,
   spiffeUri: string,
   ipAddresses: string[] = [],
+  existingKeyPem?: string,
 ): NodeCertBundle {
   const caCert = forge.pki.certificateFromPem(ca.caCertPem);
   const caKey = forge.pki.privateKeyFromPem(ca.caKeyPem);
 
-  const keys = forge.pki.rsa.generateKeyPair(2048);
+  let publicKey: forge.pki.rsa.PublicKey;
+  let keyPemOut: string;
+  if (existingKeyPem) {
+    // Key-Reuse (ADR-034): öffentlichen Schlüssel aus dem vorhandenen privaten ableiten.
+    const priv = forge.pki.privateKeyFromPem(existingKeyPem) as forge.pki.rsa.PrivateKey;
+    publicKey = forge.pki.setRsaPublicKey(priv.n, priv.e);
+    keyPemOut = existingKeyPem;
+  } else {
+    const keys = forge.pki.rsa.generateKeyPair(2048);
+    publicKey = keys.publicKey;
+    keyPemOut = forge.pki.privateKeyToPem(keys.privateKey);
+  }
   const cert = forge.pki.createCertificate();
 
-  cert.publicKey = keys.publicKey;
+  cert.publicKey = publicKey;
   cert.serialNumber = generateSerialNumber();
   cert.validity.notBefore = new Date();
   cert.validity.notAfter = new Date();
@@ -146,7 +175,7 @@ export function createNodeCert(
 
   return {
     certPem: forge.pki.certificateToPem(cert),
-    keyPem: forge.pki.privateKeyToPem(keys.privateKey),
+    keyPem: keyPemOut,
     caCertPem: ca.caCertPem,
   };
 }
@@ -165,6 +194,174 @@ export interface CanonicalRetentionOpts {
   canonicalSpiffeUri?: string;
   /** CA-PEMs (eigene + gepairte), GEFILTERT auf gepinnte Attesting-CA-Fingerprints. */
   trustedAttestingCaPems?: readonly string[];
+  /**
+   * ADR-034: Opt-in Re-Pair-Migrationsstufe. Default (undefined/false) = AUS → Migrationszweig
+   * wird NIE betreten → Verhalten bitidentisch. An: ein gültiges Legacy-`host/`-Cert eines
+   * Own-CA-Nodes wird beim Start EINMAL kanonisch (`node/<PeerID>`) neu signiert (Key-Reuse,
+   * atomarer Einzeldatei-Swap, Lock, fail-closed).
+   */
+  migrateLegacyIdentity?: boolean;
+  /** ADR-034 (testbar): Alter (ms), ab dem ein Migrations-Lockfile als verwaist gilt (Steal). Default 60000. */
+  migrateLockStaleMs?: number;
+  /** ADR-034 (testbar): max. Wartezeit (ms) auf ein gehaltenes Lock, dann skip (fail-closed). Default 10000. */
+  migrateLockTimeoutMs?: number;
+}
+
+/** ADR-034: kooperativer Sync-Sleep ohne Busy-Loop (für das Migrations-Lock-Warten). */
+function sleepSync(ms: number): void {
+  if (ms <= 0) return;
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * ADR-034: advisory O_EXCL-Lock für die Migrationsstufe. Serialisiert gleichzeitige Startversuche
+ * (Korrektheit hängt NICHT davon ab — die Migration ist idempotent). Verwaiste Locks (mtime älter
+ * als `staleMs`, Halter vermutlich gecrasht) werden gestohlen. Gibt den fd zurück oder `null`
+ * (Lock nicht erlangbar innerhalb `timeoutMs` → Aufrufer bleibt fail-closed beim Legacy-Cert).
+ */
+function acquireMigrationLock(
+  lockPath: string,
+  opts: { staleMs: number; timeoutMs: number; pollMs?: number },
+): number | null {
+  const deadline = Date.now() + opts.timeoutMs;
+  for (;;) {
+    try {
+      const fd = openSync(lockPath, 'wx', 0o600);
+      try {
+        writeSync(fd, `${process.pid}\n`);
+      } catch {
+        /* PID-Notiz ist rein diagnostisch */
+      }
+      return fd;
+    } catch (err) {
+      // CR-LOW-2: JEDER nicht-EEXIST-Fehler (EACCES/ENOSPC/ENOTDIR …) → `null` = Lock nicht
+      // erlangbar → fail-closed (Aufrufer behält das Legacy-Cert). NICHT werfen: ein Throw würde
+      // sonst in den äußeren „unlesbar → reissue"-Pfad laufen und fälschlich re-keyen statt behalten.
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') return null;
+      // Gehalten → Verwaisung prüfen.
+      try {
+        const st = statSync(lockPath);
+        if (Date.now() - st.mtimeMs > opts.staleMs) {
+          unlinkSync(lockPath); // verwaist → stehlen, dann erneut versuchen
+          continue;
+        }
+      } catch {
+        continue; // Lock verschwand zwischen open und stat → erneut versuchen
+      }
+      if (Date.now() >= deadline) return null; // aufgeben (fail-closed)
+      sleepSync(Math.min(opts.pollMs ?? 50, opts.timeoutMs));
+    }
+  }
+}
+
+function releaseMigrationLock(fd: number, lockPath: string): void {
+  try {
+    closeSync(fd);
+  } catch {
+    /* best effort */
+  }
+  try {
+    unlinkSync(lockPath);
+  } catch {
+    /* best effort */
+  }
+}
+
+interface MigrateArgs {
+  tlsDir: string;
+  ca: CaBundle;
+  hostname: string;
+  canonicalSpiffeUri: string;
+  localIps: string[];
+  /** Vorhandener Node-Key (wird WIEDERverwendet — nur das Cert wird getauscht). */
+  existingKeyPem: string;
+  spiffeBefore: string | null;
+  log?: Logger;
+  staleMs: number;
+  timeoutMs: number;
+}
+
+/**
+ * ADR-034: Migriert ein gültiges Legacy-`host/`-Node-Cert auf die kanonische `node/<PeerID>`-Identität.
+ * Unter Lock, atomar (nur `node.crt.pem` via tmp+fsync+rename; `node.key.pem` unberührt → Paar stets
+ * konsistent). Idempotent: unter dem Lock wird erneut geprüft, ob bereits kanonisch (Race-Gewinner).
+ * Gibt das kanonische Bundle zurück oder `null` (Skip/Fehler → Aufrufer behält fail-closed das Legacy-Cert).
+ */
+function migrateLegacyCertToCanonical(args: MigrateArgs): NodeCertBundle | null {
+  const nodeCertPath = resolve(args.tlsDir, 'node.crt.pem');
+  const nodeKeyPath = resolve(args.tlsDir, 'node.key.pem');
+  const lockPath = resolve(args.tlsDir, '.migrate.lock');
+  const fd = acquireMigrationLock(lockPath, { staleMs: args.staleMs, timeoutMs: args.timeoutMs });
+  if (fd === null) {
+    args.log?.warn(
+      { lockPath },
+      '[migrate] Migrations-Lock nicht erlangbar (belegt/Timeout/FS-Fehler) — übersprungen (fail-closed: Legacy-Cert bleibt)',
+    );
+    return null;
+  }
+  try {
+    args.log?.info({ lockPath }, '[migrate] Lock erworben');
+    // Unter dem Lock erneut lesen: ein paralleler Start könnte bereits migriert haben.
+    const curCertPem = readFileSync(nodeCertPath, 'utf-8');
+    const curSans = extractSpiffeUris(curCertPem);
+    if (curSans.includes(args.canonicalSpiffeUri)) {
+      args.log?.info(
+        { canonicalSpiffeUri: args.canonicalSpiffeUri },
+        '[migrate] bereits kanonisch (paralleler Start hat migriert) — behalten, kein zweiter Re-Sign',
+      );
+      return { certPem: curCertPem, keyPem: readFileSync(nodeKeyPath, 'utf-8'), caCertPem: args.ca.caCertPem };
+    }
+    // Kanonisches Cert mit WIEDERverwendetem Key signieren (nur das Cert ändert sich).
+    const canonical = createNodeCert(args.ca, args.hostname, args.canonicalSpiffeUri, args.localIps, args.existingKeyPem);
+    // Legacy-Cert archivieren (KEIN live nutzbares Cert — liegt nicht unter node.crt.pem).
+    writeFileSync(resolve(args.tlsDir, 'node.crt.legacy-premigrate.pem'), curCertPem, { mode: 0o644 });
+    // Atomarer Install: tmp + fsync + rename (node.key.pem bleibt unberührt).
+    const tmp = resolve(args.tlsDir, 'node.crt.pem.tmp');
+    try {
+      const wfd = openSync(tmp, 'w', 0o644);
+      try {
+        writeSync(wfd, canonical.certPem);
+        fsyncSync(wfd);
+      } finally {
+        closeSync(wfd);
+      }
+      renameSync(tmp, nodeCertPath);
+      // CR-LOW-1: Verzeichnis-Eintrag durabel machen (rename ist atomar für Leser, aber der
+      // Dir-Entry-Update kann bei Power-Loss verloren gehen → dann liegt wieder das Legacy-Cert
+      // vor, das zum unveränderten Key passt: fail-safe, aber wir wollen den Rename halten).
+      try {
+        const dfd = openSync(args.tlsDir, 'r');
+        try {
+          fsyncSync(dfd);
+        } finally {
+          closeSync(dfd);
+        }
+      } catch {
+        /* Dir-fsync best effort (z.B. auf FS, die es nicht unterstützen) */
+      }
+    } catch (writeErr) {
+      // CR-NIT-1: Halb geschriebenes tmp bei Fehler aufräumen (kein Litter; node.crt.pem unberührt).
+      try {
+        unlinkSync(tmp);
+      } catch {
+        /* best effort */
+      }
+      throw writeErr;
+    }
+    args.log?.info(
+      { spiffeBefore: args.spiffeBefore, spiffeAfter: args.canonicalSpiffeUri },
+      '[migrate] kanonisches Node-Cert installiert (atomarer Rename); Legacy archiviert',
+    );
+    return { certPem: canonical.certPem, keyPem: args.existingKeyPem, caCertPem: args.ca.caCertPem };
+  } catch (err) {
+    args.log?.error(
+      { err: err instanceof Error ? err.message : String(err) },
+      '[migrate] Migration fehlgeschlagen — Legacy-Cert unangetastet (fail-closed)',
+    );
+    return null;
+  } finally {
+    releaseMigrationLock(fd, lockPath);
+  }
 }
 
 /**
@@ -413,6 +610,42 @@ export function loadOrCreateTlsBundle(
         certKeyMatches = privKey.n.equals(certPubKey.n) && privKey.e.equals(certPubKey.e);
       } catch {
         certKeyMatches = false;
+      }
+
+      // ADR-034: Re-Pair-Migrationsstufe (opt-in, Default AUS → Zweig nie betreten). Ein GÜLTIGES
+      // Legacy-`host/`-Cert eines Own-CA-Nodes wird EINMAL kanonisch (`node/<PeerID>`) neu signiert.
+      // Vor den Retain-Gates, damit ein Legacy-Cert nicht still behalten wird. Key-Reuse + atomarer
+      // Einzeldatei-Swap unter Lock → keine zwei parallelen Identitäten, kein halbes File. Fehler/Skip
+      // → fall-through (das Legacy-Cert wird unten fail-closed vom legacy-current-ca-Gate behalten).
+      const canonUri = retention?.canonicalSpiffeUri;
+      if (
+        retention?.migrateLegacyIdentity === true &&
+        canonUri &&
+        fullyValid &&
+        signedByCurrentCa &&
+        certKeyMatches &&
+        certSpiffeUri !== null &&
+        certSpiffeUri.startsWith('spiffe://thinklocal/host/') &&
+        !extractSpiffeUris(certPem).includes(canonUri)
+      ) {
+        log?.info(
+          { spiffeBefore: certSpiffeUri, canonicalSpiffeUri: canonUri },
+          '[migrate] Legacy-Cert erkannt — Migrationsmodus aktiv',
+        );
+        const migrated = migrateLegacyCertToCanonical({
+          tlsDir,
+          ca,
+          hostname,
+          canonicalSpiffeUri: canonUri,
+          localIps: getLocalIpAddresses(),
+          existingKeyPem: keyPem,
+          spiffeBefore: certSpiffeUri,
+          log,
+          staleMs: retention?.migrateLockStaleMs ?? 60_000,
+          timeoutMs: retention?.migrateLockTimeoutMs ?? 10_000,
+        });
+        if (migrated) return migrated;
+        // else: fall-through → Legacy-Cert bleibt (fail-closed).
       }
 
       if (fullyValid && daysLeft > renewBeforeDays && certSpiffeUri === spiffeUri && signedByCurrentCa && certKeyMatches) {

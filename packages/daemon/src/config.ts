@@ -147,6 +147,10 @@ export interface DaemonConfig {
     /** Restlaufzeit-Schwelle (Tage): beim Start wird ein Node-Cert mit `daysLeft <= renew_before_days`
      *  neu ausgestellt (Behalten nur bei `> renew_before_days`). Default 30 (Wochen-Neustart-Rhythmus). */
     renew_before_days: number;
+    /** ADR-034 Re-Pair-Migrationsstufe (opt-in, Default false): ein gültiges Legacy-`host/`-Cert wird
+     *  beim Start EINMAL kanonisch (`node/<PeerID>`) neu signiert. Bewusst per Christians `.52`/`.55`-
+     *  Fenster zu aktivieren, nicht heimlich beim nächsten Start. */
+    migrate_legacy_identity: boolean;
   };
   /**
    * T2.4: place-or-refuse. Übersteigt die (cache-bewusste) RAM-Auslastung diese
@@ -227,6 +231,7 @@ const DEFAULTS: DaemonConfig = {
     expiry_critical_days: 7,
     expiry_check_interval_ms: 43_200_000, // 12 h
     renew_before_days: 30, // Reissue beim Start bei <= 30 d Restlaufzeit (Wochen-Neustart-Rhythmus)
+    migrate_legacy_identity: false, // ADR-034: opt-in, bewusst per Re-Pair-Fenster aktivieren
   },
   placement: {
     refuse_ram_percent: 90,
@@ -373,6 +378,10 @@ export function loadConfig(configPath?: string): DaemonConfig {
   // Wochen-Neustart-Rhythmus (Kap. 13.4): Reissue-Schwelle beim Start, konfigurierbar.
   if (env['TLMCP_CERT_RENEW_BEFORE_DAYS']) {
     cfg.cert.renew_before_days = readPositiveInt('TLMCP_CERT_RENEW_BEFORE_DAYS', cfg.cert.renew_before_days);
+  }
+  // ADR-034: Re-Pair-Migrationsstufe opt-in (Default false).
+  if (env['TLMCP_CERT_MIGRATE_LEGACY_IDENTITY']) {
+    cfg.cert.migrate_legacy_identity = env['TLMCP_CERT_MIGRATE_LEGACY_IDENTITY'] === '1';
   }
 
   // T2.4: place-or-refuse.

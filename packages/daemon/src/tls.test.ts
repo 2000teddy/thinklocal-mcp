@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 import { describe, it, expect } from 'vitest';
 import forge from 'node-forge';
-import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, rmSync, existsSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -10,8 +10,10 @@ import {
   verifyPeerCert,
   selectTrustDistributionCa,
   extractSpiffeUri,
+  extractSpiffeUris,
   isRetainableCanonicalCert,
   loadOrCreateTlsBundle,
+  type CanonicalRetentionOpts,
 } from './tls.js';
 
 const DAY = 24 * 3600_000;
@@ -558,6 +560,136 @@ describe('loadOrCreateTlsBundle — Reissue-Schwelle (renewBeforeDays)', () => {
     try {
       const bundle = loadOrCreateTlsBundle(dir, 'node', NODE_URI, undefined, 'renewedge', undefined, 10);
       expect(bundle.certPem).not.toBe(node.certPem);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+});
+
+// ADR-034: Re-Pair-Migrationsstufe (Legacy host/ → kanonisch node/<PeerID>).
+describe('ADR-034 — Re-Pair-Migrationsstufe (loadOrCreateTlsBundle)', () => {
+  const CANON = 'spiffe://thinklocal/node/12D3KooWMigCanonTEST';
+
+  // Own-CA-Node mit gültigem Legacy-`host/`-Cert (signiert von der eigenen CA).
+  function setupLegacy(nodeId: string): {
+    dir: string;
+    ownCa: ReturnType<typeof createMeshCA>;
+    legacy: ReturnType<typeof createNodeCert>;
+    legacyUri: string;
+  } {
+    const ownCa = createMeshCA('thinklocal', nodeId);
+    const legacyUri = `spiffe://thinklocal/host/${nodeId}/agent/claude-code`;
+    const legacy = createNodeCert(ownCa, 'node', legacyUri, ['10.10.10.56']);
+    const dir = mkdtempSync(join(tmpdir(), 'tlmcp-mig-'));
+    const tls = join(dir, 'tls');
+    mkdirSync(tls, { recursive: true });
+    writeFileSync(join(tls, 'ca.crt.pem'), ownCa.caCertPem);
+    writeFileSync(join(tls, 'ca.key.pem'), ownCa.caKeyPem);
+    writeFileSync(join(tls, 'node.crt.pem'), legacy.certPem);
+    writeFileSync(join(tls, 'node.key.pem'), legacy.keyPem);
+    return { dir, ownCa, legacy, legacyUri };
+  }
+  const RET = (over: Partial<CanonicalRetentionOpts> = {}): CanonicalRetentionOpts => ({
+    canonicalSpiffeUri: CANON,
+    migrateLegacyIdentity: true,
+    ...over,
+  });
+
+  it('migriert Legacy host/ → kanonisch node/ (Key-Reuse, atomarer Swap, Legacy archiviert)', () => {
+    const { dir, legacy, legacyUri } = setupLegacy('mig01');
+    try {
+      const b = loadOrCreateTlsBundle(dir, 'node', legacyUri, undefined, 'mig01', RET(), 30);
+      // Genau EINE Identität: nur die kanonische SAN.
+      expect(extractSpiffeUris(b.certPem)).toEqual([CANON]);
+      // Key WIEDERverwendet (nur das Cert getauscht).
+      expect(b.keyPem).toBe(legacy.keyPem);
+      // Auf Platte: node.crt.pem kanonisch, node.key.pem unverändert, Legacy archiviert.
+      const tls = join(dir, 'tls');
+      expect(extractSpiffeUri(readFileSync(join(tls, 'node.crt.pem'), 'utf-8'))).toBe(CANON);
+      expect(readFileSync(join(tls, 'node.key.pem'), 'utf-8')).toBe(legacy.keyPem);
+      expect(extractSpiffeUri(readFileSync(join(tls, 'node.crt.legacy-premigrate.pem'), 'utf-8'))).toBe(legacyUri);
+      // Kein halbes File (tmp weg), kein zurückgebliebenes Lock.
+      expect(existsSync(join(tls, 'node.crt.pem.tmp'))).toBe(false);
+      expect(existsSync(join(tls, '.migrate.lock'))).toBe(false);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it('idempotent: zweiter Aufruf sieht kanonisch → behalten, kein zweiter Re-Sign', () => {
+    const { dir, legacyUri } = setupLegacy('mig02');
+    try {
+      const first = loadOrCreateTlsBundle(dir, 'node', legacyUri, undefined, 'mig02', RET(), 30);
+      // Zweiter Start: Identität ist jetzt kanonisch → spiffeUri = CANON übergeben.
+      const second = loadOrCreateTlsBundle(dir, 'node', CANON, undefined, 'mig02', RET(), 30);
+      expect(second.certPem).toBe(first.certPem); // unverändert behalten
+      expect(extractSpiffeUris(second.certPem)).toEqual([CANON]);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it('Regression: Schalter AUS → Legacy-Cert unverändert behalten (bitidentisch)', () => {
+    const { dir, legacy, legacyUri } = setupLegacy('mig03');
+    try {
+      // Ohne migrateLegacyIdentity (Default): reines ADR-024-Retention-Verhalten.
+      const b = loadOrCreateTlsBundle(dir, 'node', legacyUri, undefined, 'mig03', { canonicalSpiffeUri: CANON }, 30);
+      expect(b.certPem).toBe(legacy.certPem); // Legacy behalten
+      expect(extractSpiffeUri(b.certPem)).toBe(legacyUri);
+      expect(existsSync(join(dir, 'tls', 'node.crt.legacy-premigrate.pem'))).toBe(false);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it('fail-closed: Backup-Write scheitert (Pfad blockiert) → Legacy unangetastet', () => {
+    const { dir, legacy, legacyUri } = setupLegacy('mig04');
+    try {
+      // Blockiere das Backup-Ziel mit einem Verzeichnis → writeFileSync wirft → Migration bricht ab.
+      mkdirSync(join(dir, 'tls', 'node.crt.legacy-premigrate.pem'));
+      const b = loadOrCreateTlsBundle(dir, 'node', legacyUri, undefined, 'mig04', RET(), 30);
+      // fail-closed: Legacy-Cert bleibt (fällt auf legacy-current-ca-Retain zurück).
+      expect(b.certPem).toBe(legacy.certPem);
+      expect(extractSpiffeUri(readFileSync(join(dir, 'tls', 'node.crt.pem'), 'utf-8'))).toBe(legacyUri);
+      expect(existsSync(join(dir, 'tls', '.migrate.lock'))).toBe(false); // Lock freigegeben
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it('Lock belegt (frisch) + kurzes Timeout → Migration übersprungen, Legacy behalten', () => {
+    const { dir, legacy, legacyUri } = setupLegacy('mig05');
+    try {
+      writeFileSync(join(dir, 'tls', '.migrate.lock'), '99999\n'); // frisch gehalten
+      const b = loadOrCreateTlsBundle(
+        dir, 'node', legacyUri, undefined, 'mig05',
+        RET({ migrateLockStaleMs: 60_000, migrateLockTimeoutMs: 20 }), 30,
+      );
+      expect(b.certPem).toBe(legacy.certPem); // fail-closed
+      expect(existsSync(join(dir, 'tls', 'node.crt.legacy-premigrate.pem'))).toBe(false);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it('Lock verwaist (alt) → gestohlen, Migration läuft', () => {
+    const { dir, legacyUri } = setupLegacy('mig06');
+    try {
+      const lock = join(dir, 'tls', '.migrate.lock');
+      writeFileSync(lock, '12345\n');
+      const old = new Date(Date.now() - 3600_000); // 1 h alt
+      utimesSync(lock, old, old);
+      const b = loadOrCreateTlsBundle(
+        dir, 'node', legacyUri, undefined, 'mig06',
+        RET({ migrateLockStaleMs: 60_000, migrateLockTimeoutMs: 5_000 }), 30,
+      );
+      expect(extractSpiffeUris(b.certPem)).toEqual([CANON]); // gestohlen + migriert
+      expect(existsSync(lock)).toBe(false);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it('bereits kanonisch + Schalter AN → KEINE Migration (kein Backup, kein Re-Sign)', () => {
+    const ownCa = createMeshCA('thinklocal', 'mig07');
+    const canonCert = createNodeCert(ownCa, 'node', CANON, ['10.10.10.56']);
+    const dir = mkdtempSync(join(tmpdir(), 'tlmcp-mig-'));
+    const tls = join(dir, 'tls');
+    mkdirSync(tls, { recursive: true });
+    writeFileSync(join(tls, 'ca.crt.pem'), ownCa.caCertPem);
+    writeFileSync(join(tls, 'ca.key.pem'), ownCa.caKeyPem);
+    writeFileSync(join(tls, 'node.crt.pem'), canonCert.certPem);
+    writeFileSync(join(tls, 'node.key.pem'), canonCert.keyPem);
+    try {
+      const b = loadOrCreateTlsBundle(dir, 'node', CANON, undefined, 'mig07', RET(), 30);
+      expect(b.certPem).toBe(canonCert.certPem); // unverändert behalten
+      expect(existsSync(join(tls, 'node.crt.legacy-premigrate.pem'))).toBe(false);
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });
