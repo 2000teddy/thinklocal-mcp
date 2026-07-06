@@ -1488,3 +1488,4 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 ---
 
 *Letzte Aktualisierung: 2026-07-04 08:54 — v0.34.68 feat(tls): Cert-Reissue-Schwelle 30 d + konfigurierbar.*
+| ELv2-lic | #244 (base=main) | 2026-07-06 07:04 | n/a | n/a | n/a (rein Kommentar/Metadaten) | claude Sub-Agent GREEN (kein pal:codereview verfügbar) | n/a | ✅ README/LICENSE | ELv2 LICENSE + source-available README + 266 Copyright-Header; GPL/AGPL-Scan sauber; awaiting Christian Gate 4; Merge NICHT autonom (2-Parteien-Review-Gate) |
