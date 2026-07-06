@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * mcp-service-registry.ts — ADR-028 D4-a: reines Modell + Auflösung für geteilte
  * MCP-Server als namespaced Capabilities im bestehenden CRDT (ADR-020).

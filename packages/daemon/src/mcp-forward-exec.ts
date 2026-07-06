@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * mcp-forward-exec.ts — ADR-028 D4-b (D2-Forward Exec-Schicht, **Skelett/Prep**): übersetzt einen
  * `McpForwardDispatch` (#195) in eine ausführungs-freie **Exec-Spezifikation** — entweder einen

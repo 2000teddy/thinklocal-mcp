@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 import { networkInterfaces } from 'node:os';
 import { Bonjour, type Service, type Browser } from 'bonjour-service';
 import type { Logger } from 'pino';

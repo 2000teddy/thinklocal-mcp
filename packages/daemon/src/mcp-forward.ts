@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * mcp-forward.ts — ADR-028 D4-b (Forward-Spec, Prep): übersetzt einen `McpRoutePlan`
  * (Output von `planMcpRoute`) in eine konkrete, AUSFÜHRUNGS-FREIE Spezifikation, WIE der

@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * mcp-forward-integration.test.ts — Naht-Integrationstest für den MCP-Proxy-Forward-Pfad
  * (v5 Spur 3, Modell B; T3.2+T3.3). Schließt die Lücke zwischen den bestehenden Unit-Tests,

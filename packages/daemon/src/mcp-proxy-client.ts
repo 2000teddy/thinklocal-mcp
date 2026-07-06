@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * mcp-proxy-client.ts — ADR-028 D4 / v5 Spur 3 (Modell B) **T3.4**: client-seitige
  * Helfer fuer die MCP-Proxy-Tools in `mcp-stdio.ts`. Ein lokaler Agent (z.B. Claude

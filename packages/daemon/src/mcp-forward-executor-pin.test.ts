@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * Regressionstests fuer die CR-HIGH-Findings aus dem T3.3-Review:
  *  - **CR-H2**: die Connector-Pin-Policy MUSS aus dem Request kommen (nicht der globalen

@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * onboarding-port.ts — Single Source of Truth für die Port-Beziehung zwischen dem
  * Haupt-mTLS-Daemon (z.B. 9440) und dem CERTLOSEN Onboarding-Server (Haupt-Port + 1).

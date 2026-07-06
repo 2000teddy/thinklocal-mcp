@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * Unit-Tests für agent-poll-config.ts (A5): Auflösung der Agent-Poll-Kadenz aus Env + Mode-Defaults,
  * inkl. Abgrenzung von TLMCP_HEARTBEAT_MS (dieses Modul betrifft NUR den Inbox-Poll, nicht den

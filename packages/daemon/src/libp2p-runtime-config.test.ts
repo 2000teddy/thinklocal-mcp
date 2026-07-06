@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * libp2p-runtime-config.test.ts — Regressionstests fuer ADR-020 Phase 1.1
  * Bug-Report #3 (Live-Befund 2026-05-19).

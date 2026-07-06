@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 import type { Logger } from 'pino';
 import type { PrivateKey } from '@libp2p/interface';
 import { peerIdFromString } from '@libp2p/peer-id';

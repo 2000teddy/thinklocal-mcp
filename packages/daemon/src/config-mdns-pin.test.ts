@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * config-mdns-pin.test.ts — Regression fuer das .55-Workaround-Flag
  * `disable_mdns_interface_pin` (CR-LOW gpt-5.5, 2026-06-08).

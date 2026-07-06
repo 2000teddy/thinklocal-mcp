@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * mcp-ingress-api.ts — ADR-028 D4-b / v5 Spur 3 (Modell B), **T3.2**: das Fastify-
  * Live-Wiring des Daemon-MCP-Proxy-Ingress `POST /api/mcp/<server>`.

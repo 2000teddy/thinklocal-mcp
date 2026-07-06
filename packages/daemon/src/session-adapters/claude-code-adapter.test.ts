@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * Unit tests for the Claude Code session adapter (ADR-006 Phase 1).
  * Uses synthetic jsonl lines modelled after the real v2.1.x format.

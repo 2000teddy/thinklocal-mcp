@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * libp2p-autodial.test.ts — Regressionstests fuer ADR-020 Phase 1.1.
  *

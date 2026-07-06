@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * peer-selection.ts — T2.4-Folge: least-loaded-Routing-Auswahl.
  *

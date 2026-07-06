@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 import { describe, it, expect } from 'vitest';
 import { TaskRouter, type RoutableAgent } from './task-router.js';
 import type { Capability } from './registry.js';

@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * mcp-share-beta.test.ts — v5 Spur 3 T3.1 (Modell B Beta, Christian-Gate Q1 = JA):
  * Regressionsguard, dass die AUSGELIEFERTE `config/daemon.toml` `pal` + `unifi` als

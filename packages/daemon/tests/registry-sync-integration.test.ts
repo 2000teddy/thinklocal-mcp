@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 import { describe, it, expect, afterEach } from 'vitest';
 import { wireRegistrySync } from '../src/registry-sync-libp2p-adapter.js';
 import { CapabilityRegistry, type Capability } from '../src/registry.js';

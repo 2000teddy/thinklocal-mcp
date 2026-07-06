@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * mcp-routing.ts — ADR-028 D4-b (Routing-Entscheidung): bestimmt rein, WIE ein
  * MCP-Aufruf bedient wird — lokal (eigener Node serviert via mcporter), remote

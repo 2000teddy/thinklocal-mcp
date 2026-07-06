@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * mcp-forward-executor.ts — ADR-028 D4-b / v5 Spur 3 (Modell B) **T3.3**: der Live-
  * Executor fuer den MCP-Proxy-Ingress. Konsumiert einen `McpForwardDispatch`

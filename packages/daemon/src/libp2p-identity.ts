@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * libp2p-identity.ts — ADR-022 Voraussetzung #0: persistierter libp2p-Ed25519-Key
  *

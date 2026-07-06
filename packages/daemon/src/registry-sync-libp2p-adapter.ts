@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * registry-sync-libp2p-adapter.ts — Bindeglied zwischen
  * RegistrySyncCoordinator (transport-agnostisch) und libp2p-Runtime

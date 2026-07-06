@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * agent-card.test.ts — T2.4-Folge: Mesh-Exposition der place-or-refuse-Resource-Attribute.
  *

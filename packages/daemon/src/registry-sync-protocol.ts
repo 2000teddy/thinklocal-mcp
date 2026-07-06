@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 /**
  * registry-sync-protocol.ts — Length-prefix Framing fuer den
  * /thinklocal/mesh/registry/1.0.0 libp2p-Stream.
