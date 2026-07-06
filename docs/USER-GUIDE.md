@@ -76,6 +76,11 @@ agent_type = "claude-code"
 heartbeat_interval_ms = 10000
 heartbeat_timeout_missed = 3
 
+[cert]
+# Restlaufzeit-Schwelle (Tage): beim Daemon-Start wird ein Node-Cert mit
+# daysLeft <= renew_before_days neu ausgestellt (Behalten nur bei > N).
+renew_before_days = 30
+
 [discovery]
 mdns_service_type = "_thinklocal._tcp"
 
@@ -97,8 +102,27 @@ mdns_service_type = "_thinklocal._tcp"
 | `TLMCP_STATIC_PEERS` | Statische Peers (komma-separiert) | - |
 | `TLMCP_ALLOWED_MESH_CIDRS` | Mesh-CIDRs (ADR-019, komma-separiert) | - |
 | `TLMCP_EXCLUDE_INTERFACE_PATTERNS` | Interface-Excludes (ADR-019) | Defaults |
+| `TLMCP_CERT_RENEW_BEFORE_DAYS` | Cert-Reissue-Schwelle beim Start (Tage), `[1, 89]` | 30 |
 | `TELEGRAM_BOT_TOKEN` | Telegram Bot Token | - |
 | `TELEGRAM_ALLOWED_CHATS` | Erlaubte Chat-IDs | - |
+
+### Zertifikats-Erneuerung (`[cert]`)
+
+Das Node-Zertifikat wird **beim Daemon-Start** erneuert, wenn seine Restlaufzeit die Schwelle
+erreicht (es gibt keine In-Process-Rotation — siehe `docs/RECHECK-cert-rotation-2026-07-03.md`).
+Seit v0.34.68 (PR #242) ist die Schwelle konfigurierbar:
+
+| Key (TOML `[cert]`) | Env | Default | Wertebereich | Bedeutung |
+|---|---|---|---|---|
+| `renew_before_days` | `TLMCP_CERT_RENEW_BEFORE_DAYS` | `30` | `[1, 89]` | Reissue beim Start, sobald `daysLeft <= N`. `≤ 30` passt zum **Wochen-Neustart-Rhythmus** (Kap. 13.4): das Cert erneuert sich beim ohnehin wöchentlichen Neustart rechtzeitig. |
+
+**Warum der Wertebereich streng validiert ist** (Post-Merge-Validator in `config.ts`, wirft bei
+Verletzung beim Start): `0`/negativ wäre **fail-open** — ein abgelaufenes Cert würde behalten statt
+erneuert; `≥ 90` (≥ Node-Cert-Laufzeit) würde eine **Reissue-Schleife bei jedem Start** erzeugen, weil
+ein frisch ausgestelltes Cert sofort wieder unter der Schwelle läge. Zulässig ist daher genau
+`[1, 89]`. Hintergrund: `docs/architecture/ADR-024-*` (Canonical-Cert-Retention) und `CHANGES.md`
+(v0.34.68). Token-onboardete Nodes (ohne eigenen CA-Key) sind ausgenommen — sie erneuern sich per
+Re-Onboarding, nicht über diese Schwelle.
 
 ### Credentials (.env)
 
