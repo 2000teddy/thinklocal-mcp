@@ -8,6 +8,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### chore(license): ELv2 LICENSE + source-available README + Copyright-Header (Vorbereitung, awaiting Christian Gate 4)
+
+ELv2-Lizenz-Verteilung (ENTSCHEIDUNG 12 / Gate 4). Änderung rein Kommentar/Metadaten:
+- `LICENSE`: Elastic License 2.0 neu (es gab keine Datei; README verwies fälschlich auf MIT).
+- `README.md`: „Open-Source-Infrastruktur"/„MIT License" → source-available/ELv2, ausdrücklich **nicht** „Open Source".
+- `package.json`: `license` → `SEE LICENSE IN LICENSE`.
+- Copyright-ELv2-Header in 266 first-party `.ts` (shebang-sicher; `.d.ts`/node_modules/dist ausgenommen).
+- GPL/AGPL-Dep-Scan (57 deps): keine GPL/AGPL. **Nicht mergen bis Christian Gate 4.**
+
+
 ### v0.34.68 (Daemon-Code, Deploy folgt getrennt) — feat(tls): Cert-Reissue-Schwelle 30 Tage + konfigurierbar (Wochen-Neustart-Rhythmus)
 
 Daemon-Code-Teil des Wochen-Neustart-Rhythmus (Kap. 13.4 / 3.8-Punkt 7, Christian-Freigabe 04.07.):
