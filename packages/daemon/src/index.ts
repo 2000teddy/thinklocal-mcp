@@ -160,7 +160,12 @@ async function main(): Promise<void> {
       identity.spiffeUri,
       log,
       identity.stableNodeId,
-      { canonicalSpiffeUri: canonicalSelfUriForCert, trustedAttestingCaPems: prelimTrustedCaPems },
+      {
+        canonicalSpiffeUri: canonicalSelfUriForCert,
+        trustedAttestingCaPems: prelimTrustedCaPems,
+        // ADR-034: Re-Pair-Migrationsstufe (opt-in, Default false) — Legacy `host/` → kanonisch `node/`.
+        migrateLegacyIdentity: config.cert.migrate_legacy_identity,
+      },
       config.cert.renew_before_days,
     );
     log.info('mTLS aktiviert — HTTPS mit gegenseitiger Zertifikatsprüfung');
