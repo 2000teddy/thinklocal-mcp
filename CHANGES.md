@@ -8,6 +8,31 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.69 (Daemon-Code, opt-in, kein Roll-out) — feat(tls): Re-Pair-Migrationsstufe Legacy→kanonisch (ADR-034, KW28 §2 A / TL-00a)
+
+Kontrollierte **Übergangsfenster-Stufe** für den `.52`/`.55`-Re-Enroll (Hermes-Risiko 1): ein gültiges
+Legacy-`host/`-Node-Cert eines Own-CA-Nodes wird beim Start **einmal** kanonisch (`node/<PeerID>`) neu
+signiert — **genau eine** Identität, kein Torn-Pair, kein halbes File.
+
+- **`tls.ts`:** neue opt-in Migrationsstufe in `loadOrCreateTlsBundle` (vor den Retain-Gates). Erkennung
+  Legacy-`host/`-SAN vs. kanonisch; re-signiert mit `canonicalSpiffeUri` unter **Wiederverwendung des
+  vorhandenen Keypairs** (`createNodeCert(..., existingKeyPem)`) → nur `node.crt.pem` ändert sich →
+  **atomarer Einzeldatei-Swap** (tmp+fsync+rename+Dir-fsync), `node.key.pem` unberührt → Paar stets
+  konsistent. Advisory O_EXCL-**Lock** (`.migrate.lock`, Stale-Steal, idempotenter Re-Check unter Lock).
+  **Fail-closed:** jeder Fehler / Lock nicht erlangbar → Legacy-Cert unangetastet (nur der finale Rename
+  mutiert `node.crt.pem`). Legacy nach `node.crt.legacy-premigrate.pem` archiviert (kein live Cert).
+- **`config.ts`:** neues `cert.migrate_legacy_identity` (**Default `false`**) + Env
+  `TLMCP_CERT_MIGRATE_LEGACY_IDENTITY`. Bewusst per Christians Fenster zu aktivieren, nicht heimlich.
+- **`index.ts`:** Schalter in die Retention-Opts durchgereicht.
+- **Schalter AUS = bitidentisch** zum bisherigen Verhalten (Regressionstest) — kein Quiet-Break für `.52`/`.55` im Jetzt.
+- **Doku:** `docs/architecture/ADR-034-repair-migrationsstufe.md` (Design vor Code) — inkl.
+  Design-Wahl Key-Reuse (Race-Freiheit), Lock, Fail-Safety, Review-Nachträge (LOW-1/LOW-2/NIT-2).
+- **TS:** `tls.test.ts` +7 (Migration/Key-Reuse/Archiv, Idempotenz, Regression-AUS, fail-closed-Backup,
+  Lock-busy-skip, Lock-stale-steal, bereits-kanonisch). Full Suite **1450 grün**, tsc 0; eslint keine neuen Probleme.
+- **CR:** unabhängiger **Claude**-Subagent (adversarial, Fokus Race/Atomicity/„keine zwei Identitäten")
+  **APPROVE**, 0× HIGH/CRITICAL; LOW-1/LOW-2/NIT-1 gefixt → Re-Review **APPROVE**.
+- **Grenzen:** KEIN Timer, KEIN Roll-out, KEINE `.52`/`.55`-Live-Aktion, kein Enddatum-Setzen. Nur Code + Tests + ADR.
+
 ### v0.34.68 (Daemon-Code, Deploy folgt getrennt) — feat(tls): Cert-Reissue-Schwelle 30 Tage + konfigurierbar (Wochen-Neustart-Rhythmus)
 
 Daemon-Code-Teil des Wochen-Neustart-Rhythmus (Kap. 13.4 / 3.8-Punkt 7, Christian-Freigabe 04.07.):
