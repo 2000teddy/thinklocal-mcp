@@ -1563,4 +1563,21 @@ Christians Beschluss um, keine offene Design-Frage). **DO:** CONTRIBUTING.md, CL
 
 ---
 
-*Letzte Aktualisierung: 2026-07-07 21:12 — docs(governance): Doku-Rollen + Phasen-Schalter gestrichen.*
+## Sweep 2026-07-07 21:11 — ci(gate): Ebene-1 Doku-Compliance-Gate (warnend → blockierend)
+
+| #        | PR    | Datum            | CO  | CG  | TS  | CR  | PC  | DO | Findings                           |
+|----------|-------|------------------|-----|-----|-----|-----|-----|----|------------------------------------|
+| doc-gate | (offen, base=main) | 2026-07-07 21:11 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | CI-Workflow. TS: YAML-Parse + 9-Szenarien-Logik-Dry-Test (1 Regex-Bug gefunden+gefixt: `docs(`-Titel hinter `[agent]` wurde nicht exempt). CR: Selbst-Review Logikpfade + Dogfood (dieser PR besteht sein eigenes Gate). |
+
+**Typ:** CI-Gate (kein Daemon-Code). `.github/workflows/doc-compliance-gate.yml` — verlangt je PR
+`changes/`-Eintrag + COMPLIANCE-Zeile; Ausnahme Label `no-doc-needed`/Titel-Typ `docs`/`chore`. **Rollout:**
+2 Wochen warnend (`ENFORCE_BLOCKING=false`), Flip-Ziel 2026-07-21 → blockierend + required-check in
+Branch-Protection (Christian/Hermes). **CO/CG:** n/a (setzt Beschluss um; keine offene Design-Frage). **TS:**
+YAML-safe_load grün + 9 Logik-Szenarien lokal nachgestellt (both-present/PASS, missing/WARN+FAIL, 3 Exemptions,
+Substring-„documentation" nicht fälschlich exempt) → **1 Regex-Bug (`[[:space:]\]]`-Bracket) gefunden+gefixt**.
+**CR:** Selbst-Review + Dogfood. **PC:** `git diff` — nur `.github/workflows/` + `.md`/`changes/`. **DO:**
+CHANGES.md, `changes/2026-07-07_doc-compliance-gate.md`, dieser Eintrag; Rollen/Gate-Verweis in CONTRIBUTING (#249).
+
+---
+
+*Letzte Aktualisierung: 2026-07-07 21:11 — ci(gate): Ebene-1 Doku-Compliance-Gate (warnend).*
