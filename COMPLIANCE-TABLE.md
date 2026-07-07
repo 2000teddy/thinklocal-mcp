@@ -1514,4 +1514,21 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-07-07 06:12 — v0.34.70 feat(pairing): CA-verankerter host/→node/-Re-Key (TL-00).*
+## Sweep 2026-07-07 17:24 — docs(todo): v5.1-Roadmap in Projekt-TODO übernommen (Arbeits-Wahrheit)
+
+| #        | PR    | Datum            | CO  | CG  | TS  | CR  | PC  | DO | Findings                           |
+|----------|-------|------------------|-----|-----|-----|-----|-----|----|------------------------------------|
+| v51-todo | (offen, base=main) | 2026-07-07 17:24 | n/a | n/a | n/a | n/a | ✅ | ✅ | Doc-only: `TODO.md` + COMPLIANCE. Kein Code → CO/CG/TS/CR n/a. PC: `git diff` gesichtet, keine Code-/Test-Dateien berührt. |
+
+**Typ:** Doc-only-Sweep (kein Code). Übernimmt `~/hermes/reference/architecture-v5.1/todos/TODO-thinklocal-mcp.md`
+(TL-00…TL-24) in `/opt/thinklocal-mcp/TODO.md` als neuen Abschnitt „v5.1-Roadmap — Arbeits-Wahrheit", jeder
+Punkt mit Präfix `[v5.1]`. **Zusammengeführt statt dupliziert** (per „↔ vgl."): TL-00a↔ADR-034/#245/#246,
+TL-00b/TL-13↔ADR-024-Rollout-Gate/Produktiv-Flotten-Flip, TL-01…TL-06↔#229/#231/#237/#238/#232,
+TL-08↔#239 ADR-033, TL-11↔ADR-004, TL-16↔„Unsicherer Vault-Default", TL-24↔„Hot-Reload TrustStore #117".
+**Bewusst NICHT übernommen:** der Referenz-Kopf (Lane/Repo/Gate-Meta) — als Doku-Framing in den
+Abschnitts-Intro gefaltet statt als Task dupliziert. Architekturdatei bleibt Referenz. **CO:** n/a (keine
+Architektur-/Design-Änderung, reines Roadmap-Tracking). **DO:** dieser Eintrag + TODO.md.
+
+---
+
+*Letzte Aktualisierung: 2026-07-07 17:24 — docs(todo): v5.1-Roadmap übernommen ([v5.1]-Präfix, merge statt dup).*
