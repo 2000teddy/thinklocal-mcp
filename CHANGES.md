@@ -8,6 +8,30 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### v0.34.70 (Daemon-Tool + Runbook, kein Auto-Run) — feat(pairing): CA-verankerter host/→node/-Re-Key (TL-00, KW28)
+
+Schließt den 403-„peer not paired"-Gap für re-enrollte Peers (.52/.55): announcen sie ihre kanonische
+`node/<PeerID>`-Identität, während TH01s `paired-peers.json` sie noch unter der Legacy-`host/`-URI führt,
+lehnt der Outbound-AGENT_MESSAGE-ACL (`isPaired`, URI-gekeyt) sie mit 403 ab. Dieser Slice re-keyt den
+Eintrag **kontrolliert** auf die kanonische Identität — ohne SPAKE2-PIN-Zeremonie, ohne Peer-Neuausstellung.
+
+- **`pairing-canonicalize.ts` (neu, rein, unit-getestet):** `canonicalizePairedPeer(entry, nodeCertPem,
+  expectedCanonicalUri)`. **Zwei unabhängige Sicherheits-Bindungen** (die Mesh nutzt eine GETEILTE zentrale
+  CA, daher reicht CA-Verify allein NICHT): (1) Leaf-Cert verifiziert unter dem GESPEICHERTEN `caCertPem`
+  des Eintrags; (2) node/-SAN des Certs == `expectedCanonicalUri` (Anti-Identitäts-Substitution). Plus
+  Überbreite-Cert-Schutz (zweite node/-SAN → reject). Re-keyt nur `agentId`; `publicKeyPem`/`fingerprint`/
+  `caCertPem`/`hostname`/`pairedAt` bleiben (kein irreführender RSA-TLS-Key statt ECDSA-Signing-Key). Fail-closed.
+- **`scripts/canonicalize-pairings.ts` (neu, Operator-Runner):** re-keyt **genau EINEN** Eintrag
+  (`--peer` + `--address` + `--expect-uri` Pflicht), holt das Leaf-Cert per TLS, Adress-Bindung
+  (Cert muss `--address` als IP/DNS-SAN tragen), atomarer Write + Backup, `--dry-run`. Kein Sammel-Apply.
+- **`docs/REENROLL-52-RUNBOOK.md` (neu):** ausführbares Di→Mi-Runbook (Preflight/Apply/Verify/Rollback);
+  kein Trust-Domain-Flip (Entscheidung 7 → KW30); kein neues Christian-Gate (Gate 2 deckt es).
+- **TS:** `pairing-canonicalize.test.ts` (neu, 9) inkl. **Anti-Substitution** (A-Eintrag + B-Cert unter
+  geteiltem CA → `canon-uri-mismatch`), Anker-Gate (fremde CA), Guards. Full Suite **1459 grün**, tsc 0, eslint 0.
+- **CR:** unabhängiger **Claude**-Subagent (adversarial, Trust-Modell) Erst-Review **REQUEST-CHANGES**
+  (CRITICAL: geteilte CA → Identitäts-Substitution; HIGH: RSA/ECDSA-Key-Verwechslung) — alle gefixt →
+  Re-Review **APPROVE**. **Kein Auto-Run** (Operator-gesteuert im Fenster).
+
 ### chore(license): ELv2 LICENSE + source-available README + Copyright-Header (Vorbereitung, awaiting Christian Gate 4)
 
 ELv2-Lizenz-Verteilung (ENTSCHEIDUNG 12 / Gate 4). Änderung rein Kommentar/Metadaten:

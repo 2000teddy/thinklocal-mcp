@@ -1504,4 +1504,14 @@ Die oben als „DRAFT-PR / wartet auf Review/Merge" geführten Sessions sind **g
 
 ---
 
-*Letzte Aktualisierung: 2026-07-06 07:04 — #244 ELv2 LICENSE-Vorbereitung (Admin-Lane, Gate 4 erteilt).*
+## Session 2026-07-07 06:12 — feat(pairing): CA-verankerter host/→node/-Re-Key (TL-00, KW28, v0.34.70)
+
+| #        | PR    | Datum            | CO  | CG | TS | CR | PC | DO | Findings                           |
+|----------|-------|------------------|-----|----|----|----|----|----|------------------------------------|
+| v0.34.70 | (offen, base=main) | 2026-07-07 06:12 | s.u. | n/a | ✅ | ✅ | ✅ | ✅ | CR Claude REQUEST-CHANGES (CRITICAL Identitäts-Substitution via geteilte CA + HIGH RSA/ECDSA-Key) → gefixt → Re-Review APPROVE |
+
+**Typ:** Daemon-Tool (Pairing-Trust-Re-Key) + Runbook, **kein Auto-Run/Deploy** (Operator-gesteuert im Di→Mi-Fenster). **CO:** Design-/Sicherheitsentscheidung (CA-Anker + expected-URI-Bindung gegen Identitäts-Substitution bei geteilter Mesh-CA) im Modul-Header + Runbook dokumentiert; keine pal:consensus (agy/codex nicht im Env, MiniMax verboten). **CG:** n/a. **TS:** `pairing-canonicalize.test.ts` (neu, 9): Happy-Re-Key, **Anti-Substitution** (A-Eintrag + B-Cert unter GETEILTEM CA → `canon-uri-mismatch`), Anker-Gate (fremde CA → `cert-not-under-stored-ca`), invalid-expected-uri, already-canonical, no-trust-anchor, no-canonical-san, multiple-node-sans, unlesbares Cert. Runner parse-validiert (Pflicht-Args → exit 2 vor Netz). Full Suite **115 Files / 1459 grün**, tsc 0, eslint 0 (neue src-Dateien). **CR:** unabhängiger **Claude**-Subagent (adversarial, Fokus Trust-Modell/Identitäts-Substitution): Erst-Review **REQUEST-CHANGES** — **CRITICAL-1** geteilte zentrale Mesh-CA → `verifyPeerCert` bindet Re-Key NICHT an den spezifischen Peer (A→B-Substitution), **CRITICAL-2** Runner lone-`--address`-Sammel-Apply + fehlende Adress-Cert-Bindung, **HIGH-1** pubkey/fingerprint aus RSA-TLS-Key statt ECDSA-Signing-Key (false-green). **Alle gefixt:** expected-URI-Bindung (`canon-uri-mismatch`) + Runner single-entry + `--peer`/`--address`/`--expect-uri` Pflicht + Adress-SAN-Cross-Check; pubkey/fingerprint bleiben unverändert (nur `agentId` re-gekeyt). **Re-Review APPROVE**, keine neuen Issues. **PC:** manuell (tsc/Suite/`git diff`/eslint grün) — `agy`-Backend fehlt. **DO:** `docs/REENROLL-52-RUNBOOK.md` (neu), CHANGES (v0.34.70), COMPLIANCE, `changes/2026-07-07_pairing-canonicalize.md`. **Grenze:** kein Auto-Run/Deploy/Domain-Flip; Ausführung im Fenster.
+
+---
+
+*Letzte Aktualisierung: 2026-07-07 06:12 — v0.34.70 feat(pairing): CA-verankerter host/→node/-Re-Key (TL-00).*
