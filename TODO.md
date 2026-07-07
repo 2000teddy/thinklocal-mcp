@@ -5,6 +5,92 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 
 ---
 
+## v5.1-Roadmap — Arbeits-Wahrheit (übernommen 2026-07-07 aus Architektur-Referenz)
+
+> Quelle (bleibt **Referenz**, read-only): `~/hermes/reference/architecture-v5.1/todos/TODO-thinklocal-mcp.md`.
+> Diese `TODO.md` ist ab jetzt die **Arbeits-Wahrheit**. Jeder übernommene Punkt trägt `[v5.1]`.
+> P0 = kritischer Pfad, strikt in Reihenfolge. Überschneidungen mit Bestandseinträgen sind per
+> „↔ vgl." verlinkt statt dupliziert (Detail bleibt am Original-Eintrag weiter unten).
+
+**Reconcile-Befund (Hermes 05.07.):** Spur-3-Code liegt bereits in `main` (#229→#241). TL-01…TL-06 sind
+damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-Pair** .52/.55
+(Legacy-`host/…` → kanonisch `node/…`; cross-host heute `403 peer not paired`).
+
+- [ ] **[v5.1] TL-00a (≈3 h)** Re-Pair-Migrationsstufe: EINE Stufe mit Übergangsfenster (Legacy lesen,
+  kanonisch schreiben), Lock fürs Cert-Re-Key — keine zwei parallelen Identitäten. ↔ vgl. **umgesetzt**:
+  ADR-034 (#245, v0.34.69) + CA-verankerter Re-Key (#246, v0.34.70, `pairing-canonicalize.ts`).
+- [ ] **[v5.1] TL-00b (je ≈1 h, ⛔ Fenster)** Re-Enroll `.52`, dann `.55` (nach Christians Pfad-A-Schritt),
+  dann `.94`. ↔ vgl. bestehend „ADR-024-Rollout-Gate" + „Produktiv-Flotten-Flip (.56/.52/.222)" + „.55
+  Pfad A/C2". **.52-Fenster aktiv (heute Nacht, zielt auf TL-07-Beweis).**
+- [ ] **[v5.1] TL-00c (≈2 h)** Cert-Dry-Run: Test-Peer-Cert <30 Tage → Wochen-Restart simulieren → Reissue
+  + Schlüssel-Sync verifiziert. **Abnahmekriterium vor weiterem Staffel-Rollout.** ↔ vgl. #242 renew_before_days.
+- [ ] **[v5.1] TL-00d (≈1 h)** #242-Konfig-Keys dokumentieren (`cert.renew_before_days`,
+  `TLMCP_CERT_RENEW_BEFORE_DAYS`). ↔ vgl. #243 (KW28 §2 B, USER-GUIDE) — evtl. bereits erledigt, verifizieren.
+
+### P0 — Weg zum Zwei-Rechner-Beweis (Kap. 07; Status: Code in main, live beweisen)
+- [ ] **[v5.1] TL-01 (≈2–3 h)** `[[mcp.share]]` für `pal`+`unifi` (remote-forward-only). *Fertig wenn:*
+  `query_capabilities` zeigt `mcp:pal`/`mcp:unifi` auf **allen** Peers; ADR-032-Phantom-Guard ruhig.
+  ↔ vgl. #229 (T3.1/T3.2), #232 ADR-032.
+- [ ] **[v5.1] TL-02 (≈3 h)** Fastify-Route `POST /api/mcp/<server>` um `handleMcpIngress()` (Gerüst +
+  Unit-Tests). ↔ vgl. #229 Live-Ingress.
+- [ ] **[v5.1] TL-03 (≈3 h)** Absender-Prüfung an der Route: SPIFFE-URI aus dem mTLS-Client-Cert,
+  ungültig/fehlend → **403**.
+- [ ] **[v5.1] TL-04 (≈4 h)** Live-Executor 1: undici-mTLS-Forward an den Owner-Peer, Happy-Path
+  `tools/list`. ↔ vgl. #237/#238 Forward-Executor.
+- [ ] **[v5.1] TL-05 (≈4 h)** Live-Executor 2 (Härtung): Streaming, Timeout 30 s (`AbortSignal`),
+  Body-/Stream-Limits, 1-Sprung-Schutz (`x-tlmcp-mcp-hop`), Socket-Leak-Test. ↔ vgl. #238 1-Hop-Guard.
+- [ ] **[v5.1] TL-06 (≈3 h)** Client-Seite: Proxy-Werkzeuge in `mcp-stdio` (`tools/list` + `tools/call`
+  Passthrough). ↔ vgl. #231 (T3.4 mcp-stdio-Proxy-Tools).
+- [ ] **[v5.1] TL-07 (≈2–3 h) 🎯 ZWEI-RECHNER-BEWEIS:** Spoke .52 → Mesh → TH01-unifi `list_clients`, ohne
+  stunnel, Prüfeinträge auf **beiden** Seiten. *Fertig wenn:* Bericht (Befehle+Ausgaben) in
+  `~/hermes/reference/`, Telegram an Christian. **= Beta-Kernlücke geschlossen. ← heutiges .52-Fenster.**
+
+### P0-parallel — Sicherheits-Pflicht (Beta-Blocker, Kap. 7.4/10)
+- [ ] **[v5.1] TL-08 (≈4 h)** Stufen-Durchsetzung am Hub-Eingang (Werkzeugname → lesend/schreibend/kritisch
+  → frei/Gate/verweigert; unifi READ_ONLY/WRITE_OP/DESTRUCTIVE übernehmen). ↔ vgl. #239 ADR-033
+  „Ausführungsstufen-Durchsetzung am Hub-Ingress" (Teil bereits gemergt — sichten, Lücke schließen).
+- [ ] **[v5.1] TL-09 (≈4 h)** Meldekanal-Abstraktion (Entsch. 10) + Telegram-Adapter + **Fail-safe: kein
+  erreichbarer Kanal = schreibender Aufruf bleibt verweigert.**
+- [ ] **[v5.1] TL-10 (≈3 h)** Freigabe-Matrix v1 (Werkzeug-Klasse → Kanal → Entscheider), Auswertung im Gate.
+
+### P1 — Identität, Autonomie, Robustheit
+- [ ] **[v5.1] TL-11 (≈4 h)** Heartbeat-Weckruf (Entsch. 16): Daemon weckt Agenten; geweckter Agent prüft
+  Mesh-Postfach. ↔ baut auf bestehendem ADR-004 Cron-Heartbeat.
+- [ ] **[v5.1] TL-12 (≈4 h)** Ausgewiesene Mesh-Zustellung an Agenten (signierter Auftrag → Postfach →
+  Abarbeitung; Ersatz für tmux-Zuruf, Kap. 11.3).
+- [ ] **[v5.1] TL-13 (≈1 h je Rechner + ⛔ Fenster)** Re-Enroll .56/.222/.94 → `node/<PeerID>`; danach
+  Duldungs-Ende Alt-Format aktivieren (Entsch. 17, spätestens **01.08.**). ↔ vgl. „Produktiv-Flotten-Flip"
+  + `TLMCP_STRICT_IDENTITY`.
+- [ ] **[v5.1] TL-14a (≈3 h)** CA-Zweistufen-Umzug: Runbook (Offline-Wurzel-Zeremonie, Intermediate TH01,
+  Geschwister-Intermediate TH02) — nur Papier+Skripte.
+- [ ] **[v5.1] TL-14b (≈4 h, ⛔ Termin)** CA-Umzug durchführen (mit Christian). ↔ vgl. Decision-7
+  Trust-Domain-Flip (KW30).
+- [ ] **[v5.1] TL-15 (≈3 h)** Uhr-Abweichungs-Erkennung zwischen Partnern (Skew-Messung im
+  Handshake/Heartbeat, Alarm ab Schwelle; Kap. 3.5/3).
+- [ ] **[v5.1] TL-16 (≈3 h + ⛔ Fenster)** Tresor-Passphrase von der Platte lösen (systemd-credentials);
+  Startweg dokumentieren. ↔ vgl. bestehend „Unsicherer Vault-Default" (env/Keychain/random erledigt) —
+  dies ist der Off-Disk-Folgeschritt.
+- [ ] **[v5.1] TL-17 (≈4 h)** Fremdtext-Kontrakt: Entschärfungs-Modul an den Eintrittspunkten
+  (Discovery-Banner, Katalogtexte, fremde Antworten; Kap. 10.3).
+- [ ] **[v5.1] TL-18 (≈2 h)** place-or-refuse: >90 % RAM → Ablehnung + Alarm (Ressourcen-Daten laufen live).
+- [ ] **[v5.1] TL-19 (≈4 h)** Verbindungs-Pooling + Sicherungs-Schalter je Owner-Peer; `resolveMcp` meidet
+  kranke Anbieter.
+- [ ] **[v5.1] TL-20 (≈3 h)** Pro-Rechner-Transportpolitik (ADR-031) + Relay netzweit „aus" (Entsch. 5).
+- [ ] **[v5.1] TL-21 (≈4 h)** Skelett-Auskunft (Kap. 06): zweistufig „Übersicht (Name + 1 Satz) → Details
+  auf Abruf" am lokalen Daemon.
+
+### P2 — Ausbau
+- [ ] **[v5.1] TL-22a (≈4 h)** Mesh-Dateiübertragung Slice 1 (Chunk-Endpunkt am 9440, Prüfsummen je Stück;
+  ADR-015 reaktivieren statt neu schreiben).
+- [ ] **[v5.1] TL-22b (≈4 h)** Slice 2: Wiederaufsetzen nach Abbruch, Gesamtprüfsumme, `.tlskill`-Paket als
+  erster Nutzlast-Typ.
+- [ ] **[v5.1] TL-23 (≈1 h)** Tote GraphQL-Schnittstelle entfernen (`graphql-api.ts`, kein Aufrufer —
+  Befund 04.07.).
+- [ ] **[v5.1] TL-24 (nach Beta)** ADR „Erneuerung ohne Neustart" (TLS-Hot-Reload). ↔ vgl. bestehend
+  „Hot-Reload TrustStore #117" (verwandt, aber Trust-Store ≠ Cert-Renewal).
+
+---
+
 ## Follow-ups aus Code-Reviews :
 
 > **Doku-Konvention (ab 2026-06-15 15:51):** Datumsangaben in .md mit Uhrzeit `hh:mm`. Ältere Einträge tragen Pre-Konventions-Daten (historisch belassen).
