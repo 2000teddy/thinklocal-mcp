@@ -20,6 +20,8 @@
 
 **Spalten in COMPLIANCE-TABLE.md:** CO, CG, **TS**, CR, PC, DO. Jede anwendbare Spalte muss ✅ sein bevor der PR merged wird.
 
+**COMPLIANCE-TABLE.md ist für JEDEN PR Pflicht — kein Phasen-Vorbehalt** (der „ab Phase 2"-Schalter ist ersatzlos gestrichen, Beschluss 2026-07-07). Doku-Rollen (`changes/` je PR, `CHANGES.md` = technische Historie, `HISTORY.md` = Agenten-Erzählung, `TODO.md` = Backlog+Fortschritt) sind in `CONTRIBUTING.md` → „Doku-Kanon & Compliance-Pflicht" festgeschrieben und werden per CI-Gate (Ebene 1) erzwungen.
+
 **Eine reine Bug-Fix-PR darf CO + CG auslassen — aber TS + CR + PC + DO NIE.**
 
 **Eine Doc-only-PR (wie #84) darf alles ausser CO (bei Architektur-Dokus) + DO auslassen.**

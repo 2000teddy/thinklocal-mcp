@@ -8,6 +8,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs(governance): Doku-Rollen festschreiben + Phasen-Schalter streichen (2026-07-07 21:12)
+
+Doc-only. CONTRIBUTING.md bekommt „Doku-Kanon & Compliance-Pflicht" (5-Datei-Rollentabelle: `changes/` je
+PR, `CHANGES.md` technische Historie, `HISTORY.md` Agenten-Erzählung, `COMPLIANCE-TABLE.md` immer Pflicht,
+`TODO.md` Backlog+Fortschritt). „ab Phase 2"-Schalter ersatzlos gestrichen (COMPLIANCE ab sofort je PR
+Pflicht); CLAUDE.md-Hinweis + Verweis. Enforcement folgt via Ebene-1-CI-Gate (eigener PR). Kein Code.
+
 ### docs(security): SECURITY.md auf v0.34.70 nachgezogen (Doku-Pflege-Altlast, 2026-07-07 21:04)
 
 Doc-only, kein Verhalten. SECURITY.md hinkte laut MD-Pflege-Audit den Härtungs-PRs seit v0.31 hinterher

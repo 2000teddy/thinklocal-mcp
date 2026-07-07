@@ -4,6 +4,37 @@
 
 Dieses Projekt wird sowohl von Menschen als auch von AI-Agenten entwickelt. Deshalb gelten besondere Regeln zur Koordination.
 
+## Doku-Kanon & Compliance-Pflicht (verbindlich, ab 2026-07-07)
+
+> Aus Christians Beschluss `~/hermes/reference/2026-07-07_MD-Pflege-Audit-und-Durchsetzungssystem.md`.
+> Grund: Doku, die dem **einzelnen PR** dient, wird gepflegt; Doku, die **Zustand über PRs** führt, franst
+> aus. Deshalb sind die Rollen hier **festgeschrieben** und (Ebene 1) per CI erzwungen.
+
+**Die fünf Doku-Dateien haben verschiedene Leser und Takte — sie sind KEINE Redundanz:**
+
+| Datei | Leser | Inhalt | Takt | Durchsetzung |
+|-------|-------|--------|------|--------------|
+| `changes/<datum>_*.md` | Review/Audit | **je PR** ein granularer Eintrag (was, warum, Tests, Status) | **jeder PR** | CI-Wand (Ebene 1), blockierend¹ |
+| `CHANGES.md` | Nutzer / Versionsstand | **technische** Programm-Historie, konsolidiert, versioniert | je PR/Release | CI-Wand¹ |
+| `HISTORY.md` | die Agenten | **Erzählung fürs Team** — Kontext, Warum, Entscheidungen (Agentenwissen, das nicht als Anweisung in CLAUDE.md gehört) | fortlaufend, narrativ (nicht zwingend je PR) | Wächter (Ebene 2), soft |
+| `COMPLIANCE-TABLE.md` | Prozess-Nachweis | wurde CO/CG/TS/CR/PC/DO je PR eingehalten | **jeder PR — IMMER Pflicht** | CI-Wand, blockierend¹ |
+| `TODO.md` | nächste Arbeit | **Backlog + Fortschritt** (offene/erledigte Aufgaben) | fortlaufend | Wächter, soft (Sync-Drift wird gemeldet) |
+
+¹ Ebene-1-CI-Gate: startet **2 Wochen warnend**, danach **blockierend** (required status check). Verlangt je
+PR mindestens einen `changes/`-Eintrag **und** eine COMPLIANCE-Zeile — Ausnahme nur via Label `no-doc-needed`
+(mit Begründung) oder Titel-Präfix `docs:`/`chore:`.
+
+**Verbindliche Klarstellungen:**
+- **COMPLIANCE-TABLE.md ist ab sofort für JEDEN PR Pflicht.** Der frühere „ab Phase 2"-Schalter ist
+  **ersatzlos gestrichen** — er koppelte die Pflicht an eine Zustandsmarke, die niemand ausrief. (In
+  thinklocal-mcp existierte diese Kopplung nie als Regel; die „Phase 1/2"-Überschriften in
+  COMPLIANCE-TABLE.md sind rein **chronologische Gruppierung**, kein Gate.)
+- **`changes/` ist das Fortschritts-Log je PR, `TODO.md` das Backlog.** thinklocal war stillschweigend
+  dazu übergegangen — das ist jetzt die **festgeschriebene** Rolle, nicht „veraltet".
+- **`CHANGES.md` vs. `HISTORY.md`:** CHANGES = technische Historie (Was/Version), HISTORY = Agenten-Erzählung
+  (Warum/Kontext). In thinklocal-mcp wird die Erzählung derzeit in **ADRs + `changes/`** geführt; eine
+  separate `HISTORY.md` wird bei Bedarf zum nächsten Meilenstein eingeführt (Rolle hier vorab festgeschrieben).
+
 ## Branch-Strategie
 
 ```
