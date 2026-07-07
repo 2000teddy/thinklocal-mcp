@@ -15,7 +15,8 @@
     "lint": "eslint src/ --ext .ts",
     "format": "prettier --write 'src/**/*.ts'",
     "format:check": "prettier --check 'src/**/*.ts'",
-    "migrate-pairings": "node scripts/migrate-pairings.mjs"
+    "migrate-pairings": "node scripts/migrate-pairings.mjs",
+    "canonicalize-pairings": "tsx scripts/canonicalize-pairings.ts"
   },
   "dependencies": {
     "@automerge/automerge": "^3.2.5",
