@@ -123,6 +123,10 @@ Prompts an andere Agents weiterleiten. Szenarien:
 
 ### Identitaet, Trust-Store und CA-Subject (v0.31)
 
+> **Hinweis (Stand v0.34.70):** Dieser Abschnitt beschreibt den v0.31-Stand (hostname-/hardware-verwurzelt).
+> Die kanonische Identität ist inzwischen **PeerID-verwurzelt** (`node/<PeerID>`) — siehe „Kanonische
+> PeerID-Identität & Härtungen seit v0.31" weiter unten. Der Text hier bleibt als Historie/Bootstrap-Kontext.
+
 #### Stable Node Identity (PR #74)
 
 ThinkLocal-Nodes hatten urspruenglich eine SPIFFE-URI im Format
@@ -226,7 +230,75 @@ spiffe://thinklocal/host/<stableNodeId>/agent/<agentType>/instance/<instanceId>
 
 **Konsensus-Grundlage:** GPT-5.4 und Gemini 2.5 Pro am 2026-04-08 21:30 — "pragmatische Aufloesung": SPIFFE-URI-Extension fuer logisches Routing, 3-Komponenten-Form bleibt cryptographisch attestiert.
 
-### Bekannte Limitierungen (Stand v0.24)
+### Kanonische PeerID-Identität & Härtungen seit v0.31 (Stand v0.34.70)
+
+> Nachgezogen 2026-07-07 (Doku-Pflege-Audit): Die Identitäts-, Trust- und Ingress-Härtungen
+> zwischen v0.31 und v0.34.70 waren im Code + in ADRs dokumentiert, aber in SECURITY.md nicht
+> abgebildet. Details je Punkt im jeweiligen ADR unter `docs/architecture/`.
+
+#### PeerID-verwurzelte kanonische Identität (ADR-022, ab v0.34.4)
+Die frühere hostname-/hardware-abgeleitete Form `spiffe://thinklocal/host/<stableNodeId>/agent/<type>`
+(oben unter „Stable Node Identity", historisch) wird abgelöst durch eine **kryptografisch verwurzelte**
+Identität aus dem persistenten libp2p-Ed25519-Schlüssel: `spiffe://thinklocal/node/<PeerID>/agent/<type>`.
+Motivation: drei driftende Identifier (hostname-SAN, hashed-hardware node-id, libp2p-PeerID) verursachten
+`SKILL_ANNOUNCE`-403 („Unknown sender", App-Layer, **kein** TLS-Fehler — CA-Trust war nie der Blocker).
+Kanal-gebundene Autorisierung (Noise → libp2p-PeerID; mTLS → Issuer-Fingerprint-Pin) verhindert
+Confused-Deputy über Transportgrenzen. **Migrationsstatus:** Sender-Flip code-seitig live (Flag
+`daemon.emit_canonical_sender`, Interlock „Cert-SAN VOR Sender-URI"); Produktiv-Flip pro Node ist
+**Christian-gated** im Wartungsfenster. Legacy-`host/`-Form wird während des Rollouts **akzeptiert, aber
+deprecated** (Dual-Accept-Fenster), bis Phase 4 `TLMCP_STRICT_IDENTITY=1` scharf schaltet.
+
+#### Symmetrische authentifizierte Peer-Discovery (ADR-026, ab v0.34.7)
+Ein zero-discovery-Node (mobil, NAT-quer, `mdns_enabled=false`) kann sich über einen mTLS-validierten
+Agent-Card-Fetch selbst registrieren: bei einer authentifizierten Inbound-TLS-Verbindung eines unbekannten
+Peers (CA-signiert, Issuer-Fingerprint-gepinnt) wird dessen Card geholt und in eine ephemere
+`authenticatedSeen`-Map eingetragen. Das schaltet **nur AUTHN** frei (Signatur-Prüfung), **nicht AUTHZ** —
+das Senden bleibt per `isApprovedPeerSender`/Pairing gated. Behebt 403-Kaskaden für Einmal-Absender.
+
+#### Kanonische-Cert-Retention + CA-Gültigkeit fail-closed (ADR-024, #165/#191, ab v0.34.20)
+Own-CA-Nodes **behalten** ein bereits kanonisches `node/<PeerID>`-Cert eines vertrauten Attesting-CA,
+statt es auf Legacy zurück-auszustellen. Retention ist fail-closed: Leaf verifiziert unter einem gepinnten
+Attesting-CA-PEM **und** — neu (MEDIUM-1, `verifyPeerCert` `caValid`) — auch das **Gültigkeitsfenster der
+ausstellenden CA** wird geprüft; eine abgelaufene Issuer-CA wird nicht mehr stillschweigend als Anker
+akzeptiert. Trust-Distribution behält fremde Certs fail-closed (`selectTrustDistributionCa`).
+
+#### Token-onboarded TLS-Bundle fail-closed validieren (#225 / 127b, v0.34.52)
+Beim Laden eines token-onboardeten Bundles (mitgeliefertes `ca.crt.pem` + `node.crt.pem`) wird jetzt
+fail-closed geprüft: Leaf verifiziert kryptografisch unter der mitgelieferten CA (Signatur + zeitliche
+Gültigkeit) **und** Cert/Key gehören zusammen (`certKeyMatches && verifyPeerCert`). Vorher wurden defekte
+Bundles ungeprüft geladen → stille Mesh-Ausfälle; jetzt klarer Operator-Fehler (Re-Onboarding nötig).
+
+#### mTLS-Issuer-Fingerprint-Attestierung (#226 / 127c, v0.34.53)
+Dedizierter Integrationstest über den Produktionspfad: echter `node:tls`-Handshake, Assertion
+`issuerCertificate.fingerprint256 === certFingerprint(ca.crt.pem)`. Nagelt fest, dass die PeerID-Attestierung
+an genau den Issuer-Fingerprint-Pin gebunden ist (Anti-Substitution bei geteilter Mesh-CA).
+
+#### Re-Pair Legacy→kanonisch: Migrationsstufe + CA-verankerter Re-Key (ADR-034 #245 / #246, v0.34.69–70)
+Zwei opt-in/Operator-gesteuerte Wege, beide fail-closed und ohne Zwei-Identitäten-Zustand:
+- **Selbst-Migration (#245):** own-CA-Node re-signiert beim Start sein Legacy-Cert auf `node/<PeerID>` unter
+  **Wiederverwendung des Keys**, atomar (tmp+fsync+rename), O_EXCL-Lock, idempotent; Fehler → Legacy bleibt.
+  Flag `cert.migrate_legacy_identity` (default off). Token-onboarded Nodes sind ausgenommen (kein CA-Key).
+- **CA-verankerter Re-Key (#246):** re-keyt **genau einen** stale Legacy-`host/`-Pairing-Eintrag auf **genau
+  eine** asserted `node/<PeerID>`-Identität — nur wenn Leaf unter dem **gespeicherten** `caCertPem` verifiziert
+  (CA-Anker), das Cert die Adresse als SAN trägt (Adress-Bindung) **und** die node/-SAN exakt `--expect-uri`
+  ist (Anti-Substitution — nötig wegen der **geteilten** Mesh-CA). Ausführung nur im Wartungsfenster.
+
+#### Ausführungsstufen-Durchsetzung am MCP-Hub-Ingress (ADR-033 #239, v0.34.65)
+`handleMcpIngress` bestimmt die Ausführungsstufe (derzeit **pro Server**, nicht pro einzelnem Werkzeug —
+ADR-033) und setzt sie am Ingress fail-closed durch: `self`/lesend →
+erlaubt; `gate`/schreibend und `consensus`/kritisch → **403**, solange kein Freigabe-Kanal existiert
+(Regel „kein Meldekanal ⇒ schreibender Aufruf verweigert"). Verhindert unbeabsichtigte Write-Forwards, bis
+die Meldekanal-Abstraktion + Freigabe-Matrix (Design-Vorgabe 10) implementiert sind.
+
+#### Toten Code entfernt: PolicyEngine + Cert-Rotation (#221–#224, ab v0.34.5)
+`policy.ts`/`PolicyEngine` (nie an den Request-Pfad verdrahtet) und `cert-rotation.ts` (kein
+Running-Daemon-Auto-Rotate; Renewal nur beim Start) wurden als @deprecated markiert und hart entfernt —
+Angriffs-/Review-Fläche reduziert. **Hinweis:** die oben unter „Prompt Injection Cascades → Mitigationen
+(geplant)" genannte „Policy Engine (OPA/Rego)" ist damit **hinfällig**; die real verdrahtete Autorisierung
+ist mTLS/Trust + `isApprovedPeerSender` (ADR-026) + Vault-Approval + Ingress-Stufen (ADR-033). Ein künftiger
+AUTHZ-Policy-Layer braucht ein eigenes ADR (nicht das Legacy wiederbeleben).
+
+### Bekannte Limitierungen (Stand v0.34.70)
 
 > Diese Items sind dokumentiert und werden in zukuenftigen Releases adressiert.
 
@@ -262,6 +334,8 @@ Hinweis zum ersten Punkt: Im Standard-Installationspfad reduziert `127.0.0.1` di
 | 2026-04-09 | Gemini 2.5 Pro | ADR-006 Phase 1 Session Persistence (7 Module) | 2 HIGH, 2 MEDIUM, 2 LOW | Alle gefixt PR #89 |
 | 2026-04-09 | Gemini 2.5 Pro | ADR-005 Per-Agent-Inbox (security focus) | 0 HIGH, 2 MEDIUM, 1 LOW | Alle gefixt PR #91 |
 | 2026-04-11 | Gemini 2.5 Pro | **Post-Paperclip Batch-Review (8 Module, retroaktiv)** | **2 CRITICAL, 1 HIGH, 2 MEDIUM, 1 LOW** | **Path-Traversal + TOCTOU gefixt PR #104** |
+| 2026-07-06 | Claude (adversarial) | ADR-034 Re-Pair-Migrationsstufe (#245) — Torn-Pair/Zwei-Identitäten | 0 HIGH/CRIT, 2 LOW + 1 NIT | Alle gefixt → Re-Review APPROVE |
+| 2026-07-07 | Claude (adversarial) | CA-verankerter Re-Key (#246) — Identitäts-Substitution bei geteilter CA | **2 CRITICAL, 1 HIGH** | Alle gefixt (expected-URI- + Adress-Bindung) → Re-Review APPROVE |
 
 ### Compliance-Enforcement-Architektur (2026-04-11)
 
