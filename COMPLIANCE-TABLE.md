@@ -1578,6 +1578,14 @@ Substring-„documentation" nicht fälschlich exempt) → **1 Regex-Bug (`[[:spa
 **CR:** Selbst-Review + Dogfood. **PC:** `git diff` — nur `.github/workflows/` + `.md`/`changes/`. **DO:**
 CHANGES.md, `changes/2026-07-07_doc-compliance-gate.md`, dieser Eintrag; Rollen/Gate-Verweis in CONTRIBUTING (#249).
 
+## Sweep 2026-07-08 17:05 — docs(runbook): .52-Readiness Preflight und Backup-Anker
+
+| #        | PR    | Datum            | CO  | CG  | TS  | CR  | PC  | DO | Findings                           |
+|----------|-------|------------------|-----|-----|-----|-----|-----|----|------------------------------------|
+| runbook  | (offen, base=main) | 2026-07-08 17:05 | n/a | n/a | n/a | ✅ | ✅ | ✅ | Doc-only (REENROLL-52-RUNBOOK.md). TS/CG/CO: n/a da kein Code. PC: `git diff` geprüft. CR: Unabhängiger Agent prüfte Änderungen auf Sinnhaftigkeit und Vollständigkeit. |
+
+**Typ:** Doc-only. Erweitert das Runbook für die Anmeldung des `.52` (iobroker) Nodes am Mesh um read-only Preflight-Schritte (Zertifikat gegen Trust-Anker verifizieren) und eine manuell erstellte daemon-inerte Backup-Datei vor der Mutation. **CO/CG/TS:** n/a. **CR:** Agent-Selbst-Review. **PC:** `git diff` zeigt reine `.md`-Änderungen. **DO:** `REENROLL-52-RUNBOOK.md`, `changes/2026-07-08_runbook-52-readiness.md`, dieser Eintrag.
+
 ---
 
-*Letzte Aktualisierung: 2026-07-07 21:11 — ci(gate): Ebene-1 Doku-Compliance-Gate (warnend).*
+*Letzte Aktualisierung: 2026-07-08 17:05 — docs(runbook): .52-Readiness.*
