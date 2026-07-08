@@ -1,0 +1,98 @@
+# Ebene-1 Doku-Compliance-Gate (MD-Pflege-Durchsetzungssystem, Beschluss 2026-07-07).
+#
+# Verlangt je PR MINDESTENS:
+#   1. einen Eintrag unter `changes/` (granulares Per-PR-Log), UND
+#   2. eine Änderung an `COMPLIANCE-TABLE.md` (Prozess-Nachweis — IMMER Pflicht).
+#
+# Ausnahme (überspringt den Gate): PR-Label `no-doc-needed` ODER Titel mit
+# konventionellem Typ `docs`/`chore` (z. B. "docs:", "docs(scope):", "[claude-code] chore: ...").
+#
+# ROLLOUT (Beschluss): erst 2 Wochen WARNEND, danach BLOCKIEREND.
+#   - Bis zum Flip: ENFORCE_BLOCKING="false" → Verstoß = ::warning:: (Job bleibt grün).
+#   - Ab dem Flip-Datum: ENFORCE_BLOCKING="true" → Verstoß = Job rot (exit 1).
+#   Flip: unten `ENFORCE_BLOCKING` auf "true" setzen (Ziel-Datum FLIP_DATE unten) UND
+#   diesen Check in den GitHub Branch-Protection-Rules von `main` als *required status check*
+#   markieren (erst dann blockiert er den Merge server-seitig).
+
+name: Doc-Compliance-Gate
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  doc-compliance:
+    name: Doku-Compliance (changes/ + COMPLIANCE-Zeile)
+    runs-on: ubuntu-latest
+    env:
+      # --- Rollout-Schalter: solange "false" nur warnen. Flip auf "true" ab FLIP_DATE. ---
+      ENFORCE_BLOCKING: "false"
+      FLIP_DATE: "2026-07-21"
+      PR_TITLE: ${{ github.event.pull_request.title }}
+      PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prüfe changes/-Eintrag + COMPLIANCE-Zeile
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Mode: ENFORCE_BLOCKING=${ENFORCE_BLOCKING} (Flip-Ziel: ${FLIP_DATE})"
+          echo "PR-Titel: ${PR_TITLE}"
+          echo "PR-Labels: ${PR_LABELS:-<keine>}"
+
+          # --- Ausnahme-Kennzeichnung? ---
+          exempt=""
+          # Label no-doc-needed (kommagetrennt)
+          if [[ ",${PR_LABELS}," == *",no-doc-needed,"* ]]; then
+            exempt="Label 'no-doc-needed'"
+          fi
+          # Konventioneller Typ docs/chore im Titel — optionalen "[agent] "-Präfix vorher strippen.
+          title_norm="${PR_TITLE#\[*\] }"
+          if [[ "${title_norm}" =~ ^(docs|chore)[[:space:]]*[\(:!] ]]; then
+            exempt="${exempt:+$exempt + }Titel-Typ docs/chore"
+          fi
+
+          if [[ -n "${exempt}" ]]; then
+            echo "::notice::Doku-Gate übersprungen (Ausnahme: ${exempt})."
+            exit 0
+          fi
+
+          # --- Geänderte Dateien im PR ermitteln ---
+          git fetch --no-tags --depth=1 origin "${BASE_SHA}" 2>/dev/null || true
+          FILES="$(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}")"
+          echo "Geänderte Dateien:"; echo "${FILES}" | sed 's/^/  - /'
+
+          changes_ok=""
+          compliance_ok=""
+          if echo "${FILES}" | grep -qE '^changes/.+'; then changes_ok="1"; fi
+          if echo "${FILES}" | grep -qxF 'COMPLIANCE-TABLE.md'; then compliance_ok="1"; fi
+
+          missing=""
+          [[ -z "${changes_ok}" ]]    && missing="${missing} - fehlt: ein Eintrag unter changes/\n"
+          [[ -z "${compliance_ok}" ]] && missing="${missing} - fehlt: eine Zeile in COMPLIANCE-TABLE.md\n"
+
+          if [[ -z "${missing}" ]]; then
+            echo "::notice::Doku-Gate erfüllt: changes/-Eintrag + COMPLIANCE-Zeile vorhanden."
+            exit 0
+          fi
+
+          MSG="Doku-Compliance unvollständig:\n${missing}Abhilfe: changes/<datum>_*.md anlegen und eine COMPLIANCE-TABLE.md-Zeile ergänzen — oder (bewusst) Label 'no-doc-needed' bzw. Titel-Typ docs/chore setzen."
+
+          if [[ "${ENFORCE_BLOCKING}" == "true" ]]; then
+            echo -e "::error::${MSG}"
+            exit 1
+          else
+            echo -e "::warning::${MSG}"
+            echo -e "::warning::WARN-Phase bis ${FLIP_DATE} — danach blockiert dieser Check den Merge."
+            exit 0
+          fi

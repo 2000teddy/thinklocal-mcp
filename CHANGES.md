@@ -8,6 +8,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### ci(gate): Ebene-1 Doku-Compliance-Gate — warnend → blockierend (2026-07-07 21:11)
+
+Neuer GitHub-Actions-Workflow `doc-compliance-gate.yml`: verlangt je PR einen `changes/`-Eintrag + eine
+`COMPLIANCE-TABLE.md`-Zeile (Ausnahme: Label `no-doc-needed` oder Titel-Typ `docs`/`chore`). Rollout laut
+Beschluss: 2 Wochen warnend (`ENFORCE_BLOCKING=false`), Flip-Ziel 2026-07-21 → blockierend + als
+required-check in Branch-Protection setzen. Logik über 9 Szenarien dry-getestet (1 Regex-Bug gefunden+gefixt).
+Kein Daemon-Code.
+
 ### docs(governance): Doku-Rollen festschreiben + Phasen-Schalter streichen (2026-07-07 21:12)
 
 Doc-only. CONTRIBUTING.md bekommt „Doku-Kanon & Compliance-Pflicht" (5-Datei-Rollentabelle: `changes/` je
