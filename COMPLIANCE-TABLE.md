@@ -1535,7 +1535,7 @@ Architektur-/Design-Änderung, reines Roadmap-Tracking). **DO:** dieser Eintrag 
 
 | #        | PR    | Datum            | CO  | CG  | TS  | CR  | PC  | DO | Findings                           |
 |----------|-------|------------------|-----|-----|-----|-----|-----|----|------------------------------------|
-| sec-md-altlast | (offen, base=main) | 2026-07-07 21:04 | n/a | n/a | n/a | ✅ | ✅ | ✅ | Doc-only (SECURITY.md). CR: Claude-Subagent adversarial (Faktentreue vs. Code/ADRs) → 1 MINOR (ADR-033 Stufe „pro Server" nicht „je tools/call") gefixt, Rest APPROVE. |
+| sec-md-altlast | #248 (merged) | 2026-07-07 21:04 | n/a | n/a | n/a | ✅ | ✅ | ✅ | Doc-only (SECURITY.md). CR: Claude-Subagent adversarial (Faktentreue vs. Code/ADRs) → 1 MINOR (ADR-033 Stufe „pro Server" nicht „je tools/call") gefixt, Rest APPROVE. |
 
 **Typ:** Doc-only-Altlast aus MD-Pflege-Audit. Bringt SECURITY.md von „Stand v0.24"/„(v0.31)" auf v0.34.70:
 neuer Härtungs-Abschnitt (ADR-022/026/024/033/034, #165/#191/#225/#226/#239/#245/#246, Toter-Code #221–#224),
@@ -1548,4 +1548,19 @@ CHANGES.md ([Unreleased]), `changes/2026-07-07_security-md-altlast-nachzug.md`, 
 
 ---
 
-*Letzte Aktualisierung: 2026-07-07 21:04 — docs(security): SECURITY.md v0.34.70-Nachzug (Altlast).*
+## Sweep 2026-07-07 21:12 — docs(governance): Doku-Rollen festschreiben + Phasen-Schalter streichen
+
+| #        | PR    | Datum            | CO  | CG  | TS  | CR  | PC  | DO | Findings                           |
+|----------|-------|------------------|-----|-----|-----|-----|-----|----|------------------------------------|
+| doc-roles | #249 (offen, base=main) | 2026-07-07 21:12 | n/a | n/a | n/a | n/a | ✅ | ✅ | Doc-only (CONTRIBUTING.md + CLAUDE.md). MD-Pflege-Audit Punkte 3+4. Kein Code → CO/CG/TS/CR n/a. PC: `git diff` — nur .md/changes. Rebased auf main nach #248 (nur Doku-Konfliktauflösung, kein neuer Inhalt). |
+
+**Typ:** Governance-Doc (kein Code). Schreibt die 5-Datei-Doku-Rollen in CONTRIBUTING.md fest
+(`changes/`/`CHANGES.md`/`HISTORY.md`/`COMPLIANCE-TABLE.md`/`TODO.md` — Leser/Takt/Durchsetzung) und
+**streicht den „ab Phase 2"-Schalter ersatzlos** (COMPLIANCE ab sofort je PR Pflicht; die „Phase 1/2"-
+Überschriften hier sind rein chronologisch, kein Gate). CLAUDE.md-Hinweis + Verweis. **CO:** n/a (setzt
+Christians Beschluss um, keine offene Design-Frage). **DO:** CONTRIBUTING.md, CLAUDE.md, CHANGES.md,
+`changes/2026-07-07_doc-roles-phase-switch.md`, dieser Eintrag. Enforcement (Ebene-1-CI-Gate) = eigener PR.
+
+---
+
+*Letzte Aktualisierung: 2026-07-07 21:12 — docs(governance): Doku-Rollen + Phasen-Schalter gestrichen.*
