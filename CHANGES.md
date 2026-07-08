@@ -8,6 +8,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs(security): SECURITY.md auf v0.34.70 nachgezogen (Doku-Pflege-Altlast, 2026-07-07 21:04)
+
+Doc-only, kein Verhalten. SECURITY.md hinkte laut MD-Pflege-Audit den Härtungs-PRs seit v0.31 hinterher
+(Marker „Stand v0.24", Identitäts-Abschnitt noch `host/`-verwurzelt). Neuer Abschnitt „Kanonische
+PeerID-Identität & Härtungen seit v0.31" (ADR-022/026/024/033/034, #165/#191/#225/#226/#239/#245/#246,
+Toter-Code-Entfernung #221–#224), Superseded-Hinweis am v0.31-Abschnitt, „Policy Engine (OPA/Rego)" als
+hinfällig markiert, Version-Marker v0.24→v0.34.70, +2 Security-Review-Zeilen. Kein Code.
+
 ### v0.34.70 (Daemon-Tool + Runbook, kein Auto-Run) — feat(pairing): CA-verankerter host/→node/-Re-Key (TL-00, KW28)
 
 Schließt den 403-„peer not paired"-Gap für re-enrollte Peers (.52/.55): announcen sie ihre kanonische

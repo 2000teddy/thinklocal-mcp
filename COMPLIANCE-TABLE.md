@@ -1531,4 +1531,21 @@ Architektur-/Design-Änderung, reines Roadmap-Tracking). **DO:** dieser Eintrag 
 
 ---
 
-*Letzte Aktualisierung: 2026-07-07 17:24 — docs(todo): v5.1-Roadmap übernommen ([v5.1]-Präfix, merge statt dup).*
+## Sweep 2026-07-07 21:04 — docs(security): SECURITY.md v0.34.70-Nachzug (Doku-Pflege-Altlast §2)
+
+| #        | PR    | Datum            | CO  | CG  | TS  | CR  | PC  | DO | Findings                           |
+|----------|-------|------------------|-----|-----|-----|-----|-----|----|------------------------------------|
+| sec-md-altlast | (offen, base=main) | 2026-07-07 21:04 | n/a | n/a | n/a | ✅ | ✅ | ✅ | Doc-only (SECURITY.md). CR: Claude-Subagent adversarial (Faktentreue vs. Code/ADRs) → 1 MINOR (ADR-033 Stufe „pro Server" nicht „je tools/call") gefixt, Rest APPROVE. |
+
+**Typ:** Doc-only-Altlast aus MD-Pflege-Audit. Bringt SECURITY.md von „Stand v0.24"/„(v0.31)" auf v0.34.70:
+neuer Härtungs-Abschnitt (ADR-022/026/024/033/034, #165/#191/#225/#226/#239/#245/#246, Toter-Code #221–#224),
+Superseded-Hinweis, „Policy Engine (OPA/Rego)"-Stale-Korrektur, +2 Security-Review-Zeilen. **CO/CG/TS:** n/a
+(kein Code, keine neue Design-Entscheidung — bildet nur bereits gemergte/ADR-dokumentierte Härtung ab). **CR:**
+unabhängiger **Claude**-Subagent, adversarial auf Überclaim/Fehlaussage gegen `packages/daemon/src` + ADRs;
+8 Claim-Gruppen verifiziert, 1 MINOR gefixt (ADR-033 Stufen-Granularität). **PC:** `git diff` gesichtet —
+nur `SECURITY.md`/`CHANGES.md`/`changes/`/COMPLIANCE berührt, keine Code-/Test-Dateien. **DO:** SECURITY.md,
+CHANGES.md ([Unreleased]), `changes/2026-07-07_security-md-altlast-nachzug.md`, dieser Eintrag.
+
+---
+
+*Letzte Aktualisierung: 2026-07-07 21:04 — docs(security): SECURITY.md v0.34.70-Nachzug (Altlast).*
