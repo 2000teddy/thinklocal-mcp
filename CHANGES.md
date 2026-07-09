@@ -23,6 +23,19 @@ PR, `CHANGES.md` technische Historie, `HISTORY.md` Agenten-Erzählung, `COMPLIAN
 `TODO.md` Backlog+Fortschritt). „ab Phase 2"-Schalter ersatzlos gestrichen (COMPLIANCE ab sofort je PR
 Pflicht); CLAUDE.md-Hinweis + Verweis. Enforcement folgt via Ebene-1-CI-Gate (eigener PR). Kein Code.
 
+### docs(runbook): .52-readiness preflight and backup anchors (#251, 2026-07-08 17:05)
+
+Doc-only. `REENROLL-52-RUNBOOK.md` ergänzt den `.52`-Pfad um read-only Preflight für die Zertifikatsprüfung
+gegen den Trust-Anker und um einen manuellen daemon-inerten Backup-Anker vor der Mutation. Kein Daemon-Code,
+keine Test- oder Build-Logik geändert; ergänzt die operative Nachweisstrecke für den KW28-Re-Pair-/Re-Enroll-Lauf.
+
+### docs(compliance): Compliance-Drift nachgezogen — #249/#250/#251 auf merged, #251-Historie ergänzt (2026-07-09 07:15)
+
+Doc-only. Zieht drei bereits gemergte PRs in der Doku nach: `COMPLIANCE-TABLE.md` markiert #249/#250/#251 von
+„(offen)" auf „(merged)", der fehlende `CHANGES.md`-Historieneintrag für #251 (docs(runbook): .52-Readiness)
+wurde ergänzt, und dieser Nachtrag bekommt seine eigene `changes/`- + COMPLIANCE-Zeile (damit das Ebene-1-
+Doku-Gate nicht an der eigenen Existenz stolpert). Kein Daemon-Code, keine Test-/Build-Logik.
+
 ### docs(security): SECURITY.md auf v0.34.70 nachgezogen (Doku-Pflege-Altlast, 2026-07-07 21:04)
 
 Doc-only, kein Verhalten. SECURITY.md hinkte laut MD-Pflege-Audit den Härtungs-PRs seit v0.31 hinterher

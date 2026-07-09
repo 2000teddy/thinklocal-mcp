@@ -1552,7 +1552,7 @@ CHANGES.md ([Unreleased]), `changes/2026-07-07_security-md-altlast-nachzug.md`, 
 
 | #        | PR    | Datum            | CO  | CG  | TS  | CR  | PC  | DO | Findings                           |
 |----------|-------|------------------|-----|-----|-----|-----|-----|----|------------------------------------|
-| doc-roles | #249 (offen, base=main) | 2026-07-07 21:12 | n/a | n/a | n/a | n/a | ✅ | ✅ | Doc-only (CONTRIBUTING.md + CLAUDE.md). MD-Pflege-Audit Punkte 3+4. Kein Code → CO/CG/TS/CR n/a. PC: `git diff` — nur .md/changes. Rebased auf main nach #248 (nur Doku-Konfliktauflösung, kein neuer Inhalt). |
+| doc-roles | #249 (merged) | 2026-07-07 21:12 | n/a | n/a | n/a | n/a | ✅ | ✅ | Doc-only (CONTRIBUTING.md + CLAUDE.md). MD-Pflege-Audit Punkte 3+4. Kein Code → CO/CG/TS/CR n/a. PC: `git diff` — nur .md/changes. Rebased auf main nach #248 (nur Doku-Konfliktauflösung, kein neuer Inhalt). |
 
 **Typ:** Governance-Doc (kein Code). Schreibt die 5-Datei-Doku-Rollen in CONTRIBUTING.md fest
 (`changes/`/`CHANGES.md`/`HISTORY.md`/`COMPLIANCE-TABLE.md`/`TODO.md` — Leser/Takt/Durchsetzung) und
@@ -1567,7 +1567,7 @@ Christians Beschluss um, keine offene Design-Frage). **DO:** CONTRIBUTING.md, CL
 
 | #        | PR    | Datum            | CO  | CG  | TS  | CR  | PC  | DO | Findings                           |
 |----------|-------|------------------|-----|-----|-----|-----|-----|----|------------------------------------|
-| doc-gate | (offen, base=main) | 2026-07-07 21:11 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | CI-Workflow. TS: YAML-Parse + 9-Szenarien-Logik-Dry-Test (1 Regex-Bug gefunden+gefixt: `docs(`-Titel hinter `[agent]` wurde nicht exempt). CR: Selbst-Review Logikpfade + Dogfood (dieser PR besteht sein eigenes Gate). |
+| doc-gate | #250 (merged) | 2026-07-07 21:11 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | CI-Workflow. TS: YAML-Parse + 9-Szenarien-Logik-Dry-Test (1 Regex-Bug gefunden+gefixt: `docs(`-Titel hinter `[agent]` wurde nicht exempt). CR: Selbst-Review Logikpfade + Dogfood (dieser PR besteht sein eigenes Gate). |
 
 **Typ:** CI-Gate (kein Daemon-Code). `.github/workflows/doc-compliance-gate.yml` — verlangt je PR
 `changes/`-Eintrag + COMPLIANCE-Zeile; Ausnahme Label `no-doc-needed`/Titel-Typ `docs`/`chore`. **Rollout:**
@@ -1582,10 +1582,18 @@ CHANGES.md, `changes/2026-07-07_doc-compliance-gate.md`, dieser Eintrag; Rollen/
 
 | #        | PR    | Datum            | CO  | CG  | TS  | CR  | PC  | DO | Findings                           |
 |----------|-------|------------------|-----|-----|-----|-----|-----|----|------------------------------------|
-| runbook  | (offen, base=main) | 2026-07-08 17:05 | n/a | n/a | n/a | ✅ | ✅ | ✅ | Doc-only (REENROLL-52-RUNBOOK.md). TS/CG/CO: n/a da kein Code. PC: `git diff` geprüft. CR: Unabhängiger Agent prüfte Änderungen auf Sinnhaftigkeit und Vollständigkeit. |
+| runbook  | #251 (merged) | 2026-07-08 17:05 | n/a | n/a | n/a | ✅ | ✅ | ✅ | Doc-only (REENROLL-52-RUNBOOK.md). TS/CG/CO: n/a da kein Code. PC: `git diff` geprüft. CR: Unabhängiger Agent prüfte Änderungen auf Sinnhaftigkeit und Vollständigkeit. |
 
 **Typ:** Doc-only. Erweitert das Runbook für die Anmeldung des `.52` (iobroker) Nodes am Mesh um read-only Preflight-Schritte (Zertifikat gegen Trust-Anker verifizieren) und eine manuell erstellte daemon-inerte Backup-Datei vor der Mutation. **CO/CG/TS:** n/a. **CR:** Agent-Selbst-Review. **PC:** `git diff` zeigt reine `.md`-Änderungen. **DO:** `REENROLL-52-RUNBOOK.md`, `changes/2026-07-08_runbook-52-readiness.md`, dieser Eintrag.
 
+## Sweep 2026-07-09 07:15 — docs(compliance): Compliance-Drift nachgezogen (#249/#250/#251)
+
+| #        | PR    | Datum            | CO  | CG  | TS  | CR  | PC  | DO | Findings                           |
+|----------|-------|------------------|-----|-----|-----|-----|-----|----|------------------------------------|
+| drift    | (offen, base=main) | 2026-07-09 07:15 | n/a | n/a | n/a | ✅ | ✅ | ✅ | Doc-only (`COMPLIANCE-TABLE.md` + `CHANGES.md` + `changes/`). TS/CG/CO: n/a da kein Code. PC: `git diff` — nur `.md`/`changes/`, keine Datei außerhalb des Doku-Nachtrags. CR: claude/codex/agy. |
+
+**Typ:** Doc-only. Zieht drei bereits gemergte PRs in der Doku nach: #249/#250/#251 von „(offen)" auf „(merged)" gesetzt, fehlender `CHANGES.md`-Historieneintrag für #251 ergänzt, und dieser Nachtrag trägt seine eigene `changes/`- + COMPLIANCE-Zeile (damit das Ebene-1-Doku-Gate nicht an der eigenen Existenz stolpert). **CO/CG/TS:** n/a (kein Code). **CR:** claude/codex/agy. **PC:** `git diff` zeigt reine `.md`/`changes/`-Änderungen, keine Daemon-/CI-/Test-Datei. **DO:** `COMPLIANCE-TABLE.md`, `CHANGES.md`, `changes/2026-07-09_compliance-drift-nachtrag.md`, dieser Eintrag.
+
 ---
 
-*Letzte Aktualisierung: 2026-07-08 17:05 — docs(runbook): .52-Readiness.*
+*Letzte Aktualisierung: 2026-07-09 07:15 — docs(compliance): Compliance-Drift #249/#250/#251 nachgezogen.*
