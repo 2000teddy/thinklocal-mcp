@@ -8,6 +8,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(mcp): TL07 local-exec-Naht — Owner-seitiger MCP-Serve injizierbar (2026-07-10 06:20)
+
+Der `mcporter-local`-Zweig des MCP-Forward-Executors war ein 501-Stub („local-exec deferred, Q1
+remote-forward-only") → jeder tools/call-Forward endete am Owner in 501. Neu: eine **injizierbare
+`localExec`-Primitive** (`McpLocalExec`) — fehlt sie, bleibt es 501 (Q1-Default, rückwärtskompatibel);
+ist sie gesetzt, serviert der Owner lokal und auditiert `MCP_EXEC_LOCAL` (neuer AuditEventType, Owner-
+Hälfte des beidseitigen Kap.-7.7-Audits). Fehler `>=500` → zusätzlich REJECT; werfende Primitive → 502.
+Kein Live-Wiring (index.ts injiziert nichts → Produktion unverändert). Die reale mcporter-`spawn`-
+Primitive ist der nächste Slice (offene Runtime-Fragen dokumentiert, nicht geraten). +4 Tests, 1462 grün.
+
 ### ci(gate): Ebene-1 Doku-Compliance-Gate — warnend → blockierend (2026-07-07 21:11)
 
 Neuer GitHub-Actions-Workflow `doc-compliance-gate.yml`: verlangt je PR einen `changes/`-Eintrag + eine

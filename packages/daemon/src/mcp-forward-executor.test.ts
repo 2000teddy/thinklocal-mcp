@@ -3,7 +3,9 @@
  * Unit-Tests für ADR-028 D4-b / v5 Spur 3 T3.3 — Live-Forward-Executor
  * (`mcp-forward-executor.ts`). Deckt:
  *  - createMcpForwardExecutor: remote-forward (hop+1, Payload, Audit-TX), Self-Loop-Guard,
- *    1-Hop-Guard, local→501 (Q1), reject-Durchreichung (Pin-Violation 500).
+ *    1-Hop-Guard, local→501 (Q1-Default, kein localExec), reject-Durchreichung (Pin-Violation 500).
+ *  - TL07 local-exec-Naht: injizierter localExec → lokaler Serve (200), Spec+Payload durchgereicht,
+ *    Owner-Audit MCP_EXEC_LOCAL, Exec-Fehler(>=500)→zusaetzlich REJECT.
  *  - createUndiciMcpForward (fetch injiziert): Success (Hop-Header/Body/URL), Non-JSON,
  *    Fehler→502, kein-TLS→503.
  * KEIN echter Net-Egress — die Netzwerk-Primitive bzw. `fetch` wird gefaked.
@@ -18,6 +20,8 @@ import {
   type McpForwardContext,
   type McpHttpForward,
   type McpHttpForwardRequest,
+  type McpLocalExec,
+  type McpLocalExecRequest,
 } from './mcp-forward-executor.js';
 
 const SELF = 'spiffe://thinklocal/node/12D3KooWSELF';
@@ -115,6 +119,58 @@ describe('createMcpForwardExecutor', () => {
     const exec = createMcpForwardExecutor({ selfAgentId: SELF, httpForward: captureForward().fn, audit: aud.fn });
     await exec(local, ctx());
     expect(aud.events.some(([e]) => e === 'MCP_FORWARD_REJECT')).toBe(true);
+  });
+
+  // TL07: injizierter local-exec (Owner-Seite) — die Naht, die 501 in einen echten
+  // lokalen Serve verwandelt (die reale mcporter-spawn-Primitive ist ein Folge-Slice).
+  it('local mit injiziertem localExec → serviert lokal (200), KEIN Forward, Spec+Payload durchgereicht', async () => {
+    const fwd = captureForward();
+    const seen: McpLocalExecRequest[] = [];
+    const localExec: McpLocalExec = async (req) => {
+      seen.push(req);
+      return { status: 200, body: { result: ['clientA'] } };
+    };
+    const exec = createMcpForwardExecutor({ selfAgentId: SELF, httpForward: fwd.fn, localExec });
+    const res = await exec(local, ctx());
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ result: ['clientA'] });
+    expect(fwd.calls).toHaveLength(0); // local ⇒ kein Net-Egress
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.server).toBe('unifi');
+    expect(seen[0]?.argv).toEqual(['mcporter', 'run', 'unifi']);
+    expect(seen[0]?.execution_tier).toBe('self');
+    expect(seen[0]?.payload).toEqual({ jsonrpc: '2.0', method: 'tools/list' });
+  });
+
+  it('local mit localExec: Owner-Haelfte auditiert (MCP_EXEC_LOCAL), NICHT als deferred-REJECT', async () => {
+    const aud = captureAudit();
+    const localExec: McpLocalExec = async () => ({ status: 200, body: { ok: true } });
+    const exec = createMcpForwardExecutor({ selfAgentId: SELF, httpForward: captureForward().fn, audit: aud.fn, localExec });
+    await exec(local, ctx());
+    expect(aud.events.some(([e]) => e === 'MCP_EXEC_LOCAL')).toBe(true);
+    expect(aud.events.some(([, , d]) => d.includes('local-exec deferred'))).toBe(false);
+  });
+
+  it('local mit localExec: Exec-Fehler (>=500) wird zusaetzlich als REJECT auditiert', async () => {
+    const aud = captureAudit();
+    const localExec: McpLocalExec = async () => ({ status: 500, body: { error: 'mcporter crashed' } });
+    const exec = createMcpForwardExecutor({ selfAgentId: SELF, httpForward: captureForward().fn, audit: aud.fn, localExec });
+    const res = await exec(local, ctx());
+    expect(res.status).toBe(500);
+    expect(aud.events.some(([e]) => e === 'MCP_EXEC_LOCAL')).toBe(true);
+    expect(aud.events.some(([e, , d]) => e === 'MCP_FORWARD_REJECT' && d.includes('local-exec-failed'))).toBe(true);
+  });
+
+  it('local mit localExec: werfende Primitive → 502 (Vertrag gehalten), REJECT auditiert', async () => {
+    const aud = captureAudit();
+    const localExec: McpLocalExec = async () => {
+      throw new Error('spawn ENOENT mcporter');
+    };
+    const exec = createMcpForwardExecutor({ selfAgentId: SELF, httpForward: captureForward().fn, audit: aud.fn, localExec });
+    const res = await exec(local, ctx());
+    expect(res.status).toBe(502);
+    expect((res.body as { error?: string }).error).toMatch(/local-exec failed/);
+    expect(aud.events.some(([e, , d]) => e === 'MCP_FORWARD_REJECT' && d.includes('local-exec-threw'))).toBe(true);
   });
 
   it('CR-M4: fehlgeschlagener Forward (httpForward→502) → zusaetzlich REJECT auditiert', async () => {
