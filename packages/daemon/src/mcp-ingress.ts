@@ -15,7 +15,7 @@
 import type { Capability } from './registry.js';
 import type { McpForwardPeer } from './mcp-forward.js';
 import type { McpForwardDispatch } from './mcp-forward-dispatch.js';
-import { resolveMcp, type McpExecutionTier } from './mcp-service-registry.js';
+import { resolveMcp, maxTier, deriveToolTier, type McpExecutionTier } from './mcp-service-registry.js';
 import { planMcpRoute } from './mcp-routing.js';
 import { buildMcpForwardSpec } from './mcp-forward.js';
 import { buildMcpForwardDispatch } from './mcp-forward-dispatch.js';
@@ -142,10 +142,15 @@ export async function handleMcpIngress(
     return { status: 503, body: { error: 'mcp unavailable', server: input.server, reason: dispatch.reason } };
   }
 
-  // 5. ADR-033: Ausführungsstufe durchsetzen (Gate 2) VOR dem Executor. Die Stufe stammt aus
-  //    demselben Dispatch, den der Executor auditiert (keine zweite, driftende Ableitung):
-  //    local trägt sie direkt, remote im request-Plan. gate/consensus → 403 fail-closed.
-  const tier = dispatch.kind === 'local' ? dispatch.execution_tier : dispatch.request.execution_tier;
+  // 5. ADR-033 / Entscheidung 2: Ausführungsstufe durchsetzen (Gate 2) VOR dem Executor.
+  //    EFFEKTIVE Stufe = max(Capability-Stufe, Werkzeug-Stufe):
+  //    - Capability-Stufe (pro Server) stammt aus demselben Dispatch, den der Executor auditiert.
+  //    - Werkzeug-Stufe (pro Tool) aus dem Payload-Toolnamen (`deriveToolTier`) — so hält ein
+  //      schreibendes Tool (z.B. `block_client`) am Gate an, während `list_clients` am selben
+  //      Server durchgeht. Die Werkzeug-Stufe kann nur ANHEBEN, nie absenken (fail-closed).
+  //    gate/consensus → 403, KEIN Dispatch.
+  const capabilityTier = dispatch.kind === 'local' ? dispatch.execution_tier : dispatch.request.execution_tier;
+  const tier = maxTier(capabilityTier, deriveToolTier(input.payload));
   const denied = enforceExecutionTier(tier, input.server);
   if (denied) return denied;
 

@@ -49,7 +49,9 @@ function classify(token: string): McpExecutionTier | 'unknown' {
 }
 
 const RANK: Record<McpExecutionTier, number> = { self: 0, gate: 1, consensus: 2 };
-function maxTier(a: McpExecutionTier, b: McpExecutionTier): McpExecutionTier {
+/** Höhere der beiden Stufen (self<gate<consensus). Exportiert für die Ingress-Kombination
+ *  aus Capability-Stufe (pro Server) und Werkzeug-Stufe (pro Tool). */
+export function maxTier(a: McpExecutionTier, b: McpExecutionTier): McpExecutionTier {
   return RANK[a] >= RANK[b] ? a : b;
 }
 
@@ -82,6 +84,55 @@ export function deriveExecutionTier(permissions: readonly string[], trustLevel: 
     tier = 'gate';
   }
   return tier;
+}
+
+/**
+ * Werkzeug-Verben (Präfix des Tool-Namens, `verb_object`-Konvention) → Stufe.
+ * Präfix-/Verb-basiert (nicht Substring), damit z.B. `get_switch_stack` NICHT wegen
+ * „switch" fälschlich als schreibend gilt — maßgeblich ist das führende Verb (`get`).
+ */
+const DESTRUCTIVE_VERBS = new Set([
+  'delete', 'destroy', 'remove', 'wipe', 'factory', 'reset', 'revoke', 'purge', 'forget',
+  'reboot', 'shutdown', 'drop', 'clear', 'flush', 'erase',
+]);
+const WRITE_VERBS = new Set([
+  'create', 'update', 'set', 'add', 'enable', 'disable', 'block', 'unblock', 'authorize',
+  'deauthorize', 'reauthorize', 'restart', 'adopt', 'provision', 'assign', 'move', 'rename',
+  'configure', 'send', 'actuate', 'switch', 'apply', 'start', 'stop', 'kick', 'ban', 'write',
+  'edit', 'modify', 'grant', 'deny', 'put', 'post', 'patch', 'upsert', 'toggle', 'trigger',
+  'run', 'exec', 'execute', 'invoke',
+]);
+const READ_VERBS = new Set([
+  'list', 'get', 'describe', 'read', 'show', 'search', 'query', 'find', 'stat', 'stats',
+  'count', 'fetch', 'view', 'status', 'info', 'inspect', 'export', 'ls',
+]);
+
+/** Minimale JSON-RPC-Sicht für die Werkzeug-Stufen-Ableitung. */
+interface McpCallView {
+  method?: unknown;
+  params?: { name?: unknown };
+}
+
+/**
+ * Leitet die **Werkzeug-Stufe** aus dem MCP-JSON-RPC-Payload ab (pro Tool, ADR-033 /
+ * Entscheidung 2 — „lesend≠schreibend" am selben Server). Rein, wirft NICHT.
+ *  - Nur `tools/call` ruft ein potenziell mutierendes Werkzeug auf → Verb klassifizieren.
+ *  - `tools/list` (und jede andere Metadaten-Methode) ist lesend → `self`.
+ *  - `tools/call` ohne gültigen `params.name` → `gate` (fail-closed, ungültiger Call).
+ *  - Unbekanntes Verb → `gate` (fail-closed; ADR-028-D4: „unklare Stufe → mindestens gate").
+ * Die EFFEKTIVE Stufe am Ingress ist `maxTier(Capability-Stufe, Werkzeug-Stufe)` — die
+ * Werkzeug-Stufe kann also nur ANHEBEN, nie eine Capability-Stufe absenken.
+ */
+export function deriveToolTier(payload: unknown): McpExecutionTier {
+  const call = (typeof payload === 'object' && payload !== null ? payload : {}) as McpCallView;
+  if (call.method !== 'tools/call') return 'self';
+  const name = call.params?.name;
+  if (typeof name !== 'string' || name.trim() === '') return 'gate';
+  const verb = name.toLowerCase().match(/^[a-z]+/)?.[0] ?? '';
+  if (DESTRUCTIVE_VERBS.has(verb)) return 'consensus';
+  if (WRITE_VERBS.has(verb)) return 'gate';
+  if (READ_VERBS.has(verb)) return 'self';
+  return 'gate';
 }
 
 export interface BuildMcpCapabilityInput {

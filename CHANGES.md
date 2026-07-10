@@ -8,6 +8,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(mcp): TL07 pro-Tool-Ausführungsstufe — lesend≠schreibend (Entscheidung 2) (2026-07-10 11:40)
+
+Die MCP-Ausführungsstufe wird jetzt zusätzlich **pro Tool** aus dem `tools/call`-Toolnamen abgeleitet
+(`deriveToolTier`, führendes Verb): destruktiv (`delete_`/`remove_`…)→consensus, schreibend
+(`create_`/`block_`/`enable_`/`authorize_`…)→gate, lesend (`list_`/`get_`…)→self, unbekannt→gate
+(fail-closed). Am Ingress gilt die effektive Stufe `maxTier(Capability-Stufe, Werkzeug-Stufe)` — die
+Werkzeug-Stufe kann nur anheben. Damit hält `block_client` am Gate an (403), während `list_clients` am
+selben unifi-Server durchgeht (Christians Entscheidung 2). +9 Tests, 1495 grün. CR: PASS, keine HIGH/MED.
+
 ### docs(runbook): MCP-Provider aktivieren — serve_shared + mcporter-PATH (2026-07-10 08:33)
 
 Neues `docs/RUNBOOK-mcp-provider-serve-shared.md` aus dem live-verifizierten TL07/Kap.-7.7-tools/call-

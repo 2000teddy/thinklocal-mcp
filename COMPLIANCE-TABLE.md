@@ -1618,6 +1618,14 @@ CHANGES.md, `changes/2026-07-07_doc-compliance-gate.md`, dieser Eintrag; Rollen/
 
 **Typ:** Doc-only. Schreibt zwei am TL07/Kap.-7.7-Beweis (Report `2026-07-10_0805`) verifizierte Betriebsfakten ins Deploy-Runbook fest: (1) `~/.npm-global/bin` MUSS in der Daemon-systemd-PATH stehen, sonst `execFile('mcporter')`→ENOENT→502 „mcporter exec failed" mit leerem `detail`; (2) `~/.mcporter/mcporter.json` kann Credentials im Klartext führen (`UNIFI_API_KEY`) → Rotation/`chmod 600`. **CO/CG/TS:** n/a. **CR:** claude/codex/agy. **PC:** reine `.md`/`changes/`-Änderung. **DO:** `docs/RUNBOOK-mcp-provider-serve-shared.md`, `CHANGES.md`, `changes/2026-07-10_runbook-mcp-provider-serve-shared.md`, dieser Eintrag.
 
+## Sweep 2026-07-10 11:40 — feat(mcp): TL07 pro-Tool-Ausführungsstufe (Entscheidung 2)
+
+| #        | PR    | Datum            | CO  | CG  | TS  | CR  | PC  | DO | Findings                           |
+|----------|-------|------------------|-----|-----|-----|-----|-----|----|------------------------------------|
+| tl07-tier | (offen, base=main) | 2026-07-10 11:40 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | Daemon-Code (`deriveToolTier` + Ingress `maxTier(cap,tool)`) + Tests. CO: n/a (Christians Entscheidung 2 = A, keine offene Design-Frage). CG: n/a. TS: +9 Tests (deriveToolTier read/write/destruktiv/unknown, maxTier, Ingress block_client→403/list_clients→200/get_switch_stack→200/tools/list→200/no-payload-kompat); 1495 gesamt grün, tsc+ESLint sauber. CR: claude-Subagent PASS, keine HIGH/MED — kein Under-Gating (alle unifi-Schreibverben ≥ gate), Single-Enforcement, fail-closed camelCase/unknown; 3 LOW → ADR-033-Notiz. PC: `git diff` — nur Registry/Ingress/Test + Doku. |
+
+**Typ:** Daemon-Code. Setzt Entscheidung 2 („lesend≠schreibend" am selben Server) um: die effektive Stufe am Ingress ist `max(Capability-Stufe, Werkzeug-Stufe)`; die Werkzeug-Stufe aus dem `tools/call`-Toolnamen (führendes Verb) hebt schreibende/destruktive Tools auf gate/consensus (403), während `list_clients` durchgeht. Ermöglicht die block_client-Gegenprobe (Ablaufplan Schritt 5) nach Merge+Deploy. **CO/CG:** n/a. **TS/CR/PC:** s. Zeile. **DO:** `changes/2026-07-10_tl07-per-tool-tier.md`, `CHANGES.md`, dieser Eintrag.
+
 ---
 
-*Letzte Aktualisierung: 2026-07-10 08:33 — docs(runbook): MCP-Provider serve_shared + mcporter-PATH.*
+*Letzte Aktualisierung: 2026-07-10 11:40 — feat(mcp): TL07 pro-Tool-Ausführungsstufe (Entscheidung 2).*
