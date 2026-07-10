@@ -8,6 +8,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(mcp): TL07 reale mcporter-local-exec-Primitive + Wiring (2026-07-10 07:18)
+
+Folge-Slice zur local-exec-Naht: `createMcporterLocalExec` (`mcp-mcporter-exec.ts`) übersetzt einen
+MCP-JSON-RPC-Aufruf in `mcporter list`/`call` (Vertrag grounded aus `mcporter --help` + Live-Probe,
+nicht geraten) und mappt Exit/Ausgabe auf `{status,body}` (200/504/502/400). Sicherheit: `execFile`
+ohne Shell, Argument-Vektor, `TOOL_NAME_RE` alphanumerisch-Start, Server kanonisiert. In `index.ts`
+verdrahtet **nur bei `serve_shared=true`** (defense-in-depth). Kein Deploy → Produktion erst mit
+Provider-Deploy aktiv. 18 Tests (inkl. realem execFileRunner) + End-to-End-Smoke gegen den lokalen
+thinklocal-Server (200); 1481 gesamt grün. CR: PASS, keine HIGH/CRITICAL.
+
 ### feat(mcp): TL07 local-exec-Naht — Owner-seitiger MCP-Serve injizierbar (2026-07-10 06:20)
 
 Der `mcporter-local`-Zweig des MCP-Forward-Executors war ein 501-Stub („local-exec deferred, Q1
