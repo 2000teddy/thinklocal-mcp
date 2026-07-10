@@ -7,6 +7,8 @@ import type { Capability } from './registry.js';
 import {
   buildMcpCapability,
   deriveExecutionTier,
+  deriveToolTier,
+  maxTier,
   resolveMcp,
   isMcpCapability,
   MCP_CATEGORY,
@@ -159,5 +161,54 @@ describe('resolveMcp', () => {
     expect(r).toHaveLength(1);
     expect(r[0].agent_id).toBe(NODE_A);
     expect(r[0].execution_tier).toBe('self');
+  });
+});
+
+describe('deriveToolTier (TL07 pro-Tool-Stufe)', () => {
+  const callFor = (name: string): unknown => ({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name } });
+
+  it('lesende Verben (list/get/describe/search) → self', () => {
+    for (const n of ['list_clients', 'get_device', 'describe_thing', 'search_x', 'get_switch_stack', 'list_firewall_policies']) {
+      expect(deriveToolTier(callFor(n))).toBe('self');
+    }
+  });
+
+  it('schreibende Verben (create/update/block/enable/disable/authorize) → gate', () => {
+    for (const n of ['create_network', 'update_wlan', 'block_client', 'enable_firewall_policy', 'disable_firewall_policy', 'authorize_guest', 'set_x']) {
+      expect(deriveToolTier(callFor(n))).toBe('gate');
+    }
+  });
+
+  it('destruktive Verben (delete/remove/reset/revoke) → consensus', () => {
+    for (const n of ['delete_network', 'remove_acl_rule', 'reset_device', 'revoke_voucher']) {
+      expect(deriveToolTier(callFor(n))).toBe('consensus');
+    }
+  });
+
+  it('tools/list & andere Metadaten-Methoden → self', () => {
+    expect(deriveToolTier({ jsonrpc: '2.0', id: 1, method: 'tools/list' })).toBe('self');
+    expect(deriveToolTier({ method: 'ping' })).toBe('self');
+  });
+
+  it('unbekanntes Verb / ungültiger Call → gate (fail-closed)', () => {
+    expect(deriveToolTier(callFor('frobnicate_thing'))).toBe('gate');
+    expect(deriveToolTier({ method: 'tools/call', params: {} })).toBe('gate'); // kein name
+    expect(deriveToolTier({ method: 'tools/call', params: { name: '' } })).toBe('gate');
+    expect(deriveToolTier(null)).toBe('self'); // kein tools/call
+    expect(deriveToolTier('garbage')).toBe('self');
+  });
+
+  it('Groß-/Kleinschreibung egal (führendes Verb)', () => {
+    expect(deriveToolTier(callFor('DELETE_network'))).toBe('consensus');
+    expect(deriveToolTier(callFor('Block_Client'))).toBe('gate');
+  });
+});
+
+describe('maxTier', () => {
+  it('höhere Stufe gewinnt (self<gate<consensus)', () => {
+    expect(maxTier('self', 'gate')).toBe('gate');
+    expect(maxTier('gate', 'self')).toBe('gate');
+    expect(maxTier('gate', 'consensus')).toBe('consensus');
+    expect(maxTier('self', 'self')).toBe('self');
   });
 });

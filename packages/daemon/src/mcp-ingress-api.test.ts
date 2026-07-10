@@ -217,7 +217,9 @@ describe('makeMcpIngressHandler — T3.3 Executor-Wiring (Hop, Payload, Audit)',
 
   it('reicht incomingHop (aus Header), Payload und Servername an den Executor durch', async () => {
     const cap0 = captureExec();
-    const payload = { jsonrpc: '2.0', method: 'tools/call' };
+    // Read-Tool (self), damit der Call den Executor erreicht (das Tier-Gate ist separat getestet);
+    // ein tools/call OHNE params.name ist jetzt fail-closed gegatet (TL07 Werkzeug-Stufe).
+    const payload = { jsonrpc: '2.0', method: 'tools/call', params: { name: 'list_clients' } };
     const rep = await run(
       makeRequest('unifi', authorizedSocket(CALLER), payload, { [MCP_HOP_HEADER]: '1' }),
       baseDeps({ execute: cap0.exec }),

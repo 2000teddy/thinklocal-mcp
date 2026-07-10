@@ -277,3 +277,82 @@ describe('enforceExecutionTier (ADR-033, reine Funktion)', () => {
     expect(r?.status).toBe(403);
   });
 });
+
+// TL07 / Entscheidung 2: Werkzeug-Stufe (pro Tool) hebt die effektive Stufe an — lesend≠schreibend
+// am SELBEN Server. Capability unifi = permissions:[] trust 4 → self; das Tool entscheidet.
+describe('handleMcpIngress — Werkzeug-Stufe (Entscheidung 2, pro Tool)', () => {
+  const localCap = (): Capability[] => [cap({ agent_id: SELF })]; // eigener Node serviert → local
+  const call = (name: string): unknown => ({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name } });
+
+  it('list_clients (self-Tool) am self-Server → execute (200)', async () => {
+    const ex = makeExecutor();
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: localCap(), payload: call('list_clients') },
+      baseDeps({ execute: ex.execute }),
+    );
+    expect(res.status).toBe(200);
+    expect(ex.calls).toHaveLength(1);
+  });
+
+  it('block_client (Schreib-Tool) am self-Server → 403 gate, KEIN Dispatch', async () => {
+    const ex = makeExecutor();
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: localCap(), payload: call('block_client') },
+      baseDeps({ execute: ex.execute }),
+    );
+    expect(res.status).toBe(403);
+    expect((res.body as { tier?: string }).tier).toBe('gate');
+    expect(ex.calls).toHaveLength(0);
+  });
+
+  it('delete_network (destruktiv) → 403 consensus, KEIN Dispatch', async () => {
+    const ex = makeExecutor();
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: localCap(), payload: call('delete_network') },
+      baseDeps({ execute: ex.execute }),
+    );
+    expect(res.status).toBe(403);
+    expect((res.body as { tier?: string }).tier).toBe('consensus');
+    expect(ex.calls).toHaveLength(0);
+  });
+
+  it('get_switch_stack (Verb-Präfix get, NICHT „switch") → self → execute', async () => {
+    const ex = makeExecutor();
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: localCap(), payload: call('get_switch_stack') },
+      baseDeps({ execute: ex.execute }),
+    );
+    expect(res.status).toBe(200);
+    expect(ex.calls).toHaveLength(1);
+  });
+
+  it('tools/list → self → execute', async () => {
+    const ex = makeExecutor();
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: localCap(), payload: { jsonrpc: '2.0', id: 1, method: 'tools/list' } },
+      baseDeps({ execute: ex.execute }),
+    );
+    expect(res.status).toBe(200);
+    expect(ex.calls).toHaveLength(1);
+  });
+
+  it('unbekanntes Verb → 403 fail-closed (Werkzeug-Stufe hebt an)', async () => {
+    const ex = makeExecutor();
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: localCap(), payload: call('frobnicate_thing') },
+      baseDeps({ execute: ex.execute }),
+    );
+    expect(res.status).toBe(403);
+    expect(ex.calls).toHaveLength(0);
+  });
+
+  it('ohne payload (Altverhalten) → self, execute — rückwärtskompatibel', async () => {
+    const ex = makeExecutor();
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: localCap() },
+      baseDeps({ execute: ex.execute }),
+    );
+    expect(res.status).toBe(200);
+    expect(ex.calls).toHaveLength(1);
+  });
+});
