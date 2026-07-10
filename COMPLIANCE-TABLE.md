@@ -1610,6 +1610,14 @@ CHANGES.md, `changes/2026-07-07_doc-compliance-gate.md`, dieser Eintrag; Rollen/
 
 **Typ:** Daemon-Code. Liefert die **reale** Owner-seitige local-exec-Primitive (`mcporter list`/`call`) hinter der Naht aus #253 und verdrahtet sie in `index.ts` **nur bei `serve_shared=true`** (defense-in-depth). Kein Deploy/Neustart → Produktion erst mit Provider-Deploy aktiv. Grüner TH01↔.52-Beweis braucht noch `serve_shared`-Deploy am Owner (503→Provider) — separate Live-Mutation. **CO/CG:** n/a. **TS/CR/PC:** s. Zeile. **DO:** `changes/2026-07-10_tl07-mcporter-local-exec.md`, `CHANGES.md`, dieser Eintrag.
 
+## Sweep 2026-07-10 08:33 — docs(runbook): MCP-Provider aktivieren (serve_shared + mcporter-PATH)
+
+| #        | PR    | Datum            | CO  | CG  | TS  | CR  | PC  | DO | Findings                           |
+|----------|-------|------------------|-----|-----|-----|-----|-----|----|------------------------------------|
+| runbook-provider | (offen, base=main) | 2026-07-10 08:33 | n/a | n/a | n/a | ✅ | ✅ | ✅ | Doc-only (neues `docs/RUNBOOK-mcp-provider-serve-shared.md` + `CHANGES.md` + `changes/`). TS/CG/CO: n/a (kein Code). Inhalt 1:1 aus dem live-verifizierten TL07-tools/call-Beweis (PATH-Pflicht → sonst 502 leeres detail; UNIFI_API_KEY-Klartext-Rotation). PC: `git diff` — nur `.md`/`changes/`. CR: claude/codex/agy. |
+
+**Typ:** Doc-only. Schreibt zwei am TL07/Kap.-7.7-Beweis (Report `2026-07-10_0805`) verifizierte Betriebsfakten ins Deploy-Runbook fest: (1) `~/.npm-global/bin` MUSS in der Daemon-systemd-PATH stehen, sonst `execFile('mcporter')`→ENOENT→502 „mcporter exec failed" mit leerem `detail`; (2) `~/.mcporter/mcporter.json` kann Credentials im Klartext führen (`UNIFI_API_KEY`) → Rotation/`chmod 600`. **CO/CG/TS:** n/a. **CR:** claude/codex/agy. **PC:** reine `.md`/`changes/`-Änderung. **DO:** `docs/RUNBOOK-mcp-provider-serve-shared.md`, `CHANGES.md`, `changes/2026-07-10_runbook-mcp-provider-serve-shared.md`, dieser Eintrag.
+
 ---
 
-*Letzte Aktualisierung: 2026-07-10 07:18 — feat(mcp): TL07 reale mcporter-local-exec-Primitive + Wiring.*
+*Letzte Aktualisierung: 2026-07-10 08:33 — docs(runbook): MCP-Provider serve_shared + mcporter-PATH.*
