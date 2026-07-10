@@ -1602,6 +1602,14 @@ CHANGES.md, `changes/2026-07-07_doc-compliance-gate.md`, dieser Eintrag; Rollen/
 
 **Typ:** Daemon-Code (kein Deploy/Live-Wiring — index.ts injiziert keine `localExec` → Produktion unverändert 501). Macht den Owner-seitigen local-exec von einem 501-Stub zu einer **injizierbaren Naht** (`McpLocalExec`): fehlt sie → 501 (Q1-Default, rückwärtskompatibel); vorhanden → lokaler Serve + `MCP_EXEC_LOCAL`-Audit (Owner-Hälfte des Kap.-7.7-Beweises). Die reale mcporter-`spawn`-Primitive ist der nächste Slice (offene Runtime-Fragen im `changes/`-Eintrag + PR dokumentiert, nicht geraten). **DO:** `changes/2026-07-10_tl07-mcp-local-exec-seam.md`, `CHANGES.md`, dieser Eintrag.
 
+## Sweep 2026-07-10 07:18 — feat(mcp): TL07 reale mcporter-local-exec-Primitive + Wiring
+
+| #        | PR    | Datum            | CO  | CG  | TS  | CR  | PC  | DO | Findings                           |
+|----------|-------|------------------|-----|-----|-----|-----|-----|----|------------------------------------|
+| tl07-mcporter | (offen, base=main) | 2026-07-10 07:18 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | Daemon-Code (`mcp-mcporter-exec.ts` neu + `index.ts` Wiring) + Tests. CO: n/a (Vertrag grounded aus mcporter --help + Live-Probe, keine offene Design-Frage). CG: n/a. TS: 18 Tests inkl. **realem execFileRunner** (echte Kindprozesse) + End-to-End-Smoke gegen lokalen thinklocal-Server (200); 1481 gesamt grün, tsc+ESLint sauber (1 vorbestehender index.ts-Fehler, nicht aus diesem Slice). CR: claude-Subagent PASS, keine HIGH/CRITICAL — no-shell/execFile + Tier-Gate upstream; MED (runner-Test)+2 LOW direkt gefixt. PC: `git diff` — nur Primitive/Wiring/Test + Doku. |
+
+**Typ:** Daemon-Code. Liefert die **reale** Owner-seitige local-exec-Primitive (`mcporter list`/`call`) hinter der Naht aus #253 und verdrahtet sie in `index.ts` **nur bei `serve_shared=true`** (defense-in-depth). Kein Deploy/Neustart → Produktion erst mit Provider-Deploy aktiv. Grüner TH01↔.52-Beweis braucht noch `serve_shared`-Deploy am Owner (503→Provider) — separate Live-Mutation. **CO/CG:** n/a. **TS/CR/PC:** s. Zeile. **DO:** `changes/2026-07-10_tl07-mcporter-local-exec.md`, `CHANGES.md`, dieser Eintrag.
+
 ---
 
-*Letzte Aktualisierung: 2026-07-10 06:20 — feat(mcp): TL07 local-exec-Naht (injizierbar, Owner-Seite).*
+*Letzte Aktualisierung: 2026-07-10 07:18 — feat(mcp): TL07 reale mcporter-local-exec-Primitive + Wiring.*

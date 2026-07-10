@@ -24,6 +24,7 @@ import { SkillManager, type SkillAnnouncePayload } from './skills.js';
 import { buildSharedMcpCapabilities, registerSharedMcps, guardSharedMcpAnnounce } from './mcp-registration.js';
 import { registerMcpIngressApi } from './mcp-ingress-api.js';
 import { createMcpForwardExecutor, createUndiciMcpForward } from './mcp-forward-executor.js';
+import { createMcporterLocalExec } from './mcp-mcporter-exec.js';
 import { registerDashboardApi } from './dashboard-api.js';
 import { registerInboxApi } from './inbox-api.js';
 import { AgentRegistry } from './agent-registry.js';
@@ -1026,6 +1027,12 @@ async function main(): Promise<void> {
     httpForward: mcpForwardHttp.forward,
     audit: (event, peerId, details) => audit.append(event, peerId, details),
     log,
+    // TL07: reale Owner-seitige local-exec (mcporter). Defense-in-depth: NUR ein designierter
+    // Provider (serve_shared=true) bekommt die Primitive — sonst bleibt local-exec bei 501
+    // (Q1-Default), selbst wenn das Routing je einen local-Dispatch erzeugte. Ein Non-Provider
+    // hat ohnehin keinen mcp:*-Self-Eintrag in der Registry, aber der Gate macht die Absicht
+    // explizit und fail-closed.
+    localExec: config.mcp.serve_shared ? createMcporterLocalExec({ log }) : undefined,
   });
   registerMcpIngressApi(cardServer.getServer(), {
     selfAgentId: selfIdentityUri,
