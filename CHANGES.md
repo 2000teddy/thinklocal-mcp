@@ -8,6 +8,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs(runbook): MCP-Provider aktivieren — serve_shared + mcporter-PATH (2026-07-10 08:33)
+
+Neues `docs/RUNBOOK-mcp-provider-serve-shared.md` aus dem live-verifizierten TL07/Kap.-7.7-tools/call-
+Beweis. Dokumentiert die zwei nicht-offensichtlichen Betriebsfakten: (1) `~/.npm-global/bin` MUSS in
+der systemd-Unit-PATH des Daemons stehen, sonst `execFile('mcporter')`→ENOENT→502 „mcporter exec failed"
+mit leerem `detail`; (2) `~/.mcporter/mcporter.json` kann Credentials im Klartext führen (`UNIFI_API_KEY`)
+→ Rotation/`chmod 600`. Plus serve_shared-Drop-in, Verifikation (Owner-lokal + Cross-Host + beidseitige
+Audit-Events) und Rollback. Doc-only.
+
 ### feat(mcp): TL07 reale mcporter-local-exec-Primitive + Wiring (2026-07-10 07:18)
 
 Folge-Slice zur local-exec-Naht: `createMcporterLocalExec` (`mcp-mcporter-exec.ts`) übersetzt einen
