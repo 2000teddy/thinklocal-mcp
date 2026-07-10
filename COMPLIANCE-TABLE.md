@@ -1594,6 +1594,14 @@ CHANGES.md, `changes/2026-07-07_doc-compliance-gate.md`, dieser Eintrag; Rollen/
 
 **Typ:** Doc-only. Zieht drei bereits gemergte PRs in der Doku nach: #249/#250/#251 von „(offen)" auf „(merged)" gesetzt, fehlender `CHANGES.md`-Historieneintrag für #251 ergänzt, und dieser Nachtrag trägt seine eigene `changes/`- + COMPLIANCE-Zeile (damit das Ebene-1-Doku-Gate nicht an der eigenen Existenz stolpert). **CO/CG/TS:** n/a (kein Code). **CR:** claude/codex/agy. **PC:** `git diff` zeigt reine `.md`/`changes/`-Änderungen, keine Daemon-/CI-/Test-Datei. **DO:** `COMPLIANCE-TABLE.md`, `CHANGES.md`, `changes/2026-07-09_compliance-drift-nachtrag.md`, dieser Eintrag.
 
+## Sweep 2026-07-10 06:20 — feat(mcp): TL07 local-exec-Naht (Owner-Seite, injizierbar)
+
+| #        | PR    | Datum            | CO  | CG  | TS  | CR  | PC  | DO | Findings                           |
+|----------|-------|------------------|-----|-----|-----|-----|-----|----|------------------------------------|
+| tl07-seam | (offen, base=main) | 2026-07-10 06:20 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | Daemon-Code (Executor-Naht + Audit-Event) + Tests. CO/CG: n/a (kleiner Slice, Q1 historisch entschieden). TS: +4 Tests (injizierter Exec 200/Spec+Payload/kein Net-Egress, MCP_EXEC_LOCAL-Audit, ≥500→REJECT, Throw→502); 1462 gesamt grün, tsc+ESLint sauber. CR: claude-Subagent PASS, keine HIGH/MED — Tier-Gate upstream in handleMcpIngress vor execute(), Naht öffnet keinen Bypass. PC: `git diff` — nur Executor/Audit/Test + Doku. |
+
+**Typ:** Daemon-Code (kein Deploy/Live-Wiring — index.ts injiziert keine `localExec` → Produktion unverändert 501). Macht den Owner-seitigen local-exec von einem 501-Stub zu einer **injizierbaren Naht** (`McpLocalExec`): fehlt sie → 501 (Q1-Default, rückwärtskompatibel); vorhanden → lokaler Serve + `MCP_EXEC_LOCAL`-Audit (Owner-Hälfte des Kap.-7.7-Beweises). Die reale mcporter-`spawn`-Primitive ist der nächste Slice (offene Runtime-Fragen im `changes/`-Eintrag + PR dokumentiert, nicht geraten). **DO:** `changes/2026-07-10_tl07-mcp-local-exec-seam.md`, `CHANGES.md`, dieser Eintrag.
+
 ---
 
-*Letzte Aktualisierung: 2026-07-09 07:15 — docs(compliance): Compliance-Drift #249/#250/#251 nachgezogen.*
+*Letzte Aktualisierung: 2026-07-10 06:20 — feat(mcp): TL07 local-exec-Naht (injizierbar, Owner-Seite).*

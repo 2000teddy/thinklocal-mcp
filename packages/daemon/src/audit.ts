@@ -45,8 +45,11 @@ export type AuditEventType =
   // RX = eingehender (autorisierter) /api/mcp-Proxy-Call auf diesem Node.
   // TX = dieser Node forwardet einen MCP-Call an den Owner-Peer (remote-forward).
   // REJECT = MCP-Proxy-Call abgelehnt (unauth. Sender / 1-Hop-Guard / Self-Loop).
+  // EXEC_LOCAL = dieser Node serviert einen MCP-Call LOKAL (Owner-Seite, kein Forward)
+  //   — die Owner-Hälfte des beidseitigen Kap.-7.7-Audits, Gegenstück zu MCP_FORWARD_TX.
   | 'MCP_PROXY_RX'
   | 'MCP_FORWARD_TX'
+  | 'MCP_EXEC_LOCAL'
   | 'MCP_FORWARD_REJECT';
 
 /**

@@ -9,8 +9,11 @@
  *    (`verifyMeshServerIdentity` mit der erwarteten Owner-SPIFFE-Identitaet),
  *    **Timeout + Cancel** (`AbortSignal.timeout`), **1-Hop-Guard** (kein Re-Forward)
  *    und **Self-Loop-Guard** (Forward an sich selbst).
- *  - **mcporter-local**: local-exec ist per Christian-Gate **Q1 zurueckgestellt**
- *    (remote-forward-only) → 501.
+ *  - **mcporter-local**: der eigene Node serviert lokal. Ausfuehrung ueber eine
+ *    **injizierbare** `localExec`-Primitive (TL07): fehlt sie, bleibt local-exec
+ *    zurueckgestellt (**501**, Q1-Default remote-forward-only); ist sie gesetzt, wird
+ *    lokal serviert (Owner-Haelfte des beidseitigen Kap.-7.7-Audits, `MCP_EXEC_LOCAL`).
+ *    Die reale mcporter-`spawn`-Primitive ist ein eigener, gegateter Folge-Slice.
  *  - **reject**: die fail-closed-Stati aus `buildMcpExecSpec` (403/500/503) durchgereicht.
  *
  * Die Netzwerk-Primitive (`httpForward`) ist **injizierbar** → die Guard-/Audit-/
@@ -22,6 +25,7 @@ import { Agent as UndiciAgent, fetch as undiciFetch } from 'undici';
 import type { McpForwardDispatch } from './mcp-forward-dispatch.js';
 import type { McpIngressResponse } from './mcp-ingress.js';
 import { buildMcpExecSpec, DEFAULT_MCP_EXEC_TIMEOUT_MS } from './mcp-forward-exec.js';
+import type { McpExecutionTier } from './mcp-service-registry.js';
 import {
   buildMeshConnector,
   type MeshTlsMaterial,
@@ -34,8 +38,28 @@ export const MCP_HOP_HEADER = 'x-tlmcp-mcp-hop';
 /** Maximal erlaubte Forward-Hops: 1 (Client → Owner). Ein Re-Forward ist verboten. */
 export const MAX_MCP_FORWARD_HOPS = 1;
 
-export type McpAuditEvent = 'MCP_FORWARD_TX' | 'MCP_FORWARD_REJECT';
+export type McpAuditEvent = 'MCP_FORWARD_TX' | 'MCP_EXEC_LOCAL' | 'MCP_FORWARD_REJECT';
 export type McpAuditFn = (event: McpAuditEvent, peerId: string, details: string) => void;
+
+/** Beschreibung eines LOKAL auszuführenden MCP-Calls (Owner-Seite, kein Net-Egress).
+ *  Die Felder stammen aus der `mcporter-local`-Spec (`buildMcpExecSpec`) + dem Ingress-Payload. */
+export interface McpLocalExecRequest {
+  /** Servername (z.B. "unifi") — für Logging/Audit + mcporter-Zielwahl. */
+  server: string;
+  /** Aufruf-Vektor aus der Spec (z.B. `['mcporter','run','unifi']`). */
+  argv: readonly string[];
+  /** Optionaler mcporter-Config-Pfad. */
+  configPath?: string;
+  /** MCP-JSON-RPC-Payload (tools/list | tools/call), das lokal ausgeführt wird. */
+  payload: unknown;
+  /** Timeout (ms). */
+  timeoutMs: number;
+  /** Ausführungsstufe (self); gate/consensus werden schon am Ingress abgefangen. */
+  execution_tier: McpExecutionTier;
+}
+/** Injizierbare local-exec-Primitive (real: mcporter-`spawn`). Fehlt sie am Executor,
+ *  bleibt local-exec zurückgestellt (501, Q1-Default). */
+export type McpLocalExec = (req: McpLocalExecRequest) => Promise<McpIngressResponse>;
 
 /** Kontext des eingehenden Ingress-Calls (vom Handler durchgereicht). */
 export interface McpForwardContext {
@@ -76,6 +100,10 @@ export interface McpForwardExecutorDeps {
   log?: Logger;
   /** Timeout-Override; Default `DEFAULT_MCP_EXEC_TIMEOUT_MS`. */
   timeoutMs?: number;
+  /** Injizierbare local-exec-Primitive (Owner-Seite). FEHLT sie → local-exec bleibt 501
+   *  zurückgestellt (Q1-Default, rückwärtskompatibel). VORHANDEN → der eigene Node serviert
+   *  den MCP lokal statt zu forwarden. Real: mcporter-`spawn` (eigener, gegateter Slice). */
+  localExec?: McpLocalExec;
 }
 
 /**
@@ -99,12 +127,42 @@ export function createMcpForwardExecutor(deps: McpForwardExecutorDeps): McpDispa
     }
 
     if (spec.kind === 'mcporter-local') {
-      // local-exec ist per Q1 (remote-forward-only) zurueckgestellt.
-      deps.audit?.('MCP_FORWARD_REJECT', auditPeer, `${spec.server} local-exec deferred`);
-      return {
-        status: 501,
-        body: { error: 'local-exec deferred (Q1: remote-forward-only)', server: spec.server },
-      };
+      // Ohne injizierte local-exec-Primitive bleibt local-exec zurueckgestellt (Q1-Default,
+      // remote-forward-only) → 501, unveraendertes Verhalten.
+      if (!deps.localExec) {
+        deps.audit?.('MCP_FORWARD_REJECT', auditPeer, `${spec.server} local-exec deferred`);
+        return {
+          status: 501,
+          body: { error: 'local-exec deferred (Q1: remote-forward-only)', server: spec.server },
+        };
+      }
+      // Owner-Seite serviert lokal: die Owner-Haelfte des beidseitigen Kap.-7.7-Audits.
+      deps.audit?.('MCP_EXEC_LOCAL', auditPeer, `${spec.server} tier=${spec.execution_tier}`);
+      // Defense-in-depth: eine werfende localExec-Primitive darf den {status,body}-Vertrag
+      // NICHT brechen (handleMcpIngress ruft execute() ausserhalb seines try/catch). Analog
+      // zum Self-Catch in createUndiciMcpForward → ein Throw wird zu 502 gemappt + auditiert.
+      let res: McpIngressResponse;
+      try {
+        res = await deps.localExec({
+          server: spec.server,
+          argv: spec.argv,
+          configPath: spec.configPath,
+          payload: ctx.payload,
+          timeoutMs: spec.timeoutMs,
+          execution_tier: spec.execution_tier,
+        });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        deps.log?.warn({ server: spec.server, err: msg }, '[mcp-local-exec] Primitive warf');
+        deps.audit?.('MCP_FORWARD_REJECT', auditPeer, `${spec.server} local-exec-threw`);
+        return { status: 502, body: { error: 'local-exec failed', server: spec.server, detail: msg.slice(0, 300) } };
+      }
+      // Analog zum Forward-Pfad: ein fehlgeschlagener local-exec (>=500) wird zusaetzlich als
+      // REJECT auditiert, damit ein Owner-seitiger Exec-Fehler attribuierbar ist.
+      if (res.status >= 500) {
+        deps.audit?.('MCP_FORWARD_REJECT', auditPeer, `${spec.server} local-exec-failed ${res.status}`);
+      }
+      return res;
     }
 
     // --- mtls-forward ---
