@@ -89,6 +89,17 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
 - [ ] **[v5.1] TL-24 (nach Beta)** ADR „Erneuerung ohne Neustart" (TLS-Hot-Reload). ↔ vgl. bestehend
   „Hot-Reload TrustStore #117" (verwandt, aber Trust-Store ≠ Cert-Renewal).
 
+### P0 — Discovery-Resilienz (ADR-035; Neustart-Wellen heilen nicht — Christian 11.07.)
+- [x] **[v5.1] TL-25a** Card-Fetch-Retry mit Backoff im Async-Learn (ADR-035 A3). *Erledigt: dieser PR.*
+- [ ] **[v5.1] TL-26 (≈4 h)** Peer-Cache-Persistenz (ADR-035 A1): verifizierte Auflösungen atomar nach
+  `data_dir/mesh/peer-cache.json` (AUTHN-only, `chmod 600`), beim Boot validierend laden + gegen Live-Cert
+  re-verifizieren. Kein Trust-Upgrade durch Cache. ⚠️ Trust-nah → CO (Konsens) vor dem Code.
+- [ ] **[v5.1] TL-27 (≈3 h)** Aggressives Boot-Re-Learn (ADR-035 A2): beim Start proaktiv Cache- +
+  paired-peers-Card-Fetch (mit TL-25-Backoff) statt auf Inbound zu warten.
+- [ ] **[v5.1] TL-28 (≈3 h)** Periodisches mDNS-Re-Query + `remoteAddress`-Fallback (ADR-035 A4).
+- [ ] **[v5.1] TL-29 (≈5 h)** Hub-verankerte Pull-Discovery (ADR-035 B): `/api/mesh/peers`-Endpoint (mTLS)
+  + Client-Pull + Fallback-Kette (Cache/mDNS/static). Skaliert O(n) statt O(n²). ⚠️ Architektur → CO.
+
 ---
 
 ## Follow-ups aus Code-Reviews :

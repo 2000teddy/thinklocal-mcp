@@ -74,11 +74,56 @@ describe('learnInboundPeer (ADR-026)', () => {
     expect(record).not.toHaveBeenCalled();
   });
 
-  it('fetch-failed: Card-Fetch wirft → fetch-failed, kein Record', async () => {
+  it('fetch-failed: Card-Fetch wirft dauerhaft → fetch-failed nach Retries, kein Record', async () => {
     const record = vi.fn();
-    const r = await learnInboundPeer(deps({ record, fetchCard: async () => { throw new Error('EHOSTUNREACH'); } }));
+    const fetchCard = vi.fn(async () => { throw new Error('EHOSTUNREACH'); });
+    const delay = vi.fn(async () => {});
+    const r = await learnInboundPeer(deps({ record, fetchCard, delay, maxFetchAttempts: 3 }));
     expect(r).toBe('fetch-failed');
     expect(record).not.toHaveBeenCalled();
+    expect(fetchCard).toHaveBeenCalledTimes(3); // ADR-035 A3: Retry
+    expect(delay).toHaveBeenCalledTimes(2);     // zwischen den 3 Versuchen
+  });
+
+  it('ADR-035 A3: transienter Throw, dann Erfolg beim 2. Versuch → recorded (Wellen-Recovery)', async () => {
+    const record = vi.fn();
+    let n = 0;
+    const fetchCard = vi.fn(async () => {
+      n++;
+      if (n === 1) throw new Error('ECONNREFUSED'); // Peer-HTTP noch nicht oben
+      return { spiffeUri: EXPECTED, publicKey: 'PK-LEARNED' };
+    });
+    const delay = vi.fn(async () => {});
+    const r = await learnInboundPeer(deps({ record, fetchCard, delay, maxFetchAttempts: 3 }));
+    expect(r).toBe('recorded');
+    expect(fetchCard).toHaveBeenCalledTimes(2);
+    expect(record).toHaveBeenCalledOnce();
+  });
+
+  it('ADR-035 A3: Backoff-Delays werden in Reihenfolge genutzt', async () => {
+    const seen: number[] = [];
+    const fetchCard = vi.fn(async () => { throw new Error('x'); });
+    const delay = vi.fn(async (ms: number) => { seen.push(ms); });
+    await learnInboundPeer(deps({ fetchCard, delay, maxFetchAttempts: 3, fetchBackoffMs: [100, 300, 900] }));
+    expect(seen).toEqual([100, 300]); // vor Versuch 2 und 3
+  });
+
+  it('ADR-035 A3: ungültige Card (SAN-Mismatch) wird NICHT wiederholt → rejected-identity, 1 Fetch', async () => {
+    const fetchCard = vi.fn(async () => ({ spiffeUri: 'spiffe://thinklocal/node/12D3KooWFAKE', publicKey: 'PK' }));
+    const delay = vi.fn(async () => {});
+    const r = await learnInboundPeer(deps({ fetchCard, delay, maxFetchAttempts: 3 }));
+    expect(r).toBe('rejected-identity');
+    expect(fetchCard).toHaveBeenCalledTimes(1); // erfolgreicher Fetch beendet die Schleife
+    expect(delay).not.toHaveBeenCalled();
+  });
+
+  it('ADR-035 A3: maxFetchAttempts=1 → kein Retry (Alt-Verhalten)', async () => {
+    const fetchCard = vi.fn(async () => { throw new Error('x'); });
+    const delay = vi.fn(async () => {});
+    const r = await learnInboundPeer(deps({ fetchCard, delay, maxFetchAttempts: 1 }));
+    expect(r).toBe('fetch-failed');
+    expect(fetchCard).toHaveBeenCalledTimes(1);
+    expect(delay).not.toHaveBeenCalled();
   });
 
   it('MEDIUM: IPv4-mapped/IPv6 remoteAddress wird URL-sicher gebracketet (kein kaputter Endpoint)', async () => {

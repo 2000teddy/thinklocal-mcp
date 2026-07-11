@@ -36,6 +36,15 @@ export interface LearnInboundPeerDeps {
   rateLimitOk: () => boolean;
   /** Holt + validiert die Agent-Card via mTLS von endpoint. */
   fetchCard: (endpoint: string) => Promise<{ spiffeUri?: string; publicKey?: string } | null>;
+  /** ADR-035 A3: max. Card-Fetch-Versuche bei TRANSIENTEM Fehler (Default 3). Ein Peer, dessen
+   *  HTTP-Server während einer Neustart-Welle noch nicht oben ist, wirft (ECONNREFUSED) — Retry
+   *  statt sofortigem Aufgeben. Ein erfolgreicher Fetch mit ungültiger Card wird NICHT wiederholt. */
+  maxFetchAttempts?: number;
+  /** Backoff-Delays (ms) zwischen den Versuchen; Default [500, 1500, 4000]. Letzter Wert wird für
+   *  weitere Versuche wiederverwendet. Injizierbar für deterministische Tests. */
+  fetchBackoffMs?: readonly number[];
+  /** Injizierbarer Delay (Test-Hook); Default `setTimeout`-Promise. */
+  delay?: (ms: number) => Promise<void>;
   /** Schreibt den AUTHN-only-Eintrag (mesh.recordAuthenticatedSeen). */
   record: (e: { peerId: string; publicKey: string; spiffeUri: string; certFingerprint: string; endpoint: string }) => void;
   /** Audit-Hook (PEER_OBSERVED). */
@@ -70,12 +79,35 @@ export async function learnInboundPeer(d: LearnInboundPeerDeps): Promise<LearnRe
     return 'fetch-failed';
   }
   const endpoint = `https://${hostForUrl(d.remoteAddress)}:${d.port}`;
-  let card: { spiffeUri?: string; publicKey?: string } | null;
-  try {
-    card = await d.fetchCard(endpoint);
-  } catch (err) {
-    d.log?.debug({ peerId: d.peerId, endpoint, err: (err as Error)?.message }, '[discovery] ADR-026: Card-Fetch fehlgeschlagen');
-    return 'fetch-failed';
+  // ADR-035 A3: Retry mit Backoff NUR bei transientem Fetch-Throw (Wellen-Recovery). Ein
+  // erfolgreicher Fetch (auch mit null/ungültiger Card) beendet die Schleife — eine ungültige
+  // Card ist ein permanenter Reject unten, kein transienter Fehler (kein Loop).
+  const maxAttempts = Math.max(1, d.maxFetchAttempts ?? 3);
+  const backoff = d.fetchBackoffMs ?? [500, 1500, 4000];
+  // Default-Delay: Timer ge-unref't → ein Learn, das bei SIGTERM/SIGINT mitten im Backoff
+  // hängt, hält den Event-Loop nicht offen (fire-and-forget; kein Shutdown-Stau).
+  const delay =
+    d.delay ??
+    ((ms: number): Promise<void> =>
+      new Promise((r) => {
+        const t = setTimeout(r, ms);
+        (t as { unref?: () => void }).unref?.();
+      }));
+  let card: { spiffeUri?: string; publicKey?: string } | null = null;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      card = await d.fetchCard(endpoint);
+      break;
+    } catch (err) {
+      if (attempt >= maxAttempts) {
+        d.log?.debug(
+          { peerId: d.peerId, endpoint, attempt, err: (err as Error)?.message },
+          '[discovery] ADR-026/035: Card-Fetch endgültig fehlgeschlagen (Retries erschöpft)',
+        );
+        return 'fetch-failed';
+      }
+      await delay(backoff[Math.min(attempt - 1, backoff.length - 1)] ?? 0);
+    }
   }
   // (4) Card-Validierung: PublicKey vorhanden UND Card-SAN == attestierte PeerID.
   if (!card?.publicKey || card.spiffeUri !== d.expectedSpiffeUri) {
