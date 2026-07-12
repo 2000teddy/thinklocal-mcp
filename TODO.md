@@ -98,13 +98,14 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
   unmittelbar folgen** — A1 allein behebt den Outage nicht.
   - ⏳ **Cross-Vendor-CO-Follow-up:** GPT-5/Gemini liefen nicht (codex/agy nicht im PATH); CO lief auf
     2 Claude-CLI-Modellen. Bei Bedarf stärkeren Cross-Vendor-CO aus einer Shell mit codex/agy nachziehen.
-- [ ] **[v5.1] TL-27 (≈3 h)** Aggressives Boot-Re-Learn (ADR-035 A2): beim Start proaktiv Cache- +
-  paired-peers-Card-Fetch (mit TL-25-Backoff) statt auf Inbound zu warten. Konsumiert die
-  A1-Boot-Ziele (`mesh.getBootReLearnTargets()`). **CO-Invarianten VOR A2-Code (aus TL-26-CO):**
-  **INV-A2-1** Re-Learn revalidiert IMMER die volle Issuer-Chain + SPIFFE-Grammatik, **niemals**
-  Shortcut über den gecachten `certFingerprint` (sonst A4b-Klasse via Platten-Fingerprint);
-  **INV-A2-2** Re-Learn-Endpoints strikt auf das Discovery-Subnetz (`allowed_mesh_cidrs`)
-  beschränken + Timeout + Rate-Limit (SSRF-nah). ⚠️ eigener CO-Mini-Check empfohlen.
+- [x] **[v5.1] TL-27** Aggressives Boot-Re-Learn (ADR-035 A2). *Erledigt: dieser PR.* Konsumiert die
+  A1-Boot-Ziele (`mesh.getBootReLearnTargets()`), stellt die AUTHN-Auflösung nach Restart selbst her.
+  **INV-A2-1** erfüllt: je Dial ein dedizierter, HART auf `expectedSpiffeUri` gepinnter mTLS-Dial
+  (`spiffeServerIdentity:true` nur für diesen Dial + `makeMeshCheckServerIdentity` → volle Chain +
+  SPIFFE-SAN-Match, unabhängig vom global-AUS D2b-Flag; `certFingerprint` bleibt HINT). **INV-A2-2**
+  erfüllt: `isReLearnHostAllowed`-SSRF-Gate + Timeout + Rate-Limit. Kein neuer CO nötig (Primitive
+  `verifyMeshServerIdentity` schon ADR-028-D2b-CO-blessed; A2 wendet sie maximal strikt an). **Offen:
+  Zwei-Peer-Restart-Live-Proof** (Peer-Fenster).
 - [x] **[v5.1] TL-28** Periodisches mDNS-Re-Query (ADR-035 A4a). *Erledigt: dieser PR (`reQuery()`/`resolveMdnsRequeryIntervalMs`).*
 - [ ] **[v5.1] TL-28b (gated)** Identitäts-gebundener `remoteAddress`-Fallback (ADR-035 A4b). Aus PR #258 **verschoben** (Codex CHANGES-NEEDED): naiver Fallback ist kein AUTHN-neutraler Pfad — die self-asserted Card-`publicKey` ist nicht ans Transport-Cert gebunden. Erst aktivieren, wenn die Learner-Card-Fetch auf `expectedSpiffeUri` gepinnt ist (D2b `spiffeServerIdentity`, Christian-Gate) + Adversarial-Regressionstest.
 - [ ] **[v5.1] TL-29 (≈5 h)** Hub-verankerte Pull-Discovery (ADR-035 B): `/api/mesh/peers`-Endpoint (mTLS)

@@ -1650,6 +1650,14 @@ CHANGES.md, `changes/2026-07-07_doc-compliance-gate.md`, dieser Eintrag; Rollen/
 
 **Typ:** Daemon-Code + Config + Design-Doku. ADR-035 Slice **A1** (TL-26): Peer-Auflösungs-Cache **Locator-only** (kein publicKey auf Platte → Datei ist strukturell keine AUTHN-Trust-Quelle), TTL 14d/512 LRU, fail-closed-Parsing, atomarer chmod-600-Write, `peer_cache_enabled` (Default true). **Verhaltens-inert** (nur Schreiben/Laden der Boot-Re-Learn-Ziele; kein Auflösungspfad) — **A2/TL-27 muss unmittelbar folgen** (CO-Auflage, A2-Invarianten im TL-27-Eintrag hinterlegt). Additiv/rückwärtskompatibel, kein Deploy/Secret/Gate. **CO:** ✅ (bindend Option A). **CG:** n/a. **TS/CR/PC:** s. Zeile. **DO:** CO-Brief, `docs/architecture/ADR-035-…` (indirekt), `config/daemon.toml`, `TODO.md` (TL-26 ✅ / TL-27-Invarianten), `changes/2026-07-12_adr035-a1-peer-cache-persistence.md`, `CHANGES.md`, dieser Eintrag.
 
+## Sweep 2026-07-12 11:43 — feat(discovery): ADR-035 A2 proaktives Boot-Re-Learn (TL-27)
+
+| #        | PR    | Datum            | CO  | CG  | TS  | CR  | PC  | DO | Findings                           |
+|----------|-------|------------------|-----|-----|-----|-----|-----|----|------------------------------------|
+| adr035-a2 | (offen, base=main) | 2026-07-12 11:43 | ✅(n/a-neu) | n/a | ✅ | ✅ | ✅ | ✅ | CO: **kein neuer CO** — die Attestierungs-Primitive `verifyMeshServerIdentity`(hartes `expectedSpiffeId`) ist bereits ADR-028-D2b-CO-blessed (2026-06-16, beide Modelle, fail-closed); A2 wendet sie maximal strikt an (kein TOFU, PeerID aus A1-Cache). A2-Invarianten aus dem A1-CO. CG: n/a. TS: +20 Tests (INV-A2-1 fetch-bekommt-expectedSpiffeUri + Card-SAN≠expected→rejected; INV-A2-2 endpoint-blocked/SSRF-Matrix; Wellen-Recovery/Backoff/Rate-Limit); 1554 grün, tsc sauber, keine neuen ESLint-Errors. CR: claude-Subagent (adversarial, **Pin-Enforcement-Fokus** — höchstes Risiko: schreibt in authenticatedSeen aus Outbound-Fetch) — **APPROVE, kein HIGH**; Pin end-to-end verifiziert (volle Chain + harter SPIFFE-SAN-Match, kein Skip via disablePinning, A4b nicht reintroduced). MED (unbounded res.json()) **in-slice gefixt** via `readCappedText` (256 KiB-Limit); 3 LOW deferred (dokumentiert, keine Identity-Defekte). PC: `git diff` — boot-relearn/index + Tests + Doku. |
+
+**Typ:** Daemon-Code. ADR-035 Slice **A2** (TL-27): proaktives Boot-Re-Learn aus dem A1-Cache stellt die AUTHN-Auflösung nach Restart selbst wieder her. **Sicherheits-Kern:** OUTBOUND-Fetch → je Dial ein dedizierter, HART auf `expectedSpiffeUri` gepinnter mTLS-Dial (unabhängig vom global-AUS D2b-Flag) → A4b-Klasse ausgeschlossen; `certFingerprint`=HINT; SSRF-Gate + Timeout + Rate-Limit. Neu: `boot-relearn.ts` (rein). Additiv, kein Deploy/Secret/Gate. **CO:** n/a-neu (Primitive schon CO-blessed). **CG:** n/a. **TS/CR/PC:** s. Zeile. **DO:** `changes/2026-07-12_adr035-a2-boot-relearn.md`, `CHANGES.md`, `TODO.md` (TL-27 ✅), dieser Eintrag.
+
 ---
 
-*Letzte Aktualisierung: 2026-07-12 11:00 — feat(discovery): ADR-035 A1 Peer-Cache-Persistenz (Locator-only, TL-26).*
+*Letzte Aktualisierung: 2026-07-12 11:43 — feat(discovery): ADR-035 A2 proaktives Boot-Re-Learn (TL-27).*
