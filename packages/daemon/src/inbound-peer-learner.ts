@@ -34,8 +34,23 @@ export interface LearnInboundPeerDeps {
   isAlreadyResolvable: () => boolean;
   /** Rate-Limit-Gate pro attestierter PeerID (konservativste Achse). true = erlaubt. */
   rateLimitOk: () => boolean;
-  /** Holt + validiert die Agent-Card via mTLS von endpoint. */
+  /** Holt + validiert die Agent-Card via mTLS von endpoint (Source-IP-Pfad: die Adresse IST der
+   *  authentifizierte Peer der Inbound-Verbindung → kein Server-Identity-Pin nötig). */
   fetchCard: (endpoint: string) => Promise<{ spiffeUri?: string; publicKey?: string } | null>;
+  /** ADR-035 A4b: liefert eine bekannte (mDNS-/Discovery-) Adresse für diesen Peer, falls die
+   *  TLS-`remoteAddress` leer ist (bestimmte Cross-Subnet/NAT-Inbounds liefern keine Source-IP).
+   *  Ohne Treffer (undefined) → fail-closed. */
+  resolveFallbackAddress?: () => string | undefined;
+  /** ADR-035 A4b (CR-LOW, Defense-in-depth analog A2/INV-A2-2): gated die Fallback-Adresse auf das
+   *  erlaubte Discovery-Subnetz VOR dem Dial. Der Pin schützt die Identität; dies begrenzt zusätzlich
+   *  die Ziel-Fläche (kein Handshake-Versuch gegen beliebige/loopback-Adressen). Ohne Dep ungated. */
+  isFallbackAddressAllowed?: (host: string) => boolean;
+  /** ADR-035 A4b: Card-Fetch, der die Server-Identität HART auf `expectedSpiffeUri` pinnt. Wird
+   *  AUSSCHLIESSLICH für den Fallback-Pfad genutzt: die Fallback-Adresse ist NICHT die
+   *  authentifizierte Source-IP, also muss der Dial kryptografisch an die erwartete PeerID gebunden
+   *  sein — sonst könnte ein vergifteter Discovery-Eintrag eine fremde Identität attestieren
+   *  (A4b-Fehlerklasse, s. Codex-Review #258). Fehlt die Dep → Fallback deaktiviert (fail-closed). */
+  fetchCardPinned?: (endpoint: string, expectedSpiffeUri: string) => Promise<{ spiffeUri?: string; publicKey?: string } | null>;
   /** ADR-035 A3: max. Card-Fetch-Versuche bei TRANSIENTEM Fehler (Default 3). Ein Peer, dessen
    *  HTTP-Server während einer Neustart-Welle noch nicht oben ist, wirft (ECONNREFUSED) — Retry
    *  statt sofortigem Aufgeben. Ein erfolgreicher Fetch mit ungültiger Card wird NICHT wiederholt. */
@@ -74,11 +89,33 @@ export async function learnInboundPeer(d: LearnInboundPeerDeps): Promise<LearnRe
   // CR gpt-5.5 MEDIUM: leere remoteAddress → kein valider Endpoint; IPv6 / IPv4-mapped
   // (`::ffff:10.10.10.80`) müssen für die URL entmappt/gebracketet werden, sonst ist die URL
   // ungültig und das Learning schlägt für solche Verbindungen unnötig fehl.
-  if (!d.remoteAddress) {
-    d.log?.warn({ peerId: d.peerId }, '[discovery] ADR-026: leere remoteAddress — kein Card-Fetch');
-    return 'fetch-failed';
+  // ADR-035 A4b: Fetch-Adresse + -Modus bestimmen. Regelfall = die authentifizierte TLS-Source-IP
+  // (kein Pin nötig — sie IST der attestierte Peer). Leere remoteAddress (Cross-Subnet/NAT) →
+  // bekannte Discovery-Adresse substituieren, ABER dann NUR über den server-identity-GEPINNTEN
+  // Fetch (fetchCardPinned): die Fallback-Adresse ist unauthentifiziert, also muss der Dial
+  // kryptografisch an expectedSpiffeUri gebunden sein (sonst A4b-Fehlerklasse). Ohne Fallback-
+  // Adresse ODER ohne gepinnte Fetch-Dep bleibt es fail-closed.
+  let fetchAddress = d.remoteAddress;
+  // Regelfall: Source-IP-Fetch (ungepinnt — Adresse IST der attestierte Peer).
+  let doFetch = d.fetchCard;
+  if (!fetchAddress) {
+    const fallback = d.resolveFallbackAddress?.();
+    const pinnedFetch = d.fetchCardPinned;
+    if (!fallback || !pinnedFetch) {
+      d.log?.warn({ peerId: d.peerId, hasFallback: !!fallback, hasPinnedFetch: !!pinnedFetch }, '[discovery] ADR-026/035 A4b: leere remoteAddress, kein gepinnter Fallback — kein Card-Fetch');
+      return 'fetch-failed';
+    }
+    // CR-LOW: Fallback-Adresse zusätzlich auf das erlaubte Discovery-Subnetz gaten (Defense-in-depth).
+    if (d.isFallbackAddressAllowed && !d.isFallbackAddressAllowed(fallback)) {
+      d.log?.warn({ peerId: d.peerId, fallback }, '[discovery] ADR-035 A4b: Fallback-Adresse außerhalb erlaubtem Discovery-Subnetz — kein Card-Fetch');
+      return 'fetch-failed';
+    }
+    fetchAddress = fallback;
+    // Fallback-Adresse ist unauthentifiziert → NUR gepinnter Fetch (bindet an expectedSpiffeUri).
+    doFetch = (ep: string) => pinnedFetch(ep, d.expectedSpiffeUri);
+    d.log?.debug({ peerId: d.peerId, fallback }, '[discovery] ADR-035 A4b: leere remoteAddress → bekannte Adresse via GEPINNTEM Fetch');
   }
-  const endpoint = `https://${hostForUrl(d.remoteAddress)}:${d.port}`;
+  const endpoint = `https://${hostForUrl(fetchAddress)}:${d.port}`;
   // ADR-035 A3: Retry mit Backoff NUR bei transientem Fetch-Throw (Wellen-Recovery). Ein
   // erfolgreicher Fetch (auch mit null/ungültiger Card) beendet die Schleife — eine ungültige
   // Card ist ein permanenter Reject unten, kein transienter Fehler (kein Loop).
@@ -96,7 +133,7 @@ export async function learnInboundPeer(d: LearnInboundPeerDeps): Promise<LearnRe
   let card: { spiffeUri?: string; publicKey?: string } | null = null;
   for (let attempt = 1; ; attempt++) {
     try {
-      card = await d.fetchCard(endpoint);
+      card = await doFetch(endpoint);
       break;
     } catch (err) {
       if (attempt >= maxAttempts) {

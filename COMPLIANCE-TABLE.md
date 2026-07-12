@@ -1658,6 +1658,14 @@ CHANGES.md, `changes/2026-07-07_doc-compliance-gate.md`, dieser Eintrag; Rollen/
 
 **Typ:** Daemon-Code. ADR-035 Slice **A2** (TL-27): proaktives Boot-Re-Learn aus dem A1-Cache stellt die AUTHN-Auflösung nach Restart selbst wieder her. **Sicherheits-Kern:** OUTBOUND-Fetch → je Dial ein dedizierter, HART auf `expectedSpiffeUri` gepinnter mTLS-Dial (unabhängig vom global-AUS D2b-Flag) → A4b-Klasse ausgeschlossen; `certFingerprint`=HINT; SSRF-Gate + Timeout + Rate-Limit. Neu: `boot-relearn.ts` (rein). Additiv, kein Deploy/Secret/Gate. **CO:** n/a-neu (Primitive schon CO-blessed). **CG:** n/a. **TS/CR/PC:** s. Zeile. **DO:** `changes/2026-07-12_adr035-a2-boot-relearn.md`, `CHANGES.md`, `TODO.md` (TL-27 ✅), dieser Eintrag.
 
+## Sweep 2026-07-12 12:07 — feat(discovery): ADR-035 A4b identitäts-gebundener Inbound-Fallback (TL-28b)
+
+| #        | PR    | Datum            | CO  | CG  | TS  | CR  | PC  | DO | Findings                           |
+|----------|-------|------------------|-----|-----|-----|-----|-----|----|------------------------------------|
+| adr035-a4b | (offen, base=main) | 2026-07-12 12:07 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | CO: n/a (Pin-Muster + Primitive schon in A2/D2b-CO etabliert; kein neuer Design-Fork — Anwendung auf den Inbound-Fallback). CG: n/a. TS: +7 Tests (Fallback nur GEPINNT + expectedSpiffeUri-Pin-Ziel; **SECURITY: ohne Pin-Dep fail-closed / Fremd-Card→rejected**; Source-IP-Pfad ungepinnt unverändert; Retry; CR-LOW-1 Subnetz-Gate); 1561 grün, tsc sauber, keine neuen ESLint-Errors. CR: claude-Subagent (adversarial, „Fallback-nur-gepinnt"-Fokus — reaktiviert die #258-Codex-Lücke) — **APPROVE, kein HIGH/MED**; Fallback end-to-end pinned-only verifiziert (kein ungepinnter Pfad; poisoned-host→Handshake-Abbruch). LOW-1 (Fallback-Subnetz-Gate) **in-slice gefixt**; LOW-2 (Retry bei Pin-Mismatch) akzeptiert. PC: `git diff` — pinned-card-fetch(neu)/learner/index + Tests + Doku. |
+
+**Typ:** Daemon-Code. ADR-035 Slice **A4b** (TL-28b): reaktiviert den in #258 verschobenen `remoteAddress`-Fallback **identitäts-gebunden** — der Fallback-Fetch läuft NUR über einen per-Dial hart auf `expectedSpiffeUri` gepinnten mTLS (`pinned-card-fetch.ts`, aus A2 extrahiert/geteilt), unabhängig vom global-aus D2b-Flag → **kein Christian-Gate mehr** (das frühere „gated" ist aufgehoben). Source-IP-Pfad unverändert; fehlt Adresse/Pin-Dep → fail-closed. Additiv, kein Deploy/Secret/Gate. **CO/CG:** n/a. **TS/CR/PC:** s. Zeile. **DO:** `changes/2026-07-12_adr035-a4b-inbound-fallback.md`, `CHANGES.md`, `TODO.md` (TL-28b ✅), dieser Eintrag.
+
 ---
 
-*Letzte Aktualisierung: 2026-07-12 11:43 — feat(discovery): ADR-035 A2 proaktives Boot-Re-Learn (TL-27).*
+*Letzte Aktualisierung: 2026-07-12 12:07 — feat(discovery): ADR-035 A4b identitäts-gebundener Inbound-Fallback (TL-28b).*

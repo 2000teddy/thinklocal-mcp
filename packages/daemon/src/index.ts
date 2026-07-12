@@ -45,8 +45,8 @@ import { registerCertIssuanceApi } from './cert-issuance-api.js';
 import { readFileSync, mkdirSync } from 'node:fs';
 import { writeAtomic } from './atomic-write.js';
 import { serializeCache, parseCache, mergeLocators } from './peer-cache.js';
-import { relearnPeer, isReLearnHostAllowed, readCappedText, MAX_CARD_BODY_BYTES } from './boot-relearn.js';
-import { makeMeshCheckServerIdentity } from './mesh-server-identity.js';
+import { relearnPeer, isReLearnHostAllowed } from './boot-relearn.js';
+import { fetchAgentCardPinned } from './pinned-card-fetch.js';
 import { CredentialVault } from './vault.js';
 import { loadOrCreateVaultPassphrase } from './vault-passphrase.js';
 import { isLoopbackHost } from './runtime-mode.js';
@@ -618,39 +618,14 @@ async function main(): Promise<void> {
             isAlreadyResolvable: () => mesh.resolvePeerPublicKey(t.spiffeUri) !== undefined,
             isEndpointAllowed: (h) => isReLearnHostAllowed(h, allowedCidrs),
             rateLimitOk: () => rateLimiter.allow(`adr035-relearn:${t.peerId}`),
-            fetchCardPinned: async (endpoint, expectedSpiffeUri) => {
-              // Dedizierter, HART auf expectedSpiffeUri gepinnter mTLS-Dial (INV-A2-1). Erzwingt
-              // spiffeServerIdentity für DIESEN Dial unabhängig von der globalen Policy; der
-              // Verifier verlangt einen SPIFFE-SAN-Match == expectedSpiffeUri (fail-closed).
-              const pinnedAgent = new UndiciAgent({
-                connect: buildMeshConnector(
-                  { ca: initialCaBundle, cert: tlsBundle.certPem, key: tlsBundle.keyPem },
-                  { ...outboundConnectPolicy, spiffeServerIdentity: true },
-                  log,
-                  makeMeshCheckServerIdentity(() => expectedSpiffeUri),
-                ),
-              });
-              try {
-                const res = await fetch(`${endpoint}/.well-known/agent-card.json`, {
-                  signal: AbortSignal.timeout(5_000),
-                  dispatcher: pinnedAgent,
-                });
-                if (!res.ok || !res.body) {
-                  await res.body?.cancel().catch(() => {});
-                  return null;
-                }
-                // CR MED: byte-begrenzt lesen (Timeout begrenzt nur die Zeit, nicht die Größe).
-                const text = await readCappedText(res.body, MAX_CARD_BODY_BYTES);
-                if (text === null) {
-                  log.warn({ peerId: t.peerId, endpoint }, '[discovery] ADR-035 A2: Card-Body zu groß — verworfen');
-                  return null;
-                }
-                const card = JSON.parse(text) as AgentCard;
-                return { spiffeUri: card.spiffeUri, publicKey: card.publicKey };
-              } finally {
-                await pinnedAgent.close().catch(() => {});
-              }
-            },
+            // Dedizierter, HART auf expectedSpiffeUri gepinnter mTLS-Dial (INV-A2-1) — geteilte,
+            // reviewte Implementierung (auch von A4b/Inbound-Fallback genutzt).
+            fetchCardPinned: (endpoint, expectedSpiffeUri) =>
+              fetchAgentCardPinned(endpoint, expectedSpiffeUri, {
+                tls: { ca: initialCaBundle, cert: tlsBundle.certPem, key: tlsBundle.keyPem },
+                outboundConnectPolicy,
+                log,
+              }),
             record: (e) => mesh.recordAuthenticatedSeen(e),
             audit: (a) => audit.append('PEER_OBSERVED', a.peerId, `${a.endpoint} (boot-relearn)`),
             log,
@@ -738,6 +713,20 @@ async function main(): Promise<void> {
               const card = (await res.json()) as AgentCard;
               return { spiffeUri: card.spiffeUri, publicKey: card.publicKey };
             },
+            // ADR-035 A4b: leere TLS-remoteAddress → bekannte Discovery-Adresse dieses Peers als
+            // Fallback, aber NUR über den server-identity-gepinnten Fetch (unauthentifizierte
+            // Adresse ⇒ Dial muss kryptografisch an expectedSpiffeUri gebunden sein). Ohne
+            // TLS-Bundle bleibt fetchCardPinned undefiniert → Fallback deaktiviert (fail-closed).
+            resolveFallbackAddress: () => mesh.getPeer(peerIdToSpiffeUri(info.peerId))?.host,
+            isFallbackAddressAllowed: (h) => isReLearnHostAllowed(h, config.discovery.allowed_mesh_cidrs),
+            fetchCardPinned: tlsBundle
+              ? (endpoint, expectedSpiffeUri) =>
+                  fetchAgentCardPinned(endpoint, expectedSpiffeUri, {
+                    tls: { ca: initialCaBundle, cert: tlsBundle.certPem, key: tlsBundle.keyPem },
+                    outboundConnectPolicy,
+                    log,
+                  })
+              : undefined,
             record: (e) => mesh.recordAuthenticatedSeen(e),
             audit: (a) => audit.append('PEER_OBSERVED', a.peerId, `${a.endpoint} fp=${a.certFingerprint.slice(0, 16)}`),
             log,

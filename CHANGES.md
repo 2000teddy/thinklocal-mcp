@@ -8,6 +8,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(discovery): ADR-035 A4b — identitäts-gebundener Inbound-Fallback (TL-28b) (2026-07-12 12:07)
+
+Reaktiviert den in #258 (Codex CHANGES-NEEDED) verschobenen `remoteAddress`-Fallback im ADR-026-
+Inbound-Learner — jetzt **identitäts-gebunden**. Bei leerer TLS-Source-IP (Cross-Subnet/NAT) wird
+die bekannte Discovery-Adresse substituiert, aber der Fetch läuft **ausschließlich** über einen
+**per-Dial hart auf `expectedSpiffeUri` gepinnten** mTLS (volle Chain + SPIFFE-SAN-Match, unabhängig
+vom global-aus D2b-Flag) → eine vergiftete Adresse kann keine fremde Identität attestieren (schließt
+die von Codex beanstandete A4b-Lücke). Source-IP-Pfad unverändert; fehlt Adresse/Pin-Dep →
+fail-closed. Die A2-Pin-Naht ist als geteiltes `pinned-card-fetch.ts` extrahiert (eine reviewte
+Implementierung für A2 + A4b). Kein Christian-Gate mehr nötig (Per-Dial-Pin statt globalem D2b).
++7 Tests (1561 grün), tsc sauber. Kein Deploy. Schließt die ADR-035-A-Reihe.
+
 ### feat(discovery): ADR-035 A2 — proaktives Boot-Re-Learn (TL-27) (2026-07-12 11:43)
 
 Schließt die A1+A2-Kette: A1 persistiert die Boot-Ziele, A2 stellt die AUTHN-Auflösung nach einem
