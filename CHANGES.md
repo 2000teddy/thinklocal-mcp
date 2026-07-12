@@ -8,6 +8,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(discovery): ADR-035 A2 — proaktives Boot-Re-Learn (TL-27) (2026-07-12 11:43)
+
+Schließt die A1+A2-Kette: A1 persistiert die Boot-Ziele, A2 stellt die AUTHN-Auflösung nach einem
+Restart **selbst** wieder her (proaktiver Card-Fetch je Cache-Ziel statt auf Inbound zu warten) →
+behebt „Unknown sender" nach Neustart-Wellen ohne static_peers/mDNS-Glück. **Sicherheits-Kern:** ein
+OUTBOUND-Fetch hat keinen client-cert-Anker, und der globale D2b-Server-Pin ist default-AUS — A2 baut
+daher **je Dial einen dedizierten, HART auf die erwartete kanonische PeerID gepinnten** mTLS-Dial
+(`spiffeServerIdentity:true` nur für diesen Dial + `makeMeshCheckServerIdentity(()=>expectedSpiffeUri)`
+→ volle Chain + SPIFFE-SAN-Match, fail-closed) → ein vergifteter Platten-Endpoint kann keine fremde
+Identität attestieren (A4b-Klasse ausgeschlossen). `certFingerprint` bleibt HINT (nie Accept-Gate).
+INV-A2-2: `isReLearnHostAllowed`-SSRF-Gate (nur Discovery-Subnetz/RFC1918, Loopback/public/hostname
+verworfen) + 5s-Timeout + Rate-Limit. Neu: `boot-relearn.ts` (rein). +20 Tests (1554 grün), tsc sauber.
+Kein Deploy.
+
 ### feat(discovery): ADR-035 A1 — Peer-Cache-Persistenz (Locator-only, TL-26) (2026-07-12 11:00)
 
 Behebt Root-Cause-Ebene 1 der Neustart-Wellen (MeshManager rein In-Memory → Restart-Amnesie): der

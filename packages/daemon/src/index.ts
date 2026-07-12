@@ -45,6 +45,8 @@ import { registerCertIssuanceApi } from './cert-issuance-api.js';
 import { readFileSync, mkdirSync } from 'node:fs';
 import { writeAtomic } from './atomic-write.js';
 import { serializeCache, parseCache, mergeLocators } from './peer-cache.js';
+import { relearnPeer, isReLearnHostAllowed, readCappedText, MAX_CARD_BODY_BYTES } from './boot-relearn.js';
+import { makeMeshCheckServerIdentity } from './mesh-server-identity.js';
 import { CredentialVault } from './vault.js';
 import { loadOrCreateVaultPassphrase } from './vault-passphrase.js';
 import { isLoopbackHost } from './runtime-mode.js';
@@ -588,6 +590,82 @@ async function main(): Promise<void> {
       void flushPeerCache();
     }, 5 * 60_000);
     peerCacheFlushTimer.unref();
+
+    // ADR-035 A2 (TL-27): proaktives Boot-Re-Learn der geladenen Cache-Ziele. Stellt die AUTHN-
+    // Auflösung nach einem Restart selbst wieder her (statt auf einen Inbound zu warten). Fire-and-
+    // forget (blockiert den Start nicht). NUR mit TLS-Bundle (mTLS-Pinning nötig).
+    // INV-A2-1: jeder Dial pinnt die Server-Identität HART auf die erwartete kanonische PeerID
+    // (`makeMeshCheckServerIdentity(() => expectedSpiffeUri)`), volle Chain (`rejectUnauthorized`),
+    // UNABHÄNGIG vom global-default-AUS D2b-Flag — ein vergifteter Platten-Endpoint kann so keine
+    // fremde Identität attestieren (Handshake bricht ab). INV-A2-2: nur erlaubte Discovery-Subnetz-
+    // Adressen (isReLearnHostAllowed) + 5s-Timeout + Rate-Limit.
+    if (tlsBundle) {
+      const relearnTargets = mesh.getBootReLearnTargets();
+      const allowedCidrs = config.discovery.allowed_mesh_cidrs;
+      const runBootReLearn = async (): Promise<void> => {
+        for (const t of relearnTargets) {
+          let host: string;
+          try {
+            host = new URL(t.endpoint).hostname;
+          } catch {
+            continue; // defekter Endpoint → überspringen (parseCache sollte das schon filtern)
+          }
+          const result = await relearnPeer({
+            peerId: t.peerId,
+            expectedSpiffeUri: t.spiffeUri,
+            endpoint: t.endpoint,
+            host,
+            isAlreadyResolvable: () => mesh.resolvePeerPublicKey(t.spiffeUri) !== undefined,
+            isEndpointAllowed: (h) => isReLearnHostAllowed(h, allowedCidrs),
+            rateLimitOk: () => rateLimiter.allow(`adr035-relearn:${t.peerId}`),
+            fetchCardPinned: async (endpoint, expectedSpiffeUri) => {
+              // Dedizierter, HART auf expectedSpiffeUri gepinnter mTLS-Dial (INV-A2-1). Erzwingt
+              // spiffeServerIdentity für DIESEN Dial unabhängig von der globalen Policy; der
+              // Verifier verlangt einen SPIFFE-SAN-Match == expectedSpiffeUri (fail-closed).
+              const pinnedAgent = new UndiciAgent({
+                connect: buildMeshConnector(
+                  { ca: initialCaBundle, cert: tlsBundle.certPem, key: tlsBundle.keyPem },
+                  { ...outboundConnectPolicy, spiffeServerIdentity: true },
+                  log,
+                  makeMeshCheckServerIdentity(() => expectedSpiffeUri),
+                ),
+              });
+              try {
+                const res = await fetch(`${endpoint}/.well-known/agent-card.json`, {
+                  signal: AbortSignal.timeout(5_000),
+                  dispatcher: pinnedAgent,
+                });
+                if (!res.ok || !res.body) {
+                  await res.body?.cancel().catch(() => {});
+                  return null;
+                }
+                // CR MED: byte-begrenzt lesen (Timeout begrenzt nur die Zeit, nicht die Größe).
+                const text = await readCappedText(res.body, MAX_CARD_BODY_BYTES);
+                if (text === null) {
+                  log.warn({ peerId: t.peerId, endpoint }, '[discovery] ADR-035 A2: Card-Body zu groß — verworfen');
+                  return null;
+                }
+                const card = JSON.parse(text) as AgentCard;
+                return { spiffeUri: card.spiffeUri, publicKey: card.publicKey };
+              } finally {
+                await pinnedAgent.close().catch(() => {});
+              }
+            },
+            record: (e) => mesh.recordAuthenticatedSeen(e),
+            audit: (a) => audit.append('PEER_OBSERVED', a.peerId, `${a.endpoint} (boot-relearn)`),
+            log,
+          }).catch((err) => {
+            log.debug({ err: (err as Error)?.message, peerId: t.peerId }, '[discovery] ADR-035 A2: Re-Learn-Fehler');
+            return 'fetch-failed' as const;
+          });
+          log.debug({ peerId: t.peerId, result }, '[discovery] ADR-035 A2: Boot-Re-Learn-Ergebnis');
+        }
+        if (relearnTargets.length > 0) {
+          log.info({ count: relearnTargets.length }, '[discovery] ADR-035 A2: Boot-Re-Learn abgeschlossen');
+        }
+      };
+      void runBootReLearn();
+    }
   }
 
   // 7. Gossip-Sync initialisieren
