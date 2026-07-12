@@ -58,6 +58,14 @@ disable_mdns_interface_pin = false
 # Der periodische Re-Query (Browser.update()) schliesst das Fenster ohne static_peers.
 # 0 = deaktiviert; sonst auf min. 5000 ms geklemmt. Default 30000. Env: TLMCP_MDNS_REQUERY_MS.
 # mdns_requery_interval_ms = 30000
+#
+# ADR-035 A1 (TL-26): Peer-Auflösungs-Cache (Locator-only) nach data_dir/mesh/peer-cache.json
+# persistieren, damit gelernte Peers einen Daemon-Restart ueberleben (Neustart-Wellen heilen ohne
+# static_peers). Locator-only = KEIN publicKey auf Platte → die Datei ist NIE eine AUTHN-Trust-
+# Quelle; die Key-Bindung wird nach dem Boot frisch ueber live mTLS neu aufgebaut (A2/TL-27).
+# Default true; abschaltbar per TLMCP_PEER_CACHE_ENABLED=0. In A1 verhaltens-inert (nur Schreiben/
+# Laden der Boot-Re-Learn-Ziele); A2/TL-27 konsumiert sie.
+# peer_cache_enabled = true
 
 [libp2p]
 enabled = true                  # Wird im local-Modus implizit deaktiviert, ausser per Env-Override

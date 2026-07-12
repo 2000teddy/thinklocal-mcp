@@ -36,8 +36,15 @@ import { randomUUID } from 'node:crypto';
  *
  * @param path     absolute destination path
  * @param content  file body, any length
+ * @param opts     optional `{ mode }` — the temp file is created with this mode
+ *                 (window-free `chmod`, since the mode is set at create time and
+ *                 the atomic rename preserves it). Default: process umask.
  */
-export async function writeAtomic(path: string, content: string | Buffer): Promise<void> {
+export async function writeAtomic(
+  path: string,
+  content: string | Buffer,
+  opts?: { mode?: number },
+): Promise<void> {
   const dir = dirname(path);
   // Dot-prefix the temp name so `ls`/globs don't accidentally pick
   // it up, and UUID-suffix to avoid collisions between concurrent
@@ -48,7 +55,10 @@ export async function writeAtomic(path: string, content: string | Buffer): Promi
 
   let fh: Awaited<ReturnType<typeof open>> | undefined;
   try {
-    fh = await open(tmp, 'wx'); // wx = exclusive create, fail if exists
+    // wx = exclusive create, fail if exists. Mode (if given) is applied at
+    // create time → the file is never briefly world-readable (relevant for
+    // the ADR-035 peer-cache: chmod 600 without a 0644 window).
+    fh = opts?.mode !== undefined ? await open(tmp, 'wx', opts.mode) : await open(tmp, 'wx');
     await fh.writeFile(content);
     await fh.sync();
   } catch (err) {

@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
-import { resolve, join } from 'node:path';
+import { resolve, join, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { Agent as UndiciAgent, fetch } from 'undici';
 import { loadConfig } from './config.js';
@@ -42,7 +42,9 @@ import { registerTokenApi } from './token-api.js';
 import { onboardingPort } from './onboarding-port.js';
 import { CertIssuer, NonceStore, certFingerprint, resolveAttestingCaFingerprints } from './cert-issuer.js';
 import { registerCertIssuanceApi } from './cert-issuance-api.js';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdirSync } from 'node:fs';
+import { writeAtomic } from './atomic-write.js';
+import { serializeCache, parseCache, mergeLocators } from './peer-cache.js';
 import { CredentialVault } from './vault.js';
 import { loadOrCreateVaultPassphrase } from './vault-passphrase.js';
 import { isLoopbackHost } from './runtime-mode.js';
@@ -549,6 +551,44 @@ async function main(): Promise<void> {
     log,
     tlsDispatcher,
   );
+
+  // 6b. ADR-035 A1 (TL-26): Peer-Auflösungs-Cache (Locator-only) — Boot-Load + periodischer/
+  // Shutdown-Flush. CO-Entscheidung (pal:consensus 2026-07-12): Locator-only, KEIN publicKey auf
+  // Platte (Datei ist NIE AUTHN-Quelle). Verhaltens-inert in A1: die geladenen Ziele werden in
+  // mesh.setBootReLearnTargets hinterlegt, aber erst von A2/TL-27 (Boot-Re-Learn) konsumiert.
+  let peerCacheFlushTimer: ReturnType<typeof setInterval> | undefined;
+  const peerCachePath = join(config.daemon.data_dir, 'mesh', 'peer-cache.json');
+  const flushPeerCache = async (): Promise<void> => {
+    try {
+      mkdirSync(dirname(peerCachePath), { recursive: true });
+      // CR MEDIUM / CO §6.3: die noch gültigen Boot-Ziele mit dem Live-Snapshot mergen (Live gewinnt),
+      // sonst überschreibt ein Flush die durable Menge und offline-Peers verfallen vor ihrer TTL.
+      const locators = mergeLocators(mesh.exportSeenLocators(), mesh.getBootReLearnTargets());
+      await writeAtomic(peerCachePath, serializeCache(locators), { mode: 0o600 });
+    } catch (err) {
+      log.debug({ err: (err as Error)?.message }, '[discovery] ADR-035 A1: Peer-Cache-Flush fehlgeschlagen');
+    }
+  };
+  if (config.discovery.peer_cache_enabled) {
+    // Boot-Load — parseCache ist fail-closed (Müll/Schema-Bruch/abgelaufen → []).
+    try {
+      if (fsExistsSync(peerCachePath)) {
+        const loaded = parseCache(readFileSync(peerCachePath, 'utf-8'), Date.now());
+        mesh.setBootReLearnTargets(loaded);
+        log.info(
+          { count: loaded.length, path: peerCachePath },
+          '[discovery] ADR-035 A1: Peer-Cache geladen (Boot-Re-Learn-Ziele für A2/TL-27, inert)',
+        );
+      }
+    } catch (err) {
+      log.warn({ err: (err as Error)?.message }, '[discovery] ADR-035 A1: Peer-Cache-Load übersprungen (fail-closed)');
+    }
+    // Periodischer Flush (unref't → kein Shutdown-Stau); zusätzlich Shutdown-Flush unten.
+    peerCacheFlushTimer = setInterval(() => {
+      void flushPeerCache();
+    }, 5 * 60_000);
+    peerCacheFlushTimer.unref();
+  }
 
   // 7. Gossip-Sync initialisieren
   const gossip = new GossipSync(
@@ -1464,6 +1504,10 @@ async function main(): Promise<void> {
     clearInterval(certExpiryTimer); // T2.1
     clearInterval(resourceRefreshTimer); // T2.4
     if (mdnsRequeryTimer) clearInterval(mdnsRequeryTimer); // ADR-035 A4
+    if (peerCacheFlushTimer) clearInterval(peerCacheFlushTimer); // ADR-035 A1
+    // ADR-035 A1: letzter Locator-Snapshot vor dem Beenden, damit die seit dem letzten
+    // periodischen Flush gelernten Peers den Restart überleben (best-effort, blockiert nicht).
+    if (config.discovery.peer_cache_enabled) await flushPeerCache();
     telegramGateway?.stop();
     skillHealthMonitor.stop();
     gossip.stop();

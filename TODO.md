@@ -91,11 +91,20 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
 
 ### P0 — Discovery-Resilienz (ADR-035; Neustart-Wellen heilen nicht — Christian 11.07.)
 - [x] **[v5.1] TL-25a** Card-Fetch-Retry mit Backoff im Async-Learn (ADR-035 A3). *Erledigt: dieser PR.*
-- [ ] **[v5.1] TL-26 (≈4 h)** Peer-Cache-Persistenz (ADR-035 A1): verifizierte Auflösungen atomar nach
-  `data_dir/mesh/peer-cache.json` (AUTHN-only, `chmod 600`), beim Boot validierend laden + gegen Live-Cert
-  re-verifizieren. Kein Trust-Upgrade durch Cache. ⚠️ Trust-nah → CO (Konsens) vor dem Code.
+- [x] **[v5.1] TL-26** Peer-Cache-Persistenz (ADR-035 A1). *Erledigt: dieser PR.* CO (`pal:consensus`,
+  einstimmig **Option A / Locator-only**, s. `docs/architecture/ADR-035-A1-peer-cache-CO-brief.md`):
+  persistiert NUR Locator (kein publicKey → Platte ist keine AUTHN-Quelle), TTL 14d, Cap 512 LRU,
+  fail-closed, atomarer chmod-600-Write. **Verhaltens-inert** (Boot-Ziele für A2). ⚠️ **A2/TL-27 muss
+  unmittelbar folgen** — A1 allein behebt den Outage nicht.
+  - ⏳ **Cross-Vendor-CO-Follow-up:** GPT-5/Gemini liefen nicht (codex/agy nicht im PATH); CO lief auf
+    2 Claude-CLI-Modellen. Bei Bedarf stärkeren Cross-Vendor-CO aus einer Shell mit codex/agy nachziehen.
 - [ ] **[v5.1] TL-27 (≈3 h)** Aggressives Boot-Re-Learn (ADR-035 A2): beim Start proaktiv Cache- +
-  paired-peers-Card-Fetch (mit TL-25-Backoff) statt auf Inbound zu warten.
+  paired-peers-Card-Fetch (mit TL-25-Backoff) statt auf Inbound zu warten. Konsumiert die
+  A1-Boot-Ziele (`mesh.getBootReLearnTargets()`). **CO-Invarianten VOR A2-Code (aus TL-26-CO):**
+  **INV-A2-1** Re-Learn revalidiert IMMER die volle Issuer-Chain + SPIFFE-Grammatik, **niemals**
+  Shortcut über den gecachten `certFingerprint` (sonst A4b-Klasse via Platten-Fingerprint);
+  **INV-A2-2** Re-Learn-Endpoints strikt auf das Discovery-Subnetz (`allowed_mesh_cidrs`)
+  beschränken + Timeout + Rate-Limit (SSRF-nah). ⚠️ eigener CO-Mini-Check empfohlen.
 - [x] **[v5.1] TL-28** Periodisches mDNS-Re-Query (ADR-035 A4a). *Erledigt: dieser PR (`reQuery()`/`resolveMdnsRequeryIntervalMs`).*
 - [ ] **[v5.1] TL-28b (gated)** Identitäts-gebundener `remoteAddress`-Fallback (ADR-035 A4b). Aus PR #258 **verschoben** (Codex CHANGES-NEEDED): naiver Fallback ist kein AUTHN-neutraler Pfad — die self-asserted Card-`publicKey` ist nicht ans Transport-Cert gebunden. Erst aktivieren, wenn die Learner-Card-Fetch auf `expectedSpiffeUri` gepinnt ist (D2b `spiffeServerIdentity`, Christian-Gate) + Adversarial-Regressionstest.
 - [ ] **[v5.1] TL-29 (≈5 h)** Hub-verankerte Pull-Discovery (ADR-035 B): `/api/mesh/peers`-Endpoint (mTLS)

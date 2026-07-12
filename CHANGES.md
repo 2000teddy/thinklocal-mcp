@@ -8,6 +8,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(discovery): ADR-035 A1 — Peer-Cache-Persistenz (Locator-only, TL-26) (2026-07-12 11:00)
+
+Behebt Root-Cause-Ebene 1 der Neustart-Wellen (MeshManager rein In-Memory → Restart-Amnesie): der
+AUTHN-Auflösungs-Cache wird nach `data_dir/mesh/peer-cache.json` persistiert und beim Boot geladen.
+**CO (`pal:consensus`, einstimmig Option A):** **Locator-only** — persistiert werden nur
+`{peerId, spiffeUri, endpoint, certFingerprint, lastSeen}`, **NIE der publicKey** → die Platte ist
+strukturell KEINE AUTHN-Trust-Quelle (die A4b-Fehlerklasse ist ausgeschlossen, nicht per Gate). Die
+Key-Bindung entsteht nach dem Boot frisch über live mTLS (A2/TL-27). `certFingerprint` = HINT (nie
+Accept-Gate), TTL 14 Tage, Cap 512 LRU, fail-closed-Parsing, atomarer chmod-600-Write. **A1 ist
+verhaltens-inert** (nur Schreiben/Laden der Boot-Re-Learn-Ziele; kein Auflösungspfad) — A2/TL-27
+konsumiert die Ziele und muss unmittelbar folgen. Neu: `peer-cache.ts` (rein) + `discovery.peer_cache_enabled`
+(Default true, Env `TLMCP_PEER_CACHE_ENABLED`). +25 Tests (1534 grün), tsc sauber. Kein Deploy.
+
 ### feat(discovery): ADR-035 A4a — periodisches mDNS-Re-Query (2026-07-12 07:17)
 
 Nächster Discovery-Resilienz-Slice nach A3. Additiver, rückwärtskompatibler Naht-Fix gegen das

@@ -410,6 +410,36 @@ describe('ADR-026 authenticated-seen (AUTHN-only)', () => {
   });
 });
 
+describe('ADR-035 A1 — Peer-Cache Export/Boot-Ziele (Locator-only)', () => {
+  const A = '12D3KooWAuthSeenPeerAAAA';
+
+  it('exportSeenLocators: Locator ohne publicKey, kanonische Felder', () => {
+    const mesh = mkMesh();
+    const uri = peerIdToSpiffeUri(A);
+    mesh.recordAuthenticatedSeen({ peerId: A, publicKey: 'PK-SECRET', spiffeUri: uri, certFingerprint: 'fp-a', endpoint: 'https://10.10.10.55:9440' });
+    const locs = mesh.exportSeenLocators();
+    expect(locs).toHaveLength(1);
+    expect(locs[0]).toMatchObject({ peerId: A, spiffeUri: uri, endpoint: 'https://10.10.10.55:9440', certFingerprint: 'fp-a' });
+    // SECURITY: kein publicKey im exportierten Locator.
+    expect(JSON.stringify(locs)).not.toContain('PK-SECRET');
+    expect(Object.keys(locs[0]!)).not.toContain('publicKey');
+  });
+
+  it('exportSeenLocators: leere Map → []', () => {
+    expect(mkMesh().exportSeenLocators()).toEqual([]);
+  });
+
+  it('setBootReLearnTargets/getBootReLearnTargets: Ziele hinterlegt, aber KEIN Auflösungspfad (inert)', () => {
+    const mesh = mkMesh();
+    const uri = peerIdToSpiffeUri(A);
+    mesh.setBootReLearnTargets([{ peerId: A, spiffeUri: uri, endpoint: 'https://10.10.10.55:9440', certFingerprint: 'fp', lastSeen: 1 }]);
+    expect(mesh.getBootReLearnTargets()).toHaveLength(1);
+    // INERT: geladene Ziele lösen NICHT auf (A1 ändert keinen Auflösungspfad; das ist A2).
+    expect(mesh.resolvePeerPublicKey(uri)).toBeUndefined();
+    expect(mesh.getPeer(uri)).toBeUndefined();
+  });
+});
+
 // ADR-026 / CR gpt-5.5 HIGH 1: AUTHZ-Prädikat isApprovedPeerSender — ein AUTHN-only gelernter
 // Peer ist NIE approved (gatet REGISTRY_SYNC / SKILL_ANNOUNCE in index.ts).
 describe('ADR-026 isApprovedPeerSender (AUTHZ ≠ AUTHN)', () => {
@@ -468,7 +498,9 @@ describe('ADR-026 authenticatedSeen-Isolation (Architektur)', () => {
     const lines = src.split('\n');
     const refLines = lines.map((l, i) => ({ l, i })).filter(({ l }) => l.includes('this.authenticatedSeen'));
     expect(refLines.length).toBeGreaterThan(0);
-    // Erlaubte Methoden: recordAuthenticatedSeen, resolvePeerPublicKey, (Feld-Deklaration).
+    // Erlaubte Methoden: recordAuthenticatedSeen, resolvePeerPublicKey, (Feld-Deklaration) und
+    // ADR-035 A1 exportSeenLocators — LEGITIMER Reader: exportiert NUR Locator OHNE publicKey für
+    // die Persistenz (kein Autorisierungspfad, kein Key-Leak; strukturell durch Locator-Schema).
     for (const { i } of refLines) {
       // rückwärts die nächste Methoden-Signatur suchen
       let method = '';
@@ -477,7 +509,7 @@ describe('ADR-026 authenticatedSeen-Isolation (Architektur)', () => {
         if (m) { method = m[1]; break; }
         if (/^\s*private authenticatedSeen/.test(lines[j])) { method = '<field-decl>'; break; }
       }
-      expect(['recordAuthenticatedSeen', 'resolvePeerPublicKey', '<field-decl>']).toContain(method);
+      expect(['recordAuthenticatedSeen', 'resolvePeerPublicKey', 'exportSeenLocators', '<field-decl>']).toContain(method);
     }
   });
 });

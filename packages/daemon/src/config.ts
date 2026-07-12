@@ -102,6 +102,14 @@ export interface DaemonConfig {
      * `0` = deaktiviert; sonst auf min. 5000 ms geklemmt. Default 30000. Env TLMCP_MDNS_REQUERY_MS.
      */
     mdns_requery_interval_ms: number;
+    /**
+     * ADR-035 A1 (TL-26): Peer-Auflösungs-Cache (Locator-only) nach `data_dir/mesh/peer-cache.json`
+     * persistieren, damit gelernte Peers einen Restart überleben (Neustart-Wellen heilen). Locator-
+     * only = KEIN publicKey auf Platte (kein AUTHN-Trust aus der Datei). Default true; abschaltbar
+     * per `TLMCP_PEER_CACHE_ENABLED=0`. In A1 verhaltens-inert (nur Schreiben/Laden); A2/TL-27
+     * konsumiert die Boot-Ziele.
+     */
+    peer_cache_enabled: boolean;
   };
   libp2p: {
     enabled: boolean;
@@ -213,6 +221,7 @@ const DEFAULTS: DaemonConfig = {
     preferred_interfaces: [],
     auto_register_authenticated_peers: true,
     mdns_requery_interval_ms: 30_000,
+    peer_cache_enabled: true,
   },
   libp2p: {
     enabled: true,
@@ -342,6 +351,10 @@ export function loadConfig(configPath?: string): DaemonConfig {
   if (env['TLMCP_MDNS_REQUERY_MS']) {
     const parsed = Number.parseInt(env['TLMCP_MDNS_REQUERY_MS'], 10);
     if (Number.isFinite(parsed) && parsed >= 0) cfg.discovery.mdns_requery_interval_ms = parsed;
+  }
+  // ADR-035 A1: Peer-Cache-Persistenz abschaltbar ('0' → aus).
+  if (env['TLMCP_PEER_CACHE_ENABLED']) {
+    cfg.discovery.peer_cache_enabled = env['TLMCP_PEER_CACHE_ENABLED'] !== '0';
   }
 
   // ADR-032: Phantom-Announce-Guard. Nur ein designierter Provider (Hub) announced
