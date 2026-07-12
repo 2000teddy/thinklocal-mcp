@@ -34,13 +34,6 @@ export interface LearnInboundPeerDeps {
   isAlreadyResolvable: () => boolean;
   /** Rate-Limit-Gate pro attestierter PeerID (konservativste Achse). true = erlaubt. */
   rateLimitOk: () => boolean;
-  /** ADR-035 A4: liefert eine bekannte Adresse (mDNS-/Cache-bekannt) für diesen Peer, falls die
-   *  TLS-`remoteAddress` leer ist (bestimmte Cross-Subnet/NAT-Verbindungen liefern keine Source-IP).
-   *  NUR Endpoint-Substitut — die Identität wird weiterhin strikt gegen die attestierte PeerID
-   *  validiert (Card-SAN == expectedSpiffeUri), also KEIN Trust-Change: eine falsche Fallback-
-   *  Adresse führt schlimmstenfalls zu einem Card-Reject, nie zu Auflösung auf fremde Identität.
-   *  Ohne Treffer (undefined) bleibt es fail-closed. */
-  resolveFallbackAddress?: () => string | undefined;
   /** Holt + validiert die Agent-Card via mTLS von endpoint. */
   fetchCard: (endpoint: string) => Promise<{ spiffeUri?: string; publicKey?: string } | null>;
   /** ADR-035 A3: max. Card-Fetch-Versuche bei TRANSIENTEM Fehler (Default 3). Ein Peer, dessen
@@ -81,20 +74,11 @@ export async function learnInboundPeer(d: LearnInboundPeerDeps): Promise<LearnRe
   // CR gpt-5.5 MEDIUM: leere remoteAddress → kein valider Endpoint; IPv6 / IPv4-mapped
   // (`::ffff:10.10.10.80`) müssen für die URL entmappt/gebracketet werden, sonst ist die URL
   // ungültig und das Learning schlägt für solche Verbindungen unnötig fehl.
-  // ADR-035 A4: leere remoteAddress → nicht sofort fail-closed, sondern eine bekannte (mDNS-/Cache-)
-  // Adresse substituieren. Die Identitätsprüfung unten (Card-SAN == attestierte PeerID) bleibt
-  // scharf, daher ist die Substitution AUTHN-neutral.
-  let effectiveAddress = d.remoteAddress;
-  if (!effectiveAddress) {
-    const fallback = d.resolveFallbackAddress?.();
-    if (!fallback) {
-      d.log?.warn({ peerId: d.peerId }, '[discovery] ADR-026/035: leere remoteAddress, keine bekannte Adresse — kein Card-Fetch');
-      return 'fetch-failed';
-    }
-    d.log?.debug({ peerId: d.peerId, fallback }, '[discovery] ADR-035 A4: leere remoteAddress → bekannte Adresse substituiert');
-    effectiveAddress = fallback;
+  if (!d.remoteAddress) {
+    d.log?.warn({ peerId: d.peerId }, '[discovery] ADR-026: leere remoteAddress — kein Card-Fetch');
+    return 'fetch-failed';
   }
-  const endpoint = `https://${hostForUrl(effectiveAddress)}:${d.port}`;
+  const endpoint = `https://${hostForUrl(d.remoteAddress)}:${d.port}`;
   // ADR-035 A3: Retry mit Backoff NUR bei transientem Fetch-Throw (Wellen-Recovery). Ein
   // erfolgreicher Fetch (auch mit null/ungültiger Card) beendet die Schleife — eine ungültige
   // Card ist ein permanenter Reject unten, kein transienter Fehler (kein Loop).

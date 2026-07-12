@@ -608,9 +608,6 @@ async function main(): Promise<void> {
             expectedSpiffeUri: peerIdToSpiffeUri(info.peerId),
             isAlreadyResolvable: () => mesh.resolvePeerPublicKey(info.senderUri) !== undefined,
             rateLimitOk: () => rateLimiter.allow(`adr026-learn:${info.peerId}`),
-            // ADR-035 A4: leere TLS-remoteAddress → bekannte mDNS-/Discovery-Adresse dieses Peers
-            // (per kanonischer URI) als Endpoint-Substitut. Identität bleibt Card-SAN-validiert.
-            resolveFallbackAddress: () => mesh.getPeer(peerIdToSpiffeUri(info.peerId))?.host,
             fetchCard: async (endpoint) => {
               const res = await fetch(`${endpoint}/.well-known/agent-card.json`, {
                 signal: AbortSignal.timeout(5_000),

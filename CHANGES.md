@@ -8,17 +8,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### feat(discovery): ADR-035 A4 — periodisches mDNS-Re-Query + remoteAddress-Fallback (2026-07-12 07:17)
+### feat(discovery): ADR-035 A4a — periodisches mDNS-Re-Query (2026-07-12 07:17)
 
-Nächster Discovery-Resilienz-Slice nach A3. Zwei additive, rückwärtskompatible Naht-Fixes gegen das
-Neustart-Wellen-Problem: (1) **periodisches aktives mDNS-Re-Query** — `browse()` setzt nur EINEN
-initialen PTR-Query ab + lauscht danach passiv; ein `setInterval`-getriebenes `discovery.reQuery()`
-(`Browser.update()`, Timer unref't + im Shutdown gestoppt) schließt das Announce-Fenster ohne
-static_peers. Neues Feld `discovery.mdns_requery_interval_ms` (Default 30000, Env `TLMCP_MDNS_REQUERY_MS`,
-0=aus, sonst ≥5000 geklemmt gegen Multicast-Flut). (2) **remoteAddress-Fallback** im ADR-026-Async-Learn:
-leere TLS-Source-IP (Cross-Subnet/NAT) substituiert jetzt die bekannte mDNS-/Discovery-Adresse des Peers
-statt fail-closed abzubrechen — **AUTHN-neutral**, da die Card-SAN==attestierte-PeerID-Prüfung unverändert
-gatet (falsche Adresse → `rejected-identity`, kein Trust-Leak). +15 Tests (1514 grün), tsc sauber.
+Nächster Discovery-Resilienz-Slice nach A3. Additiver, rückwärtskompatibler Naht-Fix gegen das
+Neustart-Wellen-Problem: **periodisches aktives mDNS-Re-Query** — `browse()` (`bonjour.find`) setzt
+nur EINEN initialen PTR-Query ab + lauscht danach passiv; ein `setInterval`-getriebenes
+`discovery.reQuery()` (`Browser.update()`, Timer unref't + im Shutdown via `clearInterval` gestoppt)
+schließt das Announce-Fenster nach Neustart-Wellen **ohne static_peers**. Neues Feld
+`discovery.mdns_requery_interval_ms` (Default 30000, Env `TLMCP_MDNS_REQUERY_MS`, 0=aus, sonst ≥5000
+geklemmt gegen Multicast-Flut). +10 Tests (1509 grün), tsc sauber.
+**Verschoben (Codex CHANGES-NEEDED, PR #258):** der zunächst mitgeplante `remoteAddress`-Fallback im
+ADR-026-Learner wurde **entfernt** — ein naiver Fallback ist kein AUTHN-neutraler Pfad (self-asserted
+Card-`publicKey` nicht ans Transport-Cert gebunden → ein vergifteter Discovery-Eintrag könnte
+`{Opfer → Angreifer-Key}` in die AUTHN-only-Map schreiben). Nachziehen nur identitäts-gebunden
+(Learner-Fetch auf `expectedSpiffeUri` gepinnt, D2b, Christian-Gate) als ADR-035 A4b / TL-28b.
 A1/A2/B (TL-26/27/29) bleiben eigene Slices. Kein Deploy.
 
 ### feat(discovery): ADR-035 Discovery-Resilienz — Card-Fetch-Retry (A3) + Root-Cause/ADR (2026-07-11 22:05)
