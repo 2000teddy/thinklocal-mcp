@@ -94,6 +94,14 @@ export interface DaemonConfig {
      * AUTHN-only (keine Autorisierung). Default true. Env TLMCP_AUTO_REGISTER_AUTH_PEERS=0 → aus.
      */
     auto_register_authenticated_peers: boolean;
+    /**
+     * ADR-035 A4: Intervall (ms) für periodisches aktives mDNS-Re-Query. `bonjour.find()` setzt
+     * nur EINEN initialen PTR-Query ab + lauscht danach passiv; ohne Re-Query findet ein Node,
+     * dessen initialer Query vor dem Announce-Fenster eines Peers lag (Neustart-Welle), diesen nie
+     * wieder. Der periodische Re-Query (Browser.update()) schließt das Fenster ohne static_peers.
+     * `0` = deaktiviert; sonst auf min. 5000 ms geklemmt. Default 30000. Env TLMCP_MDNS_REQUERY_MS.
+     */
+    mdns_requery_interval_ms: number;
   };
   libp2p: {
     enabled: boolean;
@@ -204,6 +212,7 @@ const DEFAULTS: DaemonConfig = {
     mdns_enabled: true,
     preferred_interfaces: [],
     auto_register_authenticated_peers: true,
+    mdns_requery_interval_ms: 30_000,
   },
   libp2p: {
     enabled: true,
@@ -328,6 +337,11 @@ export function loadConfig(configPath?: string): DaemonConfig {
   // ADR-026: symmetrische Auth-Peer-Registrierung abschaltbar ('0' → aus).
   if (env['TLMCP_AUTO_REGISTER_AUTH_PEERS']) {
     cfg.discovery.auto_register_authenticated_peers = env['TLMCP_AUTO_REGISTER_AUTH_PEERS'] !== '0';
+  }
+  // ADR-035 A4: periodisches mDNS-Re-Query-Intervall (ms) per Env übersteuerbar ('0' → aus).
+  if (env['TLMCP_MDNS_REQUERY_MS']) {
+    const parsed = Number.parseInt(env['TLMCP_MDNS_REQUERY_MS'], 10);
+    if (Number.isFinite(parsed) && parsed >= 0) cfg.discovery.mdns_requery_interval_ms = parsed;
   }
 
   // ADR-032: Phantom-Announce-Guard. Nur ein designierter Provider (Hub) announced

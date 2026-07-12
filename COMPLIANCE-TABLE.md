@@ -1634,6 +1634,14 @@ CHANGES.md, `changes/2026-07-07_doc-compliance-gate.md`, dieser Eintrag; Rollen/
 
 **Typ:** Daemon-Code + Design-Doku. Root-Cause der „Discovery überlebt Neustart-Wellen nicht"-Regression (keine Peer-Persistenz + mDNS one-shot + spröder Async-Learn) dokumentiert in ADR-035; dieser PR liefert Slice A3 (Card-Fetch-Retry mit Backoff, rückwärtskompatibel, kein Deploy). Folge-Slices A1/A2/A4/B = TL-26…TL-29. **CO/CG:** n/a (A3). **TS/CR/PC:** s. Zeile. **DO:** `docs/architecture/ADR-035-…md`, `TODO.md`, `changes/2026-07-11_adr035-card-fetch-retry.md`, `CHANGES.md`, dieser Eintrag.
 
+## Sweep 2026-07-12 07:17 — feat(discovery): ADR-035 A4 mDNS-Re-Query + remoteAddress-Fallback
+
+| #        | PR    | Datum            | CO  | CG  | TS  | CR  | PC  | DO | Findings                           |
+|----------|-------|------------------|-----|-----|-----|-----|-----|----|------------------------------------|
+| adr035-a4 | (offen, base=main) | 2026-07-12 07:17 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | Daemon-Code (`discovery.reQuery()`/`resolveMdnsRequeryIntervalMs` + Learner-`resolveFallbackAddress` + config-Feld + index.ts-Wiring/Timer) + Tests. CO: n/a (A4 mechanisch, Design in ADR-035 gesetzt; CO für A1/B TL-26/29 vorgemerkt). CG: n/a. TS: +15 Tests (Learner-Fallback inkl. Fremd-Card→rejected-identity AUTHN-Neutralitäts-Beweis; reQuery→Browser.update() / no-op vor browse / no-op mdns-off; resolveMdnsRequeryIntervalMs Klemmung; config default/env/coercion); 1514 grün, tsc sauber, keine neuen ESLint-Errors. CR: claude-Subagent (adversarial, AUTHN/AUTHZ-Fokus) — Verdikt s. PR-Body. PC: `git diff` — discovery/learner/config/index + Tests + Doku. |
+
+**Typ:** Daemon-Code + Config + Design-Doku. ADR-035 Slice A4 (TL-28): (1) periodisches aktives mDNS-Re-Query (`Browser.update()`, unref't, im Shutdown gestoppt, ≥5000 ms geklemmt) schließt das Announce-Fenster nach Neustart-Wellen ohne static_peers; (2) remoteAddress-Fallback im ADR-026-Async-Learn substituiert eine bekannte mDNS-/Discovery-Adresse bei leerer TLS-Source-IP — **AUTHN-neutral** (Card-SAN==attestierte-PeerID gatet unverändert). Additiv/rückwärtskompatibel, kein Deploy/Secret/Gate. **CO/CG:** n/a. **TS/CR/PC:** s. Zeile. **DO:** `docs/architecture/ADR-035-…md` (Slice-Tabelle A4=erledigt), `config/daemon.toml`, `TODO.md` (TL-28), `changes/2026-07-12_adr035-a4-mdns-requery-fallback.md`, `CHANGES.md`, dieser Eintrag.
+
 ---
 
-*Letzte Aktualisierung: 2026-07-11 22:05 — feat(discovery): ADR-035 A3 Card-Fetch-Retry mit Backoff.*
+*Letzte Aktualisierung: 2026-07-12 07:17 — feat(discovery): ADR-035 A4 mDNS-Re-Query + remoteAddress-Fallback.*

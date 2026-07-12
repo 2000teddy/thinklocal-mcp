@@ -62,6 +62,18 @@ Zwei Stoßrichtungen, gestaffelt:
 - **A4 — Periodisches mDNS-Re-Query + robustere `remoteAddress`:** Browser periodisch neu
   abfragen (bonjour `update()`); leere `remoteAddress` aus der mDNS-/Cache-bekannten Adresse des
   Peers substituieren statt fail-closed abzubrechen.
+  - **Sicherheits-Hinweis (CR MED, 12.07.):** Der `remoteAddress`-Fallback ist **AUTHZ-neutral**
+    (die `authenticatedSeen`-Map fließt nie in Autorisierung; `isApprovedPeerSender` konsultiert sie
+    nicht) und die `record()`-Gate (`card.spiffeUri == expectedSpiffeUri` + PublicKey) bleibt scharf.
+    Die **AUTHN-Neutralität** ist jedoch an die Integrität des Discovery-Eintrags gekoppelt: Solange
+    die Learner-Card-Fetch nur CA-Chain + Node-Default-Host/IP-Altname prüft (die
+    `spiffeServerIdentity`-Server-ID-Pinnung aus D2b ist Default AUS, Christian-Gate), könnte ein
+    Angreifer, der **bereits** den Discovery-Eintrag des Opfers vergiftet hat **und** ein
+    CA-gültiges, auf seine IP SAN'tes Mesh-Cert hält, einen self-asserted `publicKey` unter der
+    Opfer-URI in die AUTHN-only-Map schreiben. Wirkung strikt auf AUTHN begrenzt (Signatur-
+    Attribution auf Nicht-Autz-Pfaden), keine Approval/Autorisierung. **Closeout:** die Learner-
+    Fetch auf `expectedSpiffeUri` pinnen (D2b-Verifier), sobald default-on — dann muss der
+    Substitut-Endpoint das attestierte Peer-Cert wirklich halten.
 
 ### B) Ziel-Architektur: Hub-verankerte Pull-Discovery (strategisch, ADR-Kern)
 
@@ -96,7 +108,7 @@ nicht zur Grundlage.
 | **A3** | Card-Fetch-Retry mit Backoff (Learner) | TL-25a | **dieser PR** |
 | A1 | Peer-Cache-Persistenz (atomar, validierend, AUTHN-only) | TL-26 | offen (CO) |
 | A2 | Aggressives Boot-Re-Learn aus Cache + paired-peers | TL-27 | offen |
-| A4 | Periodisches mDNS-Re-Query + remoteAddress-Fallback | TL-28 | offen |
+| A4 | Periodisches mDNS-Re-Query + remoteAddress-Fallback | TL-28 | **erledigt (dieser PR)** |
 | B  | Hub-Pull-Endpoint `/api/mesh/peers` + Client + Fallback-Kette | TL-29 | offen (CO) |
 
 Jeder Slice: eigener PR, Tests, CR, PC, DO (COMPLIANCE-Pflicht). A1/B berühren Trust-nahe Pfade

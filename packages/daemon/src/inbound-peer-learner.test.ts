@@ -143,4 +143,59 @@ describe('learnInboundPeer (ADR-026)', () => {
     expect(fetchCard).not.toHaveBeenCalled();
     expect(record).not.toHaveBeenCalled();
   });
+
+  // ADR-035 A4: remoteAddress-Fallback.
+  it('A4: leere remoteAddress + bekannte Fallback-Adresse → Fetch gegen Fallback, recorded', async () => {
+    const seen: string[] = [];
+    const fetchCard = vi.fn(async (ep: string) => { seen.push(ep); return { spiffeUri: EXPECTED, publicKey: 'PK' }; });
+    const record = vi.fn();
+    const r = await learnInboundPeer(
+      deps({ remoteAddress: '', fetchCard, record, resolveFallbackAddress: () => '10.10.10.55' }),
+    );
+    expect(r).toBe('recorded');
+    expect(seen).toEqual(['https://10.10.10.55:9440']);
+    expect(record).toHaveBeenCalledOnce();
+  });
+
+  it('A4: Fallback-Adresse wird URL-sicher gebracketet (IPv4-mapped/IPv6)', async () => {
+    const seen: string[] = [];
+    const fetchCard = vi.fn(async (ep: string) => { seen.push(ep); return { spiffeUri: EXPECTED, publicKey: 'PK' }; });
+    await learnInboundPeer(deps({ remoteAddress: '', fetchCard, resolveFallbackAddress: () => '::ffff:10.10.10.80' }));
+    await learnInboundPeer(deps({ remoteAddress: '', fetchCard, resolveFallbackAddress: () => 'fe80::1' }));
+    expect(seen[0]).toBe('https://10.10.10.80:9440');
+    expect(seen[1]).toBe('https://[fe80::1]:9440');
+  });
+
+  it('A4: leere remoteAddress + Fallback liefert undefined → fetch-failed (fail-closed)', async () => {
+    const fetchCard = vi.fn();
+    const record = vi.fn();
+    const r = await learnInboundPeer(
+      deps({ remoteAddress: '', fetchCard, record, resolveFallbackAddress: () => undefined }),
+    );
+    expect(r).toBe('fetch-failed');
+    expect(fetchCard).not.toHaveBeenCalled();
+    expect(record).not.toHaveBeenCalled();
+  });
+
+  it('A4: Fallback wird NICHT konsultiert, wenn remoteAddress vorhanden ist', async () => {
+    const seen: string[] = [];
+    const fetchCard = vi.fn(async (ep: string) => { seen.push(ep); return { spiffeUri: EXPECTED, publicKey: 'PK' }; });
+    const resolveFallbackAddress = vi.fn(() => '9.9.9.9');
+    const r = await learnInboundPeer(deps({ remoteAddress: '10.10.10.55', fetchCard, resolveFallbackAddress }));
+    expect(r).toBe('recorded');
+    expect(resolveFallbackAddress).not.toHaveBeenCalled();
+    expect(seen).toEqual(['https://10.10.10.55:9440']);
+  });
+
+  it('A4: eine falsche Fallback-Adresse mit Fremd-Card → rejected-identity (kein Trust-Leak)', async () => {
+    // Fetch von der (falschen) Fallback-Adresse liefert die Card einer ANDEREN Identität →
+    // Card-SAN-Prüfung schlägt fehl → kein record. Beweist AUTHN-Neutralität der Substitution.
+    const record = vi.fn();
+    const fetchCard = vi.fn(async () => ({ spiffeUri: 'spiffe://thinklocal/node/12D3KooWOtherPeerBBBB', publicKey: 'PK-OTHER' }));
+    const r = await learnInboundPeer(
+      deps({ remoteAddress: '', fetchCard, record, resolveFallbackAddress: () => '10.10.10.99' }),
+    );
+    expect(r).toBe('rejected-identity');
+    expect(record).not.toHaveBeenCalled();
+  });
 });

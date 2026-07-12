@@ -96,7 +96,7 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
   re-verifizieren. Kein Trust-Upgrade durch Cache. ⚠️ Trust-nah → CO (Konsens) vor dem Code.
 - [ ] **[v5.1] TL-27 (≈3 h)** Aggressives Boot-Re-Learn (ADR-035 A2): beim Start proaktiv Cache- +
   paired-peers-Card-Fetch (mit TL-25-Backoff) statt auf Inbound zu warten.
-- [ ] **[v5.1] TL-28 (≈3 h)** Periodisches mDNS-Re-Query + `remoteAddress`-Fallback (ADR-035 A4).
+- [x] **[v5.1] TL-28** Periodisches mDNS-Re-Query + `remoteAddress`-Fallback (ADR-035 A4). *Erledigt: dieser PR (`reQuery()`/`resolveMdnsRequeryIntervalMs` + Learner-Fallback, AUTHN-neutral).*
 - [ ] **[v5.1] TL-29 (≈5 h)** Hub-verankerte Pull-Discovery (ADR-035 B): `/api/mesh/peers`-Endpoint (mTLS)
   + Client-Pull + Fallback-Kette (Cache/mDNS/static). Skaliert O(n) statt O(n²). ⚠️ Architektur → CO.
 
