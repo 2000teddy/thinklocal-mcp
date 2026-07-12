@@ -18,7 +18,7 @@ vom global-aus D2b-Flag) → eine vergiftete Adresse kann keine fremde Identitä
 die von Codex beanstandete A4b-Lücke). Source-IP-Pfad unverändert; fehlt Adresse/Pin-Dep →
 fail-closed. Die A2-Pin-Naht ist als geteiltes `pinned-card-fetch.ts` extrahiert (eine reviewte
 Implementierung für A2 + A4b). Kein Christian-Gate mehr nötig (Per-Dial-Pin statt globalem D2b).
-+7 Tests (1561 grün), tsc sauber. Kein Deploy. Schließt die ADR-035-A-Reihe.
++12 Tests (1566 grün), tsc sauber. Kein Deploy. Schließt die ADR-035-A-Reihe.
 
 ### feat(discovery): ADR-035 A2 — proaktives Boot-Re-Learn (TL-27) (2026-07-12 11:43)
 

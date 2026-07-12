@@ -38,11 +38,19 @@ authentifizierte Peer → kein Pin nötig).
   (kein ungepinnter Fetch); Fallback undefined → fail-failed; **SECURITY: Fremd-Identitäts-Card →
   rejected-identity**; Source-IP-Pfad nutzt `fetchCard` (NICHT `fetchCardPinned`); Retry-Recovery;
   **CR-LOW-1: Fallback-Adresse außerhalb Subnetz → fail-closed**.
-- **1561 gesamt grün** (`npm test`), `tsc --noEmit` sauber, keine neuen ESLint-Errors.
+- `pinned-card-fetch.test.ts` **+5** (Codex-Review #261, MEDIUM — direkter Adapter-Seam-Regressionstest):
+  spiegelt `buildMeshConnector` und prüft die von `fetchAgentCardPinned` übergebenen Connector-Args —
+  (1) `spiffeServerIdentity` wird ERZWUNGEN, auch bei global-AUS Policy (D2b-unabhängig); (2) der
+  installierte `checkServerIdentity` (REALER `verifyMeshServerIdentity`) akzeptiert nur den exakten
+  `expectedSpiffeUri`-SAN und verwirft fremden/fehlenden SAN + poisoned-host. Damit ist die
+  Transport-Identitäts-Bindung des Seams direkt regressions-geschützt (nicht nur via gemocktem
+  `fetchCardPinned`).
+- **1566 gesamt grün** (`npm test`), `tsc --noEmit` sauber, keine neuen ESLint-Errors.
 - CR: claude-Subagent (adversarial, „Fallback-nur-gepinnt"-Fokus) — **APPROVE, kein HIGH/MED**;
   Fallback end-to-end pinned-only verifiziert (kein ungepinnter Pfad; poisoned-host → Handshake-Abbruch,
   kein record). **LOW-1 in-slice gefixt** (Fallback-Subnetz-Gate `isFallbackAddressAllowed` analog
   A2/INV-A2-2); LOW-2 (Retry bei Pin-Mismatch, rate-limit-begrenzt) akzeptiert/dokumentiert.
+  Codex-Review #261 (MEDIUM, Test-Lücke am Adapter-Seam) → mit dem direkten `pinned-card-fetch.test.ts` behoben.
 
 ## Abgrenzung
 Schließt die ADR-035-A-Reihe (A1/A2/A3/A4a/A4b). Offen: B/TL-29 (Hub-Pull, CO-gated) + der
