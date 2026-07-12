@@ -4,6 +4,7 @@ import type { Logger } from 'pino';
 import type { DiscoveredPeer } from './discovery.js';
 import type { AgentCard } from './agent-card.js';
 import { spiffeUriToPeerId } from './peer-identity.js';
+import type { PeerCacheLocator } from './peer-cache.js';
 
 export type PeerStatus = 'online' | 'offline' | 'unknown';
 
@@ -88,6 +89,10 @@ export class MeshManager {
   // Autorisierungspfaden (registry-sync-Akzeptanz, heartbeat, capability-merge, skill-exec)
   // gelesen, AUSSCHLIESSLICH von resolvePeerPublicKey.
   private authenticatedSeen = new Map<string, AuthenticatedSeenEntry>();
+  // ADR-035 A1/A2: beim Boot aus dem persistierten Locator-Cache geladene Re-Learn-Ziele.
+  // NUR Locator (kein publicKey) — reine Zielliste; wird von A2/TL-27 (Boot-Re-Learn) konsumiert.
+  // In A1 (dieser Slice) wird sie nur befüllt/gelesen, verändert KEINEN Auflösungspfad (inert).
+  private bootReLearnTargets: PeerCacheLocator[] = [];
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
@@ -289,6 +294,40 @@ export class MeshManager {
       { peerId: entry.peerId, endpoint: entry.endpoint },
       '[discovery] ADR-026: authentifizierter Peer gelernt (AUTHN-only, authenticated_unapproved)',
     );
+  }
+
+  /**
+   * ADR-035 A1: Snapshot der AUTHN-only-seen-Map als **Locator** (OHNE `publicKey`) für die
+   * Persistenz. Bewusst nur die kanonischen (node/<PeerID>) Einträge — Legacy-URIs werden vom
+   * Locator-Schema ohnehin verworfen. Der publicKey verlässt NIE den RAM (CO-Entscheidung).
+   */
+  exportSeenLocators(): PeerCacheLocator[] {
+    const out: PeerCacheLocator[] = [];
+    for (const e of this.authenticatedSeen.values()) {
+      if (!spiffeUriToPeerId(e.spiffeUri)) continue; // nur kanonisch
+      out.push({
+        peerId: e.peerId,
+        spiffeUri: e.spiffeUri,
+        endpoint: e.endpoint,
+        certFingerprint: e.certFingerprint,
+        lastSeen: e.lastSeen,
+      });
+    }
+    return out;
+  }
+
+  /**
+   * ADR-035 A1: die beim Boot aus dem Cache geladenen Re-Learn-Ziele hinterlegen. Reine
+   * Zielliste — KEIN Trust, KEIN Auflösungspfad. A2/TL-27 konsumiert sie (proaktives Card-Fetch);
+   * in A1 bleibt sie unbenutzt (verhaltens-inert).
+   */
+  setBootReLearnTargets(locators: readonly PeerCacheLocator[]): void {
+    this.bootReLearnTargets = [...locators];
+  }
+
+  /** ADR-035 A1: die geladenen Re-Learn-Ziele (für A2/TL-27 bzw. Tests/Diagnose). */
+  getBootReLearnTargets(): readonly PeerCacheLocator[] {
+    return this.bootReLearnTargets;
   }
 
   resolvePeerPublicKey(senderUri: string): string | undefined {

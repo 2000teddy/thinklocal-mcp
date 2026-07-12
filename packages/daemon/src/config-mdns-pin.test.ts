@@ -123,6 +123,22 @@ describe('loadConfig: ADR-035 A4 mdns_requery_interval_ms', () => {
   });
 });
 
+describe('loadConfig: ADR-035 A1 peer_cache_enabled', () => {
+  afterEach(() => { delete process.env['TLMCP_PEER_CACHE_ENABLED']; });
+
+  it('Default ist true', () => {
+    expect(loadConfig(NO_TOML).discovery.peer_cache_enabled).toBe(true);
+  });
+  it('TLMCP_PEER_CACHE_ENABLED=0 → false', () => {
+    process.env['TLMCP_PEER_CACHE_ENABLED'] = '0';
+    expect(loadConfig(NO_TOML).discovery.peer_cache_enabled).toBe(false);
+  });
+  it('TLMCP_PEER_CACHE_ENABLED=1 → true', () => {
+    process.env['TLMCP_PEER_CACHE_ENABLED'] = '1';
+    expect(loadConfig(NO_TOML).discovery.peer_cache_enabled).toBe(true);
+  });
+});
+
 describe('loadConfig: ADR-026 auto_register_authenticated_peers', () => {
   afterEach(() => { delete process.env['TLMCP_AUTO_REGISTER_AUTH_PEERS']; });
 
