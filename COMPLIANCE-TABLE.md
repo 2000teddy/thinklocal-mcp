@@ -1626,6 +1626,14 @@ CHANGES.md, `changes/2026-07-07_doc-compliance-gate.md`, dieser Eintrag; Rollen/
 
 **Typ:** Daemon-Code. Setzt Entscheidung 2 („lesend≠schreibend" am selben Server) um: die effektive Stufe am Ingress ist `max(Capability-Stufe, Werkzeug-Stufe)`; die Werkzeug-Stufe aus dem `tools/call`-Toolnamen (führendes Verb) hebt schreibende/destruktive Tools auf gate/consensus (403), während `list_clients` durchgeht. Ermöglicht die block_client-Gegenprobe (Ablaufplan Schritt 5) nach Merge+Deploy. **CO/CG:** n/a. **TS/CR/PC:** s. Zeile. **DO:** `changes/2026-07-10_tl07-per-tool-tier.md`, `CHANGES.md`, dieser Eintrag.
 
+## Sweep 2026-07-11 22:05 — feat(discovery): ADR-035 A3 Card-Fetch-Retry + Root-Cause/ADR
+
+| #        | PR    | Datum            | CO  | CG  | TS  | CR  | PC  | DO | Findings                           |
+|----------|-------|------------------|-----|-----|-----|-----|-----|----|------------------------------------|
+| adr035-a3 | (offen, base=main) | 2026-07-11 22:05 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | Daemon-Code (Learner Card-Fetch-Retry+Backoff) + ADR-035 + TODO. CO: n/a für A3 (mechanische Retry-Naht, Design in ADR-035 gesetzt; CO ist für A1/B TL-26/TL-29 vorgemerkt). CG: n/a. TS: +4 Tests (Wellen-Recovery/Erschöpfung/Backoff-Reihenfolge/kein-Retry-SAN-Mismatch/maxAttempts=1), Delay injiziert; 1499 grün, tsc+ESLint sauber. CR: claude-Subagent. PC: `git diff` — Learner+Test + Doku (ADR/TODO/changes). |
+
+**Typ:** Daemon-Code + Design-Doku. Root-Cause der „Discovery überlebt Neustart-Wellen nicht"-Regression (keine Peer-Persistenz + mDNS one-shot + spröder Async-Learn) dokumentiert in ADR-035; dieser PR liefert Slice A3 (Card-Fetch-Retry mit Backoff, rückwärtskompatibel, kein Deploy). Folge-Slices A1/A2/A4/B = TL-26…TL-29. **CO/CG:** n/a (A3). **TS/CR/PC:** s. Zeile. **DO:** `docs/architecture/ADR-035-…md`, `TODO.md`, `changes/2026-07-11_adr035-card-fetch-retry.md`, `CHANGES.md`, dieser Eintrag.
+
 ---
 
-*Letzte Aktualisierung: 2026-07-10 11:40 — feat(mcp): TL07 pro-Tool-Ausführungsstufe (Entscheidung 2).*
+*Letzte Aktualisierung: 2026-07-11 22:05 — feat(discovery): ADR-035 A3 Card-Fetch-Retry mit Backoff.*
