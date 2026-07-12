@@ -107,7 +107,11 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
   `verifyMeshServerIdentity` schon ADR-028-D2b-CO-blessed; A2 wendet sie maximal strikt an). **Offen:
   Zwei-Peer-Restart-Live-Proof** (Peer-Fenster).
 - [x] **[v5.1] TL-28** Periodisches mDNS-Re-Query (ADR-035 A4a). *Erledigt: dieser PR (`reQuery()`/`resolveMdnsRequeryIntervalMs`).*
-- [ ] **[v5.1] TL-28b (gated)** Identitäts-gebundener `remoteAddress`-Fallback (ADR-035 A4b). Aus PR #258 **verschoben** (Codex CHANGES-NEEDED): naiver Fallback ist kein AUTHN-neutraler Pfad — die self-asserted Card-`publicKey` ist nicht ans Transport-Cert gebunden. Erst aktivieren, wenn die Learner-Card-Fetch auf `expectedSpiffeUri` gepinnt ist (D2b `spiffeServerIdentity`, Christian-Gate) + Adversarial-Regressionstest.
+- [x] **[v5.1] TL-28b** Identitäts-gebundener `remoteAddress`-Fallback (ADR-035 A4b). *Erledigt: dieser PR.*
+  Reaktiviert den in #258 verschobenen Fallback — der Fallback-Fetch läuft NUR über einen per-Dial
+  hart auf `expectedSpiffeUri` gepinnten mTLS (`pinned-card-fetch.ts`, geteilt mit A2), unabhängig vom
+  global-aus D2b-Flag → kein Christian-Gate mehr nötig. Fehlt Adresse/Pin-Dep → fail-closed; Source-IP-
+  Pfad unverändert. Adversarial-Regressionstests (Fremd-Card→rejected; kein ungepinnter Pfad).
 - [ ] **[v5.1] TL-29 (≈5 h)** Hub-verankerte Pull-Discovery (ADR-035 B): `/api/mesh/peers`-Endpoint (mTLS)
   + Client-Pull + Fallback-Kette (Cache/mDNS/static). Skaliert O(n) statt O(n²). ⚠️ Architektur → CO.
 

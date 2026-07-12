@@ -135,12 +135,80 @@ describe('learnInboundPeer (ADR-026)', () => {
     expect(seen[1]).toBe('https://[fe80::1]:9440');   // echtes IPv6 gebracketet
   });
 
-  it('MEDIUM: leere remoteAddress → fetch-failed, kein Fetch/Record', async () => {
+  it('MEDIUM: leere remoteAddress OHNE gepinnten Fallback → fetch-failed, kein Fetch/Record', async () => {
     const fetchCard = vi.fn();
     const record = vi.fn();
     const r = await learnInboundPeer(deps({ remoteAddress: '', fetchCard, record }));
     expect(r).toBe('fetch-failed');
     expect(fetchCard).not.toHaveBeenCalled();
     expect(record).not.toHaveBeenCalled();
+  });
+});
+
+// ADR-035 A4b: identitäts-gebundener Inbound-Fallback.
+describe('learnInboundPeer — A4b remoteAddress-Fallback (nur gepinnt)', () => {
+  it('leere remoteAddress + Fallback + gepinnter Fetch → GEPINNTER Fetch gegen Fallback, recorded', async () => {
+    const seen: Array<[string, string]> = [];
+    const fetchCard = vi.fn(); // Source-IP-Fetch darf NICHT genutzt werden
+    const fetchCardPinned = vi.fn(async (ep: string, uri: string) => { seen.push([ep, uri]); return { spiffeUri: EXPECTED, publicKey: 'PK' }; });
+    const record = vi.fn();
+    const r = await learnInboundPeer(deps({ remoteAddress: '', fetchCard, fetchCardPinned, record, resolveFallbackAddress: () => '10.10.10.80' }));
+    expect(r).toBe('recorded');
+    // INV: der Fetch lief gepinnt gegen die Fallback-Adresse mit expectedSpiffeUri als Pin-Ziel.
+    expect(seen).toEqual([['https://10.10.10.80:9440', EXPECTED]]);
+    expect(fetchCard).not.toHaveBeenCalled();
+    expect(record).toHaveBeenCalledOnce();
+  });
+
+  it('SECURITY: Fallback OHNE gepinnte Fetch-Dep → fail-closed (kein ungepinnter Fetch)', async () => {
+    const fetchCard = vi.fn();
+    const record = vi.fn();
+    const r = await learnInboundPeer(deps({ remoteAddress: '', fetchCard, record, resolveFallbackAddress: () => '10.10.10.80', fetchCardPinned: undefined }));
+    expect(r).toBe('fetch-failed');
+    expect(fetchCard).not.toHaveBeenCalled();
+    expect(record).not.toHaveBeenCalled();
+  });
+
+  it('Fallback liefert undefined → fetch-failed', async () => {
+    const fetchCardPinned = vi.fn();
+    const r = await learnInboundPeer(deps({ remoteAddress: '', fetchCardPinned, resolveFallbackAddress: () => undefined }));
+    expect(r).toBe('fetch-failed');
+    expect(fetchCardPinned).not.toHaveBeenCalled();
+  });
+
+  it('SECURITY: gepinnter Fallback-Fetch liefert Fremd-Identitäts-Card → rejected-identity, kein record', async () => {
+    const record = vi.fn();
+    const fetchCardPinned = vi.fn(async () => ({ spiffeUri: 'spiffe://thinklocal/node/12D3KooWOtherBBBB', publicKey: 'PK-OTHER' }));
+    const r = await learnInboundPeer(deps({ remoteAddress: '', record, fetchCardPinned, resolveFallbackAddress: () => '10.10.10.80' }));
+    expect(r).toBe('rejected-identity');
+    expect(record).not.toHaveBeenCalled();
+  });
+
+  it('vorhandene remoteAddress (Source-IP-Pfad) nutzt fetchCard, NICHT fetchCardPinned', async () => {
+    const fetchCard = vi.fn(async () => ({ spiffeUri: EXPECTED, publicKey: 'PK' }));
+    const fetchCardPinned = vi.fn();
+    const r = await learnInboundPeer(deps({ remoteAddress: '10.10.10.55', fetchCard, fetchCardPinned, resolveFallbackAddress: () => '9.9.9.9' }));
+    expect(r).toBe('recorded');
+    expect(fetchCard).toHaveBeenCalledOnce();
+    expect(fetchCardPinned).not.toHaveBeenCalled();
+  });
+
+  it('CR-LOW: Fallback-Adresse außerhalb erlaubtem Subnetz → fail-closed, KEIN Fetch', async () => {
+    const fetchCardPinned = vi.fn();
+    const r = await learnInboundPeer(deps({
+      remoteAddress: '', fetchCardPinned, resolveFallbackAddress: () => '8.8.8.8',
+      isFallbackAddressAllowed: (h) => h.startsWith('10.'),
+    }));
+    expect(r).toBe('fetch-failed');
+    expect(fetchCardPinned).not.toHaveBeenCalled();
+  });
+
+  it('gepinnter Fallback-Fetch retry bei transientem Throw → Erfolg beim 2. Versuch', async () => {
+    let n = 0;
+    const fetchCardPinned = vi.fn(async () => { if (++n === 1) throw new Error('ECONNREFUSED'); return { spiffeUri: EXPECTED, publicKey: 'PK' }; });
+    const delay = vi.fn(async () => {});
+    const r = await learnInboundPeer(deps({ remoteAddress: '', fetchCardPinned, delay, resolveFallbackAddress: () => '10.10.10.80' }));
+    expect(r).toBe('recorded');
+    expect(fetchCardPinned).toHaveBeenCalledTimes(2);
   });
 });
