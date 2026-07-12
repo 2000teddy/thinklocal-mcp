@@ -22,10 +22,16 @@ Eintrag in der daemon.toml brauchen."* Und: eine statische Liste skaliert bei 10
 1. **Keine Peer-Persistenz.** `MeshManager` (`mesh.ts`) hält `peers` und `authenticatedSeen`
    in In-Memory-`Map`s — **keinerlei Persistenz**. Ein Restart = **totale Amnesie**; das
    gesamte Peer-/Auflösungs-Wissen muss neu aufgebaut werden.
-2. **mDNS ist one-shot + fragil.** `MdnsDiscovery.publish()`/`browse()` laufen je EINMAL beim
-   Start; **kein periodisches Re-Announce/Re-Query**. In einer Neustart-Welle kommen Knoten
-   zeitversetzt hoch → wer die Query/den Announce des anderen verpasst, sieht ihn nicht wieder.
-   Auf dual-homed macOS zusätzlich die bekannten mDNS-Pathologien (ADR-019/025).
+2. **mDNS hat kein anwendungsseitiges Re-Query/Reconcile.** `MdnsDiscovery.publish()`/`browse()`
+   werden je EINMAL beim Start aufgerufen. `browse()` (`bonjour.find`) setzt **einen** initialen
+   aktiven PTR-Query ab und lauscht danach **passiv** auf eingehende Advertisements/Antworten;
+   `publish()` übergibt den Service dem mDNS-Responder, der die Standard-Announcements sendet
+   (**Library-getrieben, endlich/exponentiell abklingend** — kein Dauer-Broadcast) und danach
+   eingehende Queries passiv beantwortet. Es gibt aber **keinen anwendungseigenen periodischen
+   Re-Query bzw. keine Reconciliation-Schleife**: kommen Knoten in einer Neustart-Welle zeitversetzt
+   hoch, verpasst ein Node, dessen initialer Query vor dem Announce-Fenster des Peers lag, den Peer —
+   und fragt von sich aus nicht erneut. Auf dual-homed macOS zusätzlich die bekannten
+   mDNS-Pathologien (ADR-019/025).
 3. **Der Async-Learn-Fallback (ADR-026) ist rein reaktiv + spröde.** Er triggert nur bei einem
    authentifizierten Inbound-SKILL_ANNOUNCE, macht **einen einzigen** Card-Fetch-Versuch und
    scheitert fail-closed bei leerer `remoteAddress` (`inbound-peer-learner.ts:68`). Während einer

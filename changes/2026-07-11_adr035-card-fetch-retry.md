@@ -6,7 +6,8 @@
 
 ## Warum
 Root-Cause (code-verifiziert, drei Ebenen): (1) keine Peer-Persistenz (MeshManager rein
-In-Memory → Restart = Amnesie); (2) mDNS one-shot (kein Re-Announce/Re-Query); (3) Async-Learn
+In-Memory → Restart = Amnesie); (2) mDNS ohne anwendungsseitiges Re-Query/Reconcile (ein initialer
+aktiver Query + passives Lauschen; Library-Re-Announces sind endlich, kein Dauer-Broadcast); (3) Async-Learn
 rein reaktiv + **einzelner** Card-Fetch → scheitert während einer Welle (Peer-HTTP noch nicht oben).
 Live-Workaround war `static_peers` — skaliert nicht (1000+ Knoten) und ist eine `daemon.toml`-
 Ausnahme, die es laut Christian nicht braucht.

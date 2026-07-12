@@ -11,7 +11,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 ### feat(discovery): ADR-035 Discovery-Resilienz — Card-Fetch-Retry (A3) + Root-Cause/ADR (2026-07-11 22:05)
 
 Root-Cause der „Discovery überlebt Neustart-Wellen nicht"-Regression dokumentiert (ADR-035): keine
-Peer-Persistenz (MeshManager rein In-Memory → Restart-Amnesie) + mDNS one-shot (kein Re-Query) +
+Peer-Persistenz (MeshManager rein In-Memory → Restart-Amnesie) + mDNS ohne anwendungsseitiges
+Re-Query/Reconcile (initialer aktiver Query + passives Lauschen; Library-Re-Announces endlich) +
 spröder Async-Learn (einzelner Card-Fetch, scheitert während Wellen). Dieser PR = Slice A3: der
 Async-Learn wiederholt den Card-Fetch bei transientem Throw mit Backoff (Default 3× [500,1500,4000]ms;
 ungültige Card bleibt permanenter Reject). Rückwärtskompatibel (neue Deps defaulten, kein index.ts-
