@@ -51,6 +51,13 @@ exclude_interface_patterns = []
 # allowed_mesh_cidrs + static_peers kombinieren. Env: TLMCP_DISABLE_MDNS_INTERFACE_PIN=1.
 # disable_mdns_interface_pin = true
 disable_mdns_interface_pin = false
+#
+# ADR-035 A4: Intervall (ms) fuer periodisches aktives mDNS-Re-Query. bonjour.find() setzt nur
+# EINEN initialen PTR-Query ab + lauscht danach passiv; ohne Re-Query findet ein Node, dessen
+# initialer Query vor dem Announce-Fenster eines Peers lag (Neustart-Welle), diesen nie wieder.
+# Der periodische Re-Query (Browser.update()) schliesst das Fenster ohne static_peers.
+# 0 = deaktiviert; sonst auf min. 5000 ms geklemmt. Default 30000. Env: TLMCP_MDNS_REQUERY_MS.
+# mdns_requery_interval_ms = 30000
 
 [libp2p]
 enabled = true                  # Wird im local-Modus implizit deaktiviert, ausser per Env-Override

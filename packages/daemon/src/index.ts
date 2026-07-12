@@ -10,7 +10,7 @@ import { startCertExpiryMonitor } from './cert-expiry-monitor.js';
 import { readRamUsedPercent, readResourceMetrics } from './resource-metrics.js';
 import { existsSync as fsExistsSync } from 'node:fs';
 import { AuditLog } from './audit.js';
-import { MdnsDiscovery } from './discovery.js';
+import { MdnsDiscovery, resolveMdnsRequeryIntervalMs } from './discovery.js';
 import { startStaticPeerReconciler, resolveStaticReconcileSteadyMs } from './static-peer-reconciler.js';
 import { learnInboundPeer } from './inbound-peer-learner.js';
 import { AgentCardServer } from './agent-card.js';
@@ -1349,6 +1349,18 @@ async function main(): Promise<void> {
     },
   });
 
+  // ADR-035 A4: periodisches aktives mDNS-Re-Query. `browse()` setzt nur EINEN initialen PTR-Query
+  // ab + lauscht danach passiv; ein Node, dessen initialer Query vor dem Announce-Fenster eines
+  // Peers lag (Neustart-Welle), fände ihn sonst nie wieder. Timer unref't → hält den Event-Loop
+  // beim Shutdown nicht offen; sauber im shutdown() gestoppt. No-op wenn mDNS aus / Intervall 0.
+  let mdnsRequeryTimer: ReturnType<typeof setInterval> | undefined;
+  const mdnsRequeryMs = resolveMdnsRequeryIntervalMs(config.discovery.mdns_requery_interval_ms);
+  if (config.discovery.mdns_enabled && mdnsRequeryMs > 0) {
+    mdnsRequeryTimer = setInterval(() => discovery.reQuery(), mdnsRequeryMs);
+    mdnsRequeryTimer.unref();
+    log.info({ intervalMs: mdnsRequeryMs }, '[discovery] ADR-035 A4: periodisches mDNS-Re-Query aktiv');
+  }
+
   // 9b. Statische Peers verbinden — ADR-025: robuster Reconciler statt einmaligem Start-Burst.
   // Auf dual-homed macOS (.55) vergiftet der Daemon-Start die connectx-Route transient (~Sekunden);
   // der frühere Einmal-Connect traf genau dieses Fenster → EHOSTUNREACH → 0 Peers, kein Retry.
@@ -1451,6 +1463,7 @@ async function main(): Promise<void> {
     clearInterval(storageMaintenanceTimer); // ADR-030 (T1.3)
     clearInterval(certExpiryTimer); // T2.1
     clearInterval(resourceRefreshTimer); // T2.4
+    if (mdnsRequeryTimer) clearInterval(mdnsRequeryTimer); // ADR-035 A4
     telegramGateway?.stop();
     skillHealthMonitor.stop();
     gossip.stop();

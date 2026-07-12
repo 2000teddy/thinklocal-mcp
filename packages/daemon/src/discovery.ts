@@ -45,6 +45,19 @@ export function resolveBonjourOptions(
   return { interface: meshIp, bind: '0.0.0.0' };
 }
 
+/** Untere Grenze für das periodische mDNS-Re-Query, um Multicast-Fluten zu vermeiden. */
+export const MIN_MDNS_REQUERY_MS = 5_000;
+
+/**
+ * ADR-035 A4 (rein, testbar): normalisiert das konfigurierte Re-Query-Intervall.
+ * `0` (oder negativ/NaN) → 0 = deaktiviert; jeder positive Wert wird auf `MIN_MDNS_REQUERY_MS`
+ * hochgeklemmt, damit ein zu aggressiver Config-Wert das LAN nicht mit PTR-Queries flutet.
+ */
+export function resolveMdnsRequeryIntervalMs(configured: number | undefined): number {
+  if (configured === undefined || !Number.isFinite(configured) || configured <= 0) return 0;
+  return Math.max(MIN_MDNS_REQUERY_MS, Math.floor(configured));
+}
+
 export class MdnsDiscovery {
   private bonjour?: Bonjour;
   private browser: Browser | null = null;
@@ -262,6 +275,19 @@ export class MdnsDiscovery {
         events.onPeerFound(peer);
       },
     );
+  }
+
+  /**
+   * ADR-035 A4: setzt den aktiven mDNS-PTR-Query erneut ab (`Browser.update()`). Der beim
+   * `browse()` installierte passive Response-Listener bleibt erhalten — eingehende Antworten laufen
+   * weiter durch `onPeerFound`. Für periodisches Re-Query nach Neustart-Wellen: ein Node, dessen
+   * initialer Query vor dem Announce-Fenster eines Peers lag, findet ihn beim nächsten Re-Query.
+   * No-op, wenn mDNS deaktiviert (ADR-025) oder `browse()` noch nicht aufgerufen wurde.
+   */
+  reQuery(): void {
+    if (!this.bonjour || !this.browser) return;
+    this.browser.update();
+    this.log?.debug('[discovery] ADR-035 A4: aktiver mDNS-Re-Query abgesetzt');
   }
 
   unpublish(): void {

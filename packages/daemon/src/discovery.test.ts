@@ -11,7 +11,12 @@
  * Echte Multicast-Tests stehen im PoC-Script (scripts/discovery-poc.ts).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { MdnsDiscovery, resolveBonjourOptions } from './discovery.js';
+import {
+  MdnsDiscovery,
+  resolveBonjourOptions,
+  resolveMdnsRequeryIntervalMs,
+  MIN_MDNS_REQUERY_MS,
+} from './discovery.js';
 import {
   ipInCidr,
   isPeerIpAllowed,
@@ -23,6 +28,7 @@ import {
 // aber die Aufrufe sehen koennen (Bind-Regression-Test + Shutdown-Ordering).
 const bonjourCtorSpy = vi.fn();
 const browserStopSpy = vi.fn();
+const browserUpdateSpy = vi.fn();
 const unpublishAllSpy = vi.fn();
 const destroySpy = vi.fn();
 // Konfigurierbarer publish()-Service: Tests koennen `publishHolder.records` mit
@@ -45,7 +51,7 @@ vi.mock('bonjour-service', () => {
       return svc;
     }
     find() {
-      return { stop: browserStopSpy };
+      return { stop: browserStopSpy, update: browserUpdateSpy };
     }
     unpublishAll() {
       unpublishAllSpy();
@@ -482,6 +488,56 @@ describe('Discovery-Policy-Integration', () => {
       const d = new MdnsDiscovery('_thinklocal._tcp', undefined, true, { mdns_enabled: true }, fakeMeshInterface);
       expect(bonjourCtorSpy).toHaveBeenCalledTimes(1);
       d.stop();
+    });
+  });
+
+  // ADR-035 A4: periodisches mDNS-Re-Query.
+  describe('mDNS-Re-Query (ADR-035 A4)', () => {
+    const meshIf = () => ({
+      en10: [{ address: '10.10.10.94', netmask: '255.255.255.0', family: 'IPv4' as const, mac: '0', internal: false, cidr: '10.10.10.94/24', scopeid: 0 }],
+    });
+    beforeEach(() => { browserUpdateSpy.mockClear(); bonjourCtorSpy.mockClear(); });
+    afterEach(() => { browserUpdateSpy.mockClear(); });
+
+    describe('resolveMdnsRequeryIntervalMs (rein)', () => {
+      it('0 / negativ / undefined / NaN → 0 (deaktiviert)', () => {
+        expect(resolveMdnsRequeryIntervalMs(0)).toBe(0);
+        expect(resolveMdnsRequeryIntervalMs(-5)).toBe(0);
+        expect(resolveMdnsRequeryIntervalMs(undefined)).toBe(0);
+        expect(resolveMdnsRequeryIntervalMs(Number.NaN)).toBe(0);
+      });
+      it('positiver Wert unter dem Minimum wird hochgeklemmt', () => {
+        expect(resolveMdnsRequeryIntervalMs(100)).toBe(MIN_MDNS_REQUERY_MS);
+        expect(resolveMdnsRequeryIntervalMs(MIN_MDNS_REQUERY_MS - 1)).toBe(MIN_MDNS_REQUERY_MS);
+      });
+      it('Wert über dem Minimum bleibt erhalten (floor)', () => {
+        expect(resolveMdnsRequeryIntervalMs(30_000)).toBe(30_000);
+        expect(resolveMdnsRequeryIntervalMs(30_000.9)).toBe(30_000);
+      });
+    });
+
+    it('reQuery() nach browse() setzt Browser.update() ab (aktiver Re-Query)', () => {
+      const d = new MdnsDiscovery('_thinklocal._tcp', undefined, true, { mdns_enabled: true }, meshIf);
+      d.browse({ onPeerFound: vi.fn(), onPeerLeft: vi.fn() });
+      d.reQuery();
+      d.reQuery();
+      expect(browserUpdateSpy).toHaveBeenCalledTimes(2);
+      d.stop();
+    });
+
+    it('reQuery() VOR browse() ist no-op (kein Browser)', () => {
+      const d = new MdnsDiscovery('_thinklocal._tcp', undefined, true, { mdns_enabled: true }, meshIf);
+      expect(() => d.reQuery()).not.toThrow();
+      expect(browserUpdateSpy).not.toHaveBeenCalled();
+      d.stop();
+    });
+
+    it('reQuery() ist no-op bei mdns_enabled=false (static-only)', () => {
+      const d = new MdnsDiscovery('_thinklocal._tcp', undefined, true, { mdns_enabled: false }, meshIf);
+      d.browse({ onPeerFound: vi.fn(), onPeerLeft: vi.fn() });
+      expect(() => d.reQuery()).not.toThrow();
+      expect(browserUpdateSpy).not.toHaveBeenCalled();
+      expect(bonjourCtorSpy).not.toHaveBeenCalled();
     });
   });
 

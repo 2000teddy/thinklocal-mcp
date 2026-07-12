@@ -101,6 +101,28 @@ describe('loadConfig: ADR-022 emit_canonical_sender Default (Durable-Fix)', () =
   });
 });
 
+describe('loadConfig: ADR-035 A4 mdns_requery_interval_ms', () => {
+  afterEach(() => { delete process.env['TLMCP_MDNS_REQUERY_MS']; });
+
+  it('Default ist 30000', () => {
+    expect(loadConfig(NO_TOML).discovery.mdns_requery_interval_ms).toBe(30_000);
+  });
+  it('TLMCP_MDNS_REQUERY_MS=0 → 0 (Re-Query aus)', () => {
+    process.env['TLMCP_MDNS_REQUERY_MS'] = '0';
+    expect(loadConfig(NO_TOML).discovery.mdns_requery_interval_ms).toBe(0);
+  });
+  it('TLMCP_MDNS_REQUERY_MS=60000 → 60000', () => {
+    process.env['TLMCP_MDNS_REQUERY_MS'] = '60000';
+    expect(loadConfig(NO_TOML).discovery.mdns_requery_interval_ms).toBe(60_000);
+  });
+  it('nicht-numerischer/negativer Env-Wert wird ignoriert → Default bleibt', () => {
+    process.env['TLMCP_MDNS_REQUERY_MS'] = 'abc';
+    expect(loadConfig(NO_TOML).discovery.mdns_requery_interval_ms).toBe(30_000);
+    process.env['TLMCP_MDNS_REQUERY_MS'] = '-5';
+    expect(loadConfig(NO_TOML).discovery.mdns_requery_interval_ms).toBe(30_000);
+  });
+});
+
 describe('loadConfig: ADR-026 auto_register_authenticated_peers', () => {
   afterEach(() => { delete process.env['TLMCP_AUTO_REGISTER_AUTH_PEERS']; });
 

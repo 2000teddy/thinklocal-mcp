@@ -1634,6 +1634,14 @@ CHANGES.md, `changes/2026-07-07_doc-compliance-gate.md`, dieser Eintrag; Rollen/
 
 **Typ:** Daemon-Code + Design-Doku. Root-Cause der „Discovery überlebt Neustart-Wellen nicht"-Regression (keine Peer-Persistenz + mDNS one-shot + spröder Async-Learn) dokumentiert in ADR-035; dieser PR liefert Slice A3 (Card-Fetch-Retry mit Backoff, rückwärtskompatibel, kein Deploy). Folge-Slices A1/A2/A4/B = TL-26…TL-29. **CO/CG:** n/a (A3). **TS/CR/PC:** s. Zeile. **DO:** `docs/architecture/ADR-035-…md`, `TODO.md`, `changes/2026-07-11_adr035-card-fetch-retry.md`, `CHANGES.md`, dieser Eintrag.
 
+## Sweep 2026-07-12 07:17 — feat(discovery): ADR-035 A4a mDNS-Re-Query (Fallback verschoben)
+
+| #        | PR    | Datum            | CO  | CG  | TS  | CR  | PC  | DO | Findings                           |
+|----------|-------|------------------|-----|-----|-----|-----|-----|----|------------------------------------|
+| adr035-a4a | #258 (offen, base=main) | 2026-07-12 07:17 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | Daemon-Code (`discovery.reQuery()`/`resolveMdnsRequeryIntervalMs` + config-Feld + index.ts-Timer). CO: n/a (A4a mechanisch, Design in ADR-035 gesetzt; CO für A1/B TL-26/29 vorgemerkt). CG: n/a. TS: +10 Tests (reQuery→Browser.update() / no-op vor browse / no-op mdns-off; resolveMdnsRequeryIntervalMs Klemmung 0/neg/NaN/floor; config default/env/coercion); 1509 grün, tsc sauber, keine neuen ESLint-Errors. CR: claude-Subagent PASS **+ Codex-Review auf PR = CHANGES-NEEDED** → der ursprünglich mitgelieferte `remoteAddress`-Fallback wurde **entfernt** (kein AUTHN-neutraler Pfad: self-asserted Card-`publicKey` nicht ans Transport-Cert gebunden). PC: `git diff` — discovery/config/index + Tests + Doku. |
+
+**Typ:** Daemon-Code + Config + Design-Doku. ADR-035 Slice **A4a** (TL-28): periodisches aktives mDNS-Re-Query (`Browser.update()`, Timer unref't + im Shutdown gestoppt, ≥5000 ms geklemmt) schließt das Announce-Fenster nach Neustart-Wellen ohne static_peers. **Der `remoteAddress`-Fallback wurde nach Codex-CHANGES-NEEDED aus dieser PR herausgenommen** und als identitäts-gebundener, gegatteter Slice **A4b / TL-28b** neu spezifiziert (Learner-Fetch muss auf `expectedSpiffeUri` gepinnt sein, D2b, bevor er aktiviert wird). Additiv/rückwärtskompatibel, kein Deploy/Secret/Gate. **CO/CG:** n/a. **TS/CR/PC:** s. Zeile. **DO:** `docs/architecture/ADR-035-…md` (Slice-Tabelle A4a=erledigt / A4b=offen-gated + Begründung), `config/daemon.toml`, `TODO.md` (TL-28 ✅ / TL-28b offen), `changes/2026-07-12_adr035-a4-mdns-requery-fallback.md`, `CHANGES.md`, dieser Eintrag.
+
 ---
 
-*Letzte Aktualisierung: 2026-07-11 22:05 — feat(discovery): ADR-035 A3 Card-Fetch-Retry mit Backoff.*
+*Letzte Aktualisierung: 2026-07-12 08:04 — feat(discovery): ADR-035 A4a mDNS-Re-Query (Fallback → A4b/TL-28b verschoben nach Codex-Review).*

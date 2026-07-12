@@ -59,9 +59,26 @@ Zwei Stoßrichtungen, gestaffelt:
 - **A3 — Card-Fetch-Retry mit Backoff** (⟵ **dieser PR, Slice 1**): der Async-Learn und das
   Re-Learn wiederholen den Card-Fetch bei transienten Fehlern (ECONNREFUSED während einer Welle)
   mit exponentiellem Backoff statt nach einem Versuch aufzugeben. Reine, injizierbare Retry-Logik.
-- **A4 — Periodisches mDNS-Re-Query + robustere `remoteAddress`:** Browser periodisch neu
-  abfragen (bonjour `update()`); leere `remoteAddress` aus der mDNS-/Cache-bekannten Adresse des
-  Peers substituieren statt fail-closed abzubrechen.
+- **A4a — Periodisches mDNS-Re-Query** (⟵ **dieser PR, Slice 2**): Browser periodisch neu abfragen
+  (bonjour `Browser.update()`); der beim `browse()` installierte passive Response-Listener bleibt.
+  Ein Node, dessen initialer Query vor dem Announce-Fenster eines Peers lag, findet ihn beim
+  nächsten Re-Query. Rein additiv, kein Trust-Pfad berührt.
+- **A4b — Identitäts-gebundener `remoteAddress`-Fallback** (⟵ **verschoben, TL-28b, gated**):
+  leere `remoteAddress` aus der mDNS-/Cache-bekannten Adresse des Peers substituieren, **statt
+  fail-closed abzubrechen** — ABER erst, wenn die Learner-Card-Fetch server-identity-**gepinnt** ist.
+  - **Warum verschoben (Codex CHANGES-NEEDED, PR #258, 12.07.):** Ein naiver Fallback ist NICHT
+    AUTHN-neutral. Die `record()`-Gate prüft nur `card.spiffeUri == expectedSpiffeUri` + PublicKey-
+    Präsenz — **self-asserted JSON**, nicht an das Transport-Cert gebunden. Solange die Fetch nur
+    CA-Chain + Node-Default-Host/IP-Altname prüft (die `spiffeServerIdentity`-Server-ID-Pinnung aus
+    D2b ist Default AUS, Christian-Gate), kann ein Angreifer, der den Discovery-Eintrag des Opfers
+    **bereits** vergiftet hat, an der Substitut-Adresse eine Card `{spiffeUri: OPFER, publicKey:
+    ANGREIFER}` servieren → sie passiert die Gate und schreibt `{Opfer → Angreifer-Key}` in die
+    AUTHN-only-Map. Zwar AUTHZ-neutral (`authenticatedSeen` fließt nie in Autorisierung), aber ein
+    **neuer Pfad von Discovery-Host-Daten zur AUTHN-Key-Attribution** — das darf nicht default-on.
+  - **Bedingung zum Nachziehen:** die Learner-Fetch auf `expectedSpiffeUri` pinnen (D2b-Verifier
+    `spiffeServerIdentity`), dann muss der Substitut-Endpoint das attestierte Peer-Cert real halten;
+    Regressionstest: falscher Endpoint liefert `{spiffeUri: EXPECTED, publicKey: attackerKey}` → **kein**
+    `record`. Erst dann ist der Fallback identitätsgebunden aktivierbar.
 
 ### B) Ziel-Architektur: Hub-verankerte Pull-Discovery (strategisch, ADR-Kern)
 
@@ -96,7 +113,8 @@ nicht zur Grundlage.
 | **A3** | Card-Fetch-Retry mit Backoff (Learner) | TL-25a | **dieser PR** |
 | A1 | Peer-Cache-Persistenz (atomar, validierend, AUTHN-only) | TL-26 | offen (CO) |
 | A2 | Aggressives Boot-Re-Learn aus Cache + paired-peers | TL-27 | offen |
-| A4 | Periodisches mDNS-Re-Query + remoteAddress-Fallback | TL-28 | offen |
+| A4a | Periodisches mDNS-Re-Query (`Browser.update()`) | TL-28 | **erledigt (dieser PR)** |
+| A4b | Identitäts-gebundener remoteAddress-Fallback (D2b-Pinning) | TL-28b | offen (gated, s.o.) |
 | B  | Hub-Pull-Endpoint `/api/mesh/peers` + Client + Fallback-Kette | TL-29 | offen (CO) |
 
 Jeder Slice: eigener PR, Tests, CR, PC, DO (COMPLIANCE-Pflicht). A1/B berühren Trust-nahe Pfade
