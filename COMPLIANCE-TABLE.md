@@ -1670,7 +1670,7 @@ CHANGES.md, `changes/2026-07-07_doc-compliance-gate.md`, dieser Eintrag; Rollen/
 
 | #        | PR    | Datum            | CO  | CG  | TS  | CR  | PC  | DO | Findings                           |
 |----------|-------|------------------|-----|-----|-----|-----|-----|----|------------------------------------|
-| docs-pr-reconcile | (offen, base=main) | 2026-07-13 06:13 | n/a | n/a | n/a | n/a | ✅ | ✅ | **Doc-only** (kein Code). Reconcile-Wächter 03:34: PR-Felder der gemergten ADR-035-A-Reihe auf Realzustand gezogen — adr035-a3→#257, a4a→#258, a1→#259, a2→#260, a4b→#261, alle `(merged)`; CHANGES-A4b-Eintrag mit `PR #261` explizit. CO/CG/TS/CR: n/a (keine Code-/Design-Änderung). PC: `git diff` — nur `.md`/`changes/`. |
+| docs-pr-reconcile | #262 (offen, base=main) | 2026-07-13 06:13 | n/a | n/a | n/a | n/a | ✅ | ✅ | **Doc-only** (kein Code). Reconcile-Wächter 03:34: PR-Felder der gemergten ADR-035-A-Reihe auf Realzustand gezogen — adr035-a3→#257, a4a→#258, a1→#259, a2→#260, a4b→#261, alle `(merged)`; CHANGES-A4b-Eintrag mit `PR #261` explizit. CO/CG/TS/CR: n/a (keine Code-/Design-Änderung). PC: `git diff` — nur `.md`/`changes/`. |
 
 **Typ:** Doc-only. Realabgleich der PR-Felder (kein Halbwissen — nur die vom Wächter benannten gemergten #257–#261). **CO/CG/TS/CR:** n/a (keine Code-/Test-Änderung). **PC:** reine `.md`/`changes/`-Änderung. **DO:** `COMPLIANCE-TABLE.md` (5 PR-Felder + diese Zeile), `CHANGES.md` (A4b-PR-Bezug), `changes/2026-07-13_docs-compliance-pr-reconcile.md`.
 
