@@ -8,7 +8,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### feat(discovery): ADR-035 A4b — identitäts-gebundener Inbound-Fallback (TL-28b) (2026-07-12 12:07)
+### feat(discovery): ADR-035 A4b — identitäts-gebundener Inbound-Fallback (TL-28b, PR #261) (2026-07-12 12:07)
 
 Reaktiviert den in #258 (Codex CHANGES-NEEDED) verschobenen `remoteAddress`-Fallback im ADR-026-
 Inbound-Learner — jetzt **identitäts-gebunden**. Bei leerer TLS-Source-IP (Cross-Subnet/NAT) wird
