@@ -8,6 +8,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs: TL-11/TL-12 Discovery + Slice-Proposal (doc-first) (2026-07-15 13:03)
+Doc-only Discovery für TL-11 (Heartbeat-Weckruf) + TL-12 (signierte Postfach-Zustellung):
+`docs/architecture/TL-11-12-wake-postbox-discovery.md` mit belegtem Ist-Zustand, kleinster erster Scheibe
+je Feature und Sicherheits-Invarianten. CO (`pal:consensus`, opus+sonnet) einstimmig **Reorder TL-12 →
+TL-11**; TL-12 Slice A (signierter, re-verifizierbarer Auftrag im Postfach) ist die nächste Scheibe.
+TODO mit Slice-Aufteilung aktualisiert; Compliance #264→merged reconciled. Kein Code.
+
 ### feat(security): ADR-037 Ingress-Wiring der Meldekanal-Freigabe (TL-09b) (2026-07-15 11:23)
 Verdrahtet die Meldekanal-Abstraktion (ADR-036) an den Hub-Ingress: `handleMcpIngress` bekommt einen
 optionalen `resolveApproval`-Dep; ein `gate`-Aufruf holt — falls verdrahtet — eine Freigabe ein und

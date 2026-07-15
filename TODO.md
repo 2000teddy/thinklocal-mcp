@@ -67,10 +67,22 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
   unbekannte decider-Grammatik, `consensus` ohne `quorum:N` N≥2); `isRoutable()`-Guard analog `isApproved`.
 
 ### P1 — Identität, Autonomie, Robustheit
-- [ ] **[v5.1] TL-11 (≈4 h)** Heartbeat-Weckruf (Entsch. 16): Daemon weckt Agenten; geweckter Agent prüft
-  Mesh-Postfach. ↔ baut auf bestehendem ADR-004 Cron-Heartbeat.
+> **Discovery + Reihenfolge (CO 2026-07-15, opus+sonnet einstimmig):** **TL-12 VOR TL-11.** TL-12 Slice A
+> ist additiv/risikoarm/eigenständig wertvoll und stabilisiert die diskriminierte Nachrichtenform, die
+> TL-11s Wake lesen muss. Scoping-Doku: `docs/architecture/TL-11-12-wake-postbox-discovery.md`.
 - [ ] **[v5.1] TL-12 (≈4 h)** Ausgewiesene Mesh-Zustellung an Agenten (signierter Auftrag → Postfach →
-  Abarbeitung; Ersatz für tmux-Zuruf, Kap. 11.3).
+  Abarbeitung; Ersatz für tmux-Zuruf, Kap. 11.3). **← nächste Scheibe.**
+  - [ ] **TL-12 Slice A** (ADR-038): signierter Auftrag mit **intakter Signatur** im Postfach, beim
+    `read_inbox` re-verifizierbar. Neue nullable Spalten (`signed_bytes` verbatim/`signer_spiffe`/
+    `signer_keyid`/`verified_at`/`verify_verdict`); Diskriminator **signiert + server-abgeleitet**
+    (fail-closed); Order-Nonce **jetzt** in die Signatur. Kein Ausführungs-Wiring.
+  - [ ] **TL-12 Slice B**: Ausführung + Idempotenz-Ledger (Nonce).
+- [ ] **[v5.1] TL-11 (≈4 h)** Heartbeat-Weckruf (Entsch. 16): Daemon weckt Agenten; geweckter Agent prüft
+  Mesh-Postfach. ↔ baut auf ADR-004. **Nach TL-12.**
+  - [ ] **TL-11 Slice A** (ADR-039): **edge-driven** Wake auf bestehendem `inbox:new` + `AgentRegistry`-
+    Fanout (kein Zweit-Poll); gedeckelter Reconciliation-Sweep. **Transport-Entscheidung im ADR erzwingen**
+    (WS-Multiplex / mTLS-Push / Poll-Reset). Wake ohne Inhalt, ACL-gescoped, coalesce/rate-limit.
+    Cross-Repo-`deliver`-Abhängigkeit (Agent-Home-Supervisor) + **Zwei-Peer-Live-DoD** benennen.
 - [ ] **[v5.1] TL-13 (≈1 h je Rechner + ⛔ Fenster)** Re-Enroll .56/.222/.94 → `node/<PeerID>`; danach
   Duldungs-Ende Alt-Format aktivieren (Entsch. 17, spätestens **01.08.**). ↔ vgl. „Produktiv-Flotten-Flip"
   + `TLMCP_STRICT_IDENTITY`.
