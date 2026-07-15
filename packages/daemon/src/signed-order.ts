@@ -85,26 +85,74 @@ export function orderKeyId(publicKeyPem: string): string {
 }
 
 /**
- * Extrahiert die verbatim Auftrags-Bytes aus einem Nachrichten-Body. **Strikt** und wirft nie:
- *  - Body muss ein Objekt mit einem STRING-Feld `__tlorder__` sein.
- *  - base64 muss dekodierbar und ≤ MAX_ORDER_BYTES sein.
- * Alles andere (kein Marker, falscher Typ, zu groß, ungültiges base64) → `null` (Plain-Pfad).
+ * Ergebnis der Marker-Extraktion (**Tri-State**, CR-Codex #266): unterscheidet „kein Marker" von
+ * „Marker vorhanden, aber unbrauchbar". Ohne diese Trennung würde ein vorhandener-aber-kaputter Marker
+ * still zu einer Plain-Nachricht degradieren (kein INVALID, kein Audit) — Audit-Umgehung für
+ * auftrags-förmige Eingaben.
  */
-export function extractOrderMarker(body: unknown): Uint8Array | null {
-  if (typeof body !== 'object' || body === null) return null;
+export type MarkerExtraction =
+  | { kind: 'absent' } // kein `__tlorder__`-Feld → Plain-Pfad
+  | { kind: 'invalid'; reason: string } // Feld vorhanden, aber unbrauchbar → INVALID + Audit
+  | { kind: 'bytes'; bytes: Uint8Array }; // Feld vorhanden, Bytes extrahiert → verifizieren
+
+/**
+ * Extrahiert die verbatim Auftrags-Bytes aus einem Nachrichten-Body. **Strikt**, wirft nie, tri-state:
+ *  - Body ist kein Objekt oder ohne `__tlorder__`-Feld → `absent` (Plain).
+ *  - `__tlorder__` vorhanden, aber kein nicht-leerer String / zu lang / dekodiert leer/zu groß →
+ *    `invalid(reason)` (der Aufrufer routet das über INVALID + `ORDER_VERIFY_FAILED`).
+ *  - sonst → `bytes`.
+ */
+export function extractOrderMarker(body: unknown): MarkerExtraction {
+  if (typeof body !== 'object' || body === null || !(ORDER_MARKER in body)) {
+    return { kind: 'absent' };
+  }
   const raw = (body as Record<string, unknown>)[ORDER_MARKER];
-  if (typeof raw !== 'string' || raw.length === 0) return null;
+  if (typeof raw !== 'string' || raw.length === 0) {
+    return { kind: 'invalid', reason: 'marker is not a non-empty string' };
+  }
   // Grobes base64-Längenlimit VOR dem Dekodieren (base64 ~ 4/3 der Bytes).
-  if (raw.length > Math.ceil((MAX_ORDER_BYTES * 4) / 3) + 4) return null;
+  if (raw.length > Math.ceil((MAX_ORDER_BYTES * 4) / 3) + 4) {
+    return { kind: 'invalid', reason: 'marker exceeds size limit' };
+  }
   let bytes: Buffer;
   try {
     bytes = Buffer.from(raw, 'base64');
   } catch {
-    return null;
+    return { kind: 'invalid', reason: 'marker is not valid base64' };
   }
-  // Buffer.from('base64') ist tolerant — leeres/degeneriertes Ergebnis verwerfen.
-  if (bytes.length === 0 || bytes.length > MAX_ORDER_BYTES) return null;
-  return new Uint8Array(bytes);
+  // Buffer.from('base64') ist tolerant — leeres/degeneriertes/zu großes Ergebnis verwerfen.
+  if (bytes.length === 0 || bytes.length > MAX_ORDER_BYTES) {
+    return { kind: 'invalid', reason: 'decoded marker empty or oversize' };
+  }
+  return { kind: 'bytes', bytes: new Uint8Array(bytes) };
+}
+
+/**
+ * Entscheidungs-Seam für den Ingest (`index.ts` AGENT_MESSAGE): klassifiziert einen Nachrichten-Body
+ * als Plain / ungültigen Auftrag / gültigen Auftrag. **Rein, wirft nie.** Testbar ohne Netz/Handler.
+ *  - kein Marker → `plain` (unverändertes Verhalten).
+ *  - Marker vorhanden aber unbrauchbar ODER Verify fehlgeschlagen → `invalid(reason)` (Aufrufer: INVALID
+ *    + `ORDER_VERIFY_FAILED`-Audit) — **niemals stiller Downgrade zu Plain**.
+ *  - gültiger, gegen `publicKeyPem`+`expectedIssuer` verifizierter Auftrag → `order`.
+ */
+export type InboundOrderDecision =
+  | { kind: 'plain' }
+  | { kind: 'invalid'; reason: string }
+  | { kind: 'order'; bytes: Uint8Array; orderId: string };
+
+export function classifyInboundOrder(
+  body: unknown,
+  expectedIssuer: string,
+  publicKeyPem: string,
+): InboundOrderDecision {
+  const marker = extractOrderMarker(body);
+  if (marker.kind === 'absent') return { kind: 'plain' };
+  if (marker.kind === 'invalid') return { kind: 'invalid', reason: `malformed-marker: ${marker.reason}` };
+  const vr = verifyOrderBytes(marker.bytes, expectedIssuer, publicKeyPem);
+  if (vr.verdict === 'VALID' && typeof vr.orderId === 'string' && vr.orderId !== '') {
+    return { kind: 'order', bytes: marker.bytes, orderId: vr.orderId };
+  }
+  return { kind: 'invalid', reason: vr.reason ?? 'verify failed' };
 }
 
 /**

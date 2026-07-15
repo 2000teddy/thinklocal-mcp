@@ -14,9 +14,11 @@ unter Marker `__tlorder__` reist. Neu: `signed-order.ts` (fail-closed `verifyOrd
 issuer===sender-Relay-Schutz, `extractOrderMarker` wirft nie). Inbox-Schema **v3** persistiert verbatim
 `signed_bytes` + immutable `signer_pubkey` + `order_nonce`/keyid/verdict/`trust_status`/`is_order`;
 `store()` nimmt nur `OrderContext|null` (is_order typsystemisch unfälschbar); `verifyStoredOrder`
-re-verifiziert beim Lesen gegen den gespeicherten Key (rotationsfest, fail-closed). Ingest-Wiring in
-`index.ts` + `ORDER_RX`/`ORDER_VERIFY_FAILED`-Audit. Keine Ausführung (Slice B). CO: `pal:consensus`
-(opus+sonnet). CR: kein Fail-open, 7 Invarianten ok. +31 Tests, 1620 grün.
+re-verifiziert beim Lesen gegen den gespeicherten Key (rotationsfest, fail-closed) — **`GET /api/inbox`
+ruft dies live** + surfaced `is_order`/`order`-Block. Ingest über den **Tri-State** `classifyInboundOrder`
+(kein Marker → plain; kaputter Marker/Verify-Fehler → INVALID + `ORDER_VERIFY_FAILED`, nie stiller
+Downgrade). Keine Ausführung (Slice B). CO: `pal:consensus` (opus+sonnet). CR intern + extern (Codex #266,
+2 MEDIUM geschlossen): kein Fail-open. +37 Tests, 1629 grün.
 
 ### docs: TL-11/TL-12 Discovery + Slice-Proposal (doc-first) (2026-07-15 13:03)
 Doc-only Discovery für TL-11 (Heartbeat-Weckruf) + TL-12 (signierte Postfach-Zustellung):

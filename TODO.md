@@ -77,7 +77,7 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     immutable `signer_pubkey` + `order_nonce`/keyid/verdict/`trust_status`), `store()` nur `OrderContext|null`
     (is_order typsystemisch unfälschbar, issuer===sender Relay-Schutz), `verifyStoredOrder` fail-closed,
     Ingest-Wiring + `ORDER_RX`/`ORDER_VERIFY_FAILED`-Audit, **Read-Surface: `GET /api/inbox` re-verifiziert
-    live + surfaced `is_order`/`order`-Block** (Reviewer #266 in-slice). +34 Tests.
+    live + surfaced `is_order`/`order`-Block** + Tri-State-Marker (`classifyInboundOrder`-Seam: malformed → INVALID+Audit, Reviewer #266). +37 Tests.
   - [ ] **TL-12 Slice B**: **Ausführung** eines gelesenen Auftrags + Idempotenz-Ledger auf `order_nonce`;
     TTL-Read-Semantik (Ingest honoriert TTL / Read provenienz-only) entscheiden; `trust_status`/Revocation
     via `signer_keyid`.

@@ -12,6 +12,7 @@ import {
   signOrder,
   verifyOrderBytes,
   extractOrderMarker,
+  classifyInboundOrder,
   wrapOrderInBody,
   orderKeyId,
   ORDER_MARKER,
@@ -105,29 +106,75 @@ describe('signed-order — sign/verify roundtrip', () => {
   });
 });
 
-describe('signed-order — Marker-Extraktion (strikt, wirft nie)', () => {
-  it('gültiger Marker → Bytes; roundtrip via wrapOrderInBody', () => {
+describe('signed-order — Marker-Extraktion (Tri-State, strikt, wirft nie)', () => {
+  it('gültiger Marker → { kind: bytes }; roundtrip via wrapOrderInBody', () => {
     const { priv } = keypair();
     const bytes = signOrder(buildOrderEnvelope(ISSUER, 'n', { action: 'x' }), priv);
-    const body = wrapOrderInBody(bytes);
-    const extracted = extractOrderMarker(body);
-    expect(extracted).not.toBeNull();
-    expect(Buffer.compare(Buffer.from(extracted as Uint8Array), Buffer.from(bytes))).toBe(0);
+    const m = extractOrderMarker(wrapOrderInBody(bytes));
+    expect(m.kind).toBe('bytes');
+    if (m.kind !== 'bytes') throw new Error('expected bytes');
+    expect(Buffer.compare(Buffer.from(m.bytes), Buffer.from(bytes))).toBe(0);
   });
 
-  it('kein Marker / Nicht-Objekt / falscher Feldtyp → null', () => {
-    expect(extractOrderMarker('plain string')).toBeNull();
-    expect(extractOrderMarker(null)).toBeNull();
-    expect(extractOrderMarker(42)).toBeNull();
-    expect(extractOrderMarker({ hello: 'world' })).toBeNull();
-    expect(extractOrderMarker({ [ORDER_MARKER]: 123 })).toBeNull();
-    expect(extractOrderMarker({ [ORDER_MARKER]: { nested: true } })).toBeNull();
-    expect(extractOrderMarker({ [ORDER_MARKER]: '' })).toBeNull();
+  it('kein Marker-Feld / Nicht-Objekt → absent (Plain-Pfad)', () => {
+    expect(extractOrderMarker('plain string').kind).toBe('absent');
+    expect(extractOrderMarker(null).kind).toBe('absent');
+    expect(extractOrderMarker(42).kind).toBe('absent');
+    expect(extractOrderMarker({ hello: 'world' }).kind).toBe('absent');
   });
 
-  it('übergroßer Marker → null (DoS-Schutz vor dem Decode)', () => {
+  it('Marker-Feld vorhanden aber unbrauchbar → invalid (KEIN stiller Downgrade)', () => {
+    // wrong type, leer, oversize — alle „vorhanden aber kaputt" ⇒ invalid, nicht absent.
+    expect(extractOrderMarker({ [ORDER_MARKER]: 123 }).kind).toBe('invalid');
+    expect(extractOrderMarker({ [ORDER_MARKER]: { nested: true } }).kind).toBe('invalid');
+    expect(extractOrderMarker({ [ORDER_MARKER]: '' }).kind).toBe('invalid');
     const huge = 'A'.repeat(Math.ceil((MAX_ORDER_BYTES * 4) / 3) + 100);
-    expect(extractOrderMarker({ [ORDER_MARKER]: huge })).toBeNull();
+    expect(extractOrderMarker({ [ORDER_MARKER]: huge }).kind).toBe('invalid');
+  });
+});
+
+describe('signed-order — classifyInboundOrder (Ingest-Seam, CR-Codex #266)', () => {
+  it('kein Marker → plain', () => {
+    const { pub } = keypair();
+    expect(classifyInboundOrder('hi', ISSUER, pub).kind).toBe('plain');
+    expect(classifyInboundOrder({ text: 'hello' }, ISSUER, pub).kind).toBe('plain');
+  });
+
+  it('gültiger Auftrag → order (mit orderId)', () => {
+    const { priv, pub } = keypair();
+    const bytes = signOrder(buildOrderEnvelope(ISSUER, 'nonce-9', { action: 'x' }), priv);
+    const d = classifyInboundOrder(wrapOrderInBody(bytes), ISSUER, pub);
+    expect(d.kind).toBe('order');
+    if (d.kind === 'order') expect(d.orderId).toBe('nonce-9');
+  });
+
+  // Die drei vom Reviewer geforderten Ingest-Seam-Regressionen: NIE stiller Downgrade zu plain.
+  it('wrong-type Marker → invalid (nicht plain)', () => {
+    const { pub } = keypair();
+    const d = classifyInboundOrder({ [ORDER_MARKER]: 123 }, ISSUER, pub);
+    expect(d.kind).toBe('invalid');
+    if (d.kind === 'invalid') expect(d.reason).toContain('malformed-marker');
+  });
+
+  it('malformed-base64 / Garbage-Bytes im Marker → invalid (Verify schlägt fehl)', () => {
+    const { pub } = keypair();
+    // base64 von reinem Garbage — extrahiert zwar Bytes, aber verifyOrderBytes ⇒ INVALID ⇒ invalid.
+    const garbage = Buffer.from('not a signed order at all').toString('base64');
+    const d = classifyInboundOrder({ [ORDER_MARKER]: garbage }, ISSUER, pub);
+    expect(d.kind).toBe('invalid');
+  });
+
+  it('oversize Marker → invalid (nicht plain)', () => {
+    const { pub } = keypair();
+    const huge = 'A'.repeat(Math.ceil((MAX_ORDER_BYTES * 4) / 3) + 100);
+    expect(classifyInboundOrder({ [ORDER_MARKER]: huge }, ISSUER, pub).kind).toBe('invalid');
+  });
+
+  it('Relay: gültige Bytes, aber falscher expectedIssuer → invalid', () => {
+    const { priv, pub } = keypair();
+    const bytes = signOrder(buildOrderEnvelope(ISSUER, 'n', { action: 'x' }), priv);
+    const d = classifyInboundOrder(wrapOrderInBody(bytes), 'spiffe://thinklocal/node/12D3KooWX', pub);
+    expect(d.kind).toBe('invalid');
   });
 });
 

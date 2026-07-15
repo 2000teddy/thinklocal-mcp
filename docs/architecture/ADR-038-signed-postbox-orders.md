@@ -27,8 +27,15 @@ first-class `type='ORDER'` ist **Slice C**).
 
 ### Neues reines Modul `signed-order.ts`
 - `buildOrderEnvelope` / `signOrder(env, privPem) → Uint8Array` (= verbatim `serializeSignedMessage`-Bytes).
-- `extractOrderMarker(body) → Uint8Array | null` — **strikt** (Objekt mit String-`__tlorder__`, base64,
-  ≤ `MAX_ORDER_BYTES` = 64 KiB), **wirft nie**; alles andere → `null` (Plain-Pfad).
+- `extractOrderMarker(body) → { kind:'absent'|'invalid'|'bytes' }` — **Tri-State** (CR-Codex #266,
+  strikt, wirft nie), `MAX_ORDER_BYTES = 47 KiB`: **kein** `__tlorder__`-Feld → `absent` (Plain-Pfad);
+  Feld **vorhanden aber unbrauchbar** (falscher Typ / leer / zu lang / dekodiert leer-oder-zu-groß) →
+  `invalid(reason)`; sonst `bytes`. Der Unterschied absent↔invalid verhindert einen **stillen Downgrade**
+  eines kaputten Markers zu einer Plain-Nachricht.
+- `classifyInboundOrder(body, expectedIssuer, pubPem) → { kind:'plain'|'invalid'|'order' }` — der
+  testbare **Ingest-Seam** (rein, wirft nie): kombiniert Marker-Extraktion + `verifyOrderBytes`. `absent`
+  → `plain`; `invalid`-Marker **oder** Verify-Fehlschlag → `invalid(reason)` (Aufrufer: INVALID +
+  `ORDER_VERIFY_FAILED`-Audit); nur ein voll verifizierter Auftrag → `order`.
 - `verifyOrderBytes(bytes, expectedIssuer, pubPem) → { verdict:'VALID'|'INVALID', issuer?, orderId?, reason? }`
   — **rein, wirft nie** (CBOR-/Decode-Fehler → INVALID). VALID **nur** wenn: deserialisierbar,
   `decodeAndVerify`(Sig+TTL) ok, `type==='ORDER'`, **`envelope.sender === expectedIssuer`** (Relay-Schutz),
@@ -69,9 +76,11 @@ Zeile zeigt `INVALID` (getestet). `read_inbox` (MCP-Tool) reicht diesen Block tr
 
 ### Ingest-Verdrahtung (`index.ts` AGENT_MESSAGE)
 `senderPublicKey` (transport-verifiziert, bereits im `onMessage`-Handler in scope) + `envelope.sender`
-werden an `extractOrderMarker`+`verifyOrderBytes` gereicht. VALID → `OrderContext` an `store` + Audit
-`ORDER_RX`. Marker-vorhanden-aber-INVALID → `store` mit `{verdict:'INVALID'}` + Audit `ORDER_VERIFY_FAILED`
-(beobachtbar, nicht still). Kein Marker → heutiger Plain-Pfad **byte-für-byte unverändert**.
+gehen in `classifyInboundOrder`. `order` → `OrderContext{VALID}` an `store` + Audit `ORDER_RX`.
+`invalid` (Marker vorhanden aber **unbrauchbar** — falscher Typ / malformed-base64 / oversize — **oder**
+Verify fehlgeschlagen) → `store` mit `{verdict:'INVALID'}` + Audit `ORDER_VERIFY_FAILED` (beobachtbar,
+**nie stiller Downgrade zu Plain**, CR-Codex #266). `plain` (kein Marker-Feld) → heutiger Plain-Pfad
+**byte-für-byte unverändert**.
 
 ## Bewusste Grenze
 - **Keine Ausführung** (Slice B — besitzt den Idempotenz-Ledger auf `order_nonce`). Die Inbox-Zeile ist
