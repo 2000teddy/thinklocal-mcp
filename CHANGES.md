@@ -8,6 +8,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(security): ADR-041 owner-seitige Feld-Redaction (TL-08 Slice 2b) (2026-07-15 17:25)
+Owner-seitige **fail-closed** Redaction-Mechanik für die 10 sensitiven unifi credential-/PII-Reads: neues
+`redact-mcp-response.ts` (**deny-by-default Feld-Allowlist** — nur safe-gelistete Keys überleben, alles
+andere `[REDACTED]`; skalare Array-Elemente nur im erlaubten Kontext; bounded → fail-closed=200+Notiz),
+verdrahtet **unconditional** (Policy R) im Owner-Local-Exec (`mcp-mcporter-exec.ts`, auch die Fehler-Pfade).
+**Kein Gate-Flip** — sensitive Tools bleiben am Ingress gegatet (Gate-still-blocks-Regression, „wired ≠
+exposed"); `SERVER_SAFE_FIELDS['unifi']` leer (maximale Redaction; Feld-Kuratierung = 2c). CO:
+`pal:consensus` (opus+sonnet). CR: 1 HIGH (Array-Skalar-Leak) + 1 MEDIUM (Error-Pfad) in-slice gefixt.
++21 Tests, 1672 grün.
+
 ### feat(security): ADR-040 Werkzeugklassen-Observability (TL-08 Slice 2a) (2026-07-15 16:45)
 **Reine Telemetrie — null Gate-Verhaltensänderung** (`deriveToolTierForServer` byte-unverändert). Neu:
 `sensitive`-Set auf `ServerToolClasses` (10 bewusst gegatete unifi-credential-Reads explizit, Invariante

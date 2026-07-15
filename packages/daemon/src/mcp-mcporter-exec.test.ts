@@ -83,6 +83,36 @@ describe('createMcporterLocalExec', () => {
     expect(calls[0]?.argv).toEqual(['call', 'unifi.list_clients', '--args', '{}', '--output', 'json', '--timeout', '5000']);
   });
 
+  // ADR-041 (TL-08 Slice 2b): owner-seitige Redaction am Exec-Seam.
+  it('SECURITY: sensitives Tool (get_wlan) → Ergebnis owner-seitig redigiert, kein Secret im Body', async () => {
+    const { run } = fakeRun({ code: 0, stdout: '{"ssid":"home","x_passphrase":"TOPSECRET"}' });
+    const res = await createMcporterLocalExec({ run })(req(callPayload('get_wlan')));
+    expect(res.status).toBe(200);
+    expect(JSON.stringify(res.body)).not.toContain('TOPSECRET');
+    expect((res.body as { result?: unknown }).result).toEqual({ ssid: '[REDACTED]', x_passphrase: '[REDACTED]' });
+  });
+
+  it('nicht-sensitives Tool (list_clients) → passthrough (unverändert)', async () => {
+    const { run } = fakeRun({ code: 0, stdout: '{"clients":["a","b"]}' });
+    const res = await createMcporterLocalExec({ run })(req(callPayload('list_clients')));
+    expect((res.body as { result?: unknown }).result).toEqual({ clients: ['a', 'b'] });
+  });
+
+  it('SECURITY CR-MEDIUM: sensitives Tool, Exit != 0 → detail redigiert (kein rohes stderr/stdout-Leak)', async () => {
+    const { run } = fakeRun({ code: 1, stdout: 'TOPSECRET in output', stderr: 'x_passphrase=TOPSECRET' });
+    const res = await createMcporterLocalExec({ run })(req(callPayload('get_wlan')));
+    expect(res.status).toBe(502);
+    expect(JSON.stringify(res.body)).not.toContain('TOPSECRET');
+    expect((res.body as { detail?: unknown }).detail).toBe('[REDACTED]');
+  });
+
+  it('CR-MEDIUM: sensitives Tool, non-JSON stdout → detail redigiert', async () => {
+    const { run } = fakeRun({ code: 0, stdout: 'raw secret voucher ABCD-1234 not json' });
+    const res = await createMcporterLocalExec({ run })(req(callPayload('list_vouchers')));
+    expect(res.status).toBe(502);
+    expect(JSON.stringify(res.body)).not.toContain('ABCD-1234');
+  });
+
   it('tools/list → 200, result = geparste Liste', async () => {
     const { calls, run } = fakeRun({ code: 0, stdout: '{"tools":[{"name":"list_clients"}]}' });
     const exec = createMcporterLocalExec({ run });

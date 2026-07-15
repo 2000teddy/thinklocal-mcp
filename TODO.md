@@ -56,11 +56,13 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
   - [x] **TL-08 Slice 2a** (ADR-040, **reine Telemetrie**): `sensitive`-Set (10 credential-Reads explizit),
     `classifyGateReason` (diskriminiert, single source of truth, Cross-Check-Test), `reason=`-Audit-Suffix,
     `computeToolClassDrift` (Snapshot-Lint). Null Gate-Verhaltensänderung. +16 Tests.
-  - [ ] **TL-08 Slice 2b** (eigener CO): Field-Redaction „mutation ≠ sensitivity" — credential-Reads wieder
-    als self mit **redigierten Feldern**; Fail-closed-Default (unbekannte Response-Form → gegatet),
-    Redaction **beim Owner-Daemon**, konservative Secret-Key-Liste (Input = `sensitive`-Set).
-  - [ ] **TL-08 Slice 2c**: Live-Drift-Verdrahtung (periodischer Check gegen echtes `tools/list` + Warn-Log);
-    weitere governed Server.
+  - [x] **TL-08 Slice 2b** (ADR-041): owner-seitige **fail-closed** Redaction-Mechanik. `redact-mcp-response.ts`
+    (deny-by-default Feld-Allowlist, Policy R = unconditional), verdrahtet im Owner-Local-Exec; kein
+    Gate-Flip (Gate-still-blocks-Regression). `SERVER_SAFE_FIELDS['unifi']` leer (maximale Redaction).
+    CR: HIGH (Array-Skalar-Leak) + MEDIUM (Error-Pfad) in-slice gefixt. +21 Tests.
+  - [ ] **TL-08 Slice 2c** (eigener Security-CR): **Gate-Flip** sensitive → allow-with-redaction; Safe-Field-
+    Kuratierung aus Output-Schemata + nested-JSON-Strings; Tool-Name-Casing; dann Live-Drift-Verdrahtung
+    (periodischer Check gegen echtes `tools/list` + Warn-Log) + weitere governed Server.
 - [~] **[v5.1] TL-09 (≈4 h)** Meldekanal-Abstraktion (Entsch. 10) + Telegram-Adapter + **Fail-safe: kein
   erreichbarer Kanal = schreibender Aufruf bleibt verweigert.**
   - [x] **TL-09 Slice A** (ADR-036): reine Abstraktion `meldekanal.ts` (`Meldekanal`/`MeldekanalRegistry`/
