@@ -1,0 +1,189 @@
+// Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
+/**
+ * signed-order.test.ts — ADR-038 (TL-12 Slice A). Deckt die Fail-closed-Invarianten des reinen
+ * Auftrags-Moduls (CO opus+sonnet 2026-07-15): VALID nur bei echter Sig + type=ORDER + issuer==sender
+ * + Nonce; tampered/expired/wrong-key/wrong-type/relay ⇒ INVALID; Marker-Extraktion strikt + wirft nie.
+ */
+import { describe, it, expect } from 'vitest';
+import { generateKeyPairSync } from 'node:crypto';
+import { Buffer } from 'node:buffer';
+import {
+  buildOrderEnvelope,
+  signOrder,
+  verifyOrderBytes,
+  extractOrderMarker,
+  classifyInboundOrder,
+  wrapOrderInBody,
+  orderKeyId,
+  ORDER_MARKER,
+  MAX_ORDER_BYTES,
+} from './signed-order.js';
+import { createEnvelope, encodeAndSign, serializeSignedMessage, MessageType } from './messages.js';
+
+function keypair(): { priv: string; pub: string } {
+  const { privateKey, publicKey } = generateKeyPairSync('ec', {
+    namedCurve: 'P-256',
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+  });
+  return { priv: privateKey as string, pub: publicKey as string };
+}
+
+const ISSUER = 'spiffe://thinklocal/node/12D3KooWISSUER';
+
+describe('signed-order — sign/verify roundtrip', () => {
+  it('gültiger Auftrag → VALID mit issuer + orderId (Outputs aus den Bytes)', () => {
+    const { priv, pub } = keypair();
+    const env = buildOrderEnvelope(ISSUER, 'nonce-1', { action: 'restart', args: { x: 1 } });
+    const bytes = signOrder(env, priv);
+    const r = verifyOrderBytes(bytes, ISSUER, pub);
+    expect(r.verdict).toBe('VALID');
+    expect(r.issuer).toBe(ISSUER);
+    expect(r.orderId).toBe('nonce-1');
+  });
+
+  it('falscher Verify-Key → INVALID', () => {
+    const a = keypair();
+    const b = keypair();
+    const bytes = signOrder(buildOrderEnvelope(ISSUER, 'n', { action: 'x' }), a.priv);
+    expect(verifyOrderBytes(bytes, ISSUER, b.pub).verdict).toBe('INVALID');
+  });
+
+  it('manipulierte Bytes → INVALID (wirft nicht)', () => {
+    const { priv, pub } = keypair();
+    const bytes = signOrder(buildOrderEnvelope(ISSUER, 'n', { action: 'x' }), priv);
+    const tampered = Uint8Array.from(bytes);
+    tampered[tampered.length - 2] ^= 0xff;
+    expect(verifyOrderBytes(tampered, ISSUER, pub).verdict).toBe('INVALID');
+  });
+
+  it('Relay-Schutz: issuer !== expectedIssuer → INVALID', () => {
+    const { priv, pub } = keypair();
+    const bytes = signOrder(buildOrderEnvelope(ISSUER, 'n', { action: 'x' }), priv);
+    const r = verifyOrderBytes(bytes, 'spiffe://thinklocal/node/12D3KooWOTHER', pub);
+    expect(r.verdict).toBe('INVALID');
+    expect(r.reason).toContain('issuer');
+  });
+
+  it('falscher Envelope-Typ (AGENT_MESSAGE, korrekt signiert) → INVALID', () => {
+    const { priv, pub } = keypair();
+    const notOrder = createEnvelope(MessageType.AGENT_MESSAGE, ISSUER, {
+      message_id: 'm', to: ISSUER, body: 'hi', sent_at: new Date().toISOString(),
+    });
+    const bytes = serializeSignedMessage(encodeAndSign(notOrder, priv));
+    const r = verifyOrderBytes(bytes, ISSUER, pub);
+    expect(r.verdict).toBe('INVALID');
+    expect(r.reason).toContain('ORDER');
+  });
+
+  it('leere Nonce → INVALID', () => {
+    const { priv, pub } = keypair();
+    const bytes = signOrder(buildOrderEnvelope(ISSUER, '', { action: 'x' }), priv);
+    const r = verifyOrderBytes(bytes, ISSUER, pub);
+    expect(r.verdict).toBe('INVALID');
+    expect(r.reason).toContain('nonce');
+  });
+
+  it('buildOrderEnvelope defaultet ttl_ms=0 (nicht-ablaufender Auftrag, CR-LOW-2-Mitigation)', () => {
+    const env = buildOrderEnvelope(ISSUER, 'n', { action: 'x' });
+    expect(env.ttl_ms).toBe(0);
+    expect(env.idempotency_key).toBe('n');
+    expect(env.type).toBe(MessageType.ORDER);
+  });
+
+  it('abgelaufene TTL → INVALID', () => {
+    const { priv, pub } = keypair();
+    const env = buildOrderEnvelope(ISSUER, 'n', { action: 'x' }, 1000);
+    const old = { ...env, timestamp: new Date(Date.now() - 10_000).toISOString() };
+    const bytes = signOrder(old, priv);
+    expect(verifyOrderBytes(bytes, ISSUER, pub).verdict).toBe('INVALID');
+  });
+
+  it('Garbage-Bytes → INVALID (wirft nie)', () => {
+    const { pub } = keypair();
+    expect(verifyOrderBytes(new Uint8Array([1, 2, 3, 4, 5]), ISSUER, pub).verdict).toBe('INVALID');
+    expect(verifyOrderBytes(new Uint8Array(0), ISSUER, pub).verdict).toBe('INVALID');
+  });
+});
+
+describe('signed-order — Marker-Extraktion (Tri-State, strikt, wirft nie)', () => {
+  it('gültiger Marker → { kind: bytes }; roundtrip via wrapOrderInBody', () => {
+    const { priv } = keypair();
+    const bytes = signOrder(buildOrderEnvelope(ISSUER, 'n', { action: 'x' }), priv);
+    const m = extractOrderMarker(wrapOrderInBody(bytes));
+    expect(m.kind).toBe('bytes');
+    if (m.kind !== 'bytes') throw new Error('expected bytes');
+    expect(Buffer.compare(Buffer.from(m.bytes), Buffer.from(bytes))).toBe(0);
+  });
+
+  it('kein Marker-Feld / Nicht-Objekt → absent (Plain-Pfad)', () => {
+    expect(extractOrderMarker('plain string').kind).toBe('absent');
+    expect(extractOrderMarker(null).kind).toBe('absent');
+    expect(extractOrderMarker(42).kind).toBe('absent');
+    expect(extractOrderMarker({ hello: 'world' }).kind).toBe('absent');
+  });
+
+  it('Marker-Feld vorhanden aber unbrauchbar → invalid (KEIN stiller Downgrade)', () => {
+    // wrong type, leer, oversize — alle „vorhanden aber kaputt" ⇒ invalid, nicht absent.
+    expect(extractOrderMarker({ [ORDER_MARKER]: 123 }).kind).toBe('invalid');
+    expect(extractOrderMarker({ [ORDER_MARKER]: { nested: true } }).kind).toBe('invalid');
+    expect(extractOrderMarker({ [ORDER_MARKER]: '' }).kind).toBe('invalid');
+    const huge = 'A'.repeat(Math.ceil((MAX_ORDER_BYTES * 4) / 3) + 100);
+    expect(extractOrderMarker({ [ORDER_MARKER]: huge }).kind).toBe('invalid');
+  });
+});
+
+describe('signed-order — classifyInboundOrder (Ingest-Seam, CR-Codex #266)', () => {
+  it('kein Marker → plain', () => {
+    const { pub } = keypair();
+    expect(classifyInboundOrder('hi', ISSUER, pub).kind).toBe('plain');
+    expect(classifyInboundOrder({ text: 'hello' }, ISSUER, pub).kind).toBe('plain');
+  });
+
+  it('gültiger Auftrag → order (mit orderId)', () => {
+    const { priv, pub } = keypair();
+    const bytes = signOrder(buildOrderEnvelope(ISSUER, 'nonce-9', { action: 'x' }), priv);
+    const d = classifyInboundOrder(wrapOrderInBody(bytes), ISSUER, pub);
+    expect(d.kind).toBe('order');
+    if (d.kind === 'order') expect(d.orderId).toBe('nonce-9');
+  });
+
+  // Die drei vom Reviewer geforderten Ingest-Seam-Regressionen: NIE stiller Downgrade zu plain.
+  it('wrong-type Marker → invalid (nicht plain)', () => {
+    const { pub } = keypair();
+    const d = classifyInboundOrder({ [ORDER_MARKER]: 123 }, ISSUER, pub);
+    expect(d.kind).toBe('invalid');
+    if (d.kind === 'invalid') expect(d.reason).toContain('malformed-marker');
+  });
+
+  it('malformed-base64 / Garbage-Bytes im Marker → invalid (Verify schlägt fehl)', () => {
+    const { pub } = keypair();
+    // base64 von reinem Garbage — extrahiert zwar Bytes, aber verifyOrderBytes ⇒ INVALID ⇒ invalid.
+    const garbage = Buffer.from('not a signed order at all').toString('base64');
+    const d = classifyInboundOrder({ [ORDER_MARKER]: garbage }, ISSUER, pub);
+    expect(d.kind).toBe('invalid');
+  });
+
+  it('oversize Marker → invalid (nicht plain)', () => {
+    const { pub } = keypair();
+    const huge = 'A'.repeat(Math.ceil((MAX_ORDER_BYTES * 4) / 3) + 100);
+    expect(classifyInboundOrder({ [ORDER_MARKER]: huge }, ISSUER, pub).kind).toBe('invalid');
+  });
+
+  it('Relay: gültige Bytes, aber falscher expectedIssuer → invalid', () => {
+    const { priv, pub } = keypair();
+    const bytes = signOrder(buildOrderEnvelope(ISSUER, 'n', { action: 'x' }), priv);
+    const d = classifyInboundOrder(wrapOrderInBody(bytes), 'spiffe://thinklocal/node/12D3KooWX', pub);
+    expect(d.kind).toBe('invalid');
+  });
+});
+
+describe('signed-order — orderKeyId', () => {
+  it('stabil je Key, verschieden zwischen Keys', () => {
+    const a = keypair();
+    const b = keypair();
+    expect(orderKeyId(a.pub)).toBe(orderKeyId(a.pub));
+    expect(orderKeyId(a.pub)).not.toBe(orderKeyId(b.pub));
+    expect(orderKeyId(a.pub)).toMatch(/^[0-9a-f]{64}$/);
+  });
+});

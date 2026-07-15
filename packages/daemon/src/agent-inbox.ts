@@ -25,6 +25,7 @@ import { mkdirSync } from 'node:fs';
 import type { Logger } from 'pino';
 import type { AgentMessagePayload } from './messages.js';
 import { getAgentInstance, normalizeAgentId } from './spiffe-uri.js';
+import { verifyOrderBytes, type VerifyOrderResult } from './signed-order.js';
 
 const MAX_MESSAGE_BYTES = 64 * 1024;
 const MAX_SUBJECT_LENGTH = 200;
@@ -36,8 +37,10 @@ const MAX_SUBJECT_LENGTH = 200;
  *   v1 (pre-ADR-005): messages table without `to_agent_instance`
  *   v2 (ADR-005):     adds `to_agent_instance TEXT NULL` + index for
  *                     per-agent-instance routing
+ *   v3 (ADR-038):     adds signed-order columns (signed_bytes, signer_spiffe/keyid/pubkey,
+ *                     order_nonce, verified_at, verify_verdict, trust_status, is_order) + order index
  */
-const CURRENT_SCHEMA_VERSION = 2;
+const CURRENT_SCHEMA_VERSION = 3;
 
 export interface InboxMessage {
   id: number;
@@ -57,6 +60,25 @@ export interface InboxMessage {
   received_at: string;
   read_at: string | null;
   archived: number;
+  // ADR-038 (TL-12) — Signatur-/Auftrags-Provenienz. NULL/0 für Nicht-Aufträge.
+  /** 1 = verifizierter signierter Auftrag; 0 = Plain-Nachricht (Default). */
+  is_order: number;
+  /** Verbatim signierte Auftrags-Bytes (BLOB), unverändert wie empfangen. */
+  signed_bytes: Buffer | null;
+  /** Issuer-SPIFFE aus den signierten Bytes. */
+  signer_spiffe: string | null;
+  /** Fingerprint des Verify-Keys (Revocation-Join-Key). */
+  signer_keyid: string | null;
+  /** Immutable Verify-Key (PEM) — Re-Verify beim Lesen läuft gegen genau diesen. */
+  signer_pubkey: string | null;
+  /** Order-Nonce (idempotency_key) aus den signierten Bytes. */
+  order_nonce: string | null;
+  /** Zeitpunkt der Ingest-Verifikation (ISO 8601). */
+  verified_at: string | null;
+  /** Krypto-Integrität: 'VALID' | 'INVALID'. NICHT Revocation-bewusst. */
+  verify_verdict: string | null;
+  /** Getrennter Vertrauens-/Revocation-Kanal (ADR-038): Slice A immer 'unknown'. */
+  trust_status: string | null;
 }
 
 export interface StoreResult {
@@ -64,6 +86,24 @@ export interface StoreResult {
   reason?: string;
   inbox_id?: number;
 }
+
+/**
+ * ADR-038: verifizierter Auftrags-Kontext, den `store()` persistiert. `is_order` wird
+ * AUSSCHLIESSLICH aus `verdict==='VALID'` abgeleitet — nie ein freier Parameter.
+ * INVALID (Marker vorhanden, Verify fehlgeschlagen) wird als Audit-Signal auf der Zeile
+ * vermerkt (`verify_verdict='INVALID'`, `is_order=0`).
+ */
+export type OrderContext =
+  | {
+      verdict: 'VALID';
+      /** Verbatim signierte Bytes (NIE re-serialisiert). */
+      signedBytes: Uint8Array;
+      signerSpiffe: string;
+      signerKeyid: string;
+      signerPubkey: string;
+      orderNonce: string;
+    }
+  | { verdict: 'INVALID' };
 
 export class AgentInbox {
   private db: Database.Database;
@@ -95,19 +135,27 @@ export class AgentInbox {
     const hasTable = existingTables.length > 0;
 
     if (!hasTable) {
-      this.createSchemaV2();
-    } else {
-      const currentVersion =
-        (this.db.pragma('user_version', { simple: true }) as number) ?? 0;
-      if (currentVersion < 2) {
-        this.migrateToV2();
-      }
+      // Fresh-DB: Schema + user_version-Bump in EINER Transaktion (Symmetrie zu migrateToV3; ein
+      // Crash zwischen CREATE und Bump ließe sonst ein v3-Schema mit user_version=0 zurück).
+      this.db.transaction(() => {
+        this.createSchemaV3();
+        this.db.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`);
+      })();
+      return;
     }
-    this.db.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`);
+    let version = (this.db.pragma('user_version', { simple: true }) as number) ?? 0;
+    if (version < 2) {
+      this.migrateToV2();
+      this.db.pragma('user_version = 2');
+      version = 2;
+    }
+    if (version < 3) {
+      this.migrateToV3(); // transaktional inkl. user_version-Bump auf 3
+    }
   }
 
-  /** Create a pristine v2 schema (fresh database case). */
-  private createSchemaV2(): void {
+  /** Create a pristine v3 schema (fresh database case). */
+  private createSchemaV3(): void {
     this.db.exec(`
       CREATE TABLE messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -121,15 +169,59 @@ export class AgentInbox {
         sent_at TEXT NOT NULL,
         received_at TEXT NOT NULL,
         read_at TEXT,
-        archived INTEGER NOT NULL DEFAULT 0
+        archived INTEGER NOT NULL DEFAULT 0,
+        is_order INTEGER NOT NULL DEFAULT 0,
+        signed_bytes BLOB,
+        signer_spiffe TEXT,
+        signer_keyid TEXT,
+        signer_pubkey TEXT,
+        order_nonce TEXT,
+        verified_at TEXT,
+        verify_verdict TEXT,
+        trust_status TEXT
       );
       CREATE INDEX idx_messages_unread
         ON messages (read_at, archived) WHERE read_at IS NULL AND archived = 0;
       CREATE INDEX idx_messages_from ON messages (from_agent);
       CREATE INDEX idx_messages_sent_at ON messages (sent_at DESC);
       CREATE INDEX idx_messages_instance ON messages (to_agent_instance);
+      CREATE INDEX idx_messages_order ON messages (signer_keyid, order_nonce);
     `);
-    this.log?.info({ schemaVersion: 2 }, '[agent-inbox] fresh db created at v2');
+    this.log?.info({ schemaVersion: 3 }, '[agent-inbox] fresh db created at v3');
+  }
+
+  /**
+   * ADR-038 migration v2→v3: add signed-order columns + order index. Idempotent
+   * (each ADD COLUMN guarded by table_info) and **transactional together with the
+   * user_version bump** — a crash mid-migration never leaves a version that lies about
+   * the schema. Existing rows land with is_order=0 / NULL order fields (= non-orders).
+   */
+  private migrateToV3(): void {
+    const cols = new Set(
+      (this.db.prepare(`PRAGMA table_info(messages)`).all() as Array<{ name: string }>).map(
+        (c) => c.name,
+      ),
+    );
+    const addCol = (name: string, decl: string): void => {
+      if (!cols.has(name)) this.db.exec(`ALTER TABLE messages ADD COLUMN ${name} ${decl}`);
+    };
+    const tx = this.db.transaction(() => {
+      addCol('is_order', 'INTEGER NOT NULL DEFAULT 0');
+      addCol('signed_bytes', 'BLOB');
+      addCol('signer_spiffe', 'TEXT');
+      addCol('signer_keyid', 'TEXT');
+      addCol('signer_pubkey', 'TEXT');
+      addCol('order_nonce', 'TEXT');
+      addCol('verified_at', 'TEXT');
+      addCol('verify_verdict', 'TEXT');
+      addCol('trust_status', 'TEXT');
+      this.db.exec(
+        `CREATE INDEX IF NOT EXISTS idx_messages_order ON messages (signer_keyid, order_nonce)`,
+      );
+      this.db.pragma('user_version = 3');
+    });
+    tx();
+    this.log?.info({ from: 2, to: 3 }, '[agent-inbox] migrated schema: added signed-order columns');
   }
 
   /**
@@ -161,7 +253,7 @@ export class AgentInbox {
    * @param payload Die entschluesselte Payload
    * @returns delivered | duplicate | rejected mit Begruendung
    */
-  store(fromAgent: string, payload: AgentMessagePayload): StoreResult {
+  store(fromAgent: string, payload: AgentMessagePayload, order?: OrderContext | null): StoreResult {
     // Size-Limit
     const bodyStr =
       typeof payload.body === 'string' ? payload.body : JSON.stringify(payload.body);
@@ -211,11 +303,38 @@ export class AgentInbox {
     }
 
     const receivedAt = new Date().toISOString();
+    // ADR-038: is_order wird AUSSCHLIESSLICH aus order.verdict==='VALID' abgeleitet — nie ein freier
+    // Parameter, nie aus dem Body. INVALID (Marker vorhanden, Verify fehlgeschlagen) hinterlässt nur
+    // ein Audit-Signal auf der Zeile (verify_verdict='INVALID'), ist aber KEIN Auftrag.
+    const isOrder = order?.verdict === 'VALID' ? 1 : 0;
+    const orderCols =
+      order?.verdict === 'VALID'
+        ? {
+            signed_bytes: Buffer.from(order.signedBytes), // verbatim, als BLOB
+            signer_spiffe: order.signerSpiffe,
+            signer_keyid: order.signerKeyid,
+            signer_pubkey: order.signerPubkey,
+            order_nonce: order.orderNonce,
+            verified_at: receivedAt,
+            verify_verdict: 'VALID' as const,
+            trust_status: 'unknown' as const,
+          }
+        : {
+            signed_bytes: null,
+            signer_spiffe: null,
+            signer_keyid: null,
+            signer_pubkey: null,
+            order_nonce: null,
+            verified_at: order?.verdict === 'INVALID' ? receivedAt : null,
+            verify_verdict: order?.verdict === 'INVALID' ? ('INVALID' as const) : null,
+            trust_status: null,
+          };
     const info = this.db
       .prepare(
         `INSERT INTO messages
-         (message_id, from_agent, to_agent, to_agent_instance, subject, body, in_reply_to, sent_at, received_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (message_id, from_agent, to_agent, to_agent_instance, subject, body, in_reply_to, sent_at, received_at,
+          is_order, signed_bytes, signer_spiffe, signer_keyid, signer_pubkey, order_nonce, verified_at, verify_verdict, trust_status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         payload.message_id,
@@ -227,6 +346,15 @@ export class AgentInbox {
         payload.in_reply_to ?? null,
         payload.sent_at,
         receivedAt,
+        isOrder,
+        orderCols.signed_bytes,
+        orderCols.signer_spiffe,
+        orderCols.signer_keyid,
+        orderCols.signer_pubkey,
+        orderCols.order_nonce,
+        orderCols.verified_at,
+        orderCols.verify_verdict,
+        orderCols.trust_status,
       );
 
     this.log?.info(
@@ -239,6 +367,20 @@ export class AgentInbox {
       'Nachricht empfangen und gespeichert',
     );
     return { status: 'delivered', inbox_id: info.lastInsertRowid as number };
+  }
+
+  /**
+   * ADR-038: Re-verifiziert einen gespeicherten Auftrag beim Lesen — gegen den **gespeicherten**
+   * `signer_pubkey` (immutable, trust-on-first-verify, rotationsfest), NICHT gegen einen aktuellen Key.
+   * Fail-closed: keine Order-Daten / beschädigte Bytes ⇒ `INVALID`; **wirft nie** (eine bösartige
+   * Zeile darf den read_inbox-Pfad nicht lahmlegen). Beantwortet NUR „Signatur echt", nicht „noch
+   * autorisiert" (Revocation = `trust_status`, Slice B/C).
+   */
+  verifyStoredOrder(row: Pick<InboxMessage, 'is_order' | 'signed_bytes' | 'signer_spiffe' | 'signer_pubkey'>): VerifyOrderResult {
+    if (row.is_order !== 1 || !row.signed_bytes || !row.signer_spiffe || !row.signer_pubkey) {
+      return { verdict: 'INVALID', reason: 'row is not a verified order' };
+    }
+    return verifyOrderBytes(new Uint8Array(row.signed_bytes), row.signer_spiffe, row.signer_pubkey);
   }
 
   /**

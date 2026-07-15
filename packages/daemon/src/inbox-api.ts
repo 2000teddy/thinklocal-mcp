@@ -373,19 +373,36 @@ export function registerInboxApi(server: FastifyInstance, deps: InboxApiDeps): v
       unread_total: inbox.unreadCount(),
       for_instance: forInstance ?? null,
       include_legacy: includeLegacy,
-      messages: messages.map((m) => ({
-        message_id: m.message_id,
-        from: m.from_agent,
-        to: m.to_agent,
-        to_instance: m.to_agent_instance,
-        subject: m.subject,
-        body: tryParseJson(m.body),
-        in_reply_to: m.in_reply_to,
-        sent_at: m.sent_at,
-        received_at: m.received_at,
-        read: m.read_at !== null,
-        read_at: m.read_at,
-      })),
+      messages: messages.map((m) => {
+        // ADR-038 (TL-12): einen signierten Auftrag beim Lesen RE-VERIFIZIEREN — gegen den
+        // gespeicherten, immutable `signer_pubkey`. Der Leser bekommt das LIVE-Verdikt (`verify_verdict`),
+        // nicht bloß das gespeicherte Flag: ein auf der Platte manipulierter Auftrag zeigt hier `INVALID`.
+        // `verifyStoredOrder` ist fail-closed und wirft nie (eine bösartige Zeile legt die Liste nicht lahm).
+        const isOrder = m.is_order === 1;
+        return {
+          message_id: m.message_id,
+          from: m.from_agent,
+          to: m.to_agent,
+          to_instance: m.to_agent_instance,
+          subject: m.subject,
+          body: tryParseJson(m.body),
+          in_reply_to: m.in_reply_to,
+          sent_at: m.sent_at,
+          received_at: m.received_at,
+          read: m.read_at !== null,
+          read_at: m.read_at,
+          is_order: isOrder,
+          order: isOrder
+            ? {
+                verify_verdict: inbox.verifyStoredOrder(m).verdict,
+                signer_spiffe: m.signer_spiffe,
+                signer_keyid: m.signer_keyid,
+                order_nonce: m.order_nonce,
+                trust_status: m.trust_status,
+              }
+            : null,
+        };
+      }),
     };
   });
 

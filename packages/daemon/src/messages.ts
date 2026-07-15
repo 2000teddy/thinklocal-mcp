@@ -39,6 +39,9 @@ export const MessageType = {
   SECRET_RESPONSE: 'SECRET_RESPONSE',
   AGENT_MESSAGE: 'AGENT_MESSAGE',
   AGENT_MESSAGE_ACK: 'AGENT_MESSAGE_ACK',
+  // ADR-038 (TL-12): signierter Auftrag. Wird NICHT als Top-Level-Transport verschickt, sondern
+  // als serialisierter SignedMessage-Envelope im Body einer AGENT_MESSAGE getragen (Marker).
+  ORDER: 'ORDER',
 } as const;
 
 // --- Agent-to-Agent Messaging ---
@@ -194,6 +197,20 @@ export interface SecretResponsePayload {
   reason: string | null;
 }
 
+/**
+ * ADR-038 (TL-12): Nutzlast eines signierten Auftrags. Der äußere `MessageEnvelope` trägt Issuer
+ * (`sender`), Nonce (`idempotency_key`) und TTL; hier steht der eigentliche Auftragsinhalt.
+ * Slice A führt ihn NICHT aus — nur `action`/`args` als opake, signierte Felder.
+ */
+export interface OrderPayload {
+  /** Frei wählbare Auftrags-Kennung (z.B. Werkzeug-/Skill-Name), von Slice B interpretiert. */
+  action: string;
+  /** Opake Auftrags-Argumente (JSON-serialisierbar). */
+  args?: Record<string, unknown>;
+  /** Optionaler menschenlesbarer Titel. */
+  title?: string;
+}
+
 export type MessagePayload =
   | HeartbeatPayload
   | DiscoverQueryPayload
@@ -209,7 +226,8 @@ export type MessagePayload =
   | SecretRequestPayload
   | SecretResponsePayload
   | AgentMessagePayload
-  | AgentMessageAckPayload;
+  | AgentMessageAckPayload
+  | OrderPayload;
 
 // --- Envelope ---
 

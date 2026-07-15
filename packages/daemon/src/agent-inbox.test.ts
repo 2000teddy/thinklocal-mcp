@@ -1,10 +1,14 @@
 // Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AgentInbox } from './agent-inbox.js';
+import { generateKeyPairSync } from 'node:crypto';
+import { Buffer } from 'node:buffer';
+import Database from 'better-sqlite3';
+import { AgentInbox, type OrderContext, type InboxMessage } from './agent-inbox.js';
 import type { AgentMessagePayload } from './messages.js';
+import { buildOrderEnvelope, signOrder, orderKeyId } from './signed-order.js';
 
 const FROM = 'spiffe://thinklocal/host/aaaa111122223333/agent/codex';
 const TO = 'spiffe://thinklocal/host/bbbb444455556666/agent/claude-code';
@@ -69,8 +73,7 @@ describe('AgentInbox', () => {
     it('akzeptiert JSON-Object Body und serialisiert', () => {
       const r = inbox.store(FROM, makeMsg({ body: { type: 'task', count: 5 } }));
       expect(r.status).toBe('delivered');
-      const found = inbox.findByMessageId(makeMsg().message_id);
-      // we can't reuse the random id; just check via list
+      // (random id, daher Prüfung über list statt findByMessageId)
       const all = inbox.list();
       expect(all).toHaveLength(1);
       expect(JSON.parse(all[0].body)).toEqual({ type: 'task', count: 5 });
@@ -152,6 +155,125 @@ describe('AgentInbox', () => {
       const second = new AgentInbox(dir);
       expect(second.list().map((m) => m.message_id)).toEqual(['persist-1']);
       second.close();
+    });
+  });
+
+  // ── ADR-038 (TL-12 Slice A): signierte, re-verifizierbare Aufträge ──
+  describe('signierte Aufträge (ADR-038)', () => {
+    function keypair(): { priv: string; pub: string } {
+      const { privateKey, publicKey } = generateKeyPairSync('ec', {
+        namedCurve: 'P-256',
+        publicKeyEncoding: { type: 'spki', format: 'pem' },
+        privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+      });
+      return { priv: privateKey as string, pub: publicKey as string };
+    }
+    function validOrder(): { ctx: OrderContext & { verdict: 'VALID' }; pub: string; bytes: Uint8Array } {
+      const { priv, pub } = keypair();
+      const env = buildOrderEnvelope(FROM, 'nonce-42', { action: 'restart' });
+      const bytes = signOrder(env, priv);
+      return {
+        pub,
+        bytes,
+        ctx: {
+          verdict: 'VALID',
+          signedBytes: bytes,
+          signerSpiffe: FROM,
+          signerKeyid: orderKeyId(pub),
+          signerPubkey: pub,
+          orderNonce: 'nonce-42',
+        },
+      };
+    }
+
+    it('VALID: persistiert is_order=1 + Provenienz-Spalten, re-verify aus der Zeile → VALID', () => {
+      const { ctx, bytes } = validOrder();
+      const r = inbox.store(FROM, makeMsg({ message_id: 'ord-1', body: 'irrelevant' }), ctx);
+      expect(r.status).toBe('delivered');
+      const row = inbox.list()[0] as InboxMessage;
+      expect(row.is_order).toBe(1);
+      expect(row.signer_spiffe).toBe(FROM);
+      expect(row.order_nonce).toBe('nonce-42');
+      expect(row.verify_verdict).toBe('VALID');
+      expect(row.trust_status).toBe('unknown');
+      // BLOB-Roundtrip MUSS byte-identisch sein (sonst bricht die Signatur „Wochen später").
+      expect(Buffer.compare(row.signed_bytes as Buffer, Buffer.from(bytes))).toBe(0);
+      // Re-Verify aus der gespeicherten Zeile (gegen den immutable signer_pubkey).
+      expect(inbox.verifyStoredOrder(row).verdict).toBe('VALID');
+    });
+
+    it('INVALID (Marker vorhanden, Verify fehlgeschlagen): is_order=0 + verify_verdict=INVALID (Audit-Signal)', () => {
+      const r = inbox.store(FROM, makeMsg({ message_id: 'ord-bad' }), { verdict: 'INVALID' });
+      expect(r.status).toBe('delivered');
+      const row = inbox.list()[0] as InboxMessage;
+      expect(row.is_order).toBe(0);
+      expect(row.verify_verdict).toBe('INVALID');
+      expect(row.signed_bytes).toBeNull();
+      expect(inbox.verifyStoredOrder(row).verdict).toBe('INVALID');
+    });
+
+    it('Plain-Nachricht (kein order-Arg): is_order=0, alle Order-Spalten NULL, re-verify → INVALID', () => {
+      inbox.store(FROM, makeMsg({ message_id: 'plain-1', body: 'hi' }));
+      const row = inbox.list()[0] as InboxMessage;
+      expect(row.is_order).toBe(0);
+      expect(row.signer_pubkey).toBeNull();
+      expect(row.verify_verdict).toBeNull();
+      expect(inbox.verifyStoredOrder(row).verdict).toBe('INVALID');
+    });
+
+    it('re-verify fail-closed bei beschädigten gespeicherten Bytes (wirft nicht)', () => {
+      const { ctx } = validOrder();
+      const tampered = Buffer.from(ctx.signedBytes);
+      tampered[tampered.length - 2] ^= 0xff;
+      const verdict = inbox.verifyStoredOrder({
+        is_order: 1,
+        signed_bytes: tampered,
+        signer_spiffe: ctx.signerSpiffe,
+        signer_pubkey: ctx.signerPubkey,
+      });
+      expect(verdict.verdict).toBe('INVALID');
+    });
+  });
+
+  describe('Schema-Migration v2 → v3 (ADR-038)', () => {
+    it('migriert eine bestehende v2-DB additiv: Bestandszeile bleibt, is_order=0', () => {
+      const migDir = mkdtempSync(join(tmpdir(), 'tlmcp-inbox-mig-'));
+      const inboxSub = join(migDir, 'inbox');
+      mkdirSync(inboxSub, { recursive: true });
+      // Eine v2-DB von Hand anlegen (v2-Schema + user_version=2 + eine Bestandszeile).
+      const db = new Database(join(inboxSub, 'inbox.db'));
+      db.exec(`
+        CREATE TABLE messages (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          message_id TEXT NOT NULL UNIQUE,
+          from_agent TEXT NOT NULL,
+          to_agent TEXT NOT NULL,
+          to_agent_instance TEXT,
+          subject TEXT,
+          body TEXT NOT NULL,
+          in_reply_to TEXT,
+          sent_at TEXT NOT NULL,
+          received_at TEXT NOT NULL,
+          read_at TEXT,
+          archived INTEGER NOT NULL DEFAULT 0
+        );
+      `);
+      db.prepare(
+        `INSERT INTO messages (message_id, from_agent, to_agent, subject, body, sent_at, received_at)
+         VALUES ('legacy-1', ?, ?, 'old', 'legacy body', ?, ?)`,
+      ).run(FROM, TO, new Date().toISOString(), new Date().toISOString());
+      db.pragma('user_version = 2');
+      db.close();
+
+      // Öffnen mit v3-Code → migriert additiv.
+      const migrated = new AgentInbox(migDir);
+      const rows = migrated.list();
+      expect(rows.map((m) => m.message_id)).toEqual(['legacy-1']);
+      const legacy = rows[0] as InboxMessage;
+      expect(legacy.is_order).toBe(0);
+      expect(legacy.signed_bytes).toBeNull();
+      migrated.close();
+      rmSync(migDir, { recursive: true, force: true });
     });
   });
 });

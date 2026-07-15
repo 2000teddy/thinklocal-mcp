@@ -50,7 +50,7 @@ describe('AgentInbox — ADR-005 per-agent-instance routing', () => {
       const raw = new Database(dbPath, { readonly: true });
       try {
         const version = raw.pragma('user_version', { simple: true }) as number;
-        expect(version).toBe(2);
+        expect(version).toBe(3); // ADR-038: fresh DB now at v3
         const columns = raw
           .prepare(`PRAGMA table_info(messages)`)
           .all() as Array<{ name: string }>;
@@ -101,7 +101,7 @@ describe('AgentInbox — ADR-005 per-agent-instance routing', () => {
       const probe = new Database(legacyPath, { readonly: true });
       try {
         const version = probe.pragma('user_version', { simple: true }) as number;
-        expect(version).toBe(2);
+        expect(version).toBe(3); // ADR-038: v1 migrates through v2 to v3
         const columns = probe
           .prepare(`PRAGMA table_info(messages)`)
           .all() as Array<{ name: string }>;
