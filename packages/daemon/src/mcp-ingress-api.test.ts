@@ -19,6 +19,7 @@ import {
   type PeerCertSocket,
 } from './mcp-ingress-api.js';
 import { MCP_HOP_HEADER, type McpDispatchExecutor, type McpForwardContext } from './mcp-forward-executor.js';
+import { MeldekanalRegistry, type Meldekanal, type ApprovalDecision, type ApprovalOutcome } from './meldekanal.js';
 
 const SELF = 'spiffe://thinklocal/node/12D3KooWSELF';
 const OWNER = 'spiffe://thinklocal/node/12D3KooWOWNER';
@@ -264,5 +265,102 @@ describe('makeMcpIngressHandler — T3.3 Executor-Wiring (Hop, Payload, Audit)',
     await run(makeRequest('unifi', { authorized: false }), baseDeps({ execute: captureExec().exec, audit: authAudit.fn }));
     const authRej = authAudit.events.find(([e]) => e === 'MCP_FORWARD_REJECT');
     expect(authRej?.[2]).not.toContain('tier=');
+  });
+});
+
+// ── ADR-037 / CR-Codex #264: der Registry/Request-Konstruktions-Seam + korrelierbares Gate-Audit.
+// Diese Tests injizieren eine ECHTE MeldekanalRegistry (nicht nur einen gemockten resolveApproval),
+// und beweisen, dass approved UND denied Entscheidungen ein MCP_FORWARD_GATE-Audit mit requestId,
+// outcome und channelId erzeugen — VOR Dispatch/Denial.
+describe('makeMcpIngressHandler — ADR-037 Freigabe-Registry + Gate-Audit (Codex #264)', () => {
+  const CHANNEL_ID = 'test-telegram';
+  /** Fake-Kanal mit fixem Ausgang (gesund, damit die Registry ihn wählt). */
+  function fakeChannel(outcome: ApprovalOutcome): Meldekanal {
+    return {
+      id: CHANNEL_ID,
+      isHealthy: async () => true,
+      requestApproval: async (): Promise<ApprovalDecision> => ({ outcome, channelId: CHANNEL_ID }),
+    };
+  }
+  function captureExec(): { calls: number; exec: McpDispatchExecutor } {
+    const state = { calls: 0 };
+    const exec: McpDispatchExecutor = async () => {
+      state.calls += 1;
+      return { status: 200, body: { ok: true } };
+    };
+    return {
+      get calls(): number {
+        return state.calls;
+      },
+      exec,
+    };
+  }
+  function captureAudit(): { events: Array<[string, string, string]>; fn: McpIngressApiDeps['audit'] } {
+    const events: Array<[string, string, string]> = [];
+    return { events, fn: (e, p, d) => events.push([e, p, d]) };
+  }
+  // Schreibendes Tool am eigenen (self-serviced) Server → effektive Stufe `gate`.
+  const gatePayload = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'block_client' } };
+  const gateDeps = (registry: MeldekanalRegistry, over: Partial<McpIngressApiDeps> = {}): McpIngressApiDeps =>
+    baseDeps({ getCapabilities: () => [cap({ agent_id: SELF })], approvalRegistry: registry, ...over });
+
+  it('approved: Gate-Audit trägt outcome=approved + requestId + channel; Executor erreicht (200)', async () => {
+    const ex = captureExec();
+    const audit = captureAudit();
+    const registry = new MeldekanalRegistry([fakeChannel('approved')]);
+    const rep = await run(
+      makeRequest('unifi', authorizedSocket(CALLER), gatePayload),
+      gateDeps(registry, { execute: ex.exec, audit: audit.fn }),
+    );
+    expect(rep.status).toBe(200);
+    expect(ex.calls).toBe(1);
+    const gate = audit.events.find(([e]) => e === 'MCP_FORWARD_GATE');
+    expect(gate).toBeDefined();
+    expect(gate?.[2]).toContain('outcome=approved');
+    expect(gate?.[2]).toContain(`channel=${CHANNEL_ID}`);
+    expect(gate?.[2]).toMatch(/req=[0-9a-f-]{36}/); // requestId (UUID) korrelierbar
+    expect(gate?.[2]).toContain('tool=block_client');
+  });
+
+  it('denied (rejected): Gate-Audit trägt outcome=rejected + requestId; 403, KEIN Dispatch', async () => {
+    const ex = captureExec();
+    const audit = captureAudit();
+    const registry = new MeldekanalRegistry([fakeChannel('rejected')]);
+    const rep = await run(
+      makeRequest('unifi', authorizedSocket(CALLER), gatePayload),
+      gateDeps(registry, { execute: ex.exec, audit: audit.fn }),
+    );
+    expect(rep.status).toBe(403);
+    expect(ex.calls).toBe(0);
+    const gate = audit.events.find(([e]) => e === 'MCP_FORWARD_GATE');
+    expect(gate).toBeDefined();
+    expect(gate?.[2]).toContain('outcome=rejected');
+    expect(gate?.[2]).toMatch(/req=[0-9a-f-]{36}/);
+  });
+
+  it('leere Registry (DenyAll): Gate-Audit outcome=denied-no-channel; 403 (verhaltensidentisch)', async () => {
+    const ex = captureExec();
+    const audit = captureAudit();
+    const registry = new MeldekanalRegistry([]); // → DenyAllChannel
+    const rep = await run(
+      makeRequest('unifi', authorizedSocket(CALLER), gatePayload),
+      gateDeps(registry, { execute: ex.exec, audit: audit.fn }),
+    );
+    expect(rep.status).toBe(403);
+    expect(ex.calls).toBe(0);
+    const gate = audit.events.find(([e]) => e === 'MCP_FORWARD_GATE');
+    expect(gate?.[2]).toContain('outcome=denied-no-channel');
+  });
+
+  it('ohne approvalRegistry: kein Gate-Audit, gate bleibt 403 (ADR-033-Untergrenze)', async () => {
+    const ex = captureExec();
+    const audit = captureAudit();
+    const rep = await run(
+      makeRequest('unifi', authorizedSocket(CALLER), gatePayload),
+      baseDeps({ getCapabilities: () => [cap({ agent_id: SELF })], execute: ex.exec, audit: audit.fn }),
+    );
+    expect(rep.status).toBe(403);
+    expect(ex.calls).toBe(0);
+    expect(audit.events.some(([e]) => e === 'MCP_FORWARD_GATE')).toBe(false);
   });
 });

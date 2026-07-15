@@ -63,9 +63,9 @@ export function extractCanonicalSender(socket: PeerCertSocket | undefined | null
   return sans.find((u) => isCanonicalNodeUri(u)) ?? null;
 }
 
-/** Audit-Hook fuer den Ingress (RX / Reject) — im Daemon `audit.append`-basiert. */
+/** Audit-Hook fuer den Ingress (RX / Reject / Gate) — im Daemon `audit.append`-basiert. */
 export type McpIngressAuditFn = (
-  event: 'MCP_PROXY_RX' | 'MCP_FORWARD_REJECT',
+  event: 'MCP_PROXY_RX' | 'MCP_FORWARD_REJECT' | 'MCP_FORWARD_GATE',
   peerId: string,
   details: string,
 ) => void;
@@ -143,7 +143,18 @@ export function makeMcpIngressHandler(
           senderUri: ctx.senderUri,
           summary: `${ctx.tier}-tier ${ctx.tool || '<unknown-tool>'} on ${ctx.server}`,
         };
-        return approvalRegistry.requestApproval(req);
+        const decision = await approvalRegistry.requestApproval(req);
+        // ADR-037 (CR-Codex #264): dedizierter Gate-Audit VOR Dispatch/Denial — trägt requestId,
+        // outcome und channelId, sodass eine Freigabe-Entscheidung korrelierbar ist und ein
+        // approved Write im Audit NICHT von einem ungegateten Read ununterscheidbar bleibt.
+        deps.audit?.(
+          'MCP_FORWARD_GATE',
+          ctx.senderUri,
+          `${ctx.server} tool=${ctx.tool || '<unknown-tool>'} tier=${ctx.tier} ` +
+            `outcome=${decision.outcome} req=${req.requestId}` +
+            (decision.channelId ? ` channel=${decision.channelId}` : ''),
+        );
+        return decision;
       }
     : undefined;
   return async function mcpIngressHandler(request, reply): Promise<void> {

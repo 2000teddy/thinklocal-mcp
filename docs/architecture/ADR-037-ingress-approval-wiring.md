@@ -59,8 +59,15 @@ Freigabe-Kontext (parallel zu `deriveToolTier`).
 - **Keine Freigabe-Matrix** — TL-10 schiebt sich zwischen Ingress und Registry (`resolveApproval` wählt
   dann Kanal+Entscheider anhand der Matrix statt „erster gesunder Kanal").
 - **`consensus` bleibt hart 403** bis ein Quorum-Konstrukt existiert.
-- **Kein dediziertes `MCP_FORWARD_GATE`-Audit** in diesem Slice — das bestehende RX/REJECT-Audit
-  (`mcp-ingress-api.ts`) unterscheidet approved (RX) von denied (REJECT `tier=gate`) bereits.
+
+### Gate-Audit (CR-Codex #264, in diesem Slice ergänzt)
+
+Der Resolver-Adapter (`mcp-ingress-api.ts`) emittiert ein dediziertes **`MCP_FORWARD_GATE`**-Audit-Event
+**VOR** Dispatch/Denial, sobald eine Freigabe-Entscheidung vorliegt. Es trägt `requestId`, `outcome`
+und `channelId` (plus tool/tier/server) und macht damit eine Freigabe-Entscheidung korrelierbar zur
+Kanal-Anfrage — ein `approved` Write ist im Audit-Verlauf **nicht** von einem ungegateten Read
+ununterscheidbar. Das erfüllt die ursprüngliche TL-09b-Anforderung (`MCP_FORWARD_GATE`) direkt in diesem
+Slice (nicht nach TL-09c verschoben). Das bestehende RX/REJECT-Audit bleibt zusätzlich bestehen.
 
 ## Konsequenzen
 

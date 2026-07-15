@@ -42,6 +42,12 @@ Flag-Zuständen) → kein Regressionsrisiko, TL-07-Beweis (self) unberührt.
   Fail-open**, alle 7 Invarianten verifiziert. LOW-1 (`isApproved` außerhalb try → Unhandled-Reject bei
   malformed-Resolve) + LOW-3 (fehlende Dispatch-Assertion) **beide in-slice gefixt + Regressionstest**.
   LOW-2 (Verb-Heuristik-Klassifizierung) = pre-existing ADR-033, für TL-10 notiert.
+- **CR (extern, Codex #264, CHANGES NEEDED → behoben):** MEDIUM — die Freigabe-Entscheidung verlor ihre
+  Korrelationsdaten (requestId/outcome/channelId), nur generisches RX/REJECT wurde auditiert → approved
+  Write ununterscheidbar von ungegatetem Read; zudem war das in `main:TODO.md` für TL-09b geforderte
+  `MCP_FORWARD_GATE` fälschlich nach TL-09c verschoben. **Fix in-slice:** neues `MCP_FORWARD_GATE`-Audit
+  (audit.ts + Resolver-Adapter) trägt requestId/outcome/channelId VOR Dispatch/Denial; +4 adapter-Level-
+  Tests mit ECHTER `MeldekanalRegistry` (approved/rejected/denied-no-channel/ohne-Registry). 1602 grün.
 - **PC:** `git diff` — 6 Dateien + 1 ADR; Secret-Scan clean. **Vorbestehend (nicht in diesem Slice):**
   `index.ts:284` `tlsBundle!.certPem` non-null-assertion (ESLint-Error auf `main`, durch meinen +1-Import
   nur verschoben, nicht eingeführt).

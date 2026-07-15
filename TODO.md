@@ -56,10 +56,10 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
   - [x] **TL-09b Slice B** (Wiring, ADR-037): `mcp-ingress.ts` `gate`-Pfad optional auf
     `resolveApproval(...)` (→ `MeldekanalRegistry`) verdrahtet, hinter Env-Flag `TLMCP_APPROVAL_CHANNEL_ENABLED`
     (Default aus, leere Registry → 403 = verhaltensidentisch). Nur `isApproved` lässt durch; `consensus`
-    bleibt 403; fail-closed bei Throw/malformed. `meldekanal.ts` hat jetzt einen lebenden Consumer.
+    bleibt 403; fail-closed bei Throw/malformed. **Korrelierbares `MCP_FORWARD_GATE`-Audit** (requestId/
+    outcome/channelId) VOR Dispatch/Denial (CR-Codex #264). `meldekanal.ts` hat jetzt einen lebenden Consumer.
   - [ ] **TL-09c** (offen): realer `TelegramMeldekanal` (Inline-Keyboard-Callback → `approvals.ts`-Store)
-    in die Registry injizieren + optional dediziertes `MCP_FORWARD_GATE`-Audit. **Erst hiermit kann eine
-    gate-Freigabe real `approved` werden.**
+    in die Registry injizieren. **Erst hiermit kann eine gate-Freigabe real `approved` werden.**
 - [ ] **[v5.1] TL-10 (≈3 h)** Freigabe-Matrix v1 (Werkzeug-Klasse → Kanal → Entscheider), Auswertung im Gate.
   Schiebt sich zwischen Ingress (TL-09b, verdrahtet) und Registry — der `resolveApproval`-Seam existiert jetzt.
   CO-Auflagen (2026-07-15): Feld `tier` statt `tool_class` (tier = harter Predikat-Filter, nie Label);

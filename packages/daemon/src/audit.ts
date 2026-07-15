@@ -47,10 +47,13 @@ export type AuditEventType =
   // REJECT = MCP-Proxy-Call abgelehnt (unauth. Sender / 1-Hop-Guard / Self-Loop).
   // EXEC_LOCAL = dieser Node serviert einen MCP-Call LOKAL (Owner-Seite, kein Forward)
   //   — die Owner-Hälfte des beidseitigen Kap.-7.7-Audits, Gegenstück zu MCP_FORWARD_TX.
+  // GATE = Freigabe-Entscheidung für einen schreibenden (gate) Call (ADR-037): trägt
+  //   requestId/outcome/channelId → korrelierbar zur Kanal-Anfrage, VOR Dispatch/Denial.
   | 'MCP_PROXY_RX'
   | 'MCP_FORWARD_TX'
   | 'MCP_EXEC_LOCAL'
-  | 'MCP_FORWARD_REJECT';
+  | 'MCP_FORWARD_REJECT'
+  | 'MCP_FORWARD_GATE';
 
 /**
  * ADR-007 Phase A: Entity types for structured audit querying.
