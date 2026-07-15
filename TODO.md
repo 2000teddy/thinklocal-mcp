@@ -60,9 +60,14 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     (deny-by-default Feld-Allowlist, Policy R = unconditional), verdrahtet im Owner-Local-Exec; kein
     Gate-Flip (Gate-still-blocks-Regression). `SERVER_SAFE_FIELDS['unifi']` leer (maximale Redaction).
     CR: HIGH (Array-Skalar-Leak) + MEDIUM (Error-Pfad) in-slice gefixt. +21 Tests.
-  - [ ] **TL-08 Slice 2c** (eigener Security-CR): **Gate-Flip** sensitive → allow-with-redaction; Safe-Field-
-    Kuratierung aus Output-Schemata + nested-JSON-Strings; Tool-Name-Casing; dann Live-Drift-Verdrahtung
-    (periodischer Check gegen echtes `tools/list` + Warn-Log) + weitere governed Server.
+  - [~] **TL-08 Slice 2c** — teils geliefert, Kern BLOCKED:
+    - [x] **Live-Drift-Check** (ADR-042): `checkToolClassDrift`-Seam gegen live `tools/list` (secret-sicher,
+      fail-safe), +6 Tests. Verdrahtungs-Hook (index.ts/Mesh) = Folge.
+    - [ ] ⛔ **Gate-Flip BLOCKED (Christian-Gate):** sensitive → allow-with-redaction braucht kuratierte
+      Safe-Field-Allowlist; die 10 sensitiven unifi-Tools haben **kein `outputSchema`** → Feldnamen nur per
+      Tool-Aufruf (= Secret-Exposition). Unblock: (c) Doku-/Quell-Transkription der Feldnamen (UniFi-API +
+      FastMCP-Quelle), (a) Christian-sanitisierte Liste, (b) autorisierter redact-before-log-Sampling-Harness.
+      Dann Gate-Flip + nested-JSON-`content[].text`-Redaction + Tool-Name-Casing als eigener Security-CR.
 - [~] **[v5.1] TL-09 (≈4 h)** Meldekanal-Abstraktion (Entsch. 10) + Telegram-Adapter + **Fail-safe: kein
   erreichbarer Kanal = schreibender Aufruf bleibt verweigert.**
   - [x] **TL-09 Slice A** (ADR-036): reine Abstraktion `meldekanal.ts` (`Meldekanal`/`MeldekanalRegistry`/

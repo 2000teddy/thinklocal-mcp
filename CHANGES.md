@@ -8,6 +8,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(security): ADR-042 Live-Drift-Check + Gate-Flip-Blocker (TL-08 Slice 2c, partiell) (2026-07-15 17:44)
+Der TL-08-Gate-Flip (sensitive → allow-with-redaction) ist **BLOCKED**: die 10 sensitiven unifi-Tools
+haben kein `outputSchema` → eine kuratierte Safe-Field-Allowlist ist nur per Tool-Aufruf (= Secret-
+Exposition) erfahrbar; in dieser Lane autonom nicht sicher lieferbar (ADR-042, Unblock via Doku-Transkription
+/ Christian-Liste / redact-before-log-Sampling). **Geliefert (secret-sicher, null Gate-Verhaltensänderung):**
+`tool-class-drift.ts` `checkToolClassDrift` — live Drift-Check-Seam gegen `tools/list` (nur Namen), warn-loggt
+neue/entfernte Upstream-Tools (Kurations-Signal); ungoverned → null, Fetch-Fehler → null+warn (fail-safe).
+CR clean. +6 Tests, 1678 grün.
+
 ### feat(security): ADR-041 owner-seitige Feld-Redaction (TL-08 Slice 2b) (2026-07-15 17:25)
 Owner-seitige **fail-closed** Redaction-Mechanik für die 10 sensitiven unifi credential-/PII-Reads: neues
 `redact-mcp-response.ts` (**deny-by-default Feld-Allowlist** — nur safe-gelistete Keys überleben, alles
