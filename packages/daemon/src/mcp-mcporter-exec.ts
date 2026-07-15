@@ -24,7 +24,8 @@ import { execFile } from 'node:child_process';
 import type { Logger } from 'pino';
 import type { McpIngressResponse } from './mcp-ingress.js';
 import type { McpLocalExec, McpLocalExecRequest } from './mcp-forward-executor.js';
-import { canonicalizeServerName } from './mcp-service-registry.js';
+import { canonicalizeServerName, deriveToolName } from './mcp-service-registry.js';
+import { redactSensitiveResult, isSensitiveTool } from './redact-mcp-response.js';
 
 /** Aufschlag auf den mcporter-`--timeout`, bevor der Prozess hart gekillt wird: so meldet
  *  mcporter seinen eigenen (sauberen) Timeout als 502, und ein 504 (Prozess-Kill) bedeutet
@@ -130,6 +131,9 @@ export function createMcporterLocalExec(deps: McporterLocalExecDeps = {}): McpLo
     // ein gross-/whitespace-abweichender, aber gueltig aufgeloester Aufruf trifft mcporter
     // mit dem kanonischen Namen statt in einen 502 zu laufen.
     const server = canonicalizeServerName(req.server);
+    // ADR-041 (CR-MEDIUM): bei einem sensitiven Tool dürfen auch die FEHLER-Pfade kein rohes
+    // stdout/stderr durchreichen (könnte das Secret enthalten, das der Happy-Path redigiert hätte).
+    const sensitive = isSensitiveTool(server, deriveToolName(req.payload));
     const built = buildMcporterArgv(server, req.payload, req.timeoutMs);
     if ('error' in built) {
       return { status: 400, body: { error: built.error, server } };
@@ -141,17 +145,26 @@ export function createMcporterLocalExec(deps: McporterLocalExecDeps = {}): McpLo
       return { status: 504, body: { error: 'mcporter timeout', server } };
     }
     if (proc.code !== 0) {
-      const detail = (proc.stderr || proc.stdout || '').slice(0, 300);
-      deps.log?.warn({ server, code: proc.code, detail }, '[mcporter-exec] Exit != 0');
+      const detail = sensitive ? '[REDACTED]' : (proc.stderr || proc.stdout || '').slice(0, 300);
+      deps.log?.warn({ server, code: proc.code }, '[mcporter-exec] Exit != 0');
       return { status: 502, body: { error: 'mcporter exec failed', server, detail } };
     }
     let result: unknown;
     try {
       result = proc.stdout.trim() ? JSON.parse(proc.stdout) : {};
     } catch {
-      return { status: 502, body: { error: 'mcporter lieferte kein JSON', server, detail: proc.stdout.slice(0, 200) } };
+      const detail = sensitive ? '[REDACTED]' : proc.stdout.slice(0, 200);
+      return { status: 502, body: { error: 'mcporter lieferte kein JSON', server, detail } };
     }
     const id = (typeof req.payload === 'object' && req.payload !== null ? (req.payload as JsonRpcCall).id : undefined) ?? null;
-    return { status: 200, body: { jsonrpc: '2.0', id, result } };
+    // ADR-041 (TL-08 Slice 2b, Policy R): owner-seitige, UNCONDITIONAL Redaction sensitiver Tool-Ergebnisse
+    // VOR der Rückgabe — Secrets verlassen den Owner-Daemon nie unredigiert (deny-by-default, fail-closed).
+    // Nicht-sensitive Tools: passthrough (byte-unverändert). Heute im Live-Pfad tot (sensitive gegatet),
+    // am Exec-Seam getestet.
+    const redaction = redactSensitiveResult(server, deriveToolName(req.payload), result);
+    if (redaction.outcome === 'fail-closed') {
+      deps.log?.warn({ server, reason: redaction.reason }, '[mcporter-exec] sensitives Ergebnis fail-closed redigiert');
+    }
+    return { status: 200, body: { jsonrpc: '2.0', id, result: redaction.result } };
   };
 }
