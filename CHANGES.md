@@ -8,6 +8,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(security): ADR-039 gepflegte Read-only-Werkzeugklasse je Server (TL-08 Slice 1) (2026-07-15 16:20)
+Ersetzt für *governed* Server (unifi zuerst) die generische Verb-Heuristik durch eine gepflegte
+Read-only-Allowlist (`SERVER_TOOL_CLASSES` + `deriveToolTierForServer`): 24 non-secret unifi-Reads (aus
+echtem 67-Tool-`tools/list`-Inventar) → self; jedes unlisted `tools/call` → mind. gate (destruktiv →
+consensus, **nie Downgrade**, unlisted-Read nie self); `tools/list` + ungoverned Server → Heuristik
+(unverändert). Server kanonisiert (kein `/api/mcp/UNIFI`-Bypass), Tool-Name exakt (fail-closed).
+Credential-/PII-Reads (wlan/voucher/radius/vpn/wans/networks) bewusst gegatet („mutation ≠ sensitivity"
+= Slice 2). Fixture-Subset-Test gegen stille Tippfehler-Drift. CO: `pal:consensus` (opus+sonnet); CR: kein
+Self-Bypass, 3 MEDIUM (PPPoE/IPsec-Reads, whitespace-Name) in-slice gefixt. +14 Tests, 1643 grün.
+
 ### feat(security): ADR-038 signierte, re-verifizierbare Postfach-Aufträge (TL-12 Slice A) (2026-07-15 14:01)
 Ein Auftrag ist ein signierter `type='ORDER'`-Envelope, der als verbatim Bytes im Body einer AGENT_MESSAGE
 unter Marker `__tlorder__` reist. Neu: `signed-order.ts` (fail-closed `verifyOrderBytes` mit

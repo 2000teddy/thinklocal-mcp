@@ -147,6 +147,61 @@ export function deriveToolName(payload: unknown): string {
   return typeof name === 'string' ? name.trim() : '';
 }
 
+/**
+ * ADR-039 (TL-08 Slice 1): gepflegte Werkzeugklassen je *governed* Server — ersetzt für bekannte
+ * Server die Verb-Heuristik durch eine autoritative Read-only-Allowlist.
+ */
+export interface ServerToolClasses {
+  /** Tools, die als lesend (`self`) durchgehen. **Exakter** Toolname (trim, kein lowercase). */
+  readonly readOnly: ReadonlySet<string>;
+  /** Optional: Tools, die zwingend `consensus` brauchen (Eskalation über die Heuristik hinaus). */
+  readonly consensus?: ReadonlySet<string>;
+}
+
+/**
+ * unifi Read-only-Allowlist — Snapshot live `tools/list` 2026-07-15 (67 Tools; 27 read-only).
+ * Credential-/PII-nahe Reads (wlan/voucher/radius/vpn) sind BEWUSST ausgeschlossen (ADR-039 CO-B):
+ * sie mutieren nicht, exfiltrieren aber Secrets/PII → werden gegatet („mutation ≠ sensitivity" = Slice 2).
+ * `locate_device` (LED-Aktuation) ist korrekt kein Read (Heuristik → gate).
+ */
+const UNIFI_READ_ONLY: ReadonlySet<string> = new Set<string>([
+  'get_acl_rule', 'get_application_info', 'get_client', 'get_device', 'get_device_stats', 'get_dns_policy',
+  'get_firewall_policy', 'get_firewall_zone', 'get_lag', 'get_mc_lag_domain',
+  'get_switch_stack', 'get_traffic_matching_list',
+  'list_acl_rules', 'list_clients', 'list_devices', 'list_dns_policies', 'list_firewall_policies',
+  'list_firewall_zones', 'list_lags', 'list_mc_lag_domains', 'list_pending_devices',
+  'list_sites', 'list_switch_stacks', 'list_traffic_matching_lists',
+]);
+
+/** Gepflegte Klassen-Map je *governed* Server (kanonischer Servername als Schlüssel). */
+export const SERVER_TOOL_CLASSES: Readonly<Record<string, ServerToolClasses>> = {
+  unifi: { readOnly: UNIFI_READ_ONLY },
+};
+
+/**
+ * Werkzeug-Stufe unter Berücksichtigung der gepflegten Server-Klassen-Map (ADR-039). Rein, wirft nie.
+ *  - **Ungoverned** Server (kein Map-Eintrag) → `deriveToolTier(payload)` (heutiges Verhalten).
+ *  - **Governed**, Methode ≠ `tools/call` (z.B. `tools/list`) → `deriveToolTier(payload)` (→ `self`);
+ *    ohne diese Delegation bräche Discovery am governed Server (Toolname `''` → unlisted → gate → 403).
+ *  - **Governed**, `tools/call`: Tool in `readOnly` → `self`; in `consensus` → `consensus`; sonst
+ *    `maxTier('gate', deriveToolTier(payload))` (mind. gate, `consensus` bei destruktivem Verb — **nie
+ *    Downgrade**, unlisted/mis-verbtes Read geht **nie** als `self` durch).
+ * Servername wird kanonisiert (sonst wäre `/api/mcp/UNIFI` ein Governance-Bypass). Toolname exakt.
+ */
+export function deriveToolTierForServer(server: string, payload: unknown): McpExecutionTier {
+  const classes = SERVER_TOOL_CLASSES[canonicalizeServerName(server)];
+  if (!classes) return deriveToolTier(payload);
+  const call = (typeof payload === 'object' && payload !== null ? payload : {}) as McpCallView;
+  if (call.method !== 'tools/call') return deriveToolTier(payload);
+  const name = deriveToolName(payload);
+  if (name !== '' && classes.readOnly.has(name)) return 'self';
+  if (name !== '' && classes.consensus?.has(name)) return 'consensus';
+  // Governed + unlisted: Verb auf dem GETRIMMTEN Namen klassifizieren (nicht den rohen Payload an
+  // `deriveToolTier` delegieren — sonst entkäme `" delete_network "` als gate statt consensus,
+  // CR-MEDIUM). `maxTier('gate', …)` hält die Untergrenze; destruktives Verb hebt auf consensus.
+  return maxTier('gate', deriveToolTier({ method: 'tools/call', params: { name } }));
+}
+
 export interface BuildMcpCapabilityInput {
   /** MCP-Server-Name, z.B. "unifi", "markitdown" → `skill_id="mcp:unifi"`. */
   server: string;
