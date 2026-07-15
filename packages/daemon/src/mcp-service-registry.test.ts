@@ -9,6 +9,8 @@ import {
   deriveExecutionTier,
   deriveToolTier,
   deriveToolTierForServer,
+  classifyGateReason,
+  computeToolClassDrift,
   SERVER_TOOL_CLASSES,
   maxTier,
   resolveMcp,
@@ -282,5 +284,64 @@ describe('deriveToolTierForServer (ADR-039, TL-08 Slice 1 — gepflegte Server-K
     for (const tool of unifiClasses?.readOnly ?? []) {
       expect(inventory.has(tool)).toBe(true); // Tippfehler in der Allowlist ⇒ Test rot statt stiller Read-Gate
     }
+  });
+});
+
+describe('classifyGateReason (ADR-040, TL-08 Slice 2a — Audit-Gate-Grund)', () => {
+  const callFor = (name: string): unknown => ({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name } });
+
+  it('nicht gegatet (self) → null', () => {
+    expect(classifyGateReason('unifi', callFor('list_clients'))).toBeNull();
+    expect(classifyGateReason('unifi', { jsonrpc: '2.0', id: 1, method: 'tools/list' })).toBeNull();
+    expect(classifyGateReason('pal', callFor('list_models'))).toBeNull();
+  });
+
+  it('diskriminierte Gründe: write / destructive / sensitive / invalid', () => {
+    expect(classifyGateReason('unifi', callFor('block_client'))).toBe('write-verb');
+    expect(classifyGateReason('unifi', callFor('delete_network'))).toBe('destructive-verb');
+    expect(classifyGateReason('unifi', callFor('get_wlan'))).toBe('sensitive-governed');
+    expect(classifyGateReason('unifi', callFor('list_wans'))).toBe('sensitive-governed');
+    expect(classifyGateReason('unifi', callFor(''))).toBe('invalid-call');
+  });
+
+  it('KURATIONS-Signal: governed + read-ish Tool nicht allowlisted → unlisted-governed', () => {
+    // Synthetisches neues unifi-Read (nicht in readOnly/sensitive) — der „go curate this tool"-Trigger.
+    expect(classifyGateReason('unifi', callFor('list_futuretool'))).toBe('unlisted-governed');
+  });
+
+  it('SINGLE SOURCE OF TRUTH: über die volle 67-Tool-Fixture gilt (reason===null) ⟺ (tier===self)', () => {
+    for (const tool of unifiFixture as string[]) {
+      const gated = deriveToolTierForServer('unifi', callFor(tool)) !== 'self';
+      const reason = classifyGateReason('unifi', callFor(tool));
+      expect(reason !== null).toBe(gated); // Signal kann nie vom echten Gate abweichen
+    }
+  });
+});
+
+describe('computeToolClassDrift (ADR-040 — Snapshot-Lint) + sensitive-Invariante', () => {
+  it('readOnly ∩ sensitive = ∅ (Invariante)', () => {
+    const c = SERVER_TOOL_CLASSES['unifi'];
+    expect(c).toBeDefined();
+    for (const t of c?.sensitive ?? []) expect(c?.readOnly.has(t)).toBe(false);
+  });
+
+  it('gegen die committete Fixture: keine stale-Einträge, unclassified leer (Selbstkonsistenz)', () => {
+    const c = SERVER_TOOL_CLASSES['unifi'];
+    expect(c).toBeDefined();
+    const drift = computeToolClassDrift(c as NonNullable<typeof c>, unifiFixture as string[]);
+    expect(drift.staleReadOnly).toEqual([]);
+    expect(drift.staleSensitive).toEqual([]);
+    expect(drift.unclassified).toEqual([]); // 34 read-Verb-Tools = 24 readOnly + 10 sensitive
+  });
+
+  it('fängt Drift: entferntes readOnly-Tool → staleReadOnly; neues Read → unclassified', () => {
+    const c = SERVER_TOOL_CLASSES['unifi'];
+    const full = unifiFixture as string[];
+    // (a) Live-Inventar OHNE list_clients → staleReadOnly meldet es.
+    const withoutRead = full.filter((t) => t !== 'list_clients');
+    expect(computeToolClassDrift(c as NonNullable<typeof c>, withoutRead).staleReadOnly).toContain('list_clients');
+    // (b) Live-Inventar MIT einem neuen Read → unclassified meldet es.
+    const withNew = [...full, 'list_brandnew'];
+    expect(computeToolClassDrift(c as NonNullable<typeof c>, withNew).unclassified).toEqual(['list_brandnew']);
   });
 });

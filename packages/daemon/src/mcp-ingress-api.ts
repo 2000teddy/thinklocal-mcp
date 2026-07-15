@@ -31,7 +31,7 @@ import {
 import { MCP_HOP_HEADER, type McpDispatchExecutor } from './mcp-forward-executor.js';
 import { randomUUID } from 'node:crypto';
 import { MeldekanalRegistry, type ApprovalRequest, type ApprovalDecision } from './meldekanal.js';
-import type { McpExecutionTier } from './mcp-service-registry.js';
+import { classifyGateReason, type McpExecutionTier } from './mcp-service-registry.js';
 
 /** Minimaler TLS-Socket-Ausschnitt fuer die Cert-Extraktion (testbar ohne echtes TLS). */
 export interface PeerCertSocket {
@@ -188,7 +188,13 @@ export function makeMcpIngressHandler(
       // Sender-Auth-Ablehnung unterscheidbar machen — sonst sind beide „status=403" ununterscheidbar.
       const tier = (result.body as { tier?: unknown } | undefined)?.tier;
       const tierSuffix = typeof tier === 'string' ? ` tier=${tier}` : '';
-      deps.audit?.('MCP_FORWARD_REJECT', senderUri ?? 'unknown', `${server} status=${result.status}${tierSuffix}`);
+      // ADR-040 (TL-08 Slice 2a): bei einer Tier-Verweigerung (Body trägt `tier`) den diskriminierten
+      // Gate-Grund anhängen — operatives Signal, `unlisted-governed` = „kuratiere dieses Tool". Nur wenn
+      // ein `tier` vorliegt (dieselbe Bedingung wie `tierSuffix`), damit Auth-/Hop-/5xx-Rejects (ohne
+      // Tier) NICHT fälschlich als Kurations-Kandidaten etikettiert werden.
+      const reason = typeof tier === 'string' ? classifyGateReason(server, request.body) : null;
+      const reasonSuffix = reason ? ` reason=${reason}` : '';
+      deps.audit?.('MCP_FORWARD_REJECT', senderUri ?? 'unknown', `${server} status=${result.status}${tierSuffix}${reasonSuffix}`);
     } else {
       deps.audit?.('MCP_PROXY_RX', senderUri ?? 'unknown', `${server} status=${result.status} hop=${incomingHop}`);
     }
