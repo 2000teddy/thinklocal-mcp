@@ -156,6 +156,13 @@ export interface ServerToolClasses {
   readonly readOnly: ReadonlySet<string>;
   /** Optional: Tools, die zwingend `consensus` brauchen (Eskalation über die Heuristik hinaus). */
   readonly consensus?: ReadonlySet<string>;
+  /**
+   * ADR-040 (TL-08 Slice 2a): **bewusst gegatete, nicht-mutierende** credential-/PII-Reads. Diese Tools
+   * sind NICHT in `readOnly` (gaten also weiterhin) — das Set dokumentiert die Absicht strukturell,
+   * trennt sie im Gate-Grund von „unlisted → kuratieren" und ist der Eingabe-Umfang für die
+   * Field-Redaction (Slice 2b). **Verhaltensneutral.** Invariante: `readOnly ∩ sensitive = ∅`.
+   */
+  readonly sensitive?: ReadonlySet<string>;
 }
 
 /**
@@ -173,9 +180,18 @@ const UNIFI_READ_ONLY: ReadonlySet<string> = new Set<string>([
   'list_sites', 'list_switch_stacks', 'list_traffic_matching_lists',
 ]);
 
+/**
+ * unifi `sensitive` (ADR-040): nicht-mutierende Reads, die Credentials/PII zurückgeben (PSK/Passphrase,
+ * PPPoE-Passwort, IPsec-PSK, Gast-Voucher, RADIUS-Secrets, VPN-Keys). Bewusst gegatet bis Slice 2b.
+ */
+const UNIFI_SENSITIVE: ReadonlySet<string> = new Set<string>([
+  'get_wlan', 'list_wlans', 'get_voucher', 'list_vouchers', 'list_radius_profiles',
+  'list_vpn_servers', 'list_vpn_tunnels', 'list_wans', 'get_network', 'list_networks',
+]);
+
 /** Gepflegte Klassen-Map je *governed* Server (kanonischer Servername als Schlüssel). */
 export const SERVER_TOOL_CLASSES: Readonly<Record<string, ServerToolClasses>> = {
-  unifi: { readOnly: UNIFI_READ_ONLY },
+  unifi: { readOnly: UNIFI_READ_ONLY, sensitive: UNIFI_SENSITIVE },
 };
 
 /**
@@ -200,6 +216,71 @@ export function deriveToolTierForServer(server: string, payload: unknown): McpEx
   // `deriveToolTier` delegieren — sonst entkäme `" delete_network "` als gate statt consensus,
   // CR-MEDIUM). `maxTier('gate', …)` hält die Untergrenze; destruktives Verb hebt auf consensus.
   return maxTier('gate', deriveToolTier({ method: 'tools/call', params: { name } }));
+}
+
+/**
+ * ADR-040 (TL-08 Slice 2a): diskriminierter Grund, WARUM ein Aufruf gegatet wird — fürs Audit
+ * („kuratiere dieses Tool" vs. erwartetes write/destructive vs. bewusste Policy). Rein, wirft nie.
+ */
+export type GateReason =
+  | 'invalid-call' // `tools/call` ohne gültigen Namen (fail-closed, kein Kurations-Kandidat)
+  | 'destructive-verb' // Verb destruktiv → consensus
+  | 'write-verb' // Verb schreibend/unbekannt → gate
+  | 'sensitive-governed' // governed + bewusst gegateter credential-Read (Policy, Slice-2b-Input)
+  | 'unlisted-governed'; // governed + read-ish/neues Tool nicht allowlisted → KURATIONS-Signal
+
+/**
+ * Bestimmt den Gate-Grund. **Single source of truth:** ruft intern `deriveToolTierForServer` und gibt
+ * `null` zurück, wenn das Ergebnis `self` ist (= nicht gegatet) — so kann das Audit-Signal per
+ * Konstruktion nicht davon abweichen, OB gegatet wurde. Danach wird nur der Bucket bestimmt.
+ */
+export function classifyGateReason(server: string, payload: unknown): GateReason | null {
+  if (deriveToolTierForServer(server, payload) === 'self') return null;
+  const classes = SERVER_TOOL_CLASSES[canonicalizeServerName(server)];
+  const call = (typeof payload === 'object' && payload !== null ? payload : {}) as McpCallView;
+  const name = deriveToolName(payload);
+  if (call.method === 'tools/call' && name === '') return 'invalid-call';
+  if (classes && name !== '' && classes.sensitive?.has(name)) return 'sensitive-governed';
+  // Verb-Stufe auf dem getrimmten Namen (konsistent zu deriveToolTierForServer).
+  const verbTier = name === '' ? 'gate' : deriveToolTier({ method: 'tools/call', params: { name } });
+  if (verbTier === 'consensus') return 'destructive-verb';
+  if (verbTier === 'gate') return 'write-verb';
+  // verbTier === 'self', aber trotzdem gegatet ⇒ governed Read nicht in der Allowlist ⇒ kuratieren.
+  return 'unlisted-governed';
+}
+
+/** Ergebnis des Snapshot-Lints (ADR-040). */
+export interface ToolClassDrift {
+  /** `readOnly`-Einträge, die nicht (mehr) im Live-Inventar sind (Tippfehler / entferntes Tool). */
+  readonly staleReadOnly: string[];
+  /** `sensitive`-Einträge, die nicht (mehr) im Live-Inventar sind. */
+  readonly staleSensitive: string[];
+  /** Live read-Verb-Tools, die weder readOnly noch sensitive noch consensus sind — Kurations-Kandidaten. */
+  readonly unclassified: string[];
+}
+
+/**
+ * ADR-040 (TL-08 Slice 2a): **Snapshot-Selbstkonsistenz-Lint** (KEINE Live-Drift-Erkennung — gegen die
+ * committete Fixture ist es ein Regressionstest; die Live-Verdrahtung ist Folge-Slice). Rein, wirft nie.
+ * Toolnamen-Vergleich **exakt** (identisch zu `readOnly`-Matching).
+ */
+export function computeToolClassDrift(
+  classes: ServerToolClasses,
+  liveTools: readonly string[],
+): ToolClassDrift {
+  const live = new Set(liveTools);
+  const staleReadOnly = [...classes.readOnly].filter((t) => !live.has(t));
+  const staleSensitive = classes.sensitive ? [...classes.sensitive].filter((t) => !live.has(t)) : [];
+  const isReadVerb = (t: string): boolean =>
+    deriveToolTier({ method: 'tools/call', params: { name: t } }) === 'self';
+  const unclassified = liveTools.filter(
+    (t) =>
+      isReadVerb(t) &&
+      !classes.readOnly.has(t) &&
+      !(classes.sensitive?.has(t) ?? false) &&
+      !(classes.consensus?.has(t) ?? false),
+  );
+  return { staleReadOnly, staleSensitive, unclassified };
 }
 
 export interface BuildMcpCapabilityInput {

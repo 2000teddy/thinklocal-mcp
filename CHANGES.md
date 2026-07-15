@@ -8,6 +8,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(security): ADR-040 Werkzeugklassen-Observability (TL-08 Slice 2a) (2026-07-15 16:45)
+**Reine Telemetrie — null Gate-Verhaltensänderung** (`deriveToolTierForServer` byte-unverändert). Neu:
+`sensitive`-Set auf `ServerToolClasses` (10 bewusst gegatete unifi-credential-Reads explizit, Invariante
+`readOnly∩sensitive=∅`); `classifyGateReason` (diskriminierter Gate-Grund, **single source of truth** —
+ruft `deriveToolTierForServer`, kann per Cross-Check-Test nie vom Gate abweichen); `MCP_FORWARD_REJECT`-
+Audit trägt `reason=<GateReason>` (`unlisted-governed` = Kurations-Signal), gegated wie `tier=`;
+`computeToolClassDrift` (Snapshot-Selbstkonsistenz-Lint gegen die committete Fixture). Field-Redaction
+(„mutation ≠ sensitivity") = Slice 2b (eigener CO). CO: `pal:consensus` (opus+sonnet). +16 Tests, 1651 grün.
+
 ### feat(security): ADR-039 gepflegte Read-only-Werkzeugklasse je Server (TL-08 Slice 1) (2026-07-15 16:20)
 Ersetzt für *governed* Server (unifi zuerst) die generische Verb-Heuristik durch eine gepflegte
 Read-only-Allowlist (`SERVER_TOOL_CLASSES` + `deriveToolTierForServer`): 24 non-secret unifi-Reads (aus

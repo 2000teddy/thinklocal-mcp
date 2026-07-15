@@ -53,8 +53,13 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     Reads aus echtem 67-Tool-Inventar). `deriveToolTierForServer`: readOnly→self, unlisted `tools/call`→
     ≥gate (nie Downgrade), `tools/list`/ungoverned→Heuristik; Server kanonisiert, Tool exakt; Credential-
     Reads (wlan/voucher/radius/vpn/wans/networks) gegatet; Fixture-Subset-Drift-Test. +14 Tests.
-  - [ ] **TL-08 Slice 2**: „mutation ≠ sensitivity" (Feld-Redaktion, credential-Reads wieder als self mit
-    redigierten Feldern); Startup-Drift-Check gegen live `tools/list`; Audit-Signal „unlisted-on-governed";
+  - [x] **TL-08 Slice 2a** (ADR-040, **reine Telemetrie**): `sensitive`-Set (10 credential-Reads explizit),
+    `classifyGateReason` (diskriminiert, single source of truth, Cross-Check-Test), `reason=`-Audit-Suffix,
+    `computeToolClassDrift` (Snapshot-Lint). Null Gate-Verhaltensänderung. +16 Tests.
+  - [ ] **TL-08 Slice 2b** (eigener CO): Field-Redaction „mutation ≠ sensitivity" — credential-Reads wieder
+    als self mit **redigierten Feldern**; Fail-closed-Default (unbekannte Response-Form → gegatet),
+    Redaction **beim Owner-Daemon**, konservative Secret-Key-Liste (Input = `sensitive`-Set).
+  - [ ] **TL-08 Slice 2c**: Live-Drift-Verdrahtung (periodischer Check gegen echtes `tools/list` + Warn-Log);
     weitere governed Server.
 - [~] **[v5.1] TL-09 (≈4 h)** Meldekanal-Abstraktion (Entsch. 10) + Telegram-Adapter + **Fail-safe: kein
   erreichbarer Kanal = schreibender Aufruf bleibt verweigert.**

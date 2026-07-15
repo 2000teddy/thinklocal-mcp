@@ -266,6 +266,31 @@ describe('makeMcpIngressHandler — T3.3 Executor-Wiring (Hop, Payload, Audit)',
     const authRej = authAudit.events.find(([e]) => e === 'MCP_FORWARD_REJECT');
     expect(authRej?.[2]).not.toContain('tier=');
   });
+
+  // ADR-040 (TL-08 Slice 2a): der REJECT-Audit trägt den diskriminierten Gate-Grund (reason=).
+  it('Tier-403 auf governed unifi trägt reason= (Kurations-/Policy-Signal)', async () => {
+    const selfServed = (): Capability[] => [cap({ agent_id: SELF })]; // self-served unifi
+    const callFor = (name: string): unknown => ({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name } });
+
+    const a1 = captureAudit();
+    await run(
+      makeRequest('unifi', authorizedSocket(CALLER), callFor('block_client')),
+      baseDeps({ getCapabilities: selfServed, execute: captureExec().exec, audit: a1.fn }),
+    );
+    expect(a1.events.find(([e]) => e === 'MCP_FORWARD_REJECT')?.[2]).toContain('reason=write-verb');
+
+    const a2 = captureAudit();
+    await run(
+      makeRequest('unifi', authorizedSocket(CALLER), callFor('get_wlan')),
+      baseDeps({ getCapabilities: selfServed, execute: captureExec().exec, audit: a2.fn }),
+    );
+    expect(a2.events.find(([e]) => e === 'MCP_FORWARD_REJECT')?.[2]).toContain('reason=sensitive-governed');
+
+    // Auth-403 (kein Tier) → KEIN reason= (nicht als Kurations-Kandidat fehletikettiert).
+    const a3 = captureAudit();
+    await run(makeRequest('unifi', { authorized: false }), baseDeps({ execute: captureExec().exec, audit: a3.fn }));
+    expect(a3.events.find(([e]) => e === 'MCP_FORWARD_REJECT')?.[2]).not.toContain('reason=');
+  });
 });
 
 // ── ADR-037 / CR-Codex #264: der Registry/Request-Konstruktions-Seam + korrelierbares Gate-Audit.
