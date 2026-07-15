@@ -8,6 +8,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(security): ADR-037 Ingress-Wiring der Meldekanal-Freigabe (TL-09b) (2026-07-15 11:23)
+Verdrahtet die Meldekanal-Abstraktion (ADR-036) an den Hub-Ingress: `handleMcpIngress` bekommt einen
+optionalen `resolveApproval`-Dep; ein `gate`-Aufruf holt — falls verdrahtet — eine Freigabe ein und
+lässt **nur bei `approved`** (Allowlist `isApproved`) zum Executor durch, sonst 403. `consensus` bleibt
+hart 403 (nie geroutet), `self` frei. Hinter Env-Flag `TLMCP_APPROVAL_CHANNEL_ENABLED` (Default aus) mit
+**leerer** Registry → `denied-no-channel` → 403, d.h. verhaltensidentisch zu `main` bis ein realer Kanal
+existiert. Fail-closed an jeder Kante (Resolver-Throw/malformed ⇒ 403). Korrelierbares `MCP_FORWARD_GATE`-Audit
+(requestId/outcome/channelId) VOR Dispatch/Denial (CR-Codex #264). CO: `pal:consensus` (Reorder
+TL-09b vor TL-10, nutzerbestätigt). +15 Tests, 1602 grün. Neu: `deriveToolName`; `ApprovalRequest.tier`
+auf `McpExecutionTier` verengt.
+
 ### feat(security): ADR-036 Meldekanal-Abstraktion + Fail-safe Deny-Default (TL-09 Slice A) (2026-07-15 10:14)
 Neu: `meldekanal.ts` — austauschbarer `Meldekanal` (`isHealthy`/`requestApproval`) + `MeldekanalRegistry`
 (erster gesunder Kanal terminal; kein Kanal ⇒ `denied-no-channel`) + `DenyAllChannel` + `isApproved()`

@@ -135,6 +135,18 @@ export function deriveToolTier(payload: unknown): McpExecutionTier {
   return 'gate';
 }
 
+/**
+ * Extrahiert den Werkzeugnamen aus einem `tools/call`-Payload (ADR-037: für den Freigabe-Kontext
+ * am Ingress). Rein, wirft NICHT. Kein `tools/call` bzw. kein gültiger Name → `''` (der Aufrufer
+ * behandelt leer fail-closed / als „unbekanntes Tool").
+ */
+export function deriveToolName(payload: unknown): string {
+  const call = (typeof payload === 'object' && payload !== null ? payload : {}) as McpCallView;
+  if (call.method !== 'tools/call') return '';
+  const name = call.params?.name;
+  return typeof name === 'string' ? name.trim() : '';
+}
+
 export interface BuildMcpCapabilityInput {
   /** MCP-Server-Name, z.B. "unifi", "markitdown" → `skill_id="mcp:unifi"`. */
   server: string;

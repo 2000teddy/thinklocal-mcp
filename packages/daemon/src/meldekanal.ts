@@ -23,6 +23,7 @@
  *
  * Reines Modul: kein I/O, keine Uhr außer `setTimeout` (Timeout), vollständig unit-testbar.
  */
+import type { McpExecutionTier } from './mcp-service-registry.js';
 
 /** Ergebnis einer Freigabe-Anfrage. Nur `approved` erlaubt einen schreibenden Aufruf. */
 export type ApprovalOutcome =
@@ -40,8 +41,8 @@ export interface ApprovalRequest {
   readonly server: string;
   /** Werkzeugname aus `tools/call`, z.B. "block_client". */
   readonly tool: string;
-  /** Ausführungsstufe, die das Gate auslöste ('gate' | 'consensus'). */
-  readonly tier: string;
+  /** Ausführungsstufe, die das Gate auslöste (ADR-037: `McpExecutionTier`, praktisch 'gate'|'consensus'). */
+  readonly tier: McpExecutionTier;
   /** Kanonischer SPIFFE-Sender-Principal. */
   readonly senderUri: string;
   /** Kurze, menschenlesbare Zusammenfassung. */

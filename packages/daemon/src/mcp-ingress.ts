@@ -15,10 +15,11 @@
 import type { Capability } from './registry.js';
 import type { McpForwardPeer } from './mcp-forward.js';
 import type { McpForwardDispatch } from './mcp-forward-dispatch.js';
-import { resolveMcp, maxTier, deriveToolTier, type McpExecutionTier } from './mcp-service-registry.js';
+import { resolveMcp, maxTier, deriveToolTier, deriveToolName, type McpExecutionTier } from './mcp-service-registry.js';
 import { planMcpRoute } from './mcp-routing.js';
 import { buildMcpForwardSpec } from './mcp-forward.js';
 import { buildMcpForwardDispatch } from './mcp-forward-dispatch.js';
+import { isApproved, type ApprovalDecision } from './meldekanal.js';
 
 export interface McpIngressResponse {
   status: number;
@@ -94,6 +95,19 @@ export interface McpIngressDeps {
    *  nicht-routbaren Dispatch aufgerufen wird (fällt ein künftiges Refactor aus dem Guard, ist es
    *  ein Compile-Fehler statt eines stillen Bugs). */
   execute: (dispatch: Exclude<McpForwardDispatch, { kind: 'none' }>) => Promise<McpIngressResponse>;
+  /**
+   * ADR-037 (TL-09b): OPTIONALER Freigabe-Resolver für die `gate`-Stufe (schreibend). Fehlt er
+   * (Flag `TLMCP_APPROVAL_CHANNEL_ENABLED` aus / kein Kanal verdrahtet), bleibt es beim harten 403
+   * (ADR-033-Untergrenze). Ist er gesetzt, wird für einen gate-Aufruf eine Freigabe eingeholt und
+   * NUR bei `approved` (via `isApproved`) durchgelassen. `consensus` wird NIE über diesen Pfad
+   * geroutet (bleibt 403). Wird im Handler fail-closed umhüllt: ein Throw ⇒ 403, nie Durchreichen.
+   */
+  resolveApproval?: (ctx: {
+    server: string;
+    tool: string;
+    tier: McpExecutionTier;
+    senderUri: string;
+  }) => Promise<ApprovalDecision>;
 }
 
 /**
@@ -102,8 +116,9 @@ export interface McpIngressDeps {
  *  2. ungültiger Servername → 400.
  *  3. resolve → plan → spec → dispatch.
  *  4. `none` (kein Provider / nicht nutzbar / fehlkonfiguriert) → 503, KEIN Dispatch.
- *  5. Ausführungsstufe (ADR-033): `gate`/`consensus` → 403 fail-closed, KEIN Dispatch.
- *  6. `self` local/remote → an `execute` weiterreichen (Plan trägt D2-Pin/D3-Sender konsistent zu #195).
+ *  5. Ausführungsstufe (ADR-033/037): `self` → frei; `consensus` → 403; `gate` → 403, ODER — falls ein
+ *     Freigabe-Resolver verdrahtet ist (ADR-037) — Freigabe einholen, nur `approved` lässt durch.
+ *  6. `self`/approved-`gate` local/remote → an `execute` weiterreichen (Plan trägt D2-Pin/D3-Sender zu #195).
  */
 export async function handleMcpIngress(
   input: McpIngressInput,
@@ -148,12 +163,41 @@ export async function handleMcpIngress(
   //    - Werkzeug-Stufe (pro Tool) aus dem Payload-Toolnamen (`deriveToolTier`) — so hält ein
   //      schreibendes Tool (z.B. `block_client`) am Gate an, während `list_clients` am selben
   //      Server durchgeht. Die Werkzeug-Stufe kann nur ANHEBEN, nie absenken (fail-closed).
-  //    gate/consensus → 403, KEIN Dispatch.
   const capabilityTier = dispatch.kind === 'local' ? dispatch.execution_tier : dispatch.request.execution_tier;
   const tier = maxTier(capabilityTier, deriveToolTier(input.payload));
-  const denied = enforceExecutionTier(tier, input.server);
-  if (denied) return denied;
 
-  // 6. self (lesend) → an den injizierten Executor weiterreichen (kein Net-Egress hier).
+  // 5a. ADR-037 (TL-09b): `gate` MIT verdrahtetem Freigabe-Resolver → Freigabe einholen.
+  //     `consensus` wird NIE über diesen Pfad geroutet (fällt in 5b auf hartes 403).
+  //     Ohne Resolver / bei `self`/`consensus` greift die unveränderte ADR-033-Logik (5b).
+  if (tier === 'gate' && deps.resolveApproval) {
+    try {
+      const decision: ApprovalDecision = await deps.resolveApproval({
+        server: input.server,
+        tool: deriveToolName(input.payload),
+        tier,
+        senderUri: input.senderUri,
+      });
+      // Allowlist: NUR `approved` (via isApproved) lässt durch — jeder andere Ausgang verweigert.
+      // Der isApproved-Aufruf liegt BEWUSST INNERHALB des try (CR-LOW): ein Resolver, der ein
+      // malformed Ergebnis (undefined/Non-Objekt, Typvertrag verletzt) *auflöst*, darf keinen
+      // Unhandled-Reject erzeugen, sondern fällt fail-closed in den catch → 403.
+      if (!isApproved(decision)) {
+        return {
+          status: 403,
+          body: { error: 'write-tier tool not approved', server: input.server, tier, outcome: decision.outcome },
+        };
+      }
+      // approved → fällt durch zum Executor (Schritt 6).
+    } catch {
+      // Resolver-Fehler / malformed-Ergebnis ⇒ fail-closed. Kein Durchreichen, kein 500.
+      return { status: 403, body: { error: 'approval resolver failed (fail-closed)', server: input.server, tier } };
+    }
+  } else {
+    // 5b. Unverändert (ADR-033): self → erlaubt; gate ohne Resolver → 403; consensus → 403.
+    const denied = enforceExecutionTier(tier, input.server);
+    if (denied) return denied;
+  }
+
+  // 6. self (lesend) bzw. approved gate → an den injizierten Executor weiterreichen (kein Net-Egress hier).
   return deps.execute(dispatch);
 }
