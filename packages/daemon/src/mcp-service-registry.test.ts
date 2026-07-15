@@ -8,11 +8,14 @@ import {
   buildMcpCapability,
   deriveExecutionTier,
   deriveToolTier,
+  deriveToolTierForServer,
+  SERVER_TOOL_CLASSES,
   maxTier,
   resolveMcp,
   isMcpCapability,
   MCP_CATEGORY,
 } from './mcp-service-registry.js';
+import unifiFixture from './fixtures/unifi-tools-2026-07-15.json' with { type: 'json' };
 
 const NODE_A = 'spiffe://thinklocal/node/12D3KooWA000000000000000000000000000000000000000';
 const NODE_B = 'spiffe://thinklocal/node/12D3KooWB000000000000000000000000000000000000000';
@@ -210,5 +213,74 @@ describe('maxTier', () => {
     expect(maxTier('gate', 'self')).toBe('gate');
     expect(maxTier('gate', 'consensus')).toBe('consensus');
     expect(maxTier('self', 'self')).toBe('self');
+  });
+});
+
+describe('deriveToolTierForServer (ADR-039, TL-08 Slice 1 — gepflegte Server-Klassen-Map)', () => {
+  const callFor = (name: string): unknown => ({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name } });
+
+  it('governed unifi: readOnly-Allowlist-Tools → self', () => {
+    for (const n of ['list_clients', 'get_device', 'list_sites', 'get_client', 'list_firewall_policies']) {
+      expect(deriveToolTierForServer('unifi', callFor(n))).toBe('self');
+    }
+  });
+
+  it('governed unifi: block_client (schreibend) → gate', () => {
+    expect(deriveToolTierForServer('unifi', callFor('block_client'))).toBe('gate');
+  });
+
+  it('governed unifi: delete_network (destruktiv) → consensus (kein Downgrade)', () => {
+    expect(deriveToolTierForServer('unifi', callFor('delete_network'))).toBe('consensus');
+  });
+
+  it('governed unifi: unlisted Tools (locate_device/reorder_acl_rules) → gate, nicht self', () => {
+    expect(deriveToolTierForServer('unifi', callFor('locate_device'))).toBe('gate');
+    expect(deriveToolTierForServer('unifi', callFor('reorder_acl_rules'))).toBe('gate');
+  });
+
+  it('SECURITY: credential-/secret-nahe Reads → gate trotz get_/list_-Präfix (CR-MEDIUM)', () => {
+    // Die Verb-Heuristik gäbe self; die Allowlist schließt sie aus → maxTier(gate, self) = gate.
+    // Inkl. list_wans (PPPoE-Passwort) + get_network/list_networks (IPsec-PSK), CR-Codex-Befund.
+    for (const n of [
+      'get_wlan', 'list_wlans', 'get_voucher', 'list_vouchers', 'list_radius_profiles',
+      'list_vpn_servers', 'list_vpn_tunnels', 'list_wans', 'get_network', 'list_networks',
+    ]) {
+      expect(deriveToolTierForServer('unifi', callFor(n))).toBe('gate');
+    }
+  });
+
+  it('CR-MEDIUM: whitespace-umschlossener destruktiver Name bleibt consensus (getrimmte Verb-Klassifikation)', () => {
+    expect(deriveToolTierForServer('unifi', callFor(' delete_network '))).toBe('consensus');
+    expect(deriveToolTierForServer('unifi', callFor('  block_client'))).toBe('gate');
+  });
+
+  it('BLOCKER-Regression: tools/list auf governed unifi → self (Discovery bricht NICHT)', () => {
+    expect(deriveToolTierForServer('unifi', { jsonrpc: '2.0', id: 1, method: 'tools/list' })).toBe('self');
+  });
+
+  it('Kanonisierung: /api/mcp/UNIFI (uppercase) bleibt governed (kein Bypass)', () => {
+    expect(deriveToolTierForServer('UNIFI', callFor('list_clients'))).toBe('self');
+    expect(deriveToolTierForServer('  Unifi ', callFor('block_client'))).toBe('gate');
+  });
+
+  it('Toolname exakt (fail-closed): falsche Groß-/Kleinschreibung → unlisted → gate', () => {
+    expect(deriveToolTierForServer('unifi', callFor('Get_Device'))).toBe('gate');
+    expect(deriveToolTierForServer('unifi', callFor('LIST_CLIENTS'))).toBe('gate');
+  });
+
+  it('ungoverned Server (pal): Verb-Heuristik unverändert', () => {
+    expect(deriveToolTierForServer('pal', callFor('list_models'))).toBe('self');
+    expect(deriveToolTierForServer('pal', callFor('delete_thing'))).toBe('consensus');
+    expect(deriveToolTierForServer('pal', callFor('create_thing'))).toBe('gate');
+  });
+
+  it('Drift-Schutz: jede readOnly-Allowlist-Entry ist im echten 67-Tool-Inventar (readOnly ⊆ Fixture)', () => {
+    const inventory = new Set(unifiFixture as string[]);
+    expect((unifiFixture as string[]).length).toBe(67);
+    const unifiClasses = SERVER_TOOL_CLASSES['unifi'];
+    expect(unifiClasses).toBeDefined();
+    for (const tool of unifiClasses?.readOnly ?? []) {
+      expect(inventory.has(tool)).toBe(true); // Tippfehler in der Allowlist ⇒ Test rot statt stiller Read-Gate
+    }
   });
 });

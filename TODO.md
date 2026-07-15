@@ -46,9 +46,16 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
   `~/hermes/reference/`, Telegram an Christian. **= Beta-Kernlücke geschlossen. ← heutiges .52-Fenster.**
 
 ### P0-parallel — Sicherheits-Pflicht (Beta-Blocker, Kap. 7.4/10)
-- [ ] **[v5.1] TL-08 (≈4 h)** Stufen-Durchsetzung am Hub-Eingang (Werkzeugname → lesend/schreibend/kritisch
-  → frei/Gate/verweigert; unifi READ_ONLY/WRITE_OP/DESTRUCTIVE übernehmen). ↔ vgl. #239 ADR-033
-  „Ausführungsstufen-Durchsetzung am Hub-Ingress" (Teil bereits gemergt — sichten, Lücke schließen).
+- [~] **[v5.1] TL-08 (≈4 h)** Stufen-Durchsetzung am Hub-Eingang (Werkzeugname → lesend/schreibend/kritisch
+  → frei/Gate/verweigert; unifi READ_ONLY/WRITE_OP/DESTRUCTIVE übernehmen). ↔ ADR-033 (Verb-Heuristik)
+  + ADR-039 (gepflegte Map).
+  - [x] **TL-08 Slice 1** (ADR-039): gepflegte Read-only-Allowlist je governed Server (unifi, 24 non-secret
+    Reads aus echtem 67-Tool-Inventar). `deriveToolTierForServer`: readOnly→self, unlisted `tools/call`→
+    ≥gate (nie Downgrade), `tools/list`/ungoverned→Heuristik; Server kanonisiert, Tool exakt; Credential-
+    Reads (wlan/voucher/radius/vpn/wans/networks) gegatet; Fixture-Subset-Drift-Test. +14 Tests.
+  - [ ] **TL-08 Slice 2**: „mutation ≠ sensitivity" (Feld-Redaktion, credential-Reads wieder als self mit
+    redigierten Feldern); Startup-Drift-Check gegen live `tools/list`; Audit-Signal „unlisted-on-governed";
+    weitere governed Server.
 - [~] **[v5.1] TL-09 (≈4 h)** Meldekanal-Abstraktion (Entsch. 10) + Telegram-Adapter + **Fail-safe: kein
   erreichbarer Kanal = schreibender Aufruf bleibt verweigert.**
   - [x] **TL-09 Slice A** (ADR-036): reine Abstraktion `meldekanal.ts` (`Meldekanal`/`MeldekanalRegistry`/

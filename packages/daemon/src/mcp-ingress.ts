@@ -15,7 +15,7 @@
 import type { Capability } from './registry.js';
 import type { McpForwardPeer } from './mcp-forward.js';
 import type { McpForwardDispatch } from './mcp-forward-dispatch.js';
-import { resolveMcp, maxTier, deriveToolTier, deriveToolName, type McpExecutionTier } from './mcp-service-registry.js';
+import { resolveMcp, maxTier, deriveToolTierForServer, deriveToolName, type McpExecutionTier } from './mcp-service-registry.js';
 import { planMcpRoute } from './mcp-routing.js';
 import { buildMcpForwardSpec } from './mcp-forward.js';
 import { buildMcpForwardDispatch } from './mcp-forward-dispatch.js';
@@ -160,11 +160,13 @@ export async function handleMcpIngress(
   // 5. ADR-033 / Entscheidung 2: Ausführungsstufe durchsetzen (Gate 2) VOR dem Executor.
   //    EFFEKTIVE Stufe = max(Capability-Stufe, Werkzeug-Stufe):
   //    - Capability-Stufe (pro Server) stammt aus demselben Dispatch, den der Executor auditiert.
-  //    - Werkzeug-Stufe (pro Tool) aus dem Payload-Toolnamen (`deriveToolTier`) — so hält ein
-  //      schreibendes Tool (z.B. `block_client`) am Gate an, während `list_clients` am selben
-  //      Server durchgeht. Die Werkzeug-Stufe kann nur ANHEBEN, nie absenken (fail-closed).
+  //    - Werkzeug-Stufe (pro Tool) über die gepflegte Server-Klassen-Map (ADR-039,
+  //      `deriveToolTierForServer`): governed Server (z.B. unifi) nutzen eine Read-only-Allowlist
+  //      (unlisted `tools/call` → mind. gate, fail-closed), ungoverned Server + `tools/list` fallen
+  //      auf die Verb-Heuristik. So geht `list_clients` durch, `block_client` hält am Gate an, und ein
+  //      neues/mis-verbtes unifi-Tool wird NICHT geraten-`self`. Die Werkzeug-Stufe kann nur ANHEBEN.
   const capabilityTier = dispatch.kind === 'local' ? dispatch.execution_tier : dispatch.request.execution_tier;
-  const tier = maxTier(capabilityTier, deriveToolTier(input.payload));
+  const tier = maxTier(capabilityTier, deriveToolTierForServer(input.server, input.payload));
 
   // 5a. ADR-037 (TL-09b): `gate` MIT verdrahtetem Freigabe-Resolver → Freigabe einholen.
   //     `consensus` wird NIE über diesen Pfad geroutet (fällt in 5b auf hartes 403).

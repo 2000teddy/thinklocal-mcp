@@ -358,6 +358,44 @@ describe('handleMcpIngress — Werkzeug-Stufe (Entscheidung 2, pro Tool)', () =>
   });
 });
 
+// ADR-039 (TL-08 Slice 1): governed Server-Klassen-Map am Ingress. unifi ist governed → Read-only-Allowlist.
+describe('handleMcpIngress — ADR-039 governed unifi-Klassen-Map', () => {
+  const unifiCap = (): Capability[] => [cap({ agent_id: SELF })]; // self-served unifi
+  const call = (name: string): unknown => ({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name } });
+
+  it('unifi list_clients (allowlist-read) → execute (200)', async () => {
+    const ex = makeExecutor();
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: unifiCap(), payload: call('list_clients') },
+      baseDeps({ execute: ex.execute }),
+    );
+    expect(res.status).toBe(200);
+    expect(ex.calls).toHaveLength(1);
+  });
+
+  it('SECURITY: unifi get_wlan (credential-Read, governed AUSGESCHLOSSEN) → 403 gate, KEIN Dispatch', async () => {
+    const ex = makeExecutor();
+    // Verb-Heuristik allein gäbe self→200; die Allowlist gatet es (mutation ≠ sensitivity).
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: unifiCap(), payload: call('get_wlan') },
+      baseDeps({ execute: ex.execute }),
+    );
+    expect(res.status).toBe(403);
+    expect((res.body as { tier?: string }).tier).toBe('gate');
+    expect(ex.calls).toHaveLength(0);
+  });
+
+  it('BLOCKER-Regression: unifi tools/list → execute (Discovery bricht NICHT)', async () => {
+    const ex = makeExecutor();
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: unifiCap(), payload: { jsonrpc: '2.0', id: 1, method: 'tools/list' } },
+      baseDeps({ execute: ex.execute }),
+    );
+    expect(res.status).toBe(200);
+    expect(ex.calls).toHaveLength(1);
+  });
+});
+
 // ── ADR-037 (TL-09b): gate-Freigabe über den injizierten Resolver ──
 describe('handleMcpIngress — ADR-037 gate-Freigabe (resolveApproval)', () => {
   const gateCap = (): Capability[] => [cap({ agent_id: SELF, permissions: ['write'] })]; // local gate
