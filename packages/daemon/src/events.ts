@@ -42,6 +42,8 @@ export type MeshEventType =
   | 'system:skill_health'
   // ADR-007/008 Phase A+B: governance + capability lifecycle events
   | 'inbox:new'
+  // ADR-043 (TL-11): Heartbeat-Weckruf an eine registrierte Agenten-Instanz (inhaltsfrei).
+  | 'agent:wake'
   | 'approval:created'
   | 'approval:decided'
   | 'config:changed'

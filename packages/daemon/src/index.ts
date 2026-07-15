@@ -30,6 +30,7 @@ import { registerDashboardApi } from './dashboard-api.js';
 import { registerInboxApi } from './inbox-api.js';
 import { AgentRegistry } from './agent-registry.js';
 import { registerAgentApi } from './agent-api.js';
+import { WakeCoalescer, registerWakeEmitter, type WakeEventBus } from './wake-contract.js';
 import { SkillDiscovery, type AnnouncedSkill } from './skill-discovery.js';
 import { CapabilityActivationStore } from './capability-activation.js';
 import { PairingStore } from './pairing.js';
@@ -1095,6 +1096,18 @@ async function main(): Promise<void> {
     log,
   });
   agentRegistry.start();
+
+  // ADR-043 (TL-11): Heartbeat-Weckruf. Abonniert `inbox:new`, weckt (fail-closed, coalesced) die
+  // adressierte live Instanz via `agent:wake`. KEIN neuer Transport — der letzte Hop in den CLI-Prozess
+  // ist der Out-of-Repo Agent-Home-Supervisor (WS-`inbox:new`-Reuse). Unadressiert → kein Wake + WARN.
+  const wakeCoalescer = new WakeCoalescer();
+  registerWakeEmitter({
+    eventBus: eventBus as unknown as WakeEventBus,
+    listInstances: () => agentRegistry.list().map((e) => e.instanceId),
+    coalescer: wakeCoalescer,
+    now: () => Date.now(),
+    log,
+  });
 
   // T2.4: periodisch die Resource-Attribute des eigenen Knotens (free_ram, cpu_load,
   // agent_count) in die non-replizierte Registry-Side-Map schreiben. Owner-authoritativ,

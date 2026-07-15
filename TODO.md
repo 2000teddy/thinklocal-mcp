@@ -101,12 +101,15 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     TTL-Read-Semantik (Ingest honoriert TTL / Read provenienz-only) entscheiden; `trust_status`/Revocation
     via `signer_keyid`.
   - [ ] **TL-12 Slice C**: first-class `MessageType='ORDER'` (Marker ablösen), sobald Peers ≥ dieser Version.
-- [ ] **[v5.1] TL-11 (≈4 h)** Heartbeat-Weckruf (Entsch. 16): Daemon weckt Agenten; geweckter Agent prüft
-  Mesh-Postfach. ↔ baut auf ADR-004. **Nach TL-12.**
-  - [ ] **TL-11 Slice A** (ADR-039): **edge-driven** Wake auf bestehendem `inbox:new` + `AgentRegistry`-
-    Fanout (kein Zweit-Poll); gedeckelter Reconciliation-Sweep. **Transport-Entscheidung im ADR erzwingen**
-    (WS-Multiplex / mTLS-Push / Poll-Reset). Wake ohne Inhalt, ACL-gescoped, coalesce/rate-limit.
-    Cross-Repo-`deliver`-Abhängigkeit (Agent-Home-Supervisor) + **Zwei-Peer-Live-DoD** benennen.
+- [~] **[v5.1] TL-11 (≈4 h)** Heartbeat-Weckruf (Entsch. 16): Daemon weckt Agenten; geweckter Agent prüft
+  Mesh-Postfach. ↔ baut auf ADR-004.
+  - [x] **TL-11 Slice A** (ADR-043): edge-driven Wake-Kontrakt — `wake-contract.ts` (fail-closed Resolver,
+    kein Broadcast; Coalescer; Zero-Content `WakeSignal`), verdrahtet: `inbox:new`+`to_agent_instance` →
+    `agent:wake`-Event über Registry-Fanout. Transport = WS-`inbox:new`-Reuse (best-effort/lossy/idempotent).
+    **Kein neuer Transport.** +14 Tests. CR: 6 Invarianten PASS, 2 LOW in-slice gefixt.
+  - [ ] **TL-11 Slice B** (extern-blocked): Out-of-Repo Agent-Home-Supervisor konsumiert `agent:wake` →
+    weckt CLI; **Zwei-Peer-Live-Proof** (CLI-Reaktion ohne dazwischenliegenden Poll). Optional: WS-Instanz-
+    Bindung (instanceId-Metadaten-Leak schließen), Opt-in-Broadcast-Wake, Reconciliation-Sweep.
 - [ ] **[v5.1] TL-13 (≈1 h je Rechner + ⛔ Fenster)** Re-Enroll .56/.222/.94 → `node/<PeerID>`; danach
   Duldungs-Ende Alt-Format aktivieren (Entsch. 17, spätestens **01.08.**). ↔ vgl. „Produktiv-Flotten-Flip"
   + `TLMCP_STRICT_IDENTITY`.
