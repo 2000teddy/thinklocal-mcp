@@ -70,10 +70,10 @@ function fakeBus(): WakeEventBus & {
   let handler: ((e: { type: string; data: Record<string, unknown> }) => void) | undefined;
   const emitted: Array<{ type: string; data: Record<string, unknown> }> = [];
   return {
-    on: (_type, h) => {
+    on: (_type, h): void => {
       handler = h;
     },
-    emit: (type, data) => {
+    emit: (type, data): void => {
       emitted.push({ type, data });
     },
     fire: (data) => handler?.({ type: 'inbox:new', data }),
@@ -93,13 +93,13 @@ describe('registerWakeEmitter (Verdrahtung, kein Transport)', () => {
     expect(bus.emitted).toEqual([{ type: 'agent:wake', data: { instance_id: 'inst-a', reason: 'inbox' } }]);
   });
 
-  it('Loopback-Send mit explizit null to_agent_instance → KEIN agent:wake + WARN-Log', () => {
+  it('Loopback-Send mit explizit null to_agent_instance (daemon-level) → KEIN Wake, KEIN WARN (Routine)', () => {
     const bus = fakeBus();
     const log = fakeLog();
     registerWakeEmitter({ eventBus: bus, listInstances: () => LIVE, coalescer: new WakeCoalescer(), now: () => 0, log });
-    bus.fire({ from: 'peer', message_id: 'm2', to_agent_instance: null }); // Feld präsent (null)
+    bus.fire({ from: 'peer', message_id: 'm2', to_agent_instance: null }); // Feld präsent (null) = daemon-level
     expect(bus.emitted).toHaveLength(0);
-    expect(log.warns).toHaveLength(1);
+    expect(log.warns).toHaveLength(0); // routinemäßiger daemon-level-Loopback → still, keine Alert-Fatigue
   });
 
   it('CR-LOW: Remote/Broadcast OHNE to_agent_instance-Feld → KEIN Wake, KEIN WARN (keine Alert-Fatigue)', () => {
@@ -111,13 +111,13 @@ describe('registerWakeEmitter (Verdrahtung, kein Transport)', () => {
     expect(log.warns).toHaveLength(0);
   });
 
-  it('adressiert aber nicht live → KEIN Wake, KEIN WARN (nicht unadressiert)', () => {
+  it('Review-of-Record #271: an konkrete Instanz adressiert aber NICHT live → KEIN Wake + WARN', () => {
     const bus = fakeBus();
     const log = fakeLog();
     registerWakeEmitter({ eventBus: bus, listInstances: () => LIVE, coalescer: new WakeCoalescer(), now: () => 0, log });
     bus.fire({ from: 'peer', message_id: 'm3', to_agent_instance: 'inst-gone' });
     expect(bus.emitted).toHaveLength(0);
-    expect(log.warns).toHaveLength(0);
+    expect(log.warns).toHaveLength(1); // operativ relevant: Ziel-Instanz offline → Wake fällt fail-closed weg
   });
 
   it('zwei rasche inbox:new an dieselbe Instanz → nur 1 agent:wake (coalesced)', () => {

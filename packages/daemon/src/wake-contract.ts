@@ -93,26 +93,27 @@ export interface WakeEmitterDeps {
 
 /**
  * Abonniert `inbox:new`, liest `to_agent_instance`, berechnet die Wakes und emittiert `agent:wake`.
- * Unadressierte Nachricht → **kein** Wake + WARN-Log (operator-sichtbar). Kein neuer Transport —
+ * WARN **nur** bei an eine konkrete, nicht-live Instanz adressierter Nachricht (Wake fällt fail-closed
+ * weg); daemon-level-Loopback (Ziel null) und Remote/Broadcast bleiben still. Kein neuer Transport —
  * der letzte Hop in den CLI-Prozess ist der Out-of-Repo Agent-Home-Supervisor (WS-`inbox:new`-Reuse).
  */
 export function registerWakeEmitter(deps: WakeEmitterDeps): void {
   deps.eventBus.on('inbox:new', (event) => {
     const raw = event.data['to_agent_instance'];
     const targetInstance = typeof raw === 'string' && raw !== '' ? raw : null;
-    const wakes = computeWakes(targetInstance, deps.listInstances(), deps.coalescer, deps.now());
-    if (wakes.length === 0) {
-      // CR-LOW: WARN nur wenn das Feld EXPLIZIT gesetzt und null ist (Loopback-Send an daemon-level =
-      // echte Fehl-/Nicht-Adressierung). Fehlt das Feld ganz (Remote/Broadcast — erwartetes null), still
-      // bleiben, sonst Alert-Fatigue auf normalem Mesh-Verkehr.
-      if (targetInstance === null && 'to_agent_instance' in event.data) {
-        deps.log?.warn(
-          { from: event.data['from'], message_id: event.data['message_id'] },
-          '[wake] lokaler Send ohne Ziel-Instanz → kein Wake (fail-closed)',
-        );
-      }
+    const live = deps.listInstances();
+    // CR-LOW (Review-of-Record #271): WARN nur beim EINZIGEN operativ relevanten Fall — eine an eine
+    // konkrete Instanz adressierte Nachricht, deren Ziel nicht live ist (Wake fällt fail-closed weg).
+    // Daemon-level-Loopback (Ziel === null, routinemäßiger Mesh-Verkehr) und Remote/Broadcast bleiben
+    // still, sonst Alert-Fatigue. Coalesced-Away (Ziel live, Fenster) ist ebenfalls kein Fehler.
+    if (targetInstance !== null && !live.includes(targetInstance)) {
+      deps.log?.warn(
+        { from: event.data['from'], message_id: event.data['message_id'], to_agent_instance: targetInstance },
+        '[wake] Nachricht an nicht-live Instanz → kein Wake (fail-closed)',
+      );
       return;
     }
+    const wakes = computeWakes(targetInstance, live, deps.coalescer, deps.now());
     for (const w of wakes) {
       deps.eventBus.emit('agent:wake', { instance_id: w.instanceId, reason: w.reason });
     }
