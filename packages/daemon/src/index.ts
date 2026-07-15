@@ -57,7 +57,8 @@ import { checkIdentityConsistency, resolveSelfIdentity, peerIdToSpiffeUri } from
 import { loadOrCreateLibp2pPrivateKey } from './libp2p-identity.js';
 import { wireRegistrySync } from './registry-sync-libp2p-adapter.js';
 import type { SecretRequestPayload, SecretResponsePayload, AgentMessagePayload, AgentMessageAckPayload } from './messages.js';
-import { AgentInbox } from './agent-inbox.js';
+import { AgentInbox, type OrderContext } from './agent-inbox.js';
+import { extractOrderMarker, verifyOrderBytes, orderKeyId } from './signed-order.js';
 import { SYSTEM_MONITOR_MANIFEST } from './builtin-skills/system-monitor.js';
 import { INFLUXDB_MANIFEST, influxdbHealthCheck } from './builtin-skills/influxdb.js';
 import { SkillHealthMonitor } from './skill-health-monitor.js';
@@ -854,7 +855,34 @@ async function main(): Promise<void> {
               reason: 'sender not in pairing store',
             };
           } else {
-            const result = agentInbox.store(envelope.sender, msg);
+            // ADR-038 (TL-12): einen signierten Auftrag im Body erkennen + gegen den
+            // TRANSPORT-verifizierten Sender-Pubkey verifizieren. `verifyOrderBytes` erzwingt
+            // issuer===envelope.sender (Relay-Schutz). Fail-closed: kein Marker → Plain-Pfad
+            // (byte-für-byte wie bisher); Marker aber Verify fehlgeschlagen → INVALID-Signal auf
+            // der Zeile + Audit, NIE ein Auftrag. Nichts hier wirft in den Handler.
+            let orderCtx: OrderContext | null = null;
+            const orderBytes = extractOrderMarker(msg.body);
+            if (orderBytes) {
+              const vr = verifyOrderBytes(orderBytes, envelope.sender, senderPublicKey);
+              if (vr.verdict === 'VALID' && vr.orderId) {
+                orderCtx = {
+                  verdict: 'VALID',
+                  signedBytes: orderBytes,
+                  signerSpiffe: envelope.sender,
+                  signerKeyid: orderKeyId(senderPublicKey),
+                  signerPubkey: senderPublicKey,
+                  orderNonce: vr.orderId,
+                };
+              } else {
+                orderCtx = { verdict: 'INVALID' };
+                audit.append(
+                  'ORDER_VERIFY_FAILED',
+                  envelope.sender,
+                  `${msg.message_id} ${vr.reason ?? 'invalid'}`,
+                );
+              }
+            }
+            const result = agentInbox.store(envelope.sender, msg, orderCtx);
             if (result.status === 'rejected') {
               ack = {
                 message_id: msg.message_id,
@@ -874,6 +902,14 @@ async function main(): Promise<void> {
               // nicht Duplikate — sonst wird das Audit-Log unnoetig noisy.
               if (result.status === 'delivered') {
                 audit.append('AGENT_MESSAGE_RX', envelope.sender, msg.message_id);
+                // ADR-038: verifizierten Auftrag korrelierbar auditieren (nonce + keyid).
+                if (orderCtx?.verdict === 'VALID') {
+                  audit.append(
+                    'ORDER_RX',
+                    envelope.sender,
+                    `${msg.message_id} nonce=${orderCtx.orderNonce} keyid=${orderCtx.signerKeyid}`,
+                  );
+                }
                 eventBus.emit('audit:new', {
                   type: 'AGENT_MESSAGE',
                   from: envelope.sender,

@@ -53,7 +53,10 @@ export type AuditEventType =
   | 'MCP_FORWARD_TX'
   | 'MCP_EXEC_LOCAL'
   | 'MCP_FORWARD_REJECT'
-  | 'MCP_FORWARD_GATE';
+  | 'MCP_FORWARD_GATE'
+  // ADR-038 (TL-12): signierter Postfach-Auftrag empfangen (verifiziert) bzw. Verify fehlgeschlagen.
+  | 'ORDER_RX'
+  | 'ORDER_VERIFY_FAILED';
 
 /**
  * ADR-007 Phase A: Entity types for structured audit querying.

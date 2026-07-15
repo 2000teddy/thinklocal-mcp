@@ -70,13 +70,17 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
 > **Discovery + Reihenfolge (CO 2026-07-15, opus+sonnet einstimmig):** **TL-12 VOR TL-11.** TL-12 Slice A
 > ist additiv/risikoarm/eigenständig wertvoll und stabilisiert die diskriminierte Nachrichtenform, die
 > TL-11s Wake lesen muss. Scoping-Doku: `docs/architecture/TL-11-12-wake-postbox-discovery.md`.
-- [ ] **[v5.1] TL-12 (≈4 h)** Ausgewiesene Mesh-Zustellung an Agenten (signierter Auftrag → Postfach →
-  Abarbeitung; Ersatz für tmux-Zuruf, Kap. 11.3). **← nächste Scheibe.**
-  - [ ] **TL-12 Slice A** (ADR-038): signierter Auftrag mit **intakter Signatur** im Postfach, beim
-    `read_inbox` re-verifizierbar. Neue nullable Spalten (`signed_bytes` verbatim/`signer_spiffe`/
-    `signer_keyid`/`verified_at`/`verify_verdict`); Diskriminator **signiert + server-abgeleitet**
-    (fail-closed); Order-Nonce **jetzt** in die Signatur. Kein Ausführungs-Wiring.
-  - [ ] **TL-12 Slice B**: Ausführung + Idempotenz-Ledger (Nonce).
+- [~] **[v5.1] TL-12 (≈4 h)** Ausgewiesene Mesh-Zustellung an Agenten (signierter Auftrag → Postfach →
+  Abarbeitung; Ersatz für tmux-Zuruf, Kap. 11.3).
+  - [x] **TL-12 Slice A** (ADR-038): signierter, re-verifizierbarer Auftrag im Postfach. `signed-order.ts`
+    (Order = signierter `type='ORDER'`-Envelope im Body-Marker), Inbox-Schema v3 (verbatim `signed_bytes` +
+    immutable `signer_pubkey` + `order_nonce`/keyid/verdict/`trust_status`), `store()` nur `OrderContext|null`
+    (is_order typsystemisch unfälschbar, issuer===sender Relay-Schutz), `verifyStoredOrder` fail-closed,
+    Ingest-Wiring + `ORDER_RX`/`ORDER_VERIFY_FAILED`-Audit. +31 Tests.
+  - [ ] **TL-12 Slice B**: Ausführung + Idempotenz-Ledger auf `order_nonce`; Read-Surface (`read_inbox`
+    reicht Provenienz + `verifyStoredOrder` durch); TTL-Read-Semantik (Ingest honoriert TTL / Read
+    provenienz-only) entscheiden; `trust_status`/Revocation via `signer_keyid`.
+  - [ ] **TL-12 Slice C**: first-class `MessageType='ORDER'` (Marker ablösen), sobald Peers ≥ dieser Version.
 - [ ] **[v5.1] TL-11 (≈4 h)** Heartbeat-Weckruf (Entsch. 16): Daemon weckt Agenten; geweckter Agent prüft
   Mesh-Postfach. ↔ baut auf ADR-004. **Nach TL-12.**
   - [ ] **TL-11 Slice A** (ADR-039): **edge-driven** Wake auf bestehendem `inbox:new` + `AgentRegistry`-
