@@ -55,11 +55,17 @@ Zusatzspalten unkritisch — nur additive Reads).
 - **`is_order` ist KEIN freier Parameter** — es wird **ausschließlich** aus `order.verdict==='VALID'`
   abgeleitet (typsystemisch bypass-sicher, kein client-gesetztes Flag).
 
-### Re-Verify beim Lesen
+### Re-Verify beim Lesen — produktiv am Read-Pfad
 `verifyStoredOrder(row) → VerifyOrderResult` re-verifiziert `signed_bytes` gegen den **gespeicherten**
 `signer_pubkey` (immutable, trust-on-first-verify) — **nie** gegen einen „aktuellen" Key (rotationsfest;
 vermeidet die CA-Rotations-403-Welle). Fail-closed umhüllt: jede Exception → `INVALID`, **nie** ein Throw
-in den `read_inbox`-Pfad (ein einzelne bösartige Zeile darf die Inbox nicht lahmlegen).
+in den `read_inbox`-Pfad (eine einzelne bösartige Zeile darf die Inbox nicht lahmlegen).
+
+**Wird am realen Read-Pfad aufgerufen** (Reviewer-Befund PR #266, in-slice geschlossen): `GET /api/inbox`
+(`inbox-api.ts`) ruft für jede Auftragszeile `verifyStoredOrder(m)` **live** auf und liefert dem Leser einen
+`order`-Block `{ verify_verdict, signer_spiffe, signer_keyid, order_nonce, trust_status }` + `is_order`.
+Das Verdikt ist das **Live-Re-Verify-Ergebnis**, nicht das gespeicherte Flag — eine at-rest manipulierte
+Zeile zeigt `INVALID` (getestet). `read_inbox` (MCP-Tool) reicht diesen Block transparent durch.
 
 ### Ingest-Verdrahtung (`index.ts` AGENT_MESSAGE)
 `senderPublicKey` (transport-verifiziert, bereits im `onMessage`-Handler in scope) + `envelope.sender`
@@ -80,10 +86,10 @@ werden an `extractOrderMarker`+`verifyOrderBytes` gereicht. VALID → `OrderCont
   `decodeAndVerify` — daher würde ein Auftrag mit `ttl_ms>0` nach Ablauf `is_order=1` **aber** re-verify
   `INVALID` liefern (fail-closed, kein Sicherheitsleck). Die saubere Trennung „Ingest honoriert TTL /
   Read ist provenienz-only (TTL-ignorierend)" ist eine **Slice-B-Entscheidung** (mit der Ausführung).
-- **Read-Wiring (CR-LOW-3):** `read_inbox` (`inbox-api.ts`) reicht die Order-/Provenienz-Spalten in
-  Slice A noch **nicht** an den Leser durch und ruft `verifyStoredOrder` nicht auf — passt zur Grenze
-  „gespeichert+re-verifizierbar, aber nicht ausgeführt". Das Read-Surface + Re-Verify-am-Read ist
-  **Slice B** (dort wird `verifyStoredOrder` produktiv, heute nur test-abgedeckt).
+- **Read-Wiring (CR-LOW-3 → in-slice geschlossen, Reviewer PR #266):** `GET /api/inbox` ruft
+  `verifyStoredOrder` jetzt **live** auf und surfaced `is_order` + `order`-Block. Der Read-Pfad
+  re-verifiziert also produktiv (nicht nur test-abgedeckt). **Weiterhin Slice B:** die *Ausführung* eines
+  gelesenen Auftrags + der Idempotenz-Ledger auf `order_nonce` (dieses Slice liest+verifiziert, führt nicht aus).
 
 ## Konsequenzen
 - **+** Aufträge sind ab jetzt im Postfach **re-verifizierbar** (verbatim Bytes + immutable Key), rückwärts-

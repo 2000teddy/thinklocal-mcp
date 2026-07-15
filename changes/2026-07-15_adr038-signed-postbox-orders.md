@@ -21,6 +21,9 @@ den **re-verifizierbaren Auftrag im Postfach** (ohne Ausführung = Slice B).
   gegen den **immutable** `signer_pubkey`, fail-closed, wirft nie.
 - `index.ts` AGENT_MESSAGE-Handler: Marker erkennen → gegen `senderPublicKey` + `envelope.sender`
   verifizieren → `OrderContext` an `store` + Audit `ORDER_RX`/`ORDER_VERIFY_FAILED`. Plain-Pfad unverändert.
+- `inbox-api.ts` (Read-Surface, Reviewer-Befund #266 in-slice): `GET /api/inbox` ruft `verifyStoredOrder`
+  **live** je Auftragszeile und liefert `is_order` + `order`-Block (`verify_verdict`/`signer_spiffe`/
+  `signer_keyid`/`order_nonce`/`trust_status`). Verdikt = Live-Re-Verify, nicht das gespeicherte Flag.
 - `messages.ts`: `MessageType.ORDER` + `OrderPayload`. `audit.ts`: `ORDER_RX`/`ORDER_VERIFY_FAILED`.
 
 ## Bewusste Grenze

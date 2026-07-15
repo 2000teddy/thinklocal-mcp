@@ -11,8 +11,10 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { generateKeyPairSync } from 'node:crypto';
 import { AgentInbox } from './agent-inbox.js';
 import { registerInboxApi } from './inbox-api.js';
+import { buildOrderEnvelope, signOrder, orderKeyId } from './signed-order.js';
 
 const OWN_ID = 'spiffe://thinklocal/host/deadbeefcafe0001/agent/claude-code';
 const OWN_INSTANCE_ALPHA = `${OWN_ID}/instance/alpha`;
@@ -260,6 +262,71 @@ describe('inbox-api — ADR-005 per-agent-instance routing', () => {
       });
       // Without pairingStore, ACL is not enforced, reaches sign step → 500/502
       expect(res.statusCode).not.toBe(403);
+    });
+  });
+
+  // ── ADR-038 (TL-12): GET /api/inbox re-verifiziert signierte Aufträge LIVE beim Lesen ──
+  describe('GET /api/inbox — signierte Aufträge (Read-Surface, ADR-038)', () => {
+    function keypair(): { priv: string; pub: string } {
+      const { privateKey, publicKey } = generateKeyPairSync('ec', {
+        namedCurve: 'P-256',
+        publicKeyEncoding: { type: 'spki', format: 'pem' },
+        privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+      });
+      return { priv: privateKey as string, pub: publicKey as string };
+    }
+    const msgTo = (mid: string): Parameters<AgentInbox['store']>[1] => ({
+      message_id: mid,
+      to: OWN_ID,
+      body: 'order carrier',
+      sent_at: new Date().toISOString(),
+    });
+
+    it('gültiger Auftrag: is_order=true + order.verify_verdict=VALID + Provenienz', async () => {
+      const { priv, pub } = keypair();
+      const bytes = signOrder(buildOrderEnvelope(REMOTE_PEER_ID, 'nonce-1', { action: 'restart' }), priv);
+      ctx.inbox.store(REMOTE_PEER_ID, msgTo('ord-1'), {
+        verdict: 'VALID',
+        signedBytes: bytes,
+        signerSpiffe: REMOTE_PEER_ID,
+        signerKeyid: orderKeyId(pub),
+        signerPubkey: pub,
+        orderNonce: 'nonce-1',
+      });
+      const res = await ctx.server.inject({ method: 'GET', url: '/api/inbox' });
+      expect(res.statusCode).toBe(200);
+      const m = res.json().messages[0];
+      expect(m.is_order).toBe(true);
+      expect(m.order.verify_verdict).toBe('VALID');
+      expect(m.order.signer_spiffe).toBe(REMOTE_PEER_ID);
+      expect(m.order.order_nonce).toBe('nonce-1');
+      expect(m.order.trust_status).toBe('unknown');
+    });
+
+    it('Plain-Nachricht: is_order=false + order=null', async () => {
+      ctx.inbox.store(REMOTE_PEER_ID, msgTo('plain-1'));
+      const res = await ctx.server.inject({ method: 'GET', url: '/api/inbox' });
+      const m = res.json().messages[0];
+      expect(m.is_order).toBe(false);
+      expect(m.order).toBeNull();
+    });
+
+    it('LIVE-Re-Verify: eine Zeile, deren gespeicherte Bytes NICHT verifizieren, liefert beim Lesen INVALID (kein Vertrauen aufs gespeicherte Flag)', async () => {
+      const { pub } = keypair();
+      // Bewusst kaputte „signierte" Bytes, aber als VALID abgelegt (simuliert at-rest-Korruption /
+      // einen fehlerhaften Ingest). Der Read-Pfad MUSS live re-verifizieren und INVALID melden.
+      ctx.inbox.store(REMOTE_PEER_ID, msgTo('corrupt-1'), {
+        verdict: 'VALID',
+        signedBytes: new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]),
+        signerSpiffe: REMOTE_PEER_ID,
+        signerKeyid: orderKeyId(pub),
+        signerPubkey: pub,
+        orderNonce: 'nonce-x',
+      });
+      const res = await ctx.server.inject({ method: 'GET', url: '/api/inbox' });
+      const m = res.json().messages[0];
+      expect(m.is_order).toBe(true);
+      expect(m.order.verify_verdict).toBe('INVALID'); // live re-verify fängt die Korruption
     });
   });
 });
