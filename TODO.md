@@ -53,13 +53,18 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
   erreichbarer Kanal = schreibender Aufruf bleibt verweigert.**
   - [x] **TL-09 Slice A** (ADR-036): reine Abstraktion `meldekanal.ts` (`Meldekanal`/`MeldekanalRegistry`/
     `DenyAllChannel`/`isApproved`) + Fail-safe Deny-Default + 22 Tests. `mcp-ingress.ts` unangetastet.
-  - [ ] **TL-09b Slice B** (Wiring): `mcp-ingress.ts` `gate`-Pfad von hartem 403 auf
-    `registry.requestApproval(...)` umstellen — **hinter Env-Flag, Default = heutiges Fail-safe-Verhalten**;
-    exhaustives `switch` mit `never`-Default (nur `approved` erlaubt); Entscheidungs-Audit (`MCP_FORWARD_GATE`).
-    Realer `TelegramMeldekanal` (Inline-Keyboard-Callback → `approvals.ts`-Store). **Pflicht-Folge, sonst
-    bleibt `meldekanal.ts` toter Code.**
+  - [x] **TL-09b Slice B** (Wiring, ADR-037): `mcp-ingress.ts` `gate`-Pfad optional auf
+    `resolveApproval(...)` (→ `MeldekanalRegistry`) verdrahtet, hinter Env-Flag `TLMCP_APPROVAL_CHANNEL_ENABLED`
+    (Default aus, leere Registry → 403 = verhaltensidentisch). Nur `isApproved` lässt durch; `consensus`
+    bleibt 403; fail-closed bei Throw/malformed. `meldekanal.ts` hat jetzt einen lebenden Consumer.
+  - [ ] **TL-09c** (offen): realer `TelegramMeldekanal` (Inline-Keyboard-Callback → `approvals.ts`-Store)
+    in die Registry injizieren + optional dediziertes `MCP_FORWARD_GATE`-Audit. **Erst hiermit kann eine
+    gate-Freigabe real `approved` werden.**
 - [ ] **[v5.1] TL-10 (≈3 h)** Freigabe-Matrix v1 (Werkzeug-Klasse → Kanal → Entscheider), Auswertung im Gate.
-  Schiebt sich zwischen Ingress (TL-09b) und Registry.
+  Schiebt sich zwischen Ingress (TL-09b, verdrahtet) und Registry — der `resolveApproval`-Seam existiert jetzt.
+  CO-Auflagen (2026-07-15): Feld `tier` statt `tool_class` (tier = harter Predikat-Filter, nie Label);
+  Parse-Rejects (tool-ohne-server, Duplikat-Spezifität, unbekannte Keys, non-kanonischer Server,
+  unbekannte decider-Grammatik, `consensus` ohne `quorum:N` N≥2); `isRoutable()`-Guard analog `isApproved`.
 
 ### P1 — Identität, Autonomie, Robustheit
 - [ ] **[v5.1] TL-11 (≈4 h)** Heartbeat-Weckruf (Entsch. 16): Daemon weckt Agenten; geweckter Agent prüft

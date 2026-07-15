@@ -14,6 +14,7 @@ import {
   type McpIngressDeps,
   type McpIngressResponse,
 } from './mcp-ingress.js';
+import type { ApprovalDecision, ApprovalOutcome } from './meldekanal.js';
 
 const SELF = 'spiffe://thinklocal/node/12D3KooWSELF';
 const OWNER = 'spiffe://thinklocal/node/12D3KooWOWNER';
@@ -352,6 +353,151 @@ describe('handleMcpIngress — Werkzeug-Stufe (Entscheidung 2, pro Tool)', () =>
       { server: 'unifi', senderUri: SELF, capabilities: localCap() },
       baseDeps({ execute: ex.execute }),
     );
+    expect(res.status).toBe(200);
+    expect(ex.calls).toHaveLength(1);
+  });
+});
+
+// ── ADR-037 (TL-09b): gate-Freigabe über den injizierten Resolver ──
+describe('handleMcpIngress — ADR-037 gate-Freigabe (resolveApproval)', () => {
+  const gateCap = (): Capability[] => [cap({ agent_id: SELF, permissions: ['write'] })]; // local gate
+  const consensusCap = (): Capability[] => [cap({ agent_id: SELF, permissions: ['delete'] })]; // local consensus
+
+  /** Resolver-Fabrik: liefert fixen outcome, protokolliert den ctx. */
+  function approver(outcome: ApprovalOutcome, sink: { ctx?: unknown } = {}): {
+    sink: { ctx?: unknown };
+    resolve: NonNullable<McpIngressDeps['resolveApproval']>;
+  } {
+    return {
+      sink,
+      resolve: async (ctx): Promise<ApprovalDecision> => {
+        sink.ctx = ctx;
+        return { outcome, channelId: 'test-channel' };
+      },
+    };
+  }
+
+  it('gate + approved → execute (200)', async () => {
+    const ex = makeExecutor();
+    const a = approver('approved');
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: gateCap() },
+      baseDeps({ execute: ex.execute, resolveApproval: a.resolve }),
+    );
+    expect(res.status).toBe(200);
+    expect(ex.calls).toHaveLength(1);
+  });
+
+  it('gate + rejected → 403 mit outcome, KEIN Dispatch', async () => {
+    const ex = makeExecutor();
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: gateCap() },
+      baseDeps({ execute: ex.execute, resolveApproval: approver('rejected').resolve }),
+    );
+    expect(res.status).toBe(403);
+    expect((res.body as { outcome?: string }).outcome).toBe('rejected');
+    expect(ex.calls).toHaveLength(0);
+  });
+
+  it('gate + denied-no-channel → 403, KEIN Dispatch', async () => {
+    const ex = makeExecutor();
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: gateCap() },
+      baseDeps({ execute: ex.execute, resolveApproval: approver('denied-no-channel').resolve }),
+    );
+    expect(res.status).toBe(403);
+    expect((res.body as { outcome?: string }).outcome).toBe('denied-no-channel');
+    expect(ex.calls).toHaveLength(0);
+  });
+
+  it('gate + timeout/error → 403 (nie approve), KEIN Dispatch', async () => {
+    for (const outcome of ['timeout', 'error'] as const) {
+      const ex = makeExecutor();
+      const res = await handleMcpIngress(
+        { server: 'unifi', senderUri: SELF, capabilities: gateCap() },
+        baseDeps({ execute: ex.execute, resolveApproval: approver(outcome).resolve }),
+      );
+      expect(res.status).toBe(403);
+      expect((res.body as { outcome?: string }).outcome).toBe(outcome);
+      expect(ex.calls).toHaveLength(0);
+    }
+  });
+
+  it('gate + Resolver wirft → 403 fail-closed, KEIN Dispatch (kein 500)', async () => {
+    const ex = makeExecutor();
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: gateCap() },
+      baseDeps({
+        execute: ex.execute,
+        resolveApproval: async () => {
+          throw new Error('resolver boom');
+        },
+      }),
+    );
+    expect(res.status).toBe(403);
+    expect((res.body as { error?: string }).error).toContain('fail-closed');
+    expect(ex.calls).toHaveLength(0);
+  });
+
+  // CR-LOW: ein Resolver, der ein malformed Ergebnis AUFLÖST (Typvertrag verletzt), muss fail-closed
+  // 403 liefern — kein Unhandled-Reject, kein Durchreichen, kein 500.
+  it('gate + Resolver löst malformed (undefined) auf → 403 fail-closed, KEIN Dispatch', async () => {
+    const ex = makeExecutor();
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: gateCap() },
+      baseDeps({
+        execute: ex.execute,
+        resolveApproval: async () => undefined as unknown as ApprovalDecision,
+      }),
+    );
+    expect(res.status).toBe(403);
+    expect(ex.calls).toHaveLength(0);
+  });
+
+  it('gate OHNE Resolver → 403 (ADR-033-Untergrenze, unverändert)', async () => {
+    const ex = makeExecutor();
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: gateCap() },
+      baseDeps({ execute: ex.execute }), // kein resolveApproval
+    );
+    expect(res.status).toBe(403);
+    expect((res.body as { tier?: string }).tier).toBe('gate');
+    expect(ex.calls).toHaveLength(0);
+  });
+
+  it('consensus wird NIE geroutet: consensus + approved → STILL 403, KEIN Dispatch', async () => {
+    const ex = makeExecutor();
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: consensusCap() },
+      baseDeps({ execute: ex.execute, resolveApproval: approver('approved').resolve }),
+    );
+    expect(res.status).toBe(403);
+    expect((res.body as { tier?: string }).tier).toBe('consensus');
+    expect(ex.calls).toHaveLength(0);
+  });
+
+  it('self wird NICHT gegatet: Resolver gesetzt, self-Tool → execute ohne Freigabe', async () => {
+    const ex = makeExecutor();
+    const a = approver('rejected'); // würde ablehnen, darf aber nie gefragt werden
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: [cap({ agent_id: SELF, permissions: ['network.read'] })] },
+      baseDeps({ execute: ex.execute, resolveApproval: a.resolve }),
+    );
+    expect(res.status).toBe(200);
+    expect(ex.calls).toHaveLength(1);
+    expect(a.sink.ctx).toBeUndefined(); // Resolver für self NICHT konsultiert
+  });
+
+  it('Resolver bekommt den korrekten Kontext (server/tool/tier) aus dem Payload', async () => {
+    const ex = makeExecutor();
+    const a = approver('approved');
+    const call = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'block_client' } };
+    const res = await handleMcpIngress(
+      { server: 'unifi', senderUri: SELF, capabilities: [cap({ agent_id: SELF })], payload: call },
+      baseDeps({ execute: ex.execute, resolveApproval: a.resolve }),
+    );
+    expect(a.sink.ctx).toMatchObject({ server: 'unifi', tool: 'block_client', tier: 'gate', senderUri: SELF });
+    // CR-LOW: Werkzeug-Stufe hebt self→gate, approved → MUSS den Executor erreichen (Regression-Guard).
     expect(res.status).toBe(200);
     expect(ex.calls).toHaveLength(1);
   });

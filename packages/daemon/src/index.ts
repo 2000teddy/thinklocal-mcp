@@ -23,6 +23,7 @@ import { TaskManager } from './tasks.js';
 import { SkillManager, type SkillAnnouncePayload } from './skills.js';
 import { buildSharedMcpCapabilities, registerSharedMcps, guardSharedMcpAnnounce } from './mcp-registration.js';
 import { registerMcpIngressApi } from './mcp-ingress-api.js';
+import { MeldekanalRegistry } from './meldekanal.js';
 import { createMcpForwardExecutor, createUndiciMcpForward } from './mcp-forward-executor.js';
 import { createMcporterLocalExec } from './mcp-mcporter-exec.js';
 import { registerDashboardApi } from './dashboard-api.js';
@@ -1141,6 +1142,18 @@ async function main(): Promise<void> {
     // explizit und fail-closed.
     localExec: config.mcp.serve_shared ? createMcporterLocalExec({ log }) : undefined,
   });
+  // ADR-037 (TL-09b): gate-Freigabe über den Meldekanal. Hinter Env-Flag (Default AUS). Die Registry
+  // wird LEER konstruiert (noch kein realer Kanal) → DenyAllChannel → jede gate-Freigabe endet
+  // `denied-no-channel` → 403. Damit ist Flag-an verhaltensidentisch zu Flag-aus (beide gate=403),
+  // bis ein realer TelegramMeldekanal injiziert wird ("doppelte Sicherheit", ADR-037).
+  const approvalChannelEnabled =
+    process.env['TLMCP_APPROVAL_CHANNEL_ENABLED'] === '1' ||
+    process.env['TLMCP_APPROVAL_CHANNEL_ENABLED']?.toLowerCase() === 'true';
+  const approvalRegistry = approvalChannelEnabled ? new MeldekanalRegistry([]) : undefined;
+  if (approvalChannelEnabled) {
+    log.info('ADR-037: MCP-gate-Freigabe aktiviert (leere Registry → bis zum realen Kanal weiterhin 403)');
+  }
+
   registerMcpIngressApi(cardServer.getServer(), {
     selfAgentId: selfIdentityUri,
     resolvePeer: (agentId) => {
@@ -1151,6 +1164,7 @@ async function main(): Promise<void> {
     requireServerIdentity: outboundConnectPolicy.spiffeServerIdentity,
     execute: mcpForwardExecutor,
     audit: (event, peerId, details) => audit.append(event, peerId, details),
+    ...(approvalRegistry ? { approvalRegistry } : {}),
     log,
   });
 

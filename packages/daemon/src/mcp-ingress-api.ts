@@ -29,6 +29,9 @@ import {
   isCanonicalNodeUri,
 } from './peer-identity.js';
 import { MCP_HOP_HEADER, type McpDispatchExecutor } from './mcp-forward-executor.js';
+import { randomUUID } from 'node:crypto';
+import { MeldekanalRegistry, type ApprovalRequest, type ApprovalDecision } from './meldekanal.js';
+import type { McpExecutionTier } from './mcp-service-registry.js';
 
 /** Minimaler TLS-Socket-Ausschnitt fuer die Cert-Extraktion (testbar ohne echtes TLS). */
 export interface PeerCertSocket {
@@ -80,6 +83,13 @@ export interface McpIngressApiDeps {
   execute?: McpDispatchExecutor;
   /** Ingress-seitiges (RX/Reject) Audit — bildet mit dem Executor-TX-Audit das beidseitige Audit. */
   audit?: McpIngressAuditFn;
+  /**
+   * ADR-037 (TL-09b): Meldekanal-Registry für die `gate`-Freigabe. Nur gesetzt, wenn das Flag
+   * `TLMCP_APPROVAL_CHANNEL_ENABLED` an ist (index.ts). Ohne sie bleibt der gate-Pfad beim harten
+   * 403. Solange die Registry leer ist (noch kein realer Kanal), liefert sie `denied-no-channel`
+   * → 403 — verhaltensidentisch zum Flag-aus-Zustand (ADR-037 „doppelte Sicherheit").
+   */
+  approvalRegistry?: MeldekanalRegistry;
   log?: Logger;
 }
 
@@ -114,6 +124,28 @@ export function makeMcpIngressHandler(
   deps: McpIngressApiDeps,
 ): (request: FastifyRequest, reply: FastifyReply) => Promise<void> {
   const executor = deps.execute ?? deferredExecutor;
+  // ADR-037: Freigabe-Resolver nur bauen, wenn eine Registry injiziert ist (Flag an). Er kapselt
+  // den ApprovalRequest-Bau (requestId/summary) + `registry.requestApproval`. Fehlt die Registry,
+  // bleibt `resolveApproval` undefined → der Ingress hält am harten 403 (ADR-033-Untergrenze).
+  const approvalRegistry = deps.approvalRegistry;
+  const resolveApproval = approvalRegistry
+    ? async (ctx: {
+        server: string;
+        tool: string;
+        tier: McpExecutionTier;
+        senderUri: string;
+      }): Promise<ApprovalDecision> => {
+        const req: ApprovalRequest = {
+          requestId: randomUUID(),
+          server: ctx.server,
+          tool: ctx.tool,
+          tier: ctx.tier,
+          senderUri: ctx.senderUri,
+          summary: `${ctx.tier}-tier ${ctx.tool || '<unknown-tool>'} on ${ctx.server}`,
+        };
+        return approvalRegistry.requestApproval(req);
+      }
+    : undefined;
   return async function mcpIngressHandler(request, reply): Promise<void> {
     const server = (request.params as { server?: string } | undefined)?.server ?? '';
     // D3: Sender-Principal ausschliesslich aus dem mTLS-Client-Cert (nicht aus dem Body).
@@ -132,6 +164,8 @@ export function makeMcpIngressHandler(
         requireServerIdentity: deps.requireServerIdentity,
         // Der Executor bekommt den Hop + das Payload + den Servernamen via Closure.
         execute: (dispatch) => executor(dispatch, { incomingHop, payload: request.body, server }),
+        // ADR-037: gate-Freigabe (nur wenn Registry/Flag gesetzt; sonst undefined → hartes 403).
+        ...(resolveApproval ? { resolveApproval } : {}),
       },
     );
 
