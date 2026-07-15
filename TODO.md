@@ -49,9 +49,17 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
 - [ ] **[v5.1] TL-08 (≈4 h)** Stufen-Durchsetzung am Hub-Eingang (Werkzeugname → lesend/schreibend/kritisch
   → frei/Gate/verweigert; unifi READ_ONLY/WRITE_OP/DESTRUCTIVE übernehmen). ↔ vgl. #239 ADR-033
   „Ausführungsstufen-Durchsetzung am Hub-Ingress" (Teil bereits gemergt — sichten, Lücke schließen).
-- [ ] **[v5.1] TL-09 (≈4 h)** Meldekanal-Abstraktion (Entsch. 10) + Telegram-Adapter + **Fail-safe: kein
+- [~] **[v5.1] TL-09 (≈4 h)** Meldekanal-Abstraktion (Entsch. 10) + Telegram-Adapter + **Fail-safe: kein
   erreichbarer Kanal = schreibender Aufruf bleibt verweigert.**
+  - [x] **TL-09 Slice A** (ADR-036): reine Abstraktion `meldekanal.ts` (`Meldekanal`/`MeldekanalRegistry`/
+    `DenyAllChannel`/`isApproved`) + Fail-safe Deny-Default + 22 Tests. `mcp-ingress.ts` unangetastet.
+  - [ ] **TL-09b Slice B** (Wiring): `mcp-ingress.ts` `gate`-Pfad von hartem 403 auf
+    `registry.requestApproval(...)` umstellen — **hinter Env-Flag, Default = heutiges Fail-safe-Verhalten**;
+    exhaustives `switch` mit `never`-Default (nur `approved` erlaubt); Entscheidungs-Audit (`MCP_FORWARD_GATE`).
+    Realer `TelegramMeldekanal` (Inline-Keyboard-Callback → `approvals.ts`-Store). **Pflicht-Folge, sonst
+    bleibt `meldekanal.ts` toter Code.**
 - [ ] **[v5.1] TL-10 (≈3 h)** Freigabe-Matrix v1 (Werkzeug-Klasse → Kanal → Entscheider), Auswertung im Gate.
+  Schiebt sich zwischen Ingress (TL-09b) und Registry.
 
 ### P1 — Identität, Autonomie, Robustheit
 - [ ] **[v5.1] TL-11 (≈4 h)** Heartbeat-Weckruf (Entsch. 16): Daemon weckt Agenten; geweckter Agent prüft

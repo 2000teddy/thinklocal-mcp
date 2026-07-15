@@ -1674,6 +1674,14 @@ CHANGES.md, `changes/2026-07-07_doc-compliance-gate.md`, dieser Eintrag; Rollen/
 
 **Typ:** Doc-only. Realabgleich der PR-Felder (kein Halbwissen — nur die vom Wächter benannten gemergten #257–#261). **CO/CG/TS/CR:** n/a (keine Code-/Test-Änderung). **PC:** reine `.md`/`changes/`-Änderung. **DO:** `COMPLIANCE-TABLE.md` (5 PR-Felder + diese Zeile), `CHANGES.md` (A4b-PR-Bezug), `changes/2026-07-13_docs-compliance-pr-reconcile.md`.
 
+## Sweep 2026-07-15 10:14 — feat(security): ADR-036 Meldekanal-Abstraktion + Fail-safe (TL-09 Slice A)
+
+| #        | PR    | Datum            | CO  | CG  | TS  | CR  | PC  | DO | Findings                           |
+|----------|-------|------------------|-----|-----|-----|-----|-----|----|------------------------------------|
+| adr036-tl09a | (offen, base=main) | 2026-07-15 10:14 | ✅ | n/a | ✅ | ✅ | ✅ | ✅ | CO: **`pal:consensus` — Zerlegung einstimmig angenommen**, 2 Modelle (`cli-claude-opus`/neutral + `cli-claude-sonnet`/against); drei Interface-Nachschärfungen übernommen (async `isHealthy`, Deny-Default in Registry + `isApproved`-Allowlist, `AbortSignal` in Signatur). ⚠️ Cross-Vendor (codex/agy nicht im PATH) diese Runde NICHT gelaufen → Follow-up notiert. CG: n/a (agy fehlt; Testdesign aus CO). TS: +22 Tests (Deny-Default leer/Default-Ctor; erster gesunder Kanal terminal für approved/rejected/timeout/error/bad-shape; unhealthy-skip; sync-Wurf Health+Approval; non-boolean-truthy Health; späte Rejection kein Unhandled-Rejection; `isApproved`-Allowlist); **1588 grün**, tsc sauber, ESLint 0. CR: claude-Subagent (adversarial, Fail-open-Fokus; agy-Backend fehlt) — **kein direkter Fail-open-Pfad**; HIGH (Test-Lücke terminal-erster-Kanal bei timeout/error) + MEDIUM (synchroner Kanal-Wurf entkommt `withTimeout`) **beide in-slice gefixt + Regressionstests**, 2 LOW ebenfalls. PC: `git diff` — 3 neue Dateien, `mcp-ingress.ts` unangetastet, Secret-Scan clean. |
+
+**Typ:** Daemon-Code + Design-Doku. TL-09 **Slice A** (ADR-036): reine, austauschbare Meldekanal-Abstraktion (`meldekanal.ts`: `Meldekanal`/`MeldekanalRegistry`/`DenyAllChannel`/`isApproved`) verankert die eiserne Regel „kein erreichbarer Kanal ⇒ schreibender Aufruf bleibt verweigert" strukturell. **`mcp-ingress.ts` bewusst unverändert** (hartes 403 bleibt → Risiko-Delta null, TL-07-Beweis unberührt). Ingress-Wiring + Telegram-Adapter = **Slice B/TL-09b** (in TODO.md als Pflicht-Folge geführt); Freigabe-Matrix = TL-10. Additiv, kein Deploy/Secret/Gate. **CO:** ✅. **CG:** n/a. **TS/CR/PC:** s. Zeile. **DO:** `docs/architecture/ADR-036-meldekanal-abstraction.md`, `TODO.md` (TL-09 Slice A ✅ / TL-09b offen), `CHANGES.md`, `changes/2026-07-15_adr036-meldekanal-slice-a.md`, dieser Eintrag.
+
 ---
 
-*Letzte Aktualisierung: 2026-07-13 06:13 — docs: COMPLIANCE-/CHANGES-PR-Felder auf Realzustand (Reconcile-Nachtrag).*
+*Letzte Aktualisierung: 2026-07-15 10:14 — feat(security): ADR-036 Meldekanal-Abstraktion + Fail-safe Deny-Default (TL-09 Slice A).*

@@ -8,6 +8,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(security): ADR-036 Meldekanal-Abstraktion + Fail-safe Deny-Default (TL-09 Slice A) (2026-07-15 10:14)
+Neu: `meldekanal.ts` — austauschbarer `Meldekanal` (`isHealthy`/`requestApproval`) + `MeldekanalRegistry`
+(erster gesunder Kanal terminal; kein Kanal ⇒ `denied-no-channel`) + `DenyAllChannel` + `isApproved()`
+als einziger Allowlist-Auswertungspfad. Verankert die eiserne Regel „kein erreichbarer Kanal ⇒
+schreibender Aufruf bleibt verweigert" (Kap. 7.4) strukturell und testbar. **`mcp-ingress.ts`
+unverändert** (hartes 403 bleibt) — das Ingress-Wiring + Telegram-Adapter sind Slice B/TL-09b, die
+Freigabe-Matrix ist TL-10. CO: `pal:consensus` (opus+sonnet). +22 Tests, 1588 grün.
+
 ### feat(discovery): ADR-035 A4b — identitäts-gebundener Inbound-Fallback (TL-28b, PR #261) (2026-07-12 12:07)
 
 Reaktiviert den in #258 (Codex CHANGES-NEEDED) verschobenen `remoteAddress`-Fallback im ADR-026-
