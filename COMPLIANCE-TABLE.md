@@ -1784,6 +1784,10 @@ CHANGES.md, `changes/2026-07-07_doc-compliance-gate.md`, dieser Eintrag; Rollen/
 
 **Typ:** Doc-only Architektur-Companion (TL-11 Consumer-Contract) + TODO-Reconciliation. TL-11 Slice B (Supervisor→CLI + Zwei-Peer-Proof) bleibt extern-blocked; Frame-Pfad-Loopback-Härtung = eigener TS+CR-Slice (Entscheidung offen). **DO:** `docs/architecture/TL-11-wake-consumer-contract.md`, `CHANGES.md`, `TODO.md`, `changes/2026-07-16_tl11-wake-consumer-contract.md`, dieser Eintrag.
 
+| #280 | (offen, base=main) | 2026-07-16 17:20 | — | n/a | ✅ | ✅ | ✅ | ✅ | **Security-Bug-Fix → CO/CG entfallen** (setzt die bereits gemergte Invariante durch, kein neuer Beschluss; verworfene Alternative in Doc §8.1 + `changes/` begründet). Schließt den in #279 §8.1 dokumentierten Befund: „agent-gefilterte WS-Subscriptions sind loopback-only" wurde nur am Query-Pfad (`?agent=`→`4003`) durchgesetzt; der Frame-Pfad `{type:'subscribe',agent:…}` setzte `agentFilter` **ohne** Loopback-Check → Nicht-Loopback-mTLS-Peer konnte per Frame fremde `agent:wake` abonnieren (Snooping). Fix: reine `rejectsAgentFilter(agent,isLoopback)` von **beiden** Pfaden, `ClientState.isLoopback` am Connect aus `req.ip` (kein `trustProxy` → nicht spoofbar), Frame-Verstoß `4003` **vor** State-Mutation; konservativ strikt-loopback-only. TS: **+16 Tests** (IP-Prädikat + Regel, beide Pfade + L1-Array); `websocket.test.ts` **30 grün**, daemon-Suite **1714 grün**, tsc(strict)/Lint 0. CR: adversarialer Claude — **APPROVE, keine HIGH/MEDIUM** (isLoopback stabil, Gate-vor-Mutation, alle Schreibpfade dicht, `req.ip` sicher verifiziert); **L1 (Query-Array-Asymmetrie) in-slice gefixt**, **L2 (Live-WS-Integrationstest) als Grenze akzeptiert** (im Repo nicht simulierbar, Regel voll unit-getestet). PC: Secret-Scan clean. |
+
+**Typ:** Daemon-Security-Bug-Fix + Tests + Doc-Update (TL-11 §8.1-Härtung). **DO:** `docs/architecture/TL-11-wake-consumer-contract.md` §8.1/§3, `TODO.md`, `CHANGES.md`, `changes/2026-07-16_tl11-frame-loopback-gate.md`, dieser Eintrag.
+
 ---
 
-*Letzte Aktualisierung: 2026-07-16 10:37 — feat(wake): agent:wake gerichtet + routbar (TL-11 §4 directed-wake).*
+*Letzte Aktualisierung: 2026-07-16 17:20 — fix(ws): Loopback-Gate auch auf dem subscribe-Frame-Pfad (TL-11 §8.1-Härtung).*
