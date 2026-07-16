@@ -456,7 +456,7 @@ ExecStart=$NODE_PATH $INDEX_PATH
 Environment=TLMCP_CONFIG=$INSTALL_DIR/config/daemon.toml
 Environment=TLMCP_DATA_DIR=$HOME/.thinklocal
 Environment=TLMCP_RUNTIME_MODE=$RUNTIME_MODE
-Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 Environment=NODE_ENV=production
 WorkingDirectory=$INSTALL_DIR
 Restart=on-failure
@@ -516,7 +516,7 @@ Type=simple
 ExecStart=$NPX_PATH vite --host 0.0.0.0 --port 3000
 WorkingDirectory=$INSTALL_DIR/packages/dashboard-ui
 Environment=NODE_ENV=production
-Environment=PATH=$(dirname "$NPX_PATH"):/usr/local/bin:/usr/bin:/bin
+Environment=PATH=$(dirname "$NPX_PATH"):/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 Restart=on-failure
 RestartSec=10
 

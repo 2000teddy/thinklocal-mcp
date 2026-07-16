@@ -15,7 +15,7 @@ ExecStart=__NODE_PATH__ __INSTALL_DIR__/packages/daemon/dist/index.js
 Environment=TLMCP_CONFIG=__INSTALL_DIR__/config/daemon.toml
 Environment=TLMCP_DATA_DIR=__HOME__/.thinklocal
 Environment=TLMCP_NO_TLS=0
-Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 Environment=NODE_ENV=production
 
 WorkingDirectory=__INSTALL_DIR__

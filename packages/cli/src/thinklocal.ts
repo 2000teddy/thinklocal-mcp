@@ -1318,7 +1318,7 @@ function installLaunchdService(
         <key>TLMCP_BIND_HOST</key>
         <string>${xmlEscape(runtime.bindHost)}</string>
         <key>PATH</key>
-        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>${Object.entries(loadServiceEnvVars()).map(([k, v]) => `
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>${Object.entries(loadServiceEnvVars()).map(([k, v]) => `
         <key>${xmlEscape(k)}</key>
         <string>${xmlEscape(v)}</string>`).join('')}
     </dict>
