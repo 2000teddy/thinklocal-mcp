@@ -46,6 +46,11 @@ Beschluss, falls je gewünscht).
   laufen). **Zusatz-Befund beim Fix:** der Frame-Pfad umgeht das Loopback-Gate (`websocket.ts:187-189`) →
   als OFFENER Sicherheits-Härtungs-Posten mit Beleg in §8.1 + TODO dokumentiert (eigener Slice, kein
   Live-Exploit-Druck). 1 kosmetische Zeilennr. (`WakeSignal` :18 statt :10) gefixt.
+  - **Review-Follow-up (2026-07-16 16:05):** §3 nannte die Frame-Form „äquivalent" zur Query-Form —
+    **Overclaim**, da der Frame-Pfad den Loopback-Gate NICHT durchsetzt (§8.1). Korrigiert: Query-Param ist
+    die **einzige kontrakt-konforme** Art, den `agent`-Filter zu setzen; `agent` per Frame ist **unsupported/
+    unsafe bis zum Härtungs-Slice** und darf im Kontrakt nicht angenommen werden. Keine Äquivalenz-Behauptung
+    mehr. §6-Referenz-Loop nutzt ohnehin die Query-Form.
 - **PC:** `git diff --cached` gesichtet (nur Docs: Spec + TODO + CHANGES + changes/); **kein Code**;
   Secret-Scan clean.
 - **DO:** dieser Eintrag, `CHANGES.md`, `COMPLIANCE-TABLE.md`, `TODO.md`, das neue Spec-Doc.

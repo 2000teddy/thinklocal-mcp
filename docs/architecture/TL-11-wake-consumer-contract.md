@@ -48,14 +48,20 @@ Diese Spec definiert die Linie **dazwischen**.
 an einen ungefilterten Client geliefert (deny-by-default, schließt den Metadaten-Leak D1). Der Supervisor
 MUSS daher **beides** setzen: den Event-Typ `agent:wake` **und** einen `agent`-Filter auf die Ziel-Identität.
 
-**Query-Form (beim Connect):**
+**Vorgeschriebene Form — Query-Param beim Connect (der `agent`-Filter MUSS hier gesetzt werden):**
 ```
 wss://127.0.0.1:9440/ws?subscribe=agent:wake&agent=spiffe://thinklocal/node/<PeerID>
 ```
+Nur dieser Pfad durchläuft den Loopback-Gate (`websocket.ts:138-145`, §2) — er ist der **einzige
+kontrakt-konforme** Weg, den `agent`-Filter zu setzen.
 
-**Frame-Form (nach Connect, äquivalent):**
-```json
-{ "type": "subscribe", "events": ["agent:wake"], "agent": "spiffe://thinklocal/node/<PeerID>" }
+**Frame-Form — für den `agent`-Filter NICHT unterstützt (unsicher, bis Härtung landet):**
+```jsonc
+// { "type": "subscribe", "events": ["agent:wake"], "agent": "…" }
+//   ^ Das Setzen von `agent` per Frame UMGEHT derzeit den Loopback-Gate (websocket.ts:187-189, s. §8.1).
+//     Ein konformer Konsument setzt den agent-Filter deshalb AUSSCHLIESSLICH über die Query-Form oben.
+//     Der Frame-`subscribe` ist NUR zum Ändern der Event-Typ-Liste (`events`) gedacht; `agent` per Frame
+//     ist bis zum Härtungs-Slice (§8.1) unsupported/unsafe und darf im Kontrakt nicht angenommen werden.
 ```
 
 - `agent` matcht gegen **`spiffe_uri` ODER `instance_id`** des Payloads (`websocket.ts:66`). Beide sind
