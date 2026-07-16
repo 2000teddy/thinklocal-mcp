@@ -49,45 +49,52 @@ sudo launchctl kickstart -k system/com.thinklocal.daemon
 
 ## 3. Bestätigen
 ```bash
-# (a) PFLICHT-LIVENESS: der Daemon MUSS nach dem Restart laufen. Ohne diesen Nachweis ist ein
-#     new_flood=0 bedeutungslos (0 aus einem TOTEN Daemon = false PASS). Harte DoD-Vorbedingung.
-if sudo launchctl print system/com.thinklocal.daemon 2>/dev/null | grep -qE 'state = running'; then
-  alive=1; else alive=0; fi
-echo "alive=$alive"                       # DoD (a): MUSS 1 sein
-[ "$alive" = 1 ] || echo "STOP: Daemon läuft nicht — new_flood ist ungültig; Start/Fehler prüfen"
-
-# (b) Effektiver PATH enthält jetzt /sbin + /usr/sbin:
+# (a) Effektiver PATH enthält jetzt /sbin + /usr/sbin (Point-in-time ok):
 sudo launchctl print system/com.thinklocal.daemon | grep -A1 -i 'PATH'
-# (c) Die Binaries sind unter dem neuen PATH auflösbar:
+# (b) Die Binaries sind unter dem neuen PATH auflösbar:
 /sbin/mount >/dev/null 2>&1 && echo "mount ok"
 /usr/sbin/diskutil list >/dev/null 2>&1 && echo "diskutil ok"
 
-# (d) KEINE neuen Flood-Zeilen seit dem Restart — mind. 2 Resource-Refresh-Intervalle abwarten.
-#     $LOG wurde in §2 weggerückt → die frische Datei enthält AUSSCHLIESSLICH Post-Restart-Inhalt.
-#     ACHTUNG grep -c: bei 0 Treffern gibt es "0" aus UND exitet mit 1 → KEIN `|| echo 0` anhängen
-#     (das ergäbe "0\n0"). `|| true` + `${:-0}` liefert genau EINE 0 (auch bei fehlender Datei):
+# (c) Beobachtungsfenster: mind. 2 Resource-Refresh-Intervalle abwarten (fsSize läuft mehrfach).
 sleep 120
+
+# (d) POST-WINDOW-LIVENESS (PFLICHT, NACH dem sleep): der Daemon MUSS am ENDE des Fensters noch
+#     laufen UND serven. Vor dem Fenster zu samplen genügt NICHT (Codex #274): stirbt der Daemon
+#     WÄHREND des Fensters, schreibt er keine weiteren stderr-Zeilen → new_flood=0 wäre ein false
+#     PASS aus einem toten Daemon. Deshalb hier, nach sleep 120.
+if sudo launchctl print system/com.thinklocal.daemon 2>/dev/null | grep -qE 'state = running'; then
+  alive=1; else alive=0; fi
+# stärkerer Beleg: der Daemon SERVIERT wirklich (authentifizierter /api/status nach dem Fenster) —
+# fängt "launchd sagt running, Prozess hängt/serviert nicht" ab:
+if curl -sf --max-time 5 --cert <peer.crt> --key <peer.key> --cacert <ca.crt> \
+        https://127.0.0.1:9440/api/status >/dev/null 2>&1; then api_ok=1; else api_ok=0; fi
+echo "alive=$alive api_ok=$api_ok"        # DoD (d): BEIDE MÜSSEN 1 sein (nach dem Fenster)
+[ "$alive" = 1 ] && [ "$api_ok" = 1 ] || echo "STOP: Daemon post-window nicht lebendig → new_flood ungültig"
+
+# (e) KEINE neuen Flood-Zeilen im Fenster. $LOG wurde in §2 weggerückt → die frische Datei enthält
+#     AUSSCHLIESSLICH Post-Restart-Inhalt. grep -c gibt bei 0 Treffern "0" aus UND exitet 1 → KEIN
+#     `|| echo 0` (ergäbe "0\n0"); `|| true` + `${:-0}` liefert genau EINE 0 (auch bei fehlender Datei):
 new_flood=$(grep -c "command not found" "$LOG" 2>/dev/null || true)
 new_flood=${new_flood:-0}
-echo "new_flood=$new_flood"               # DoD (d): MUSS 0 sein — nur gültig, wenn alive=1
+echo "new_flood=$new_flood"               # DoD (e): MUSS 0 sein — NUR gültig bei alive=1 && api_ok=1
 
-# (e) Positiv-Nachweis, dass fsSize jetzt Disk-Daten liefert (vorher leer):
+# (f) Sekundär: fsSize liefert jetzt Disk-Daten (aus derselben /api/status-Antwort):
 curl -s --cert <peer.crt> --key <peer.key> --cacert <ca.crt> https://127.0.0.1:9440/api/status \
   | grep -o '"resources":[^}]*'          # resources/disk-Felder gefüllt statt null/0
 ```
 
 ## 4. Definition of Done (ALLE Pflicht-Punkte müssen zutreffen)
-- **(a) `alive=1` — PFLICHT-Vorbedingung.** Der Daemon läuft nach dem Restart (`launchctl … state = running`).
-  Ist `alive≠1`, ist **(d) ungültig** — ein `new_flood=0` aus einem toten Daemon ist ein false PASS und zählt
-  **nicht**.
-- **(d) `new_flood=0`** — keine neuen `command not found`-Zeilen in der frischen `$LOG` (mind. 2
-  Poll-Intervalle), **nur gültig bei `alive=1`**. Der Zähler ist offset-/rotationsfrei (§2 mv) und liefert
-  dank `|| true`/`${:-0}` genau eine `0` (kein `0\n0`); `$LOG.pre-fix` belegt den Vorher-Zustand.
-- **(b)** PATH enthält `/sbin` **und** `/usr/sbin`; **(c)** `mount ok` + `diskutil ok`.
-- Optional **(e):** Disk-Metriken in `/api/status`/Dashboard nicht mehr leer (Sekundär-Symptom behoben).
+- **(d) POST-WINDOW-Liveness — PFLICHT, NACH `sleep 120`:** `alive=1` **und** `api_ok=1` (launchd
+  `state = running` **und** authentifizierter `/api/status` erfolgreich). **Vor** dem Fenster gemessene
+  Liveness zählt nicht — der Daemon muss am **Ende** des Beobachtungsfensters noch leben und servieren.
+- **(e) `new_flood=0`** — keine neuen `command not found`-Zeilen in der frischen `$LOG`, **nur gültig bei
+  `alive=1 && api_ok=1`** (sonst false PASS aus totem Daemon). Zähler ist offset-/rotationsfrei (§2 mv) und
+  liefert dank `|| true`/`${:-0}` genau eine `0` (kein `0\n0`); `$LOG.pre-fix` belegt den Vorher-Zustand.
+- **(a)** PATH enthält `/sbin` **und** `/usr/sbin`; **(b)** `mount ok` + `diskutil ok`.
+- Optional **(f):** Disk-Metriken in `/api/status`/Dashboard nicht mehr leer (Sekundär-Symptom behoben).
 
-Ergebnis (`alive`, `new_flood`, PATH-Zeile, Pfad des `$LOG.pre-fix`-Belegs) im Deploy-Schritt / PR-Body
-dokumentieren — damit ist Bug-Pfad 2 **end-to-end** geschlossen (Repo-Fix #273 + Live-Beleg).
+Ergebnis (`alive`, `api_ok`, `new_flood`, PATH-Zeile, Pfad des `$LOG.pre-fix`-Belegs) im Deploy-Schritt /
+PR-Body dokumentieren — damit ist Bug-Pfad 2 **end-to-end** geschlossen (Repo-Fix #273 + Live-Beleg).
 
 ## 5. Rollback
 `plutil -replace … -string "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"` + `kickstart -k`. Risiko minimal:
