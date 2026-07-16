@@ -1768,4 +1768,14 @@ CHANGES.md, `changes/2026-07-07_doc-compliance-gate.md`, dieser Eintrag; Rollen/
 
 ---
 
-*Letzte Aktualisierung: 2026-07-16 07:48 — fix(service): /sbin+/usr/sbin in Unit-PATH (KW29 Bug-Pfad 2).*
+## Sweep 2026-07-16 10:37 — feat(wake): agent:wake gerichtet + routbar (TL-11 §4 directed-wake)
+
+| #        | PR    | Datum            | CO  | CG  | TS  | CR  | PC  | DO | Findings                           |
+|----------|-------|------------------|-----|-----|-----|-----|-----|----|------------------------------------|
+| #277 | (offen, base=main) | 2026-07-16 10:37 | ⚠️ | n/a | ✅ | ✅ | ✅ | ✅ | CO: Design doc-first in `TL-11-wake-routing.md` (#276); directed-Mechanismus low-controversy + per CR bestätigt → separater `pal:consensus` für den Code-Slice entfiel bewusst. Macht den gemergten `agent:wake` (ADR-043) routbar + schließt Leak: Emit trägt `spiffe_uri` (fail-closed ohne SPIFFE), `agent:wake` = directed Event (nie an Ungefilterte = D1; match `instance_id`/`spiffe_uri` = D2). TS: +7 Tests (spiffe_uri-Payload, fail-closed, kein Leak, routbar, drop non-match, event-type-Filter, Regression nicht-directed); **1774 grün**, tsc 0, geänderte Dateien lint-clean. CR: adversarialer Claude — **APPROVE, 6 Invarianten PASS**; 1 LOW (Doku-Hinweis) inline. PC: Secret-Scan clean. |
+
+**Typ:** Daemon-Code + Tests (Umsetzung des #276-Designs). CLI-letzter-Hop + Zwei-Peer-Live-Proof bleiben extern-blocked. **DO:** `CHANGES.md`, `changes/2026-07-16_tl11-directed-wake.md`, `COMPLIANCE-TABLE.md`, dieser Eintrag.
+
+---
+
+*Letzte Aktualisierung: 2026-07-16 10:37 — feat(wake): agent:wake gerichtet + routbar (TL-11 §4 directed-wake).*

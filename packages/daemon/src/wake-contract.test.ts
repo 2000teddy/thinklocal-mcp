@@ -15,6 +15,12 @@ import {
 } from './wake-contract.js';
 
 const LIVE = ['inst-a', 'inst-b'];
+// TL-11 Wake-Routing: Instanz → SPIFFE für den gerichteten `agent:wake`-Payload.
+const SPIFFE: Record<string, string> = {
+  'inst-a': 'spiffe://thinklocal/host/h/agent/claude-code/instance/inst-a',
+  'inst-b': 'spiffe://thinklocal/host/h/agent/codex/instance/inst-b',
+};
+const RESOLVE = (id: string): string | null => SPIFFE[id] ?? null;
 
 describe('resolveWakeTargets (fail-closed)', () => {
   it('adressierte, live Instanz → [it]', () => {
@@ -86,17 +92,28 @@ function fakeLog(): { warns: unknown[]; warn: (o: unknown, m: string) => void } 
 }
 
 describe('registerWakeEmitter (Verdrahtung, kein Transport)', () => {
-  it('inbox:new adressiert an live Instanz → agent:wake (inhaltsfrei)', () => {
+  it('inbox:new adressiert an live Instanz → agent:wake (inhaltsfrei, MIT spiffe_uri)', () => {
     const bus = fakeBus();
-    registerWakeEmitter({ eventBus: bus, listInstances: () => LIVE, coalescer: new WakeCoalescer(), now: () => 0 });
+    registerWakeEmitter({ eventBus: bus, listInstances: () => LIVE, resolveSpiffe: RESOLVE, coalescer: new WakeCoalescer(), now: () => 0 });
     bus.fire({ from: 'peer', message_id: 'm1', to_agent_instance: 'inst-a' });
-    expect(bus.emitted).toEqual([{ type: 'agent:wake', data: { instance_id: 'inst-a', reason: 'inbox' } }]);
+    expect(bus.emitted).toEqual([
+      { type: 'agent:wake', data: { instance_id: 'inst-a', spiffe_uri: SPIFFE['inst-a'], reason: 'inbox' } },
+    ]);
+  });
+
+  it('TL-11: live Instanz OHNE SPIFFE → KEIN Wake + WARN (fail-closed, nicht routbar)', () => {
+    const bus = fakeBus();
+    const log = fakeLog();
+    registerWakeEmitter({ eventBus: bus, listInstances: () => LIVE, resolveSpiffe: () => null, coalescer: new WakeCoalescer(), now: () => 0, log });
+    bus.fire({ from: 'peer', message_id: 'm-nospiffe', to_agent_instance: 'inst-a' });
+    expect(bus.emitted).toHaveLength(0); // un-routbares Wake wird nicht emittiert
+    expect(log.warns).toHaveLength(1);
   });
 
   it('Loopback-Send mit explizit null to_agent_instance (daemon-level) → KEIN Wake, KEIN WARN (Routine)', () => {
     const bus = fakeBus();
     const log = fakeLog();
-    registerWakeEmitter({ eventBus: bus, listInstances: () => LIVE, coalescer: new WakeCoalescer(), now: () => 0, log });
+    registerWakeEmitter({ eventBus: bus, listInstances: () => LIVE, resolveSpiffe: RESOLVE, coalescer: new WakeCoalescer(), now: () => 0, log });
     bus.fire({ from: 'peer', message_id: 'm2', to_agent_instance: null }); // Feld präsent (null) = daemon-level
     expect(bus.emitted).toHaveLength(0);
     expect(log.warns).toHaveLength(0); // routinemäßiger daemon-level-Loopback → still, keine Alert-Fatigue
@@ -105,7 +122,7 @@ describe('registerWakeEmitter (Verdrahtung, kein Transport)', () => {
   it('CR-LOW: Remote/Broadcast OHNE to_agent_instance-Feld → KEIN Wake, KEIN WARN (keine Alert-Fatigue)', () => {
     const bus = fakeBus();
     const log = fakeLog();
-    registerWakeEmitter({ eventBus: bus, listInstances: () => LIVE, coalescer: new WakeCoalescer(), now: () => 0, log });
+    registerWakeEmitter({ eventBus: bus, listInstances: () => LIVE, resolveSpiffe: RESOLVE, coalescer: new WakeCoalescer(), now: () => 0, log });
     bus.fire({ from: 'peer', message_id: 'm-remote', to: 'spiffe://thinklocal/host/x/agent/y' }); // Feld fehlt
     expect(bus.emitted).toHaveLength(0);
     expect(log.warns).toHaveLength(0);
@@ -114,7 +131,7 @@ describe('registerWakeEmitter (Verdrahtung, kein Transport)', () => {
   it('Review-of-Record #271: an konkrete Instanz adressiert aber NICHT live → KEIN Wake + WARN', () => {
     const bus = fakeBus();
     const log = fakeLog();
-    registerWakeEmitter({ eventBus: bus, listInstances: () => LIVE, coalescer: new WakeCoalescer(), now: () => 0, log });
+    registerWakeEmitter({ eventBus: bus, listInstances: () => LIVE, resolveSpiffe: RESOLVE, coalescer: new WakeCoalescer(), now: () => 0, log });
     bus.fire({ from: 'peer', message_id: 'm3', to_agent_instance: 'inst-gone' });
     expect(bus.emitted).toHaveLength(0);
     expect(log.warns).toHaveLength(1); // operativ relevant: Ziel-Instanz offline → Wake fällt fail-closed weg
@@ -123,7 +140,7 @@ describe('registerWakeEmitter (Verdrahtung, kein Transport)', () => {
   it('zwei rasche inbox:new an dieselbe Instanz → nur 1 agent:wake (coalesced)', () => {
     const bus = fakeBus();
     let t = 0;
-    registerWakeEmitter({ eventBus: bus, listInstances: () => LIVE, coalescer: new WakeCoalescer(1000), now: () => t });
+    registerWakeEmitter({ eventBus: bus, listInstances: () => LIVE, resolveSpiffe: RESOLVE, coalescer: new WakeCoalescer(1000), now: () => t });
     bus.fire({ to_agent_instance: 'inst-a' });
     t = 200;
     bus.fire({ to_agent_instance: 'inst-a' });

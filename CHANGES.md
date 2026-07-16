@@ -8,6 +8,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(wake): `agent:wake` gerichtet + routbar (TL-11 §4 directed-wake) (2026-07-16 10:37)
+Macht den gemergten `agent:wake`-Kontrakt (ADR-043) für registrierte Agenten **routbar** und schließt den
+Metadaten-Leak — Umsetzung des Designs aus `docs/architecture/TL-11-wake-routing.md`. Vorher: Payload
+`{instance_id,reason}` matchte keinen WS-Agent-Filter → (D1) ungefilterte Dashboard-Clients bekamen jedes Wake
+inkl. Ziel-`instance_id` (Leak), (D2) ein `agent=<uri>`-Filter matchte NIE (unroutbar). Neu: Emit trägt
+`spiffe_uri` (aus `AgentRegistry`, **fail-closed**: keine SPIFFE → kein Wake); `websocket.ts` behandelt
+`agent:wake` als **directed** Event — nie an ungefilterte Clients (deny-by-default, schließt D1), match auf
+`instance_id`/`spiffe_uri` (schließt D2); nicht-directed Events unverändert. +7 Tests, Suite 1774 grün. CR:
+6 Invarianten PASS, 1 LOW (Doku-Hinweis) inline. CLI-letzter-Hop + Zwei-Peer-Proof bleiben extern-blocked.
+
 ### fix(service): /sbin+/usr/sbin in Unit-PATH — `.55` mount-Flood (KW29 Bug-Pfad 2) (2026-07-16 07:48)
 Auf `.55` (macOS/launchd) flutete `mount: command not found` den `daemon.error.log`. **Verifizierte Kette:**
 Service-Unit-PATH ohne `/sbin`+`/usr/sbin` → `systeminformation.fsSize()` ruft auf darwin

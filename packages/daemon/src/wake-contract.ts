@@ -85,6 +85,13 @@ export interface WakeEmitterDeps {
   eventBus: WakeEventBus;
   /** Live registrierte Agenten-Instanz-IDs (im Daemon: `agentRegistry.list().map(e => e.instanceId)`). */
   listInstances: () => readonly string[];
+  /**
+   * Instanz-ID → 4-komponentige SPIFFE-URI (im Daemon: `agentRegistry.get(id)?.spiffeUri`). Damit das
+   * gerichtete `agent:wake`-Event routbar wird (TL-11 Wake-Routing): der WS-Filter matcht auf
+   * `spiffe_uri`/`instance_id`. Liefert `null`/leer ⇒ **fail-closed**: kein Wake emittieren (ein
+   * un-routbares Wake wäre ein Leak-/Broadcast-Kandidat).
+   */
+  resolveSpiffe: (instanceId: string) => string | null | undefined;
   coalescer: WakeCoalescer;
   /** Uhr (injiziert; real `Date.now`). */
   now: () => number;
@@ -115,7 +122,18 @@ export function registerWakeEmitter(deps: WakeEmitterDeps): void {
     }
     const wakes = computeWakes(targetInstance, live, deps.coalescer, deps.now());
     for (const w of wakes) {
-      deps.eventBus.emit('agent:wake', { instance_id: w.instanceId, reason: w.reason });
+      // Routbarkeit: `agent:wake` ist ein gerichtetes Event (WS liefert es NUR an einen Client, dessen
+      // agentFilter `spiffe_uri`/`instance_id` matcht — nie an Ungefilterte). Ohne SPIFFE ist es nicht
+      // routbar → fail-closed nicht emittieren (kein un-adressiertes Wake, das breit sichtbar würde).
+      const spiffe = deps.resolveSpiffe(w.instanceId);
+      if (spiffe == null || spiffe === '') {
+        deps.log?.warn(
+          { instance_id: w.instanceId },
+          '[wake] keine SPIFFE-URI für live Instanz → kein Wake (fail-closed, nicht routbar)',
+        );
+        continue;
+      }
+      deps.eventBus.emit('agent:wake', { instance_id: w.instanceId, spiffe_uri: spiffe, reason: w.reason });
     }
   });
 }
