@@ -1788,6 +1788,10 @@ CHANGES.md, `changes/2026-07-07_doc-compliance-gate.md`, dieser Eintrag; Rollen/
 
 **Typ:** Daemon-Security-Bug-Fix + Tests + Doc-Update (TL-11 §8.1-Härtung). **DO:** `docs/architecture/TL-11-wake-consumer-contract.md` §8.1/§3, `TODO.md`, `CHANGES.md`, `changes/2026-07-16_tl11-frame-loopback-gate.md`, dieser Eintrag.
 
+| #281 | (offen, base=main) | 2026-07-16 18:10 | — | n/a | ✅ | ✅ | ✅ | ✅ | **Additiver Read-View → CO/CG entfallen** (kompakte Projektion vorhandener Daten, Präzedenz #278; Design gepinnt in `TL-21-skeleton-disclosure.md`, kein Kap.06-Spec im Repo → Ambiguität festgeschrieben, nicht über Scope erweitert). **Lane:** TL-12 B0 Christian-gated (Scoping §9), TL-14a an Decision-7 + undecided CA-Architektur (kein ADR) blockiert → Pivot auf TL-21 (kein Christian-Gate). Neu `capability-skeleton.ts` (reine `firstSentence`/`buildCapabilitySkeleton`, deterministisch) + `GET /api/capabilities/overview` → `{skills,count}` (dedupliziert pro `skill_id`, Name+erster Satz, Health-Aggregation); Stufe 2 = bestehendes `?skill_id=` unverändert. TS: **+15 Tests** (firstSentence-Kanten, Dedupe/Sort/Tie-Break, Health-Aggregation, Endpoint). Suite **1729 grün**, tsc(strict)/neue-Dateien-Lint 0. CR: adversarialer Claude — **kein HIGH**; **1 MEDIUM (uncapped Satz-mit-Terminator → 8-KB-Blowup) in-slice gefixt + Regressionstest**; **3 LOW gefixt** (Dezimal-Lookahead, `HEALTH_RANK`-NaN-Fallback, locale-fixe Sortierung). PC: Secret-Scan clean. Slice 2 (MCP-Tool) folgt. |
+
+**Typ:** Daemon-Feature (read-only, additiv) + Design-Doku + Tests (TL-21 Slice 1, Kap. 06 Kontext-Ökonomie). **DO:** `docs/architecture/TL-21-skeleton-disclosure.md`, `docs/API-REFERENCE.md`, `TODO.md`, `CHANGES.md`, `changes/2026-07-16_tl21-skeleton-overview.md`, dieser Eintrag.
+
 ---
 
-*Letzte Aktualisierung: 2026-07-16 17:20 — fix(ws): Loopback-Gate auch auf dem subscribe-Frame-Pfad (TL-11 §8.1-Härtung).*
+*Letzte Aktualisierung: 2026-07-16 18:10 — feat(api): TL-21 Skelett-Auskunft `GET /api/capabilities/overview` (Kap. 06).*
