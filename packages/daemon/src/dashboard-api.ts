@@ -78,6 +78,11 @@ export function registerDashboardApi(server: FastifyInstance, deps: DashboardApi
   // GET /api/status — Gesamtstatus
   server.get('/api/status', async (request: FastifyRequest, reply: FastifyReply) => {
     if (!checkRateLimit(request, reply)) return;
+    // Ein atomarer Snapshot für alle drei Peer-Zahlen (kein TOCTOU zwischen zwei Getter-Aufrufen).
+    // peers_known/peers_offline machen die „Phantom-ROT von unten"-Klasse extern sichtbar:
+    // peers_known>0 && peers_online==0 ⇒ Heartbeat-/Cert-Problem, NICHT „Knoten tot".
+    // Siehe docs/DIAGNOSE-api-status-phantom-rot.md §9.
+    const peerCounts = mesh.getPeerCounts();
     return {
       agent_id: ownAgentId,
       build_version: deps.buildInfo?.build_version ?? 'unknown',
@@ -93,7 +98,9 @@ export function registerDashboardApi(server: FastifyInstance, deps: DashboardApi
       libp2p_enabled: config.libp2p.enabled,
       libp2p_port: config.libp2p.listen_port,
       uptime_seconds: Math.floor(process.uptime()),
-      peers_online: mesh.getOnlinePeers().length,
+      peers_online: peerCounts.online,
+      peers_known: peerCounts.known,
+      peers_offline: peerCounts.offline,
       capabilities_count: registry.getAllCapabilities().length,
       active_tasks: tasks.getActiveTasks().length,
       audit_events: audit.count(),
