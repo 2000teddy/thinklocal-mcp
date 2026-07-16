@@ -126,13 +126,13 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     fixen Consumer-Contract (s.o.) baubar. **Echter Blocker:** der letzte Hop (Supervisor → CLI) ist
     out-of-repo + Deploy/Host-gated (vgl. `[[dod-two-peer-mcp-proof]]`, `[[week1-remote-restart-rollout]]`).
     Optional/danach: WS-Instanz-Bindung, Opt-in-Broadcast-Wake, Reconciliation-Sweep.
-  - [ ] 🟠 **TL-11 Sicherheits-Härtung: Frame-Pfad umgeht Loopback-Gate** (entdeckt 2026-07-16, mit Beleg) —
-    der `4003`-Loopback-Gate für agent-gefilterte Subscriptions prüft nur `query.agent` beim Connect
-    (`websocket.ts:138-145`); der Frame-Pfad `{type:'subscribe',agent:…}` setzt `state.agentFilter` **ohne**
-    Loopback-Check (`websocket.ts:187-189`) → ein Nicht-Loopback-mTLS-Peer kann ohne `?agent=` verbinden und
-    per Frame fremde `agent:wake` abonnieren (Event-Snooping-Schutz umgehbar). **Entscheidung nötig:** strikt
-    loopback-only vs. „jeder mTLS-Peer darf filtern"; falls loopback-only → Frame-Handler-Gate nachziehen
-    (`isLoopback` in `ClientState` am Connect + Prüfung im subscribe-Frame, `4003`). Doc: `TL-11-wake-consumer-contract.md` §8.1. Eigener Slice (TS+CR).
+  - [x] 🟠 **TL-11 Sicherheits-Härtung: Frame-Pfad-Loopback-Loch GESCHLOSSEN** (entdeckt+gefixt 2026-07-16) —
+    der `4003`-Loopback-Gate prüfte nur `query.agent` beim Connect; der Frame-Pfad `{type:'subscribe',agent:…}`
+    setzte `agentFilter` **ohne** Loopback-Check → Nicht-Loopback-mTLS-Peer konnte per Frame fremde `agent:wake`
+    abonnieren. **Fix:** reine `rejectsAgentFilter(agent,isLoopback)` von **beiden** Pfaden benutzt,
+    `ClientState.isLoopback` am Connect aus `req.ip` gestempelt (kein `trustProxy` → nicht spoofbar), Frame-
+    Verstoß schließt `4003` vor jeder State-Mutation. **Entscheidung:** konservativ strikt-loopback-only (die
+    bereits gemergte Invariante) — keine Schwächung, kein neuer Beschluss. +15 Tests. Doc §8.1/§3 aktualisiert.
 - [ ] **[v5.1] TL-13 (≈1 h je Rechner + ⛔ Fenster)** Re-Enroll .56/.222/.94 → `node/<PeerID>`; danach
   Duldungs-Ende Alt-Format aktivieren (Entsch. 17, spätestens **01.08.**). ↔ vgl. „Produktiv-Flotten-Flip"
   + `TLMCP_STRICT_IDENTITY`.

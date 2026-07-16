@@ -8,6 +8,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### fix(ws): Loopback-Gate auch auf dem subscribe-Frame-Pfad (TL-11 §8.1-Härtung) (2026-07-16 17:20)
+Security-Bug-Fix: die Regel „agent-gefilterte WS-Subscriptions sind **loopback-only**" (Snooping-Schutz für
+gerichtete Events wie `agent:wake`) wurde nur auf dem Query-Pfad (`?agent=` → `4003`) durchgesetzt; der
+Frame-Pfad `{type:'subscribe',agent:…}` setzte `agentFilter` **ohne** Loopback-Check → ein Nicht-Loopback-
+mTLS-Peer konnte ohne `?agent=` verbinden und per Frame fremde `agent:wake` abonnieren. Fix: reine
+`rejectsAgentFilter(agent,isLoopback)` von **beiden** Pfaden benutzt, `ClientState.isLoopback` am Connect aus
+`req.ip` gestempelt (kein `trustProxy` → nicht header-spoofbar), Frame-Verstoß schließt `4003` **vor** jeder
+State-Mutation. **Konservativ strikt-loopback-only** (bereits gemergte Invariante) — kein neuer Beschluss.
++16 Tests, daemon-Suite **1714 grün**, tsc/Lint 0. CR: adversarialer Claude — **APPROVE, keine HIGH/MEDIUM**
+(L1 Query-Array-Asymmetrie in-slice gefixt; L2 Live-WS-Integrationstest als Grenze akzeptiert). Schließt den
+in #279 dokumentierten §8.1-Befund; Doc §8.1/§3 + TODO aktualisiert.
+
 ### docs(TL-11): Wake-Consumer-Contract-Spec + TODO-Wahrheit (KW30 proof→autonomy) (2026-07-16 15:45)
 Repo-Wahrheit-Check TL-11: Slice A (ADR-043, #271) + §4 directed-wake (#277) sind gemergt → `agent:wake`
 trägt `spiffe_uri` und wird **gerichtet** zugestellt; die TODO-„Backlog-Befunde" (Leak D1 + Mis-Routing D2)
