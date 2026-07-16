@@ -110,6 +110,14 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
   - [ ] **TL-11 Slice B** (extern-blocked): Out-of-Repo Agent-Home-Supervisor konsumiert `agent:wake` →
     weckt CLI; **Zwei-Peer-Live-Proof** (CLI-Reaktion ohne dazwischenliegenden Poll). Optional: WS-Instanz-
     Bindung (instanceId-Metadaten-Leak schließen), Opt-in-Broadcast-Wake, Reconciliation-Sweep.
+    - **Backlog-Befund (2026-07-16, verifiziert):** `agent:wake` trägt nur `{instance_id,reason}` — keine
+      `from/to/agentId/peer_id`. Folgen an `websocket.ts`: (1) **Leak** — `eventBus.onAny` (`websocket.ts:210`)
+      pusht `agent:wake` an jeden *ungefilterten* Dashboard-Client (`matchesSubscription` :45 lässt es durch),
+      d.h. der Ziel-`instance_id` wird breit sichtbar; (2) **Mis-Routing** — ein Loopback-Supervisor mit
+      `agent=<URI>`-Filter matcht NIE (`matchesSubscription` keyt nur auf from/to/agentId/peer_id :52-54),
+      also kann der eigentliche Konsument sein Wake gar nicht abonnieren. Fix-Skizze: `agent:wake` als
+      *directed* Event behandeln (nur an passenden agentFilter-Client, nie an Ungefilterte) + `spiffeUri`
+      der Instanz (`AgentRegistryEntry.spiffeUri`) in den Payload, damit der Filter greift. Schließt beide.
 - [ ] **[v5.1] TL-13 (≈1 h je Rechner + ⛔ Fenster)** Re-Enroll .56/.222/.94 → `node/<PeerID>`; danach
   Duldungs-Ende Alt-Format aktivieren (Entsch. 17, spätestens **01.08.**). ↔ vgl. „Produktiv-Flotten-Flip"
   + `TLMCP_STRICT_IDENTITY`.
