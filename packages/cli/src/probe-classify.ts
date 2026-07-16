@@ -35,13 +35,15 @@ const TLS_TRUST_HINT = /cert|_ssl_|altname|verify|self.signed|wrong version/i;
 /** Socket-/HTTP-Parse-Signaturen: es kamen Nicht-HTTP-Bytes zurück (TLS-Alert) → Port sprach TLS. */
 const TLS_SOCKET_HINT = /socket hang up|other side closed/i;
 
-function pickErr(err: unknown): { name: string; code: string | null; message: string } {
+function pickErr(err: unknown): { names: string[]; code: string | null; message: string } {
   const e = err as
     | { name?: string; code?: string; message?: string; cause?: { code?: string; message?: string; name?: string } }
     | null
     | undefined;
   return {
-    name: e?.name ?? e?.cause?.name ?? '',
+    // BEIDE Namen sammeln: undici umschließt oft als `TypeError('fetch failed')` (top-level name
+    // 'TypeError', nicht leer) und trägt das Timeout-/Abort-Signal nur in `cause.name`.
+    names: [e?.name, e?.cause?.name].filter((n): n is string => typeof n === 'string' && n !== ''),
     code: e?.cause?.code ?? e?.code ?? null,
     message: (e?.cause?.message ?? e?.message ?? '').toString(),
   };
@@ -53,10 +55,11 @@ function pickErr(err: unknown): { name: string; code: string | null; message: st
  * „down" beschönigt noch ein TLS-Reset fälschlich als ROT gemeldet.
  */
 export function classifyProbeError(err: unknown): ProbeErrorVerdict {
-  const { name, code, message } = pickErr(err);
+  const { names, code, message } = pickErr(err);
 
-  // 1. Timeout (mehrdeutig)
-  if (name === 'TimeoutError' || name === 'AbortError' || (code !== null && TIMEOUT_CODES.has(code))) {
+  // 1. Timeout (mehrdeutig) — Signal kann top-level ODER in cause.name stehen
+  const isTimeoutName = names.some((n) => n === 'TimeoutError' || n === 'AbortError');
+  if (isTimeoutName || (code !== null && TIMEOUT_CODES.has(code))) {
     return { kind: 'timeout', likelyUp: false, code, hint: 'Timeout — Host/Port langsam, gefiltert oder down.' };
   }
 

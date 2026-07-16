@@ -84,8 +84,28 @@ describe('classifyProbeError', () => {
     expect(classifyProbeError(Object.assign(new Error('aborted'), { name: 'AbortError' })).kind).toBe('timeout');
   });
 
-  it('UND_ERR_CONNECT_TIMEOUT → timeout', () => {
+  it('UND_ERR_CONNECT_TIMEOUT / ETIMEDOUT → timeout', () => {
     expect(classifyProbeError(fetchFailed({ code: 'UND_ERR_CONNECT_TIMEOUT' })).kind).toBe('timeout');
+    expect(classifyProbeError(fetchFailed({ code: 'ETIMEDOUT' })).kind).toBe('timeout');
+  });
+
+  it('CR-LOW: TimeoutError nur in cause.name (umschließender TypeError) → timeout', () => {
+    // undici kann Signal in cause tragen; pickErr fällt via `||` auf cause.name durch.
+    expect(classifyProbeError(fetchFailed({ name: 'TimeoutError' })).kind).toBe('timeout');
+  });
+
+  it('CR-LOW: EPROTO über den Code-Pfad (ohne TLS-Message) → tls', () => {
+    const v = classifyProbeError(fetchFailed({ code: 'EPROTO' })); // message leer → nur Code-Match greift
+    expect(v.kind).toBe('tls');
+    expect(v.likelyUp).toBe(true);
+  });
+
+  it('CR-LOW: Fremdprozess auf dem Port (ECONNRESET) → tls/likelyUp (dokumentierte False-UP-Grenze)', () => {
+    // Bewusst akzeptiert: hält ein anderer Prozess den Port, meldet der Klassifikator "wahrscheinlich UP"
+    // — aber nur als warn+Hinweis (https:// + Cert prüfen), nie als grünes ok. Besser als Phantom-ROT.
+    const v = classifyProbeError(fetchFailed({ code: 'ECONNRESET' }));
+    expect(v.kind).toBe('tls');
+    expect(v.likelyUp).toBe(true);
   });
 
   it('unbekannter Code → unknown, likelyUp=false (konservativ, kein Über-Claim)', () => {
