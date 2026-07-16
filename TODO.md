@@ -151,8 +151,13 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
 - [ ] **[v5.1] TL-19 (≈4 h)** Verbindungs-Pooling + Sicherungs-Schalter je Owner-Peer; `resolveMcp` meidet
   kranke Anbieter.
 - [ ] **[v5.1] TL-20 (≈3 h)** Pro-Rechner-Transportpolitik (ADR-031) + Relay netzweit „aus" (Entsch. 5).
-- [ ] **[v5.1] TL-21 (≈4 h)** Skelett-Auskunft (Kap. 06): zweistufig „Übersicht (Name + 1 Satz) → Details
-  auf Abruf" am lokalen Daemon.
+- [~] **[v5.1] TL-21 (≈4 h)** Skelett-Auskunft (Kap. 06): zweistufig „Übersicht (Name + 1 Satz) → Details
+  auf Abruf" am lokalen Daemon. Design: `docs/architecture/TL-21-skeleton-disclosure.md`.
+  - [x] **Slice 1** (2026-07-16): REST `GET /api/capabilities/overview` (dedupliziert pro `skill_id`, Name +
+    erster Satz + Health-Aggregation) + reines Modul `capability-skeleton.ts` (`firstSentence`,
+    `buildCapabilitySkeleton`), +13 Tests. Stufe 2 = bestehendes `/api/capabilities?skill_id=`. Read-only/additiv.
+  - [ ] **Slice 2**: identische Skelett-Projektion als MCP-Tool `list_capabilities_overview` (Agent-Kontext-
+    Ökonomie), dieselbe reine Funktion. Optional danach: Skelett für Peers/Tools/Tasks.
 
 ### P2 — Ausbau
 - [ ] **[v5.1] TL-22a (≈4 h)** Mesh-Dateiübertragung Slice 1 (Chunk-Endpunkt am 9440, Prüfsummen je Stück;

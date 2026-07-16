@@ -24,6 +24,7 @@ import type { CredentialVault } from './vault.js';
 import type { TaskExecutor } from './task-executor.js';
 import type { SkillHealthStatus } from './skill-health-monitor.js';
 import type { BuildInfo } from './build-info.js';
+import { buildCapabilitySkeleton } from './capability-skeleton.js';
 
 export interface DashboardApiDeps {
   mesh: MeshManager;
@@ -178,6 +179,16 @@ export function registerDashboardApi(server: FastifyInstance, deps: DashboardApi
       count: capabilities.length,
       hash: registry.getCapabilityHash(),
     };
+  });
+
+  // GET /api/capabilities/overview — TL-21 Skelett-Auskunft (Kap. 06):
+  // kompakte „Name + ein Satz"-Übersicht, dedupliziert pro skill_id. Details auf Abruf
+  // über GET /api/capabilities?skill_id=<id>. Read-only, additiv.
+  // Siehe docs/architecture/TL-21-skeleton-disclosure.md.
+  server.get('/api/capabilities/overview', async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!checkRateLimit(request, reply)) return;
+    const skills = buildCapabilitySkeleton(registry.getAllCapabilities());
+    return { skills, count: skills.length };
   });
 
   // GET /api/tasks — Alle Tasks

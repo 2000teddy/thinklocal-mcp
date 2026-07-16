@@ -8,6 +8,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(api): TL-21 Skelett-Auskunft `GET /api/capabilities/overview` (Kap. 06) (2026-07-16 18:10)
+Kontext-Ökonomie: ein Agent bekam bei „was kann dieser Knoten?" entweder zu wenig (`list_skills` ohne
+Beschreibung) oder zu viel (`/api/capabilities` volle Objekte je Provider). Neu: kompakte **Skelett-
+Übersicht** (pro Skill **Name + ein Satz**), Details erst auf Abruf. `capability-skeleton.ts` (reines Modul:
+`firstSentence`, `buildCapabilitySkeleton` — dedupliziert pro `skill_id`, gesund-bevorzugter Provider,
+Health-Aggregation, deterministisch); `GET /api/capabilities/overview` → `{ skills, count }` (rate-limited,
+read-only, additiv). Stufe 2 = bestehendes `GET /api/capabilities?skill_id=` (unverändert). Design:
+`docs/architecture/TL-21-skeleton-disclosure.md`. +13 Tests, Suite **1727 grün**, tsc/Lint 0. Slice 2
+(MCP-Tool `list_capabilities_overview`) folgt. Weekly-Plan KW30, gewählt nachdem TL-12 B0 Christian-gated
+und TL-14a an Decision-7/undecided-CA-Architektur entkoppelt blockiert.
+
 ### fix(ws): Loopback-Gate auch auf dem subscribe-Frame-Pfad (TL-11 §8.1-Härtung) (2026-07-16 17:20)
 Security-Bug-Fix: die Regel „agent-gefilterte WS-Subscriptions sind **loopback-only**" (Snooping-Schutz für
 gerichtete Events wie `agent:wake`) wurde nur auf dem Query-Pfad (`?agent=` → `4003`) durchgesetzt; der
