@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { matchesSubscription, parseQuerySubscription, type ClientState } from './websocket.js';
+import { matchesSubscription, parseQuerySubscription, rejectsAgentFilter, isLoopbackIp, type ClientState } from './websocket.js';
 import type { MeshEvent, MeshEventType } from './events.js';
 
 // ─── Helper ────────────────────────────────────────────────────────
@@ -18,11 +18,13 @@ function makeEvent(type: MeshEventType, data: Record<string, unknown> = {}): Mes
 function makeState(opts: {
   events?: MeshEventType[];
   agent?: string | null;
+  isLoopback?: boolean;
 } = {}): ClientState {
   return {
     ws: {} as ClientState['ws'], // dummy, not used in pure matching
     subscribedEvents: new Set(opts.events ?? []),
     agentFilter: opts.agent ?? null,
+    isLoopback: opts.isLoopback ?? true,
   };
 }
 
@@ -189,5 +191,47 @@ describe('inbox:new event filtering', () => {
     });
 
     expect(matchesSubscription(event, state)).toBe(false);
+  });
+});
+
+// ─── TL-11 §8.1-Härtung: Loopback-only für agent-Filter (Query UND Frame) ───────────
+describe('isLoopbackIp', () => {
+  it('erkennt IPv4/IPv6/IPv4-mapped Loopback', () => {
+    expect(isLoopbackIp('127.0.0.1')).toBe(true);
+    expect(isLoopbackIp('::1')).toBe(true);
+    expect(isLoopbackIp('::ffff:127.0.0.1')).toBe(true);
+  });
+  it('lehnt Nicht-Loopback + undefined ab', () => {
+    expect(isLoopbackIp('10.10.10.55')).toBe(false);
+    expect(isLoopbackIp('100.103.115.126')).toBe(false);
+    expect(isLoopbackIp(undefined)).toBe(false);
+  });
+});
+
+describe('rejectsAgentFilter (Loopback-only-Regel — beide Pfade, §8.1)', () => {
+  it('nicht-leerer agent von NICHT-Loopback → abgelehnt (schließt Frame-Bypass)', () => {
+    expect(rejectsAgentFilter('spiffe://thinklocal/node/PID', false)).toBe(true);
+  });
+  it('nicht-leerer agent von Loopback → erlaubt', () => {
+    expect(rejectsAgentFilter('spiffe://thinklocal/node/PID', true)).toBe(false);
+  });
+  it('leerer agent (= Filter löschen) → erlaubt, auch von Nicht-Loopback', () => {
+    expect(rejectsAgentFilter('', false)).toBe(false);
+  });
+  it('fehlender agent (null/undefined) → erlaubt (kein Filter präsent)', () => {
+    expect(rejectsAgentFilter(undefined, false)).toBe(false);
+    expect(rejectsAgentFilter(null, false)).toBe(false);
+  });
+  it('CR-LOW L1: präsenter Nicht-String agent (Array/Number) von Nicht-Loopback → abgelehnt (fail-closed, keine Asymmetrie)', () => {
+    expect(rejectsAgentFilter(['a', 'b'], false)).toBe(true);   // ?agent=a&agent=b → Array
+    expect(rejectsAgentFilter(123, false)).toBe(true);
+    // von Loopback bleibt jeder Wert erlaubt (der String-Setter ignoriert Nicht-Strings ohnehin)
+    expect(rejectsAgentFilter(['a', 'b'], true)).toBe(false);
+  });
+  it('Query- und Frame-Pfad teilen dieselbe Regel → keine Umgehung per Frame', () => {
+    const agent = 'spiffe://thinklocal/node/victim';
+    // identisches Verhalten unabhängig vom Pfad — nur isLoopback entscheidet
+    expect(rejectsAgentFilter(agent, false)).toBe(true);  // remote → immer abgelehnt
+    expect(rejectsAgentFilter(agent, true)).toBe(false);  // loopback → immer erlaubt
   });
 });

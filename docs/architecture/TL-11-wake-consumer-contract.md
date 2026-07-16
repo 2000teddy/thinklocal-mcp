@@ -52,16 +52,16 @@ MUSS daher **beides** setzen: den Event-Typ `agent:wake` **und** einen `agent`-F
 ```
 wss://127.0.0.1:9440/ws?subscribe=agent:wake&agent=spiffe://thinklocal/node/<PeerID>
 ```
-Nur dieser Pfad durchläuft den Loopback-Gate (`websocket.ts:138-145`, §2) — er ist der **einzige
-kontrakt-konforme** Weg, den `agent`-Filter zu setzen.
+Dieser Pfad durchläuft den Loopback-Gate (`websocket.ts`, §2) und ist der **empfohlene** Weg, den
+`agent`-Filter zu setzen (einmalig, deterministisch am Connect).
 
-**Frame-Form — für den `agent`-Filter NICHT unterstützt (unsicher, bis Härtung landet):**
+**Frame-Form — `agent`-Filter jetzt ebenfalls loopback-gated (seit §8.1-Härtung):**
 ```jsonc
 // { "type": "subscribe", "events": ["agent:wake"], "agent": "…" }
-//   ^ Das Setzen von `agent` per Frame UMGEHT derzeit den Loopback-Gate (websocket.ts:187-189, s. §8.1).
-//     Ein konformer Konsument setzt den agent-Filter deshalb AUSSCHLIESSLICH über die Query-Form oben.
-//     Der Frame-`subscribe` ist NUR zum Ändern der Event-Typ-Liste (`events`) gedacht; `agent` per Frame
-//     ist bis zum Härtungs-Slice (§8.1) unsupported/unsafe und darf im Kontrakt nicht angenommen werden.
+//   ^ Das Setzen von `agent` per Frame durchläuft jetzt DIESELBE Loopback-Schranke wie die Query-Form
+//     (rejectsAgentFilter, §8.1): von Nicht-Loopback → Close 4003; von Loopback → erlaubt. Der frühere
+//     Bypass ist geschlossen. Empfehlung bleibt Query-Form (§6-Referenz-Loop); der Frame-`subscribe`
+//     dient primär dem Ändern der Event-Typ-Liste (`events`).
 ```
 
 - `agent` matcht gegen **`spiffe_uri` ODER `instance_id`** des Payloads (`websocket.ts:66`). Beide sind
@@ -151,22 +151,26 @@ Der einzige nicht-triviale Teil — `pokeCli()` (wie genau wird der CLI-Prozess 
   (#271/#277). Sollte ein zukünftiger `reason`-Typ oder ein Opt-in-Broadcast gewünscht werden, ist das ein
   **separater** Beschluss (nicht Teil dieser Spec).
 
-### 8.1 OFFENER Sicherheits-Befund (beim Schreiben dieser Spec entdeckt, mit Beleg)
+### 8.1 Sicherheits-Härtung — Frame-Pfad-Loopback-Loch (GESCHLOSSEN)
 
-Die **Loopback-Pflicht** (§2) wird **nur auf dem Query-Param-Pfad** durchgesetzt: der `4003`-Gate prüft
-`query.agent` **beim Connect** (`websocket.ts:138-145`). Der **Frame-Pfad** `{type:'subscribe',
-agent:'…'}` setzt `state.agentFilter` jedoch **ohne** jede Loopback-Prüfung (`websocket.ts:187-189`).
-**Folge:** ein Nicht-Loopback-Client kann **ohne** `?agent=` verbinden (Gate nicht ausgelöst), danach per
-Frame einen `agent`-Filter setzen und so `agent:wake`-Events einer fremden Instanz abonnieren — der
-Loopback-Schutz gegen Event-Snooping ist umgehbar (mTLS-Peer vorausgesetzt, aber nicht Loopback).
+**Befund (bei Erstellung dieser Spec entdeckt):** Die **Loopback-Pflicht** (§2) wurde **nur auf dem
+Query-Param-Pfad** durchgesetzt — der `4003`-Gate prüfte `query.agent` beim Connect. Der **Frame-Pfad**
+`{type:'subscribe', agent:'…'}` setzte `state.agentFilter` **ohne** Loopback-Prüfung. Ein Nicht-Loopback-
+mTLS-Peer konnte **ohne** `?agent=` verbinden (Gate nicht ausgelöst) und danach per Frame einen `agent`-
+Filter setzen → `agent:wake`-Events einer fremden Instanz abonnieren (Snooping-Schutz umgehbar).
 
-- **Status:** dokumentiert, **nicht** eigenmächtig gefixt — die *korrekte* Invariante ist eine
-  **Design-Entscheidung** (strikt loopback-only **vs.** „jeder mTLS-authentifizierte Mesh-Peer darf
-  filtern"). Der Query-Gate-Kommentar sagt „prevent event snooping" → Intent = loopback-only; dann ist der
-  Frame-Pfad ein **Enforcement-Loch**, das gestopft gehört (Loopback-Check auch im Frame-Handler,
-  z.B. `isLoopback` in `ClientState` am Connect stempeln + im `subscribe`-Frame prüfen, `4003` bei Verstoß).
-- **Für den Konsumenten dieser Spec irrelevant** (er ist ohnehin loopback, §2) — der Befund betrifft die
-  **Härtung** des Daemons, nicht das Consumer-Verhalten. Eigener Slice (TS+CR); kein Live-Exploit-Druck.
+**Auflösung:** Der Frame-Pfad setzt jetzt **dieselbe** Loopback-Schranke durch. Die Regel ist in die reine
+Funktion `rejectsAgentFilter(agent, isLoopback)` extrahiert und wird von **beiden** Pfaden benutzt; die
+Connection-Loopback-Herkunft wird am Connect aus `req.ip` in `ClientState.isLoopback` gestempelt; ein
+verstoßender Frame wird **vor** jeder State-Mutation mit `4003` geschlossen. Entschieden wurde die
+**konservative, bereits gemergte** Invariante (**strikt loopback-only**, fail-closed) — nicht die
+Alternative „jeder mTLS-Peer darf filtern" (die einen deliberaten Snooping-Schutz geschwächt hätte und
+einen positiven Beschluss gebraucht hätte). `req.ip` ist nicht header-spoofbar: der `cardServer` setzt
+**kein** `trustProxy` (Default false) → `req.ip` = Socket-Peer-Adresse.
+
+**Beleg / Tests:** `websocket.ts` `rejectsAgentFilter` + `isLoopbackIp` + Frame-Gate; Regeltabelle in
+`websocket.test.ts` (`rejectsAgentFilter`: remote+nicht-leer → reject, loopback → allow, leer/absent →
+allow; `isLoopbackIp`: v4/v6/v4-mapped). Geschlossen in PR (KW30 TL-11-Härtungs-Slice).
 
 ## 9. Verweise
 - `docs/architecture/ADR-043-heartbeat-wake-contract.md` — daemon-seitige Entscheidung (Slice A).

@@ -37,6 +37,30 @@ interface ClientState {
   subscribedEvents: Set<MeshEventType>;
   /** If set, only events where data.to or data.from matches this agent. */
   agentFilter: string | null;
+  /**
+   * Ist die Verbindung von Loopback? Agent-gefilterte Subscriptions sind loopback-only
+   * (Snooping-Schutz, TL-11). Am Connect aus `req.ip` gestempelt, damit der `subscribe`-Frame-
+   * Pfad dieselbe Schranke durchsetzt wie der Query-Pfad (sonst umgehbar — TL-11 §8.1-Härtung).
+   */
+  isLoopback: boolean;
+}
+
+/** Loopback-IP-Test (IPv4, IPv6, IPv4-mapped-IPv6). */
+function isLoopbackIp(ip: string | undefined): boolean {
+  return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+}
+
+/**
+ * Zentrale Loopback-only-Schranke für agent-gefilterte Subscriptions (TL-11, Snooping-Schutz):
+ * ein **nicht-leerer** `agent`-Filter ist NUR von Loopback erlaubt. Wird von BEIDEN Pfaden benutzt —
+ * Query (`?agent=`) am Connect UND `subscribe`-Frame — damit die Schranke nicht per Frame umgehbar ist
+ * (§8.1-Härtung). Leerer/fehlender `agent` (= kein Filter / Filter löschen) ist immer erlaubt.
+ */
+function rejectsAgentFilter(agent: unknown, isLoopback: boolean): boolean {
+  // Fail-closed: JEDER präsente, nicht-leere `agent`-Wert von Nicht-Loopback wird abgelehnt — auch ein
+  // Array (`?agent=a&agent=b` → Fastify liefert ein Array) oder ein Nicht-String; sonst entstünde eine
+  // Asymmetrie zum Query-Parser (CR-LOW L1). `null`/`undefined`/'' (= kein Filter / Filter löschen) ist erlaubt.
+  return agent != null && agent !== '' && !isLoopback;
 }
 
 /**
@@ -134,15 +158,15 @@ export async function registerWebSocket(
     // Parse initial subscription from query string
     const query = (req.query ?? {}) as Record<string, string | undefined>;
 
-    // Agent-filtered subscriptions are loopback-only (prevent event snooping)
-    if (query.agent) {
-      const ip = req.ip;
-      const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
-      if (!isLocal) {
-        log?.warn({ ip, agent: query.agent }, 'WebSocket agent-filter rejected: not loopback');
-        socket.close(4003, 'Agent-filtered subscriptions are loopback-only');
-        return;
-      }
+    // Agent-filtered subscriptions are loopback-only (prevent event snooping).
+    // Am Connect einmal bestimmen; derselbe Wert gilt für den Query-Pfad HIER und den
+    // späteren `subscribe`-Frame-Pfad (ClientState.isLoopback) — sonst ließe sich die
+    // Schranke per Frame umgehen (TL-11 §8.1-Härtung).
+    const isLocal = isLoopbackIp(req.ip);
+    if (rejectsAgentFilter(query.agent, isLocal)) {
+      log?.warn({ ip: req.ip, agent: query.agent }, 'WebSocket agent-filter rejected: not loopback');
+      socket.close(4003, 'Agent-filtered subscriptions are loopback-only');
+      return;
     }
     const initial = parseQuerySubscription(query);
 
@@ -150,6 +174,7 @@ export async function registerWebSocket(
       ws: socket,
       subscribedEvents: initial.events,
       agentFilter: initial.agent,
+      isLoopback: isLocal,
     };
     clients.set(socket, state);
 
@@ -178,6 +203,15 @@ export async function registerWebSocket(
       try {
         const msg = JSON.parse(typeof raw === 'string' ? raw : raw.toString('utf-8'));
         if (msg.type === 'subscribe') {
+          // Loopback-only-Schranke wie am Query-Pfad (dieselbe reine Regel): ein Nicht-Loopback-Client
+          // darf keinen agent-Filter per Frame setzen (sonst Snooping fremder directed Events). VOR
+          // jeder State-Mutation prüfen, damit ein abgelehnter Frame den Client nicht halb-
+          // umkonfiguriert zurücklässt. Leerer `agent` (= Filter löschen) ist erlaubt.
+          if (rejectsAgentFilter(msg.agent, state.isLoopback)) {
+            log?.warn({ ip: req.ip, agent: msg.agent }, 'WebSocket agent-filter (frame) rejected: not loopback');
+            socket.close(4003, 'Agent-filtered subscriptions are loopback-only');
+            return;
+          }
           state.subscribedEvents.clear();
           if (Array.isArray(msg.events)) {
             for (const e of msg.events) {
@@ -241,4 +275,4 @@ export async function registerWebSocket(
 }
 
 // Export for testing
-export { matchesSubscription, parseQuerySubscription, type ClientState };
+export { matchesSubscription, parseQuerySubscription, rejectsAgentFilter, isLoopbackIp, type ClientState };
