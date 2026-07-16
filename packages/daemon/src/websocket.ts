@@ -58,6 +58,8 @@ function matchesSubscription(event: MeshEvent, state: ClientState): boolean {
 
   // Gerichtetes Event: deny-by-default. Ohne agentFilter NIE liefern (kein Leak an Ungefilterte);
   // mit agentFilter nur, wenn er die Ziel-Identität (`instance_id` ODER `spiffe_uri`) matcht.
+  // Hinweis (CR-LOW): der Event-Typ-Filter oben greift zuerst — ein Wake-Konsument MUSS `agent:wake`
+  // abonnieren (oder den Event-Filter weglassen), sonst wird sein Wake schon dort verworfen.
   if (DIRECTED_EVENT_TYPES.has(event.type)) {
     if (!state.agentFilter) return false;
     const { instance_id, spiffe_uri } = event.data as Record<string, string | undefined>;
