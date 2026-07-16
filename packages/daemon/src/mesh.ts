@@ -236,6 +236,25 @@ export class MeshManager {
     return [...this.peers.values()].filter((p) => p.status === 'online');
   }
 
+  /**
+   * Getrennte Zählung bekannter vs. Heartbeat-online Peers — aus EINEM atomaren
+   * Map-Snapshot (kein TOCTOU zwischen zwei Getter-Aufrufen). `peers_online` allein
+   * macht „0 bekannt (echt allein)" von „N bekannt, alle Heartbeat-offline
+   * (Cert/CA/Routing)" ununterscheidbar → Phantom-ROT-Fehldeutung. `known` = rohe
+   * Map-Größe (offline-Peers werden NICHT gelöscht, nur `status='offline'` gesetzt),
+   * `offline` = jeder nicht-`online`-Zustand (`offline`|`unknown`).
+   * Siehe docs/DIAGNOSE-api-status-phantom-rot.md §9.
+   */
+  getPeerCounts(): { known: number; online: number; offline: number } {
+    let online = 0;
+    let offline = 0;
+    for (const p of this.peers.values()) {
+      if (p.status === 'online') online++;
+      else offline++;
+    }
+    return { known: this.peers.size, online, offline };
+  }
+
   getPeer(agentId: string): MeshPeer | undefined {
     return this.peers.get(agentId);
   }

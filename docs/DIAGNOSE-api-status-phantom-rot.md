@@ -105,7 +105,76 @@ Auch ein Umstellen auf `https://` heilt es nicht, solange kein Client-Cert präs
 - **Board-Kontrakt dokumentieren:** externe Konsumenten MÜSSEN Mesh-Client-Cert präsentieren; ein
   Transport-/Auth-Fehler ist **nicht** gleich „Knoten ROT".
 
-## 8. Reproduzierbarkeits-Anhang (exakte Artefakte)
+## 9. Zweite Klasse — „Phantom-ROT von unten": `peers_online=0` TROTZ bekannter Peers
+
+§2–§7 behandeln den **Konsumenten→Knoten**-Transportfehler (Board erreicht `/api/status` nicht →
+`000` → ROT; Fix in #272). Es gibt eine **zweite, davon unabhängige** Klasse, bei der `/api/status`
+sauber `200` liefert, der Wert aber inhaltlich irreführend ist: **`peers_online` fällt auf 0 (oder
+unter die bekannte Peer-Zahl), obwohl der Knoten sehr wohl Peers kennt** — sie sind nur alle über den
+**HTTP-Heartbeat** unerreichbar. Ein naives Board liest `peers_online==0` → ROT, obwohl der Knoten
+gesund ist und Peers im Mesh hält.
+
+### 9.1 Mechanismus (code-gegroundet)
+
+- `/api/status.peers_online` = `mesh.getOnlinePeers().length` (`dashboard-api.ts:96`), und
+  `getOnlinePeers()` filtert **hart auf `status==='online'`** (`mesh.ts:235-237`).
+- Der Online-Status wird **ausschließlich** vom HTTP-Heartbeat gehalten: `checkPeers()` proben jeden
+  Peer per `fetch(`${peer.endpoint}/health`, { dispatcher: tlsDispatcher })` (`mesh.ts:585-588`).
+  **Dieselbe** mTLS-Gate wie in §3 — nur auf dem **ausgehenden** Bein: `tlsDispatcher` erzwingt
+  `rejectUnauthorized:true` + Server-Identitäts-/SAN-Check (`index.ts:230`, `mesh-connect.ts:82`).
+- Schlägt der Probe-`fetch` fehl (CA-Rotation, fehlender IP/100.x-SAN, EHOSTUNREACH — genau die
+  bekannten Fleet-Blocker `[[mesh-ca-rotation-repair-all]]`, `[[th55-pathA-cert-san-blocker]]`,
+  `[[th55-ehostunreach-host-routing]]`), zählt `handleMissedBeat` hoch; nach
+  `heartbeat_timeout_missed=3` Runden à `heartbeat_interval_ms=10000` (~30 s) → `status='offline'`
+  (`mesh.ts:602-610`). Der Peer bleibt **im `peers`-Map** (nicht gelöscht) → `mesh.peerCount` zählt
+  ihn weiter, aber `getOnlinePeers()` schließt ihn aus.
+- **Blast-Radius:** Bei einem fleet-weiten Cert-/CA-Ereignis scheitert der Heartbeat zu **allen** Peers
+  gleichzeitig → `peers_online=0` auf **jedem** Knoten, obwohl alle Peers bekannt (und ggf. libp2p-
+  verbunden) sind. Reales-Daten-ROT, kein Konsumenten-Artefakt.
+
+### 9.2 Live-Beleg (TH01/10.10.10.80, 2026-07-16, Daemon PID 447415, cert-authentifiziert)
+
+```bash
+C=~/.thinklocal/tls
+# (a) /api/status — Online-Sicht
+curl -s --cert $C/node.crt.pem --key $C/node.key.pem --cacert $C/ca.crt.pem \
+  https://127.0.0.1:9440/api/status            # -> peers_online: 3
+# (b) Agent-Card — rohe Map-Größe (mesh.peerCount, inkl. offline)
+curl -s --cert $C/node.crt.pem --key $C/node.key.pem --cacert $C/ca.crt.pem \
+  https://127.0.0.1:9440/.well-known/agent-card.json   # -> mesh.peers_connected: 6, libp2p.connected_peers: 4
+# (c) Audit-Churn (better-sqlite3, readonly)
+#     PEER_JOIN=958  PEER_LEAVE=834   → Dauer-Flapping online<->offline
+```
+
+| Quelle | Feld | Wert | Bedeutung |
+|--------|------|------|-----------|
+| `/api/status` | `peers_online` | **3** | `status==='online'` (HTTP-Heartbeat frisch) |
+| agent-card `mesh` | `peers_connected` | **6** | `mesh.peerCount` = rohe Map-Größe (inkl. offline) |
+| agent-card `libp2p` | `connected_peers` | **4** | libp2p-Transport (anderer Pfad als HTTP-Heartbeat) |
+| audit | `PEER_JOIN` / `PEER_LEAVE` | **958 / 834** | massives Flapping = wiederholte Heartbeat-Fehlschläge |
+
+**Befund:** 6 Peers bekannt, aber nur 3 „online" → **3 bekannte, aber Heartbeat-offline Peers**. Fiele
+das auf 0 (fleet-weites Cert-Ereignis), zeigte `/api/status` `peers_online:0`, während 6 Peers bekannt
+und 4 libp2p-verbunden bleiben. HTTP-Heartbeat (3) und libp2p (4) widersprechen sich zusätzlich —
+zwei Transporte, zwei Wahrheiten.
+
+### 9.3 Observability-Lücke (die eigentliche Root-Cause der Fehldeutung)
+
+`/api/status` exponierte **nur** `peers_online`. Ein externer Konsument kann damit **nicht**
+unterscheiden zwischen:
+- **„0 bekannt"** (echt allein / discovery tot) → berechtigtes ROT, und
+- **„N bekannt, 0 Heartbeat-online"** (Cert/CA/Routing) → Transport-/Auth-Problem, NICHT „Knoten tot".
+
+Beide sehen als `peers_online:0` identisch aus. `mesh.peerCount` existierte, wurde aber nur indirekt in
+der Agent-Card (`peers_connected`) sichtbar, nicht in der Status-Auskunft.
+
+**Fix dieses Slice (additiv, nicht-brechend):** `/api/status` und der MCP-`mesh_status` liefern
+zusätzlich `peers_known` (rohe Map-Größe) und `peers_offline` (`known − online`) aus einem einzigen
+atomaren Snapshot (`mesh.getPeerCounts()`). Damit wird die Klasse aus §9 extern **sichtbar und
+diagnostizierbar** — `peers_known>0 && peers_online==0` ⇒ Heartbeat-/Cert-Problem, kein „Knoten ROT".
+Das eigentliche Cert-/CA-/SAN-Heilen bleibt die bekannten Christian-gated Fleet-Blocker (out of scope).
+
+## 10. Reproduzierbarkeits-Anhang (exakte Artefakte)
 
 - Endpunkte am 9440-`cardServer`: `dashboard-api.ts:79` (`/api/status`), `agent-card.ts:252` (`/health`).
 - mTLS-Gate: `agent-card.ts:225-230` (`requestCert/rejectUnauthorized`, keine Public-Path-Allowlist).

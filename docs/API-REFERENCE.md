@@ -183,7 +183,7 @@ Authorization: Bearer tlmcp_AbCdEf...
 
 | Method | Path | Beschreibung |
 |---|---|---|
-| GET | `/api/status` | Daemon-Status (Agent-ID, Peers, Capabilities, Uptime) |
+| GET | `/api/status` | Daemon-Status (Agent-ID, Peers, Capabilities, Uptime). Peer-Zahlen: `peers_online` (Heartbeat-frisch), `peers_known` (alle bekannten, inkl. offline), `peers_offline` (`known−online`). `peers_known>0 && peers_online==0` ⇒ Heartbeat-/Cert-Problem, kein „down" (Phantom-ROT, `docs/DIAGNOSE-api-status-phantom-rot.md` §9). |
 | GET | `/api/peers` | Online-Peers mit Name, Host, Status, Last-Seen |
 | GET | `/api/capabilities` | Registrierte Capabilities (filterbar) |
 | GET | `/api/tasks` | Tasks mit Status |

@@ -8,6 +8,10 @@ export interface DaemonStatus {
   agent_type: string;
   uptime_seconds: number;
   peers_online: number;
+  /** Rohe Map-Größe (bekannte Peers, inkl. Heartbeat-offline). Additiv seit KW29 Bug-Pfad 1. */
+  peers_known?: number;
+  /** known − online (offline|unknown). peers_known>0 && peers_online==0 ⇒ Heartbeat/Cert, kein „down". */
+  peers_offline?: number;
   capabilities_count: number;
   active_tasks: number;
   audit_events: number;
