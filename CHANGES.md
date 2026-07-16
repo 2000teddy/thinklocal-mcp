@@ -8,6 +8,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### fix(cli): TLS/mTLS-Reset von „down" unterscheiden — Phantom-ROT (KW29 Bug-Pfad 1) (2026-07-16 07:14)
+`tl check` (`cmdCheck`) meldete **jeden** `fetch`-Fehler gegen `/health` + `/api/status` pauschal als
+„Daemon nicht erreichbar" — obwohl beide Endpunkte am mTLS-`cardServer` hängen
+(`requestCert+rejectUnauthorized`, keine Public-Path-Allowlist) und eine `http://`- oder cert-lose
+Probe **auf TLS-Ebene resettet** wird → der Port antwortet, der Daemon **läuft**. Ergebnis: **Phantom-ROT**.
+Neu: `packages/cli/src/probe-classify.ts` — reine `classifyProbeError(err)` unterscheidet
+`down` (ECONNREFUSED/DNS/Routing) · `tls` (ECONNRESET/EPROTO/UND_ERR_SOCKET/HPE_*/cert-trust → `likelyUp`) ·
+`timeout` · `unknown`; **konservativ** (`likelyUp` nur bei nachweislichem Port-Antworten, Signal auch aus
+`cause.name`/`cause.code`). `cmdCheck` meldet einen TLS-Reset jetzt als `warn`+Hinweis („Port antwortet,
+aber TLS/mTLS … kein down") statt als `fail`-ROT. **Kein neuer Transport, kein Endpoint-Verhalten geändert.**
+Diagnose-Beleg: `docs/DIAGNOSE-api-status-phantom-rot.md`. CR: adversarial (APPROVE, keine HIGH/MEDIUM), 2 LOW
+gefixt. +19 Tests.
+
 ### feat: ADR-043 Heartbeat-Weckruf-Kontrakt (TL-11 Slice A) (2026-07-15 18:49)
 Daemon-seitiger Wake-Kontrakt + edge-driven per-Instanz-Fanout, **kein neuer Transport**. Neu:
 `wake-contract.ts` — `resolveWakeTargets` (**fail-closed**: unadressiert/nicht-live → `[]`, **kein

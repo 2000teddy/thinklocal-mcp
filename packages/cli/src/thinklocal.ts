@@ -26,6 +26,7 @@ import { resolveRuntimeSettings, parseRuntimeMode, runtimeModeFromFlags, type Ru
 import { onboardingUrlFromAdminUrl } from '../../daemon/src/onboarding-port.js';
 import { BUILTIN_SKILL_SERVICE_DEPS, serviceUnitDependencyLines } from '../../daemon/src/service-dependencies.js';
 import { runHeartbeatCommand } from './thinklocal-heartbeat.js';
+import { classifyProbeError } from './probe-classify.js';
 import type { SupportedTool } from '../../daemon/src/cli-adapters.js';
 
 const HOME = homedir();
@@ -952,9 +953,17 @@ async function cmdCheck(host: string): Promise<void> {
       fail(`Daemon antwortet mit Status ${res.status}`);
       return;
     }
-  } catch {
-    fail(`Daemon nicht erreichbar auf ${targetHost}:${targetPort}`);
-    info('Pruefen: Laeuft der Daemon? Firewall? Richtiger Port?');
+  } catch (err) {
+    // Phantom-ROT vermeiden: TLS/mTLS-Reset (Port antwortet → Daemon läuft) ist NICHT „down".
+    // Siehe docs/DIAGNOSE-api-status-phantom-rot.md.
+    const v = classifyProbeError(err);
+    if (v.likelyUp) {
+      warn(`Port ${targetHost}:${targetPort} antwortet, aber die http-Probe scheiterte am TLS/mTLS-Gate${v.code ? ` (${v.code})` : ''} — Daemon ist wahrscheinlich UP`);
+      info(v.hint);
+    } else {
+      fail(`Daemon nicht erreichbar auf ${targetHost}:${targetPort} (${v.kind}${v.code ? `, ${v.code}` : ''})`);
+      info(v.hint);
+    }
     return;
   }
 
@@ -969,8 +978,10 @@ async function cmdCheck(host: string): Promise<void> {
     console.log(`  Peers:         ${status['peers_online']} online`);
     console.log(`  Capabilities:  ${status['capabilities_count']}`);
     console.log(`  Tasks:         ${status['active_tasks']} aktiv`);
-  } catch {
-    warn('Status konnte nicht abgerufen werden');
+  } catch (err) {
+    const v = classifyProbeError(err);
+    warn(`Status konnte nicht abgerufen werden (${v.kind}${v.code ? `, ${v.code}` : ''})`);
+    if (v.likelyUp) info(v.hint);
   }
 
   // 3. Agent Card
