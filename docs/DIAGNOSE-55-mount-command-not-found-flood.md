@@ -56,9 +56,12 @@ cat cap2.err    # -> leer
 unterdrückt (deshalb kein Flood auf TH01/Linux), der darwin-Pfad (Schritt 2) aber nicht.
 
 ## 4. Fix (in diesem PR)
-`/usr/sbin:/sbin` an **alle** Service-Unit-PATHs angehängt (macOS-Default-PATH enthält beide):
-- `scripts/service/com.thinklocal.daemon.plist.template`, `…plist`, `packages/cli/src/thinklocal.ts` (macOS)
-- `scripts/install.sh` (2×), `scripts/service/thinklocal-daemon.service` (systemd, Konsistenz/Defense-in-Depth)
+`/usr/sbin:/sbin` an **alle 7** Service-Unit-PATHs angehängt (macOS-Default-PATH enthält beide):
+- macOS-Plist: `scripts/service/com.thinklocal.daemon.plist.template:38`, `…plist:25`,
+  CLI-launchd-Generator `packages/cli/src/thinklocal.ts:1321`
+- systemd: `scripts/install.sh` (2×: :459/:519), `scripts/service/thinklocal-daemon.service:18`,
+  CLI-systemd-Generator `packages/cli/src/thinklocal.ts:1387` (Linux-Source-of-Truth, CR-MEDIUM nachgezogen)
+  — Konsistenz/Defense-in-Depth (Linux-Pfad flutet nicht, s. §2).
 - Regression-Test: `launchd-plist.test.ts` prüft, dass die gerenderte Plist-PATH `:/sbin` + `:/usr/sbin` enthält.
 
 **Bewusst NICHT geändert:** das Upstream-`systeminformation`-Verhalten (execSync ohne `ignore`) — das ist
@@ -75,8 +78,9 @@ tail -n 200 ~/.thinklocal/logs/daemon.error.log | grep -c "command not found"   
 Diese Live-Verifikation ist der finale Beweis und gehört in den Deploy-Schritt (Fenster/Christian-gated).
 
 ## 6. Artefakte
-- PATH-Defizit (vorher): `com.thinklocal.daemon.plist.template:38`, `…plist:25`, `thinklocal.ts:1321`,
-  `install.sh:459/519`, `thinklocal-daemon.service:18`.
+- PATH-Defizit (vorher, 7 Stellen): `com.thinklocal.daemon.plist.template:38`, `…plist:25`,
+  `thinklocal.ts:1321` (launchd) + `thinklocal.ts:1387` (systemd), `install.sh:459/519`,
+  `thinklocal-daemon.service:18`.
 - Flut-Quelle: `systeminformation/lib/filesystem.js:130-152` (darwin `execSync('mount')`/`('diskutil list')`),
   `util.js:61` (Linux `ignore`-Kontrast).
 - Treiber: `index.ts:1129` (Resource-Refresh-Timer), `agent-card.ts:484`, `system-monitor.ts:40/126`.
