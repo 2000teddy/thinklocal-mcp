@@ -8,6 +8,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs(TL-11): Wake-Consumer-Contract-Spec + TODO-Wahrheit (KW30 proof→autonomy) (2026-07-16 15:45)
+Repo-Wahrheit-Check TL-11: Slice A (ADR-043, #271) + §4 directed-wake (#277) sind gemergt → `agent:wake`
+trägt `spiffe_uri` und wird **gerichtet** zugestellt; die TODO-„Backlog-Befunde" (Leak D1 + Mis-Routing D2)
+waren dadurch **bereits geschlossen** (TODO war stale). Fehlend war die **implementierbare Consumer-
+Schnittstelle** für den Out-of-Repo Agent-Home-Supervisor (TL-11 Slice B, extern-blocked). Neu
+`docs/architecture/TL-11-wake-consumer-contract.md`: WS-Endpunkt am mTLS-`cardServer` (Client-Cert-Pflicht),
+Subscribe `?subscribe=agent:wake&agent=<spiffe>` (directed deny-by-default), Zero-Content-Payload-Schema
+`{instance_id,spiffe_uri,reason:'inbox'}`, Semantik (best-effort/lossy/idempotent/coalesced ≤1·2000ms/
+fail-closed), Referenz-Loop + Cold-Start-Sweep, **jede Garantie auf einen benannten Test gemappt** (§7).
+**Kein Code**, kein neuer Beschluss (aus #271/#277 abgeleitet). **De-riskt** Slice B (Supervisor gegen
+fixen Kontrakt baubar), ohne den extern-blockierten letzten Hop (Supervisor→CLI) zu bauen. TODO-TL-11-Block
+reconciliert.
+
 ### feat(status): `peers_known`/`peers_offline` — Phantom-ROT von unten sichtbar (KW29 Bug-Pfad 1) (2026-07-16 14:50)
 `/api/status` exponierte nur `peers_online` (`getOnlinePeers().length`, `status==='online'`). Der Online-
 Status hängt allein am **ausgehenden** HTTP-Heartbeat (`checkPeers` → `fetch(.../health, {dispatcher:

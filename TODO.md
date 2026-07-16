@@ -112,17 +112,27 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     kein Broadcast; Coalescer; Zero-Content `WakeSignal`), verdrahtet: `inbox:new`+`to_agent_instance` →
     `agent:wake`-Event über Registry-Fanout. Transport = WS-`inbox:new`-Reuse (best-effort/lossy/idempotent).
     **Kein neuer Transport.** +14 Tests. CR: 6 Invarianten PASS, 2 LOW in-slice gefixt.
+  - [x] **TL-11 §4 directed-wake** (#277, b459bdf): `agent:wake` ist jetzt ein **gerichtetes** Event —
+    Payload trägt `spiffe_uri` (fail-closed ohne SPIFFE), WS liefert es NUR an einen Client, dessen
+    `agentFilter` `spiffe_uri`/`instance_id` matcht, **nie** an Ungefilterte. **Schließt die beiden
+    Backlog-Befunde** (Leak D1 + Mis-Routing D2) aus dem vorigen Eintrag — beide bewacht (`websocket.test.ts:92,97,102,107,112`).
+  - [x] **TL-11 Consumer-Contract-Spec** (2026-07-16): `docs/architecture/TL-11-wake-consumer-contract.md`
+    — implementierbare Schnittstelle für den Out-of-Repo-Supervisor (WS `/ws` mTLS-Pflicht, Subscribe
+    `?subscribe=agent:wake&agent=<spiffe>`, Zero-Content-Payload-Schema, best-effort/lossy/coalesced-Semantik,
+    Referenz-Loop, jede Garantie testgebunden). **De-riskt** Slice B, ohne den externen Hop zu bauen; kein
+    neuer Beschluss (aus gemergtem #271/#277-Code abgeleitet).
   - [ ] **TL-11 Slice B** (extern-blocked): Out-of-Repo Agent-Home-Supervisor konsumiert `agent:wake` →
-    weckt CLI; **Zwei-Peer-Live-Proof** (CLI-Reaktion ohne dazwischenliegenden Poll). Optional: WS-Instanz-
-    Bindung (instanceId-Metadaten-Leak schließen), Opt-in-Broadcast-Wake, Reconciliation-Sweep.
-    - **Backlog-Befund (2026-07-16, verifiziert):** `agent:wake` trägt nur `{instance_id,reason}` — keine
-      `from/to/agentId/peer_id`. Folgen an `websocket.ts`: (1) **Leak** — `eventBus.onAny` (`websocket.ts:210`)
-      pusht `agent:wake` an jeden *ungefilterten* Dashboard-Client (`matchesSubscription` :45 lässt es durch),
-      d.h. der Ziel-`instance_id` wird breit sichtbar; (2) **Mis-Routing** — ein Loopback-Supervisor mit
-      `agent=<URI>`-Filter matcht NIE (`matchesSubscription` keyt nur auf from/to/agentId/peer_id :52-54),
-      also kann der eigentliche Konsument sein Wake gar nicht abonnieren. Fix-Skizze: `agent:wake` als
-      *directed* Event behandeln (nur an passenden agentFilter-Client, nie an Ungefilterte) + `spiffeUri`
-      der Instanz (`AgentRegistryEntry.spiffeUri`) in den Payload, damit der Filter greift. Schließt beide.
+    weckt CLI (`pokeCli`); **Zwei-Peer-Live-Proof** (CLI-Reaktion ohne dazwischenliegenden Poll). Gegen den
+    fixen Consumer-Contract (s.o.) baubar. **Echter Blocker:** der letzte Hop (Supervisor → CLI) ist
+    out-of-repo + Deploy/Host-gated (vgl. `[[dod-two-peer-mcp-proof]]`, `[[week1-remote-restart-rollout]]`).
+    Optional/danach: WS-Instanz-Bindung, Opt-in-Broadcast-Wake, Reconciliation-Sweep.
+  - [ ] 🟠 **TL-11 Sicherheits-Härtung: Frame-Pfad umgeht Loopback-Gate** (entdeckt 2026-07-16, mit Beleg) —
+    der `4003`-Loopback-Gate für agent-gefilterte Subscriptions prüft nur `query.agent` beim Connect
+    (`websocket.ts:138-145`); der Frame-Pfad `{type:'subscribe',agent:…}` setzt `state.agentFilter` **ohne**
+    Loopback-Check (`websocket.ts:187-189`) → ein Nicht-Loopback-mTLS-Peer kann ohne `?agent=` verbinden und
+    per Frame fremde `agent:wake` abonnieren (Event-Snooping-Schutz umgehbar). **Entscheidung nötig:** strikt
+    loopback-only vs. „jeder mTLS-Peer darf filtern"; falls loopback-only → Frame-Handler-Gate nachziehen
+    (`isLoopback` in `ClientState` am Connect + Prüfung im subscribe-Frame, `4003`). Doc: `TL-11-wake-consumer-contract.md` §8.1. Eigener Slice (TS+CR).
 - [ ] **[v5.1] TL-13 (≈1 h je Rechner + ⛔ Fenster)** Re-Enroll .56/.222/.94 → `node/<PeerID>`; danach
   Duldungs-Ende Alt-Format aktivieren (Entsch. 17, spätestens **01.08.**). ↔ vgl. „Produktiv-Flotten-Flip"
   + `TLMCP_STRICT_IDENTITY`.
