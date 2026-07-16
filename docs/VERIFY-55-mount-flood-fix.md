@@ -54,24 +54,31 @@ sudo launchctl print system/com.thinklocal.daemon | grep -A1 -i 'PATH'
 /sbin/mount >/dev/null 2>&1 && echo "mount ok"
 /usr/sbin/diskutil list >/dev/null 2>&1 && echo "diskutil ok"
 # (c) KEINE neuen Flood-Zeilen seit dem Restart — mind. 2 Resource-Refresh-Intervalle abwarten.
-#     Nur die NACH dem Byte-Offset angehängten Bytes zählen (positions-, nicht zeitstempelbasiert →
-#     erfasst auch die untimestamped "command not found"-Zeilen zuverlässig):
+#     Post-Restart-Bytes zählen (positions-, nicht zeitstempelbasiert → erfasst auch untimestamped
+#     "command not found"-Zeilen). Rotation/Truncation MUSS im Check selbst behandelt werden, sonst
+#     liest tail hinter dem Dateiende und meldet fälschlich 0 (Codex-Review #274):
 sleep 120
-tail -c +$((err_off + 1)) "$LOG" | grep -c "command not found"
-#     Falls der Log beim Restart rotiert/getruncatet wurde (neue Datei kleiner als err_off), stattdessen
-#     die ganze frische Datei zählen — ebenfalls robust, da sie dann NUR Post-Restart-Inhalt hat:
-#       [ "$(wc -c < "$LOG")" -lt "$err_off" ] && grep -c "command not found" "$LOG"
+now=$(wc -c < "$LOG" 2>/dev/null || echo 0)
+if [ "$now" -lt "$err_off" ]; then
+  # Log wurde beim Restart rotiert/getruncatet → die frische Datei enthält NUR Post-Restart-Inhalt:
+  new_flood=$(grep -c "command not found" "$LOG")
+else
+  # Append-Fall → nur die nach err_off angehängten Bytes:
+  new_flood=$(tail -c +$((err_off + 1)) "$LOG" | grep -c "command not found")
+fi
+echo "new_flood=$new_flood"     # DoD (c): muss 0 sein
 # (d) Positiv-Nachweis, dass fsSize jetzt Disk-Daten liefert (vorher leer):
 curl -s --cert <peer.crt> --key <peer.key> --cacert <ca.crt> https://127.0.0.1:9440/api/status \
   | grep -o '"resources":[^}]*'          # resources/disk-Felder gefüllt statt null/0
 ```
 
 ## 4. Definition of Done
-- **(c) ergibt `0`** — keine neuen `command not found`-Zeilen nach dem Restart (mind. 2 Poll-Intervalle).
+- **(c) `new_flood=0`** — keine neuen `command not found`-Zeilen nach dem Restart (mind. 2 Poll-Intervalle);
+  der Check behandelt Append **und** Rotation/Truncation inline, meldet also kein false-zero bei Log-Shrink.
 - **(a)** PATH enthält `/sbin` **und** `/usr/sbin`; **(b)** `mount ok` + `diskutil ok`.
 - Optional **(d):** Disk-Metriken in `/api/status`/Dashboard nicht mehr leer (Sekundär-Symptom behoben).
 
-Ergebnis (Count, PATH-Zeile, Restart-Timestamp) im Deploy-Schritt / PR-Body dokumentieren — damit ist
+Ergebnis (`new_flood`, PATH-Zeile, `err_off`) im Deploy-Schritt / PR-Body dokumentieren — damit ist
 Bug-Pfad 2 **end-to-end** geschlossen (Repo-Fix #273 + Live-Beleg).
 
 ## 5. Rollback
