@@ -63,6 +63,19 @@ describe('renderLaunchDaemonPlist', () => {
     expect(out).toContain('<string>staff</string>'); // GroupName
   });
 
+  it('PATH enthält /sbin + /usr/sbin (macOS mount/diskutil) — Bug-Pfad 2: kein mount-command-not-found-Flood', () => {
+    // Regression: systeminformation.fsSize() ruft auf darwin execSync('mount') + execSync('diskutil list')
+    // OHNE stderr-Unterdrückung (Node execSync erbt stderr an den Parent) → fehlt /sbin (mount) bzw.
+    // /usr/sbin (diskutil) im Unit-PATH, flutet "mount: command not found" den daemon.error.log bei
+    // jedem Resource-Refresh. macOS-Default-PATH enthält beide.
+    const out = renderLaunchDaemonPlist(TEMPLATE, validCtx());
+    // Nur die PATH-Zeile (colon-separiert, enthält /usr/local/bin) — nicht die node-ProgramArguments-Zeile.
+    const pathLine = out.split('\n').find((l) => l.includes('/usr/local/bin:'));
+    expect(pathLine).toBeDefined();
+    expect(pathLine).toContain(':/sbin');
+    expect(pathLine).toContain(':/usr/sbin');
+  });
+
   it('setzt UserName/GroupName (LaunchDaemon läuft NICHT als root)', () => {
     const out = renderLaunchDaemonPlist(TEMPLATE, validCtx());
     expect(out).toMatch(/<key>UserName<\/key>\s*<string>svc-thinklocal<\/string>/);

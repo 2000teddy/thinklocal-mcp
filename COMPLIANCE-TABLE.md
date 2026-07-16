@@ -1758,4 +1758,14 @@ CHANGES.md, `changes/2026-07-07_doc-compliance-gate.md`, dieser Eintrag; Rollen/
 
 ---
 
-*Letzte Aktualisierung: 2026-07-16 07:14 — fix(cli): TLS/mTLS-Reset von „down" unterscheiden (KW29 Bug-Pfad 1).*
+## Sweep 2026-07-16 07:48 — fix(service): /sbin+/usr/sbin in Unit-PATH (KW29 Bug-Pfad 2)
+
+| #        | PR    | Datum            | CO  | CG  | TS  | CR  | PC  | DO | Findings                           |
+|----------|-------|------------------|-----|-----|-----|-----|-----|----|------------------------------------|
+| #273 | (offen, base=main) | 2026-07-16 07:48 | — | n/a | ✅ | ✅ | ✅ | ✅ | **Reiner Bug-Fix → CO/CG entfallen.** `.55` (macOS) mount-Flood: Unit-PATH ohne `/sbin`+`/usr/sbin` → `systeminformation.fsSize()` `execSync('mount')`/`('diskutil list')` auf darwin **ohne** stderr-`ignore` (anders als Linux-Pfad) → Node `execSync` erbt Child-stderr → `command not found` in `StandardErrorPath`, periodisch (Resource-Refresh + agent-card + system-monitor) = Flut. Fix: `/usr/sbin:/sbin` an **alle 7** Unit-PATH-Stellen. TS: +1 Regression (`launchd-plist.test.ts` PATH `:/sbin`+`:/usr/sbin`), **1767 grün**, `bash -n` OK, Mechanismus lokal bewiesen (execSync-stderr-Erbe vs. `ignore`). CR: adversarialer Claude — Kette **bestätigt** (execSync-Default-Erbe; darwin unsuppressed; mount/diskutil in /sbin,/usr/sbin); Append sicher; **1 MEDIUM** (7. PATH-Stelle `thinklocal.ts:1387`) + 1 LOW (Count 6→7) **in-slice gefixt**. PC: Secret-Scan clean. |
+
+**Typ:** Service-Unit-Config-Fix + Diagnose-Doku + Regression-Test. `.55`-Live-Bestätigung (`daemon.error.log`→0 nach Neustart) ist deploy-gated (Fenster). **DO:** `docs/DIAGNOSE-55-mount-command-not-found-flood.md`, `CHANGES.md`, `changes/2026-07-16_service-unit-path-sbin.md`, dieser Eintrag.
+
+---
+
+*Letzte Aktualisierung: 2026-07-16 07:48 — fix(service): /sbin+/usr/sbin in Unit-PATH (KW29 Bug-Pfad 2).*

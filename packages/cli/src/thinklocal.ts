@@ -1318,7 +1318,7 @@ function installLaunchdService(
         <key>TLMCP_BIND_HOST</key>
         <string>${xmlEscape(runtime.bindHost)}</string>
         <key>PATH</key>
-        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>${Object.entries(loadServiceEnvVars()).map(([k, v]) => `
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>${Object.entries(loadServiceEnvVars()).map(([k, v]) => `
         <key>${xmlEscape(k)}</key>
         <string>${xmlEscape(v)}</string>`).join('')}
     </dict>
@@ -1384,7 +1384,7 @@ Environment=${systemdEscape(`TLMCP_CONFIG=${configPath}`)}
 Environment=${systemdEscape(`TLMCP_DATA_DIR=${DATA_DIR}`)}
 Environment=${systemdEscape(`TLMCP_RUNTIME_MODE=${runtime.mode}`)}
 Environment=${systemdEscape(`TLMCP_BIND_HOST=${runtime.bindHost}`)}
-Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+Environment="PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 Environment="NODE_ENV=production"
 ${Object.entries(loadServiceEnvVars()).map(([k, v]) => `Environment=${systemdEscape(`${k}=${v}`)}`).join('\n')}
 WorkingDirectory=${systemdEscape(INSTALL_DIR)}
