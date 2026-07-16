@@ -34,7 +34,7 @@ import type { AgentInbox } from './agent-inbox.js';
 import type { MeshManager } from './mesh.js';
 import type { RateLimiter } from './ratelimit.js';
 import type { Logger } from 'pino';
-import { normalizeAgentId, SpiffeUriError, SPIFFE_COMPONENT_REGEX } from './spiffe-uri.js';
+import { normalizeAgentId, getAgentInstance, SpiffeUriError, SPIFFE_COMPONENT_REGEX } from './spiffe-uri.js';
 import type { MeshEventBus } from './events.js';
 import type { AgentRegistry } from './agent-registry.js';
 import type { PairingStore } from './pairing.js';
@@ -235,6 +235,8 @@ export function registerInboxApi(server: FastifyInstance, deps: InboxApiDeps): v
           message_id: messageId,
           subject: body.subject ?? null,
           to: body.to,
+          // ADR-043 (TL-11): Ziel-Instanz für den Wake-Emitter (additiv; null = daemon-level → kein Wake).
+          to_agent_instance: getAgentInstance(body.to) ?? null,
         });
       }
       return {

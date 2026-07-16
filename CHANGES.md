@@ -8,6 +8,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat: ADR-043 Heartbeat-Weckruf-Kontrakt (TL-11 Slice A) (2026-07-15 18:49)
+Daemon-seitiger Wake-Kontrakt + edge-driven per-Instanz-Fanout, **kein neuer Transport**. Neu:
+`wake-contract.ts` — `resolveWakeTargets` (**fail-closed**: unadressiert/nicht-live → `[]`, **kein
+Broadcast**), `WakeCoalescer` (per-Instanz-Dedup im Fenster, bounded), inhaltsfreies `WakeSignal`,
+`registerWakeEmitter` (abonniert `inbox:new`, emittiert `agent:wake` an die adressierte live Instanz).
+`inbox:new` trägt jetzt additiv `to_agent_instance` (Loopback); neuer `MeshEventType` `agent:wake`.
+Transport = Reuse des bestehenden WS-`inbox:new`-Push; der letzte Hop in den CLI + Zwei-Peer-Live-Proof
+bleiben extern-blocked (Out-of-Repo Agent-Home-Supervisor). CO: `pal:consensus` (opus+sonnet). CR: 6
+Invarianten PASS, 2 LOW gefixt. +14 Tests, 1692 grün.
+
 ### feat(security): ADR-042 Live-Drift-Check + Gate-Flip-Blocker (TL-08 Slice 2c, partiell) (2026-07-15 17:44)
 Der TL-08-Gate-Flip (sensitive → allow-with-redaction) ist **BLOCKED**: die 10 sensitiven unifi-Tools
 haben kein `outputSchema` → eine kuratierte Safe-Field-Allowlist ist nur per Tool-Aufruf (= Secret-
