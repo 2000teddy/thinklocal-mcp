@@ -115,14 +115,13 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
   - [ ] **TL-11 Slice B** (extern-blocked): Out-of-Repo Agent-Home-Supervisor konsumiert `agent:wake` →
     weckt CLI; **Zwei-Peer-Live-Proof** (CLI-Reaktion ohne dazwischenliegenden Poll). Optional: WS-Instanz-
     Bindung (instanceId-Metadaten-Leak schließen), Opt-in-Broadcast-Wake, Reconciliation-Sweep.
-    - **Backlog-Befund (2026-07-16, verifiziert):** `agent:wake` trägt nur `{instance_id,reason}` — keine
-      `from/to/agentId/peer_id`. Folgen an `websocket.ts`: (1) **Leak** — `eventBus.onAny` (`websocket.ts:210`)
-      pusht `agent:wake` an jeden *ungefilterten* Dashboard-Client (`matchesSubscription` :45 lässt es durch),
-      d.h. der Ziel-`instance_id` wird breit sichtbar; (2) **Mis-Routing** — ein Loopback-Supervisor mit
-      `agent=<URI>`-Filter matcht NIE (`matchesSubscription` keyt nur auf from/to/agentId/peer_id :52-54),
-      also kann der eigentliche Konsument sein Wake gar nicht abonnieren. Fix-Skizze: `agent:wake` als
-      *directed* Event behandeln (nur an passenden agentFilter-Client, nie an Ungefilterte) + `spiffeUri`
-      der Instanz (`AgentRegistryEntry.spiffeUri`) in den Payload, damit der Filter greift. Schließt beide.
+    - **Wake-Routing (Design fertig 2026-07-16):** `docs/architecture/TL-11-wake-routing.md` nagelt den
+      directed-Wake-Routing-Kontrakt + Mailbox-Check-Flow für registrierte Agenten fest. Verifizierte Defekte:
+      (1) **Leak** — `agent:wake` `{instance_id,reason}` erreicht via `eventBus.onAny` (`websocket.ts:210`) jeden
+      *ungefilterten* Client (`matchesSubscription` :45 keyt nur auf from/to/agentId/peer_id); (2) **Mis-Routing**
+      — ein `agent=<URI>`-Filter matcht `agent:wake` NIE → unroutbar. **Design:** `agent:wake` = *directed*
+      Event (nie an Ungefilterte, match auf `instance_id`/`spiffe_uri`) + `spiffe_uri` (aus
+      `AgentRegistryEntry.spiffeUri`) im Payload. Folge-Code-Slice mit exaktem Testplan in §4 des Docs.
 - [ ] **[v5.1] TL-13 (≈1 h je Rechner + ⛔ Fenster)** Re-Enroll .56/.222/.94 → `node/<PeerID>`; danach
   Duldungs-Ende Alt-Format aktivieren (Entsch. 17, spätestens **01.08.**). ↔ vgl. „Produktiv-Flotten-Flip"
   + `TLMCP_STRICT_IDENTITY`.
