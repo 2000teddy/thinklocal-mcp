@@ -8,6 +8,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### fix(service): /sbin+/usr/sbin in Unit-PATH — `.55` mount-Flood (KW29 Bug-Pfad 2) (2026-07-16 07:48)
+Auf `.55` (macOS/launchd) flutete `mount: command not found` den `daemon.error.log`. **Verifizierte Kette:**
+Service-Unit-PATH ohne `/sbin`+`/usr/sbin` → `systeminformation.fsSize()` ruft auf darwin
+`execSync('mount')`+`execSync('diskutil list')` **ohne** stderr-Unterdrückung (anders als der Linux-Pfad mit
+`stdio:'ignore'`) → Node `execSync` **erbt** die Child-stderr an den Parent → `command not found` landet im
+`StandardErrorPath`. `fsSize()` läuft periodisch (Resource-Refresh-Timer + agent-card + system-monitor) → Flut.
+`mount`=`/sbin/mount`, `diskutil`=`/usr/sbin/diskutil` — beide fehlten im PATH. **Fix:** `/usr/sbin:/sbin` an
+**alle 7** Unit-PATH-Definitionen (macOS-Plist-Template + committed Plist + CLI-launchd-Generator; systemd
+`install.sh` 2× + `.service` + CLI-systemd-Generator). Regression-Test in `launchd-plist.test.ts`. Mechanismus
+lokal bewiesen (execSync-stderr-Erbe; Linux-Pfad unterdrückt); Live-Bestätigung auf `.55` (Log→0) deploy-gated.
+Evidence: `docs/DIAGNOSE-55-mount-command-not-found-flood.md`. CR: adversarial — Kette bestätigt, 1 MEDIUM (7.
+PATH-Stelle) nachgezogen.
+
 ### fix(cli): TLS/mTLS-Reset von „down" unterscheiden — Phantom-ROT (KW29 Bug-Pfad 1) (2026-07-16 07:14)
 `tl check` (`cmdCheck`) meldete **jeden** `fetch`-Fehler gegen `/health` + `/api/status` pauschal als
 „Daemon nicht erreichbar" — obwohl beide Endpunkte am mTLS-`cardServer` hängen
