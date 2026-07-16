@@ -49,36 +49,45 @@ sudo launchctl kickstart -k system/com.thinklocal.daemon
 
 ## 3. Bestätigen
 ```bash
-# (a) Effektiver PATH enthält jetzt /sbin + /usr/sbin:
+# (a) PFLICHT-LIVENESS: der Daemon MUSS nach dem Restart laufen. Ohne diesen Nachweis ist ein
+#     new_flood=0 bedeutungslos (0 aus einem TOTEN Daemon = false PASS). Harte DoD-Vorbedingung.
+if sudo launchctl print system/com.thinklocal.daemon 2>/dev/null | grep -qE 'state = running'; then
+  alive=1; else alive=0; fi
+echo "alive=$alive"                       # DoD (a): MUSS 1 sein
+[ "$alive" = 1 ] || echo "STOP: Daemon läuft nicht — new_flood ist ungültig; Start/Fehler prüfen"
+
+# (b) Effektiver PATH enthält jetzt /sbin + /usr/sbin:
 sudo launchctl print system/com.thinklocal.daemon | grep -A1 -i 'PATH'
-# (b) Die Binaries sind unter dem neuen PATH auflösbar:
+# (c) Die Binaries sind unter dem neuen PATH auflösbar:
 /sbin/mount >/dev/null 2>&1 && echo "mount ok"
 /usr/sbin/diskutil list >/dev/null 2>&1 && echo "diskutil ok"
-# (c) KEINE neuen Flood-Zeilen seit dem Restart — mind. 2 Resource-Refresh-Intervalle abwarten.
-#     $LOG wurde in §2 weggerückt → die vom neuen Daemon angelegte Datei enthält AUSSCHLIESSLICH
-#     Post-Restart-Inhalt. Ein simpler Vollzähler ist damit eindeutig — kein Offset, keine Rotation/
-#     Truncation-Sonderfälle, kein false-zero:
+
+# (d) KEINE neuen Flood-Zeilen seit dem Restart — mind. 2 Resource-Refresh-Intervalle abwarten.
+#     $LOG wurde in §2 weggerückt → die frische Datei enthält AUSSCHLIESSLICH Post-Restart-Inhalt.
+#     ACHTUNG grep -c: bei 0 Treffern gibt es "0" aus UND exitet mit 1 → KEIN `|| echo 0` anhängen
+#     (das ergäbe "0\n0"). `|| true` + `${:-0}` liefert genau EINE 0 (auch bei fehlender Datei):
 sleep 120
-new_flood=$(grep -c "command not found" "$LOG" 2>/dev/null || echo 0)
-echo "new_flood=$new_flood"     # DoD (c): muss 0 sein
-# Sanity: der Daemon läuft wirklich (frische $LOG existiert / (a) zeigt loaded) — sonst wäre 0 aus
-# einem toten Daemon, nicht aus einem behobenen Flood.
-[ -f "$LOG" ] && echo "frische $LOG vorhanden" || echo "WARN: keine $LOG — (a) prüfen, ob Daemon läuft"
-# (d) Positiv-Nachweis, dass fsSize jetzt Disk-Daten liefert (vorher leer):
+new_flood=$(grep -c "command not found" "$LOG" 2>/dev/null || true)
+new_flood=${new_flood:-0}
+echo "new_flood=$new_flood"               # DoD (d): MUSS 0 sein — nur gültig, wenn alive=1
+
+# (e) Positiv-Nachweis, dass fsSize jetzt Disk-Daten liefert (vorher leer):
 curl -s --cert <peer.crt> --key <peer.key> --cacert <ca.crt> https://127.0.0.1:9440/api/status \
   | grep -o '"resources":[^}]*'          # resources/disk-Felder gefüllt statt null/0
 ```
 
-## 4. Definition of Done
-- **(c) `new_flood=0`** — keine neuen `command not found`-Zeilen in der frischen `$LOG` (mind. 2
-  Poll-Intervalle). Der weggerückte Alt-Log (`$LOG.pre-fix`) belegt den Vorher-Zustand; der Zähler ist
-  offset-/rotationsfrei und kann daher nicht false-zero werden.
-- **(a)** PATH enthält `/sbin` **und** `/usr/sbin`; **(b)** `mount ok` + `diskutil ok`; frische `$LOG` existiert
-  (Daemon läuft wirklich → 0 stammt nicht von einem toten Daemon).
-- Optional **(d):** Disk-Metriken in `/api/status`/Dashboard nicht mehr leer (Sekundär-Symptom behoben).
+## 4. Definition of Done (ALLE Pflicht-Punkte müssen zutreffen)
+- **(a) `alive=1` — PFLICHT-Vorbedingung.** Der Daemon läuft nach dem Restart (`launchctl … state = running`).
+  Ist `alive≠1`, ist **(d) ungültig** — ein `new_flood=0` aus einem toten Daemon ist ein false PASS und zählt
+  **nicht**.
+- **(d) `new_flood=0`** — keine neuen `command not found`-Zeilen in der frischen `$LOG` (mind. 2
+  Poll-Intervalle), **nur gültig bei `alive=1`**. Der Zähler ist offset-/rotationsfrei (§2 mv) und liefert
+  dank `|| true`/`${:-0}` genau eine `0` (kein `0\n0`); `$LOG.pre-fix` belegt den Vorher-Zustand.
+- **(b)** PATH enthält `/sbin` **und** `/usr/sbin`; **(c)** `mount ok` + `diskutil ok`.
+- Optional **(e):** Disk-Metriken in `/api/status`/Dashboard nicht mehr leer (Sekundär-Symptom behoben).
 
-Ergebnis (`new_flood`, PATH-Zeile, Pfad des `$LOG.pre-fix`-Belegs) im Deploy-Schritt / PR-Body dokumentieren
-— damit ist Bug-Pfad 2 **end-to-end** geschlossen (Repo-Fix #273 + Live-Beleg).
+Ergebnis (`alive`, `new_flood`, PATH-Zeile, Pfad des `$LOG.pre-fix`-Belegs) im Deploy-Schritt / PR-Body
+dokumentieren — damit ist Bug-Pfad 2 **end-to-end** geschlossen (Repo-Fix #273 + Live-Beleg).
 
 ## 5. Rollback
 `plutil -replace … -string "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"` + `kickstart -k`. Risiko minimal:
