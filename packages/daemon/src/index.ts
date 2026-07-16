@@ -1104,6 +1104,8 @@ async function main(): Promise<void> {
   registerWakeEmitter({
     eventBus: eventBus as unknown as WakeEventBus,
     listInstances: () => agentRegistry.list().map((e) => e.instanceId),
+    // TL-11 Wake-Routing: Instanz → SPIFFE, damit `agent:wake` gerichtet/routbar ist (fail-closed).
+    resolveSpiffe: (id) => agentRegistry.get(id)?.spiffeUri ?? null,
     coalescer: wakeCoalescer,
     now: () => Date.now(),
     log,

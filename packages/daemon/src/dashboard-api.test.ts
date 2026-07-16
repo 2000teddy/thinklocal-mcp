@@ -131,7 +131,7 @@ describe('GET /api/status — T2.4-Folge: Self-Resources für least-loaded-Routi
         daemon: { hostname: 'self', port: 9440, bind_host: '0.0.0.0', runtime_mode: 'lan', tls_enabled: true, agent_type: 'claude-code' },
         libp2p: { enabled: false, listen_port: 0 },
       },
-      mesh: { getOnlinePeers: () => [] },
+      mesh: { getOnlinePeers: () => [], getPeerCounts: () => ({ known: 0, online: 0, offline: 0 }) },
       registry: { getAllCapabilities: () => [], getNodeResources },
       tasks: { getActiveTasks: () => [] },
       audit: { append: vi.fn(), count: () => 0 },
@@ -154,6 +154,19 @@ describe('GET /api/status — T2.4-Folge: Self-Resources für least-loaded-Routi
     const { app } = buildApp(statusDeps(() => undefined));
     const res = await app.inject({ method: 'GET', url: '/api/status' });
     expect(res.json().resources).toBeNull();
+    await app.close();
+  });
+
+  it('exponiert peers_known/peers_offline aus getPeerCounts (Phantom-ROT-Observability, §9)', async () => {
+    // known>0 && online==0 ⇒ „Phantom-ROT von unten": bekannte, aber Heartbeat-offline Peers.
+    const deps = statusDeps(() => undefined);
+    (deps as { mesh: { getPeerCounts: () => unknown } }).mesh.getPeerCounts = () => ({ known: 6, online: 0, offline: 6 });
+    const { app } = buildApp(deps);
+    const res = await app.inject({ method: 'GET', url: '/api/status' });
+    const body = res.json();
+    expect(body.peers_online).toBe(0);
+    expect(body.peers_known).toBe(6);
+    expect(body.peers_offline).toBe(6);
     await app.close();
   });
 });

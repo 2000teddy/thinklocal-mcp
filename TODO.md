@@ -97,9 +97,14 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     (is_order typsystemisch unfälschbar, issuer===sender Relay-Schutz), `verifyStoredOrder` fail-closed,
     Ingest-Wiring + `ORDER_RX`/`ORDER_VERIFY_FAILED`-Audit, **Read-Surface: `GET /api/inbox` re-verifiziert
     live + surfaced `is_order`/`order`-Block** + Tri-State-Marker (`classifyInboundOrder`-Seam: malformed → INVALID+Audit, Reviewer #266). +37 Tests.
-  - [ ] **TL-12 Slice B**: **Ausführung** eines gelesenen Auftrags + Idempotenz-Ledger auf `order_nonce`;
-    TTL-Read-Semantik (Ingest honoriert TTL / Read provenienz-only) entscheiden; `trust_status`/Revocation
-    via `signer_keyid`.
+  - [~] **TL-12 Slice B**: **Ausführung** eines gelesenen Auftrags. **Scoping-Doku (CO 2026-07-16, opus+sonnet)
+    fertig:** `docs/architecture/TL-12-slice-b-execution-scoping.md` — Votum **B1 nicht starten**, bis Owner-Opt-in
+    + Epoch-Grenze entschieden. Korrigierte Zerlegung **B0→B1→B2a→B2b→B3**: B0 Executable-Profil (`ttl_ms>0`,
+    `order_type` aus `signed_bytes`, DER-SPKI-Keyid, Epoch-Grenze) → B1 Ledger `UNIQUE(signer_keyid,order_nonce)`
+    reserve-vor-dispatch/at-most-once → B2a TTL-strenger Execute-Resolver → B2b **neues** keyid-Denylist (NICHT
+    `crl.ts` — Fingerprint-gekeyt+unverdrahtet) → B3 Ausführung hinter allen Gates + per-signer Rate-Fence.
+    Offen (Christian): `[orders] execute` + `(signer_keyid×order_type)`-Allowlist, Epoch `T` vs. max-TTL,
+    ausführbare Startmenge, Revocation-Autorität. Human-Approval-Gate existiert noch nicht → sensible Typen = Deny.
   - [ ] **TL-12 Slice C**: first-class `MessageType='ORDER'` (Marker ablösen), sobald Peers ≥ dieser Version.
 - [~] **[v5.1] TL-11 (≈4 h)** Heartbeat-Weckruf (Entsch. 16): Daemon weckt Agenten; geweckter Agent prüft
   Mesh-Postfach. ↔ baut auf ADR-004.
@@ -203,6 +208,7 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
 - [ ] 🟡 **ADR-029: macOS-LaunchDaemon-Installer** — durable Start, Env-durable, KeepAlive/RunAtLoad, kein mystery-relauncher, FileVault-aware. (5-Tage-Plan B6.) **Repo-intern erledigt:** Doku/Template/Render-Kern (v0.34.21/#192), **Installer-Umbau `install.sh`→System-Domain + bootstrap + Uninstall (#196)**, Operator-Runbook (v0.34.27/#200), **Homebrew-Formel + USER-GUIDE angeglichen (v0.34.28/#201)**. **Offen nur noch (Christian-Deploy-Gate):** tatsächliches `install.sh`/`bootstrap system`-Ausführen + Service-User-Anlage + Live-Install/Reboot (FileVault).
 - [ ] 🟡 **Owner-wins Phase-2: signierte Per-Key-Origin-Provenance** (ADR-020 v2.2 Phase-2) — additiv, Schema-Feld `provenance` reserviert. Nötig falls Mesh sparse/partitioniert.
 - [ ] 🟡 **CLI-Join: request-lokaler TLS-Skip statt prozessweit** (v0.30.1) — undici-`Agent({connect:{rejectUnauthorized:false}})` + dispatcher; braucht undici als CLI-Dep.
+- [x] 🟡 **KW29 Bug-Pfad 1 — Phantom-ROT von unten (`peers_online=0` trotz bekannter Peers)** (2026-07-16 14:50) — `/api/status` exponierte nur `peers_online`; ein fehlschlagender **ausgehender** HTTP-Heartbeat (CA-Rotation/SAN/EHOSTUNREACH) markiert alle Peers `offline`, obwohl sie im Map bleiben → Board färbt ROT ohne „0 bekannt" von „N bekannt, 0 online" trennen zu können. ✅ **Sichtbar gemacht (PR-Slice `getPeerCounts` → `peers_known`/`peers_offline` auf `/api/status` + `mesh_status`; Live-Beleg TH01 6 known / 3 online; DIAGNOSE §9; CR APPROVE, 1706 grün).** **Offen (out of scope, Christian-gated):** das eigentliche Cert-/CA-/SAN-Heilen der Fleet (`mesh-ca-rotation-repair-all` / `th55-pathA-cert-san-blocker` / `th55-ehostunreach-host-routing`). Transport-Phantom-ROT (Konsument→Knoten) = #272.
 
 ## Code-Review beim dokumentieren entdeckt :
 

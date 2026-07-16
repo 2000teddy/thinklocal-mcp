@@ -1768,4 +1768,18 @@ CHANGES.md, `changes/2026-07-07_doc-compliance-gate.md`, dieser Eintrag; Rollen/
 
 ---
 
-*Letzte Aktualisierung: 2026-07-16 07:48 — fix(service): /sbin+/usr/sbin in Unit-PATH (KW29 Bug-Pfad 2).*
+## Sweep 2026-07-16 10:37 — feat(wake): agent:wake gerichtet + routbar (TL-11 §4 directed-wake)
+
+| #        | PR    | Datum            | CO  | CG  | TS  | CR  | PC  | DO | Findings                           |
+|----------|-------|------------------|-----|-----|-----|-----|-----|----|------------------------------------|
+| #277 | (offen, base=main) | 2026-07-16 10:37 | ⚠️ | n/a | ✅ | ✅ | ✅ | ✅ | CO: Design doc-first in `TL-11-wake-routing.md` (#276); directed-Mechanismus low-controversy + per CR bestätigt → separater `pal:consensus` für den Code-Slice entfiel bewusst. Macht den gemergten `agent:wake` (ADR-043) routbar + schließt Leak: Emit trägt `spiffe_uri` (fail-closed ohne SPIFFE), `agent:wake` = directed Event (nie an Ungefilterte = D1; match `instance_id`/`spiffe_uri` = D2). TS: +7 Tests (spiffe_uri-Payload, fail-closed, kein Leak, routbar, drop non-match, event-type-Filter, Regression nicht-directed); **1774 grün**, tsc 0, geänderte Dateien lint-clean. CR: adversarialer Claude — **APPROVE, 6 Invarianten PASS**; 1 LOW (Doku-Hinweis) inline. PC: Secret-Scan clean. |
+
+**Typ:** Daemon-Code + Tests (Umsetzung des #276-Designs). CLI-letzter-Hop + Zwei-Peer-Live-Proof bleiben extern-blocked. **DO:** `CHANGES.md`, `changes/2026-07-16_tl11-directed-wake.md`, `COMPLIANCE-TABLE.md`, dieser Eintrag.
+
+| #278 | (offen, base=main) | 2026-07-16 14:50 | — | n/a | ✅ | ✅ | ✅ | ✅ | **Additive Observability → CO/CG entfallen** (Design in `mesh.ts`-JSDoc + `DIAGNOSE §9` begründet). Phantom-ROT von unten: `/api/status` exponierte nur `peers_online` (`getOnlinePeers`, `status==='online'`); ausgehender HTTP-Heartbeat (`checkPeers`→`fetch(/health,{dispatcher:tlsDispatcher})`, `rejectUnauthorized:true`) schlägt bei CA-Rotation/SAN/EHOSTUNREACH fehl → Peers `offline`, bleiben aber im Map → `peers_online` sinkt bis 0 trotz bekannter Peers; extern nicht von „0 bekannt" trennbar. Live-Beleg TH01: `peers_online=3` vs agent-card `peers_connected=6` / libp2p `4`, Audit PEER_JOIN 958/LEAVE 834. Fix: neu `getPeerCounts()` (atomarer Snapshot, `known===online+offline`), `/api/status`+`mesh_status` liefern `peers_known`/`peers_offline` (additiv, nicht-brechend). TS: **+6 Tests** (5 getPeerCounts inkl. Invariante + worst-case known>0/online==0, 1 REST-Feld-Test); **1706 grün**, tsc(strict)/Source-Lint 0-neu. CR: adversarialer Claude — **APPROVE, keine HIGH/MEDIUM** (Invariante by-construction, `peerCounts.online===getOnlinePeers().length`, kein neuer Leak, Snapshot atomar; 1 LOW bewusst nicht gefixt; Reviewer lief 53 Tests+tsc). PC: `git diff`+Secret-Scan clean. Cert-/CA-Heilen der Fleet Christian-gated (out of scope). Folge-Slice zu #272. |
+
+**Typ:** Daemon-/UI-Code + Tests + Diagnose-Doku (KW29 Bug-Pfad 1, Datensicht). Cert-/CA-/SAN-Heilen (`mesh-ca-rotation-repair-all`/`th55-pathA-cert-san-blocker`/`th55-ehostunreach-host-routing`) bleibt Christian-gated. **DO:** `docs/DIAGNOSE-api-status-phantom-rot.md` §9, `docs/API-REFERENCE.md`, `CHANGES.md`, `TODO.md`, `changes/2026-07-16_peers-known-observability.md`, dieser Eintrag.
+
+---
+
+*Letzte Aktualisierung: 2026-07-16 10:37 — feat(wake): agent:wake gerichtet + routbar (TL-11 §4 directed-wake).*

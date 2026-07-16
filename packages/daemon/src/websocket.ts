@@ -40,6 +40,14 @@ interface ClientState {
 }
 
 /**
+ * Gerichtete (directed) Event-Typen (TL-11 Wake-Routing): werden **nur** an einen Client geliefert,
+ * dessen `agentFilter` das Ziel matcht — **nie** an einen ungefilterten Client (deny-by-default). Das
+ * schließt den `agent:wake`-Leak (Ziel-`instance_id` an alle Dashboards) und macht das Wake für den
+ * adressierten Agenten routbar. Siehe `docs/architecture/TL-11-wake-routing.md`.
+ */
+const DIRECTED_EVENT_TYPES = new Set<MeshEventType>(['agent:wake']);
+
+/**
  * Check whether a MeshEvent matches the client's subscription filter.
  */
 function matchesSubscription(event: MeshEvent, state: ClientState): boolean {
@@ -47,6 +55,17 @@ function matchesSubscription(event: MeshEvent, state: ClientState): boolean {
   if (state.subscribedEvents.size > 0 && !state.subscribedEvents.has(event.type)) {
     return false;
   }
+
+  // Gerichtetes Event: deny-by-default. Ohne agentFilter NIE liefern (kein Leak an Ungefilterte);
+  // mit agentFilter nur, wenn er die Ziel-Identität (`instance_id` ODER `spiffe_uri`) matcht.
+  // Hinweis (CR-LOW): der Event-Typ-Filter oben greift zuerst — ein Wake-Konsument MUSS `agent:wake`
+  // abonnieren (oder den Event-Filter weglassen), sonst wird sein Wake schon dort verworfen.
+  if (DIRECTED_EVENT_TYPES.has(event.type)) {
+    if (!state.agentFilter) return false;
+    const { instance_id, spiffe_uri } = event.data as Record<string, string | undefined>;
+    return state.agentFilter === instance_id || state.agentFilter === spiffe_uri;
+  }
+
   // Agent filter: check if `to` or `from` in data matches
   if (state.agentFilter) {
     const { from, to, agentId, peer_id } = event.data as Record<string, string | undefined>;

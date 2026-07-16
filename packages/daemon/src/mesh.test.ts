@@ -513,3 +513,55 @@ describe('ADR-026 authenticatedSeen-Isolation (Architektur)', () => {
     }
   });
 });
+
+describe('MeshManager.getPeerCounts — Phantom-ROT-Observability (Bug-Pfad 1, §9)', () => {
+  const A = 'spiffe://thinklocal/host/aaa/agent/claude-code';
+  const B = 'spiffe://thinklocal/host/bbb/agent/claude-code';
+  const C = 'spiffe://thinklocal/host/ccc/agent/claude-code';
+
+  it('leeres Mesh → alle Zähler 0', () => {
+    expect(mkMesh().getPeerCounts()).toEqual({ known: 0, online: 0, offline: 0 });
+  });
+
+  it('frisch hinzugefügte Peers sind online; known === online', () => {
+    const mesh = mkMesh();
+    mesh.addPeer(disc({ agentId: A }));
+    mesh.addPeer(disc({ agentId: B, host: '10.10.10.10' }));
+    expect(mesh.getPeerCounts()).toEqual({ known: 2, online: 2, offline: 0 });
+  });
+
+  it('bekannte-aber-offline Peers bleiben in known, fallen aus online (die Kern-Invariante)', () => {
+    const mesh = mkMesh();
+    mesh.addPeer(disc({ agentId: A }));
+    mesh.addPeer(disc({ agentId: B, host: '10.10.10.10' }));
+    mesh.addPeer(disc({ agentId: C, host: '10.10.10.11' }));
+    // Heartbeat-Fehlschlag simulieren: Peer bleibt im Map, nur status='offline'
+    // (genau wie handleMissedBeat nach missedBeatsThreshold; Peer wird NICHT gelöscht).
+    mesh.getPeer(B)!.status = 'offline';
+    expect(mesh.getPeerCounts()).toEqual({ known: 3, online: 2, offline: 1 });
+    // getOnlinePeers und getPeerCounts.online müssen konsistent sein
+    expect(mesh.getOnlinePeers().length).toBe(mesh.getPeerCounts().online);
+  });
+
+  it('worst case „Phantom-ROT von unten": alle bekannt, keiner online', () => {
+    const mesh = mkMesh();
+    mesh.addPeer(disc({ agentId: A }));
+    mesh.addPeer(disc({ agentId: B, host: '10.10.10.10' }));
+    mesh.getPeer(A)!.status = 'offline';
+    mesh.getPeer(B)!.status = 'unknown'; // 'unknown' zählt ebenfalls als nicht-online
+    const c = mesh.getPeerCounts();
+    expect(c).toEqual({ known: 2, online: 0, offline: 2 });
+    // Der diagnostische Diskriminator: known>0 && online==0 ⇒ Heartbeat/Cert, kein „down"
+    expect(c.known > 0 && c.online === 0).toBe(true);
+  });
+
+  it('Invariante known === online + offline für jede Zusammensetzung', () => {
+    const mesh = mkMesh();
+    mesh.addPeer(disc({ agentId: A }));
+    mesh.addPeer(disc({ agentId: B, host: '10.10.10.10' }));
+    mesh.addPeer(disc({ agentId: C, host: '10.10.10.11' }));
+    mesh.getPeer(C)!.status = 'offline';
+    const c = mesh.getPeerCounts();
+    expect(c.online + c.offline).toBe(c.known);
+  });
+});

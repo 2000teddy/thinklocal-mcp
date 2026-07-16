@@ -8,6 +8,31 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(status): `peers_known`/`peers_offline` — Phantom-ROT von unten sichtbar (KW29 Bug-Pfad 1) (2026-07-16 14:50)
+`/api/status` exponierte nur `peers_online` (`getOnlinePeers().length`, `status==='online'`). Der Online-
+Status hängt allein am **ausgehenden** HTTP-Heartbeat (`checkPeers` → `fetch(.../health, {dispatcher:
+tlsDispatcher})`, `rejectUnauthorized:true`); bei fehlschlagendem Heartbeat (CA-Rotation / fehlender IP-SAN
+/ EHOSTUNREACH — die bekannten Fleet-Blocker) fallen Peers nach `heartbeat_timeout_missed=3` auf `offline`,
+**bleiben aber im `peers`-Map**. Folge: `peers_online` sinkt bis 0, obwohl der Knoten die Peers weiter kennt
+→ ein naives Board färbt ROT, ohne „0 bekannt (echt allein)" von „N bekannt, 0 Heartbeat-online" trennen zu
+können. Live-Beleg (TH01): `peers_online=3` vs. agent-card `peers_connected=6` / libp2p `connected_peers=4`,
+Audit `PEER_JOIN 958 / PEER_LEAVE 834`. **Fix (additiv, nicht-brechend):** neu `MeshManager.getPeerCounts()`
+(ein atomarer Map-Snapshot: `known`/`online`/`offline`); `/api/status` + MCP-`mesh_status` liefern zusätzlich
+`peers_known` + `peers_offline`. Damit ist `peers_known>0 && peers_online==0` extern als Heartbeat-/Cert-
+Problem (kein „down") diagnostizierbar. Cert-/CA-Heilen bleibt Christian-gated (out of scope). +6 Tests,
+daemon-Suite **1706 grün**, tsc/Lint 0-neu. CR: adversarialer Claude — **APPROVE, keine HIGH/MEDIUM**.
+Doku: `docs/DIAGNOSE-api-status-phantom-rot.md` §9. Folge-Slice zu #272.
+
+### feat(wake): `agent:wake` gerichtet + routbar (TL-11 §4 directed-wake) (2026-07-16 10:37)
+Macht den gemergten `agent:wake`-Kontrakt (ADR-043) für registrierte Agenten **routbar** und schließt den
+Metadaten-Leak — Umsetzung des Designs aus `docs/architecture/TL-11-wake-routing.md`. Vorher: Payload
+`{instance_id,reason}` matchte keinen WS-Agent-Filter → (D1) ungefilterte Dashboard-Clients bekamen jedes Wake
+inkl. Ziel-`instance_id` (Leak), (D2) ein `agent=<uri>`-Filter matchte NIE (unroutbar). Neu: Emit trägt
+`spiffe_uri` (aus `AgentRegistry`, **fail-closed**: keine SPIFFE → kein Wake); `websocket.ts` behandelt
+`agent:wake` als **directed** Event — nie an ungefilterte Clients (deny-by-default, schließt D1), match auf
+`instance_id`/`spiffe_uri` (schließt D2); nicht-directed Events unverändert. +7 Tests, Suite 1774 grün. CR:
+6 Invarianten PASS, 1 LOW (Doku-Hinweis) inline. CLI-letzter-Hop + Zwei-Peer-Proof bleiben extern-blocked.
+
 ### fix(service): /sbin+/usr/sbin in Unit-PATH — `.55` mount-Flood (KW29 Bug-Pfad 2) (2026-07-16 07:48)
 Auf `.55` (macOS/launchd) flutete `mount: command not found` den `daemon.error.log`. **Verifizierte Kette:**
 Service-Unit-PATH ohne `/sbin`+`/usr/sbin` → `systeminformation.fsSize()` ruft auf darwin

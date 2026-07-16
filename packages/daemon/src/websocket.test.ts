@@ -85,6 +85,40 @@ describe('matchesSubscription', () => {
     const state = makeState({ agent: 'spiffe://thinklocal/host/abc/agent/x' });
     expect(matchesSubscription(makeEvent('system:startup', {}), state)).toBe(false);
   });
+
+  // ─── TL-11: directed event (agent:wake) ────────────────────────────
+  const SP = 'spiffe://thinklocal/host/h/agent/claude-code/instance/inst-a';
+
+  it('directed agent:wake: NEVER delivered to an unfiltered client (Leak zu, D1)', () => {
+    const state = makeState({}); // kein agentFilter → sonst „alles"
+    expect(matchesSubscription(makeEvent('agent:wake', { instance_id: 'inst-a', spiffe_uri: SP }), state)).toBe(false);
+  });
+
+  it('directed agent:wake: matcht agentFilter=spiffe_uri (routbar, D2)', () => {
+    const state = makeState({ agent: SP });
+    expect(matchesSubscription(makeEvent('agent:wake', { instance_id: 'inst-a', spiffe_uri: SP }), state)).toBe(true);
+  });
+
+  it('directed agent:wake: matcht agentFilter=instance_id', () => {
+    const state = makeState({ agent: 'inst-a' });
+    expect(matchesSubscription(makeEvent('agent:wake', { instance_id: 'inst-a', spiffe_uri: SP }), state)).toBe(true);
+  });
+
+  it('directed agent:wake: nicht-passender Filter → drop (deny-by-default)', () => {
+    const state = makeState({ agent: 'someone-else' });
+    expect(matchesSubscription(makeEvent('agent:wake', { instance_id: 'inst-a', spiffe_uri: SP }), state)).toBe(false);
+  });
+
+  it('directed agent:wake: event-type-Filter greift weiterhin (nur inbox:new abonniert)', () => {
+    const state = makeState({ events: ['inbox:new'], agent: SP });
+    expect(matchesSubscription(makeEvent('agent:wake', { instance_id: 'inst-a', spiffe_uri: SP }), state)).toBe(false);
+  });
+
+  it('REGRESSION: nicht-directed Event an ungefilterten Client → unverändert Delivery', () => {
+    const state = makeState({});
+    expect(matchesSubscription(makeEvent('inbox:new', { to_agent_instance: 'inst-a' }), state)).toBe(true);
+    expect(matchesSubscription(makeEvent('peer:join', { agentId: 'x' }), state)).toBe(true);
+  });
 });
 
 // ─── parseQuerySubscription ────────────────────────────────────────

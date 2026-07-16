@@ -167,6 +167,9 @@ export function createMcpServer(deps: McpServerDeps): McpServer {
 
   // mesh_status: Gesamtstatus
   server.tool('mesh_status', 'Zeigt den Gesamtstatus des Mesh-Daemons', {}, async () => {
+    // Ein atomarer Snapshot (kein TOCTOU); peers_known/peers_offline machen die
+    // Phantom-ROT-Klasse sichtbar — s. docs/DIAGNOSE-api-status-phantom-rot.md §9.
+    const peerCounts = mesh.getPeerCounts();
     return {
       content: [{
         type: 'text' as const,
@@ -174,7 +177,9 @@ export function createMcpServer(deps: McpServerDeps): McpServer {
           agent_id: identity.spiffeUri,
           hostname: config.daemon.hostname,
           port: config.daemon.port,
-          peers_online: mesh.getOnlinePeers().length,
+          peers_online: peerCounts.online,
+          peers_known: peerCounts.known,
+          peers_offline: peerCounts.offline,
           capabilities: registry.getAllCapabilities().length,
           active_tasks: tasks.getActiveTasks().length,
           local_skills: skills.getLocalSkills().length,
