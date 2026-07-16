@@ -97,9 +97,14 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     (is_order typsystemisch unfälschbar, issuer===sender Relay-Schutz), `verifyStoredOrder` fail-closed,
     Ingest-Wiring + `ORDER_RX`/`ORDER_VERIFY_FAILED`-Audit, **Read-Surface: `GET /api/inbox` re-verifiziert
     live + surfaced `is_order`/`order`-Block** + Tri-State-Marker (`classifyInboundOrder`-Seam: malformed → INVALID+Audit, Reviewer #266). +37 Tests.
-  - [ ] **TL-12 Slice B**: **Ausführung** eines gelesenen Auftrags + Idempotenz-Ledger auf `order_nonce`;
-    TTL-Read-Semantik (Ingest honoriert TTL / Read provenienz-only) entscheiden; `trust_status`/Revocation
-    via `signer_keyid`.
+  - [~] **TL-12 Slice B**: **Ausführung** eines gelesenen Auftrags. **Scoping-Doku (CO 2026-07-16, opus+sonnet)
+    fertig:** `docs/architecture/TL-12-slice-b-execution-scoping.md` — Votum **B1 nicht starten**, bis Owner-Opt-in
+    + Epoch-Grenze entschieden. Korrigierte Zerlegung **B0→B1→B2a→B2b→B3**: B0 Executable-Profil (`ttl_ms>0`,
+    `order_type` aus `signed_bytes`, DER-SPKI-Keyid, Epoch-Grenze) → B1 Ledger `UNIQUE(signer_keyid,order_nonce)`
+    reserve-vor-dispatch/at-most-once → B2a TTL-strenger Execute-Resolver → B2b **neues** keyid-Denylist (NICHT
+    `crl.ts` — Fingerprint-gekeyt+unverdrahtet) → B3 Ausführung hinter allen Gates + per-signer Rate-Fence.
+    Offen (Christian): `[orders] execute` + `(signer_keyid×order_type)`-Allowlist, Epoch `T` vs. max-TTL,
+    ausführbare Startmenge, Revocation-Autorität. Human-Approval-Gate existiert noch nicht → sensible Typen = Deny.
   - [ ] **TL-12 Slice C**: first-class `MessageType='ORDER'` (Marker ablösen), sobald Peers ≥ dieser Version.
 - [~] **[v5.1] TL-11 (≈4 h)** Heartbeat-Weckruf (Entsch. 16): Daemon weckt Agenten; geweckter Agent prüft
   Mesh-Postfach. ↔ baut auf ADR-004.
