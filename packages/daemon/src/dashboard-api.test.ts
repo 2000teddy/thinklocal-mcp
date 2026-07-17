@@ -212,3 +212,55 @@ describe('POST /api/registry/republish (ADR-020 v1 safety valve)', () => {
     await app.close();
   });
 });
+
+describe('GET /api/capabilities/overview — TL-21 Skelett-Auskunft', () => {
+  const cap = (o: Record<string, unknown>) => ({
+    version: '1.0.0', description: '', health: 'healthy', trust_level: 3,
+    updated_at: '2026-07-16T00:00:00.000Z', category: 'misc', permissions: [], ...o,
+  });
+
+  it('liefert deduplizierte „Name + ein Satz"-Übersicht', async () => {
+    const caps = [
+      cap({ skill_id: 'db.read', agent_id: 'a', description: 'Liest DB. Details egal.', category: 'database' }),
+      cap({ skill_id: 'db.read', agent_id: 'b', description: 'Liest DB. y', health: 'offline' }),
+      cap({ skill_id: 'ai.chat', agent_id: 'a', description: 'Chattet.' }),
+    ];
+    const { app } = buildApp({ registry: { getAllCapabilities: () => caps } } as never);
+    const res = await app.inject({ method: 'GET', url: '/api/capabilities/overview' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.count).toBe(2);
+    expect(body.skills.map((s: { skill_id: string }) => s.skill_id)).toEqual(['ai.chat', 'db.read']);
+    const dbread = body.skills.find((s: { skill_id: string }) => s.skill_id === 'db.read');
+    expect(dbread).toMatchObject({ summary: 'Liest DB.', category: 'database', providers: 2, health: 'healthy' });
+    await app.close();
+  });
+
+  it('leere Registry → count 0', async () => {
+    const { app } = buildApp({ registry: { getAllCapabilities: () => [] } } as never);
+    const res = await app.inject({ method: 'GET', url: '/api/capabilities/overview' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ skills: [], count: 0 });
+    await app.close();
+  });
+
+  it('CR-MEDIUM #281: malformed CRDT-Capability (non-string description/skill_id) → 200, KEIN 500', async () => {
+    // Ein authentifizierter/buggy Peer kann via importPeerCapabilities untyped Wire-Werte publizieren.
+    // firstSentence(preferred.description) hätte auf `.trim` geworfen → Endpoint-500. Muss jetzt total sein.
+    const caps = [
+      cap({ skill_id: 'good', agent_id: 'a', description: 'Valide Beschreibung. mehr' }),
+      cap({ skill_id: 'bad.desc', agent_id: 'b', description: 123 }), // non-string → summary ''
+      cap({ skill_id: {}, agent_id: 'c', description: 'obj key' }), // unprojektierbar → skip
+      cap({ skill_id: 'bad.cat', agent_id: 'd', description: 'X.', category: [] }), // non-string cat → ''
+    ];
+    const { app } = buildApp({ registry: { getAllCapabilities: () => caps } } as never);
+    const res = await app.inject({ method: 'GET', url: '/api/capabilities/overview' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    // 'good' + 'bad.desc' + 'bad.cat' bleiben; der non-string-key wird übersprungen (bounded).
+    expect(body.skills.map((s: { skill_id: string }) => s.skill_id)).toEqual(['bad.cat', 'bad.desc', 'good']);
+    expect(body.skills.find((s: { skill_id: string }) => s.skill_id === 'bad.desc').summary).toBe('');
+    expect(body.skills.find((s: { skill_id: string }) => s.skill_id === 'bad.cat').category).toBe('');
+    await app.close();
+  });
+});

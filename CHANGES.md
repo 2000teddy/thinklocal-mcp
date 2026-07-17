@@ -8,6 +8,31 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### fix(api): TL-21 Skelett-Übersicht total gegen malformed CRDT-Daten (CR-MEDIUM codex-Review #281) (2026-07-17 06:14)
+Robustheits-Fix auf dem offenen PR #281: `firstSentence(text)` nahm einen Laufzeit-**String** an
+(`(text ?? '').trim()`), aber `Capability.description` ist runtime-untyped — `importPeerCapabilities()`
+schema-validiert es nicht, `stripNonCrdtFields` erhält malformed Metadaten. Ein authentifizierter/buggy
+Peer konnte `description: 123`/`{}` publizieren → `GET /api/capabilities/overview` warf `trim is not a
+function` → **eine** geschmiedete Capability kippte die additive Read-View in einen **500**. Fix macht die
+Projektion **total/fail-safe:** neuer `asStr()`-Normalisierer, `firstSentence(text: unknown)` guarded,
+`buildCapabilitySkeleton` überspringt Einträge mit non-string/leerem `skill_id` (unprojektierbarer
+Grouping-Key) und normalisiert `agent_id`/`category` → Ergebnis bleibt **bounded + deterministisch** statt
+den ganzen Request zu fehlern. CR-LOW Doku-Drift: `SUMMARY_MAX_LEN=160` als **Inhalts**-Cap präzisiert
+(Ergebnis ≤160 + optionales `…` = max. 161). +6 Regression-Tests (pure-function non-string `description`/
+`skill_id`/`category`/`agent_id` + Endpoint malformed→**200**). Suite **1735 grün**, tsc(strict)/neue-
+Dateien-Lint 0. Kein Merge (Christian-gated).
+
+### feat(api): TL-21 Skelett-Auskunft `GET /api/capabilities/overview` (Kap. 06) (2026-07-16 18:10)
+Kontext-Ökonomie: ein Agent bekam bei „was kann dieser Knoten?" entweder zu wenig (`list_skills` ohne
+Beschreibung) oder zu viel (`/api/capabilities` volle Objekte je Provider). Neu: kompakte **Skelett-
+Übersicht** (pro Skill **Name + ein Satz**), Details erst auf Abruf. `capability-skeleton.ts` (reines Modul:
+`firstSentence`, `buildCapabilitySkeleton` — dedupliziert pro `skill_id`, gesund-bevorzugter Provider,
+Health-Aggregation, deterministisch); `GET /api/capabilities/overview` → `{ skills, count }` (rate-limited,
+read-only, additiv). Stufe 2 = bestehendes `GET /api/capabilities?skill_id=` (unverändert). Design:
+`docs/architecture/TL-21-skeleton-disclosure.md`. +13 Tests, Suite **1727 grün**, tsc/Lint 0. Slice 2
+(MCP-Tool `list_capabilities_overview`) folgt. Weekly-Plan KW30, gewählt nachdem TL-12 B0 Christian-gated
+und TL-14a an Decision-7/undecided-CA-Architektur entkoppelt blockiert.
+
 ### fix(ws): Loopback-Gate auch auf dem subscribe-Frame-Pfad (TL-11 §8.1-Härtung) (2026-07-16 17:20)
 Security-Bug-Fix: die Regel „agent-gefilterte WS-Subscriptions sind **loopback-only**" (Snooping-Schutz für
 gerichtete Events wie `agent:wake`) wurde nur auf dem Query-Pfad (`?agent=` → `4003`) durchgesetzt; der
