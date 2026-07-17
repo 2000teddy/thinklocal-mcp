@@ -8,6 +8,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### test(tl11): §2 mTLS-Pflicht + Nicht-Loopback-4003 Draht-Conformance (cert-fixture Slice) (2026-07-17 13:05)
+Zieht die zwei offenen `it.todo` des Wire-Scaffolds an → `tl11-wake-wire.conformance.test.ts` jetzt **11 grün**
+(0 todo). **§2 mTLS-Pflicht:** zweiter Harness mit demselben Vertrag wie der cardServer (Fastify `https` +
+`requestCert`+`rejectUnauthorized`, agent-card.ts:229-230), In-Memory-CA/Server-/Client-Leaf (node-forge),
+undici-`WebSocket`+`Agent`-Client → gültiges Client-Cert erreicht `/ws` (`system:connected`), cert-los + `ws://`
+werden auf TLS-Ebene resettet. **§2 Nicht-Loopback → `4003`:** Bindung an eine echte Nicht-Loopback-IPv4 (kein
+`trustProxy` → `req.ip` = Socket-Peer) → agent-gefilterter Connect mit Close-Code `4003`; `it.skipIf` auf reinen
+Loopback-Hosts. CR (adversariales Claude-Subagent — codex/agy nicht im PATH): kein HIGH; M1 (Timeout-Sentinel,
+Negatives beweisen echten Reset), M2 (Abgrenzung: mTLS-Semantik ≠ Prod-Verdrahtung, cardServer-Wiring-Test =
+Follow-up), L2 (Listener-Race), L3 (Link-Local-Ausschluss) adressiert. Suite **1746 grün**, tsc(strict)/Lint 0.
+Kein Runtime-Change, kein Deploy.
+
 ### test(tl11): Draht-Ebenen-Conformance für den Wake-Kontrakt (Scaffold) (2026-07-17 06:38)
 Die §2–§5-Garantien der `TL-11-wake-consumer-contract.md` waren nur auf Pure-Function-/Routing-Ebene bewacht
 (`matchesSubscription`/`rejectsAgentFilter`/`isLoopbackIp` — kein Socket). Neu `tl11-wake-wire.conformance.test.ts`:

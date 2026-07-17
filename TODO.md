@@ -124,9 +124,15 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
   - [x] **TL-11 Wire-Conformance-Scaffold** (2026-07-17): `tl11-wake-wire.conformance.test.ts` — treibt den
     **realen `/ws`-Socket** (echter Fastify-Server + `registerWebSocket`, Node-22-`WebSocket`-Client, Loopback)
     statt nur reine Funktionen: **7 grün** (§3 Subscribe, §4 Zero-Content-Wire-Shape, directed Match/deny/drop,
-    §8.1 Frame-Pfad, §2 Loopback-Positivpfad) **+ 2 `it.todo`** (§2 mTLS-Pflicht + Nicht-Loopback-`4003` →
-    brauchen Cert-Fixtures bzw. Nicht-Loopback-Bindung). Wire-Shape-Befund: Payload liegt **unter `.data`** →
+    §8.1 Frame-Pfad, §2 Loopback-Positivpfad). Wire-Shape-Befund: Payload liegt **unter `.data`** →
     Consumer-Doc §4/§6/§7.1 korrigiert. De-riskt Slice B, ohne den externen Hop zu bauen.
+  - [x] **TL-11 cert-fixture Slice** (2026-07-17): die zwei ex-`it.todo` sind jetzt **echte Tests** (→ **11 grün**):
+    §2 **mTLS-Pflicht** über einen zweiten Harness mit demselben Vertrag wie der cardServer (Fastify `https` +
+    `requestCert`+`rejectUnauthorized`, agent-card.ts:229-230), In-Memory-CA/Server-/Client-Leaf (node-forge),
+    undici-`WebSocket`+`Agent`-Client → gültiges Client-Cert erreicht `/ws`, cert-los/`ws://` werden TLS-resettet;
+    §2 **Nicht-Loopback-`4003`** über Bindung an eine echte Nicht-Loopback-IPv4 (kein `trustProxy` → `req.ip` =
+    Socket-Peer, `it.skipIf` auf reinen Loopback-Hosts). Offen als Follow-up: cardServer-Wiring-Test (CR-M2 —
+    ein Regress von `requestCert` in agent-card.ts wird hier bewusst NICHT gefangen).
   - [ ] **TL-11 Slice B** (extern-blocked): Out-of-Repo Agent-Home-Supervisor konsumiert `agent:wake` →
     weckt CLI (`pokeCli`); **Zwei-Peer-Live-Proof** (CLI-Reaktion ohne dazwischenliegenden Poll). Gegen den
     fixen Consumer-Contract (s.o.) baubar. **Echter Blocker:** der letzte Hop (Supervisor → CLI) ist
