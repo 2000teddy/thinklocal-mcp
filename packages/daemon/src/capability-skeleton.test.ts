@@ -47,6 +47,14 @@ describe('firstSentence', () => {
     expect(firstSentence('')).toBe('');
     expect(firstSentence('   ')).toBe('');
   });
+  it('CR-MEDIUM Regression: non-string / null / undefined Eingabe → leerer String (kein throw)', () => {
+    // `description` ist runtime-untyped (CRDT-Wire, nicht schema-validiert). Ein geschmiedeter
+    // Nicht-String darf `.trim()` nicht sprengen — total statt „trim is not a function"-500.
+    for (const bad of [123, 0, {}, [], true, false, null, undefined] as unknown[]) {
+      expect(() => firstSentence(bad)).not.toThrow();
+      expect(firstSentence(bad)).toBe('');
+    }
+  });
 });
 
 describe('buildCapabilitySkeleton', () => {
@@ -102,5 +110,55 @@ describe('buildCapabilitySkeleton', () => {
 
   it('leere Eingabe → []', () => {
     expect(buildCapabilitySkeleton([])).toEqual([]);
+  });
+
+  // ── CR-MEDIUM #281: total gegen malformed CRDT-Capabilities (authentifizierter/buggy Peer) ──
+  // importPeerCapabilities schema-validiert weder description noch skill_id/agent_id/category. Eine
+  // einzelne geschmiedete Capability darf die additive Read-View nicht in einen 500er kippen.
+  const bad = (o: Record<string, unknown>): Capability =>
+    ({
+      version: '1.0.0', description: '', health: 'healthy', trust_level: 3,
+      updated_at: '2026-07-16T00:00:00.000Z', category: 'misc', permissions: [], ...o,
+    }) as unknown as Capability;
+
+  it('non-string description → summary "" (kein throw), Eintrag bleibt bounded', () => {
+    for (const badDesc of [123, {}, [], true, null] as unknown[]) {
+      const out = buildCapabilitySkeleton([bad({ skill_id: 's', agent_id: 'a', description: badDesc })]);
+      expect(out).toHaveLength(1);
+      expect(out[0].summary).toBe('');
+      expect(out[0].skill_id).toBe('s');
+    }
+  });
+
+  it('non-string/leerer skill_id (unprojektierbarer Grouping-Key) → übersprungen, valide Einträge bleiben', () => {
+    const out = buildCapabilitySkeleton([
+      bad({ skill_id: 123, agent_id: 'a', description: 'Geschmiedet.' }),
+      bad({ skill_id: {}, agent_id: 'b', description: 'Auch geschmiedet.' }),
+      bad({ skill_id: '', agent_id: 'c', description: 'Leerer Key.' }),
+      bad({ skill_id: 'ok', agent_id: 'd', description: 'Valide.' }),
+    ]);
+    expect(out.map((e) => e.skill_id)).toEqual(['ok']); // nur der valide Eintrag, deterministisch
+    expect(out[0].summary).toBe('Valide.');
+  });
+
+  it('non-string category/agent_id → normalisiert auf "", Sort/Tie-Break deterministisch (kein throw)', () => {
+    const out = buildCapabilitySkeleton([
+      bad({ skill_id: 's', agent_id: {}, description: 'Von obj-id.', category: 456, health: 'healthy' }),
+      bad({ skill_id: 's', agent_id: 'a', description: 'Von a.', category: 'catA', health: 'healthy' }),
+    ]);
+    expect(out).toHaveLength(1);
+    // agent_id 'a' > asStr({})='' → '' bevorzugt (lexikografisch kleiner); category dieses Providers = 456→''.
+    expect(out[0].category).toBe('');
+    expect(out[0].summary).toBe('Von obj-id.');
+    expect(typeof out[0].category).toBe('string');
+  });
+
+  it('gemischte malformed + valide Eingabe → wirft nie, Ergebnis bounded/total', () => {
+    expect(() =>
+      buildCapabilitySkeleton([
+        bad({ skill_id: null, agent_id: 42, description: [], category: {} }),
+        bad({ skill_id: 'real', agent_id: 'x', description: 'Echt. mehr', health: 'degraded' }),
+      ]),
+    ).not.toThrow();
   });
 });

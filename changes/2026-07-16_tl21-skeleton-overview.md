@@ -43,3 +43,28 @@ Christian-gated und TL-14a an Decision-7 + einer nicht-entschiedenen CA-Architek
   Dedupe/Sortierung/Aggregation + Additivität/Read-only + keine neue Exposition unabhängig **bestätigt**.
 - **PC:** `git diff --cached` gesichtet; Secret-Scan clean.
 - **DO:** Design-Doku, `docs/API-REFERENCE.md`, `CHANGES.md`, `TODO.md`, `COMPLIANCE-TABLE.md`, dieser Eintrag.
+
+## Nachtrag 2026-07-17 — CR-MEDIUM (externer codex-Review) gefixt: Projektion total gegen malformed CRDT-Daten
+**Befund (codex, formaler GitHub-Review auf #281):** `firstSentence(text)` nahm `(text ?? '').trim()` einen
+Laufzeit-**String** an, aber `description` ist runtime-untyped: `CapabilityRegistry.importPeerCapabilities()`
+owner-gated nur `agent_id`, **schema-validiert `description` nicht**, und `stripNonCrdtFields` erhält
+malformed Metadaten. Ein authentifizierter/buggy Peer konnte `description: 123` / `{}` publizieren →
+`GET /api/capabilities/overview` rief `firstSentence(preferred.description)` → **`trim is not a function`**
+→ eine einzige geschmiedete Capability kippte die additive Read-View in einen **500** (neue Verfügbarkeits-
+Regression nur auf der neuen Route; der Details-Endpoint serialisiert den Wert nur).
+**Fix (total/fail-safe):**
+- `asStr(v)` — deterministische String-Sicht auf untyped CRDT-Felder (non-string → `''`, wirft nie).
+- `firstSentence(text: unknown)` — guarded via `asStr`; non-string/null/undefined → `''`.
+- `buildCapabilitySkeleton` — `skill_id` (Grouping-/Sort-Key) non-string/leer → **Eintrag übersprungen**
+  (unprojektierbar, bounded, kein garbage-Key); `agent_id` (Tie-Break) + `category` (Output) über `asStr`
+  normalisiert; `health` war bereits defensiv (`healthRank ?? 3`, `some(=== 'healthy')`). Ergebnis bleibt
+  **bounded + deterministisch** statt den ganzen Request zu fehlern.
+- **CR-LOW Doku-Drift:** `SUMMARY_MAX_LEN=160` als **Inhalts**-Cap (vor Ellipsis) präzisiert — Ergebnis
+  ≤ 160 Inhalts-Zeichen **+ optionales `…`** (max. 161); Design-Doc + Code-Doc angeglichen, kein Verhaltens-
+  Change (bestehende Tests erlaubten bereits 161).
+**Regression-Tests:** `capability-skeleton.test.ts` +4 (non-string `description`→`''`; non-string/leerer
+`skill_id`→skip; non-string `category`/`agent_id`→normalisiert/deterministisch; gemischt malformed→wirft nie)
++ `firstSentence` non-string-Fälle; `dashboard-api.test.ts` +1 (malformed Registry → **200, kein 500**).
+Voller Lauf **1735 grün** (1729 → +6), tsc(strict) 0, neue-Dateien-Lint 0 (netto keine neue Warning).
+**CR/Verifikation:** Fix deckt exakt die im Review benannten Vektoren (non-string `description` **plus**
+malformed identifiers in Sort/Grouping). Kein Merge (Christian-gated).

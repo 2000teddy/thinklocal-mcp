@@ -243,4 +243,24 @@ describe('GET /api/capabilities/overview — TL-21 Skelett-Auskunft', () => {
     expect(res.json()).toEqual({ skills: [], count: 0 });
     await app.close();
   });
+
+  it('CR-MEDIUM #281: malformed CRDT-Capability (non-string description/skill_id) → 200, KEIN 500', async () => {
+    // Ein authentifizierter/buggy Peer kann via importPeerCapabilities untyped Wire-Werte publizieren.
+    // firstSentence(preferred.description) hätte auf `.trim` geworfen → Endpoint-500. Muss jetzt total sein.
+    const caps = [
+      cap({ skill_id: 'good', agent_id: 'a', description: 'Valide Beschreibung. mehr' }),
+      cap({ skill_id: 'bad.desc', agent_id: 'b', description: 123 }), // non-string → summary ''
+      cap({ skill_id: {}, agent_id: 'c', description: 'obj key' }), // unprojektierbar → skip
+      cap({ skill_id: 'bad.cat', agent_id: 'd', description: 'X.', category: [] }), // non-string cat → ''
+    ];
+    const { app } = buildApp({ registry: { getAllCapabilities: () => caps } } as never);
+    const res = await app.inject({ method: 'GET', url: '/api/capabilities/overview' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    // 'good' + 'bad.desc' + 'bad.cat' bleiben; der non-string-key wird übersprungen (bounded).
+    expect(body.skills.map((s: { skill_id: string }) => s.skill_id)).toEqual(['bad.cat', 'bad.desc', 'good']);
+    expect(body.skills.find((s: { skill_id: string }) => s.skill_id === 'bad.desc').summary).toBe('');
+    expect(body.skills.find((s: { skill_id: string }) => s.skill_id === 'bad.cat').category).toBe('');
+    await app.close();
+  });
 });

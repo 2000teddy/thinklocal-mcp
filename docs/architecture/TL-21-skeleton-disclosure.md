@@ -27,10 +27,14 @@ Ein Skelett-Eintrag:
 }
 ```
 - **„Ein Satz" = `firstSentence(description)`**: bis zum ersten `.`/`!`/`?`, das von Whitespace/Textende
-  gefolgt wird (Lookahead → keine Zerschneidung an Dezimalzahlen wie „v3.14"). Das Ergebnis wird **immer**
-  auf eine harte Obergrenze (`SUMMARY_MAX_LEN=160`, sonst `…`) gekappt — auch bei gefundenem Terminator,
-  damit ein untrusted (CRDT-basierter) „8-KB-Ein-Satz" die Übersicht nicht sprengt. Abkürzungen (`z.B.`)
-  bleiben eine bewusste Heuristik-Grenze. Quelle ist **ausschließlich** das vorhandene `Capability.description`.
+  gefolgt wird (Lookahead → keine Zerschneidung an Dezimalzahlen wie „v3.14"). Der **Inhalt** wird **immer**
+  auf `SUMMARY_MAX_LEN=160` Code-Einheiten gekappt; wird gekürzt, hängt `…` an → das Ergebnis ist ≤ **160
+  Inhalts-Zeichen + optionales `…`** (max. 161 Code-Einheiten). Der Cap greift auch bei gefundenem
+  Terminator, damit ein untrusted (CRDT-basierter) „8-KB-Ein-Satz" die Übersicht nicht sprengt.
+  **Total gegen malformed CRDT-Daten:** ein non-string `description`/`category`/`agent_id` wird auf `''`
+  normalisiert, ein Eintrag ohne verwertbaren `skill_id` übersprungen — die additive Read-View bleibt
+  bounded/deterministisch statt in einen 500er zu kippen (CR-MEDIUM #281). Abkürzungen (`z.B.`) bleiben
+  eine bewusste Heuristik-Grenze. Quelle ist **ausschließlich** das vorhandene `Capability.description`.
 - **Deterministisch:** sortiert nach `skill_id`; die `summary`/`category` stammen vom **gesund-bevorzugten**
   Provider (erst healthy, dann degraded, dann offline; bei Gleichstand lexikografisch nach `agent_id`) —
   stabil ohne `Date`/Random.

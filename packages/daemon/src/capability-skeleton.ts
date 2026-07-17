@@ -21,19 +21,33 @@ export interface CapabilitySkeletonEntry {
   health: CapabilityHealth;
 }
 
-/** Harte Obergrenze für `summary`, falls die Beschreibung keinen Satz-Terminator enthält. */
+/**
+ * Obergrenze für den **Inhalt** von `summary` (vor einem etwaigen Ellipsis). Wird gekürzt, hängt
+ * `firstSentence` `…` an → das Ergebnis hat höchstens `SUMMARY_MAX_LEN` Inhalts-Code-Einheiten **plus**
+ * das optionale `…` (max. `SUMMARY_MAX_LEN + 1` Code-Einheiten). Der Cap greift, falls die Beschreibung
+ * keinen Satz-Terminator enthält — oder der „erste Satz" pathologisch lang ist (untrusted CRDT-Daten).
+ */
 const SUMMARY_MAX_LEN = 160;
 
 /**
- * Erster Satz eines Textes: bis zum ersten `.`/`!`/`?`, das von Whitespace oder Textende gefolgt wird
- * (der Lookahead verhindert das Zerschneiden an Dezimalzahlen wie „v3.14"). **Das Ergebnis wird IMMER auf
- * `SUMMARY_MAX_LEN` gekappt** (mit `…`, wenn gekürzt) — auch wenn ein Terminator gefunden wurde: ein
- * (untrusted, CRDT-basierter) 8-KB-„Ein-Satz" darf die Übersicht nicht sprengen (Kap.-06-Kompaktheit).
- * Leere/whitespace-only Eingabe → leerer String. Rein, deterministisch. Abkürzungen (`z.B.`) bleiben eine
- * bewusste Heuristik-Grenze (ohne Wörterbuch nicht auflösbar).
+ * Total-fail-safe String-Sicht auf runtime-untypisierte CRDT-Felder: `Capability` ist typisiert `string`,
+ * aber die Wire-/Registry-Herkunft ist untyped (`importPeerCapabilities` schema-validiert weder
+ * `description` noch `skill_id`/`agent_id`/`category`). Ein geschmiedeter Nicht-String (`123`, `{}`, `[]`)
+ * würde `.trim()`/Comparator/Map-Key sprengen → hier deterministisch auf `''` normalisiert (nie werfen).
  */
-export function firstSentence(text: string): string {
-  const trimmed = (text ?? '').trim();
+const asStr = (v: unknown): string => (typeof v === 'string' ? v : '');
+
+/**
+ * Erster Satz eines Textes: bis zum ersten `.`/`!`/`?`, das von Whitespace oder Textende gefolgt wird
+ * (der Lookahead verhindert das Zerschneiden an Dezimalzahlen wie „v3.14"). **Der Inhalt wird IMMER auf
+ * `SUMMARY_MAX_LEN` gekappt** (mit angehängtem `…`, wenn gekürzt — Ergebnis ≤ `SUMMARY_MAX_LEN + 1`) —
+ * auch wenn ein Terminator gefunden wurde: ein (untrusted, CRDT-basierter) 8-KB-„Ein-Satz" darf die
+ * Übersicht nicht sprengen (Kap.-06-Kompaktheit). **Nicht-String / leere / whitespace-only Eingabe →
+ * leerer String** (total: `description` ist runtime-untyped, s. `asStr`). Rein, deterministisch.
+ * Abkürzungen (`z.B.`) bleiben eine bewusste Heuristik-Grenze (ohne Wörterbuch nicht auflösbar).
+ */
+export function firstSentence(text: unknown): string {
+  const trimmed = asStr(text).trim();
   if (trimmed === '') return '';
   const match = /^[\s\S]*?[.!?](?=\s|$)/.exec(trimmed);
   const sentence = (match ? match[0] : trimmed).trim();
@@ -52,20 +66,32 @@ const cmpStr = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
  * Baut die deduplizierte Skelett-Übersicht: ein Eintrag pro `skill_id`, sortiert nach `skill_id`.
  * `summary`/`category` stammen vom gesund-bevorzugten Provider (Rang, dann lexikografisch `agent_id`);
  * `health` ist über alle Provider aggregiert. Rein, deterministisch (kein Date/Random).
+ *
+ * **Total gegen malformed CRDT-Daten (CR-MEDIUM):** die Projektion ist eine *additive Read-View* — eine
+ * einzelne geschmiedete Capability (`skill_id`/`agent_id`/`category`/`description` non-string) darf sie
+ * NICHT in einen 500er kippen. Ein Eintrag ohne verwertbaren `skill_id` (Grouping-Key) ist unprojektierbar
+ * → **übersprungen** (bounded, kein Crash, kein garbage-Key); die weichen Anzeigefelder werden über `asStr`
+ * normalisiert; `health` ist bereits defensiv (`healthRank ?? 3`, `some(=== 'healthy')`).
  */
 export function buildCapabilitySkeleton(capabilities: Capability[]): CapabilitySkeletonEntry[] {
   const bySkill = new Map<string, Capability[]>();
   for (const c of capabilities) {
-    const list = bySkill.get(c.skill_id);
+    // skill_id ist Grouping-/Sort-Key: non-string/leer → nicht projektierbar → skip (total, bounded).
+    const skill_id = asStr((c as { skill_id?: unknown }).skill_id);
+    if (skill_id === '') continue;
+    const list = bySkill.get(skill_id);
     if (list) list.push(c);
-    else bySkill.set(c.skill_id, [c]);
+    else bySkill.set(skill_id, [c]);
   }
 
   const entries: CapabilitySkeletonEntry[] = [];
   for (const [skill_id, providers] of bySkill) {
     // Gesund-bevorzugter Provider: erst nach Health-Rang, dann lexikografisch nach agent_id (stabil).
+    // agent_id über asStr → deterministischer Comparator auch bei geschmiedetem non-string agent_id.
     const preferred = [...providers].sort(
-      (a, b) => healthRank(a.health) - healthRank(b.health) || cmpStr(a.agent_id, b.agent_id),
+      (a, b) =>
+        healthRank(a.health) - healthRank(b.health) ||
+        cmpStr(asStr((a as { agent_id?: unknown }).agent_id), asStr((b as { agent_id?: unknown }).agent_id)),
     )[0];
     const health: CapabilityHealth = providers.some((p) => p.health === 'healthy')
       ? 'healthy'
@@ -74,8 +100,9 @@ export function buildCapabilitySkeleton(capabilities: Capability[]): CapabilityS
         : 'offline';
     entries.push({
       skill_id,
+      // firstSentence + asStr sind beide total gegen non-string CRDT-Werte (kein throw).
       summary: firstSentence(preferred.description),
-      category: preferred.category,
+      category: asStr((preferred as { category?: unknown }).category),
       providers: providers.length,
       health,
     });
