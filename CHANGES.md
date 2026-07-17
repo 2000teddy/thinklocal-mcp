@@ -8,6 +8,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(mcp): TL-21 Slice 2 — MCP-Tool `list_capabilities_overview` (2026-07-17 18:13)
+Slice 1 (#281) lieferte die Skelett-Übersicht als REST `GET /api/capabilities/overview`; Slice 2 macht dieselbe
+kompakte „Name + ein Satz je Skill"-Projektion als **MCP-Tool** verfügbar (Agent-Kontext-Ökonomie, Details auf
+Abruf via `query_capabilities`). Neu: reine Funktion `buildCapabilityOverview(capabilities)` → `{skills,count}`
+als **eine Quelle der Wahrheit**, die REST **und** MCP benutzen → strukturelle Parität (kein Drift, CR-MEDIUM-Fix).
+Read-only/additiv, strikte Teilmenge von `query_capabilities`. +6 Tests (echtes registriertes Tool über
+`_registeredTools[name].handler` invoked + Envelope-Unit), Suite **1752 grün**, tsc(strict)/Lint 0. CR:
+Claude-Subagent (codex/agy nicht im PATH), kein HIGH; Rate-Limit-Abwesenheit als kein Problem eingestuft
+(authentifizierter lokaler stdio-Transport, Geschwister-Tools ebenso).
+
 ### docs(kw29): Bug-Pfad 2 Log-Flut — konsolidierter Beleg + Issue-Vorlage (2026-07-17 17:06)
 KW29-Freitag-Deliverable („Logrotation + PATH-/`mount`-Fehler einsortieren, saubere Belegdatei/Issue-Vorlage").
 Neu `docs/BUGPFAD-2-logflut-status.md` — trennt die **zwei** Hälften von Bug-Pfad 2: **2a** `mount: command not

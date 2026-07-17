@@ -168,8 +168,11 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
   - [x] **Slice 1** (2026-07-16): REST `GET /api/capabilities/overview` (dedupliziert pro `skill_id`, Name +
     erster Satz + Health-Aggregation) + reines Modul `capability-skeleton.ts` (`firstSentence`,
     `buildCapabilitySkeleton`), +13 Tests. Stufe 2 = bestehendes `/api/capabilities?skill_id=`. Read-only/additiv.
-  - [ ] **Slice 2**: identische Skelett-Projektion als MCP-Tool `list_capabilities_overview` (Agent-Kontext-
-    Ökonomie), dieselbe reine Funktion. Optional danach: Skelett für Peers/Tools/Tasks.
+  - [x] **Slice 2** (2026-07-17): identische Skelett-Projektion als MCP-Tool `list_capabilities_overview`
+    (Agent-Kontext-Ökonomie). Gemeinsamer Envelope-Builder `buildCapabilityOverview` von REST **und** MCP
+    benutzt → strukturelle Parität (kein Drift, CR-MEDIUM-Fix). +6 Tests (echtes registriertes Tool via
+    `_registeredTools[name].handler` invoked; Envelope-Unit). Read-only/additiv. Optional danach: Skelett
+    für Peers/Tools/Tasks.
 
 ### P2 — Ausbau
 - [ ] **[v5.1] TL-22a (≈4 h)** Mesh-Dateiübertragung Slice 1 (Chunk-Endpunkt am 9440, Prüfsummen je Stück;

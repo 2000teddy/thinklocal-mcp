@@ -1804,6 +1804,10 @@ CHANGES.md, `changes/2026-07-07_doc-compliance-gate.md`, dieser Eintrag; Rollen/
 
 **Typ:** Doc-only (KW29 Bug-Pfad 2 Log-Flut Beleg/Issue-Vorlage). Kein Runtime-Change. **DO:** `docs/BUGPFAD-2-logflut-status.md`, `changes/2026-07-17_bugpath2-logflut-evidence.md`, `CHANGES.md`, `TODO.md`, dieser Eintrag.
 
+| #285 | (offen, base=main) | 2026-07-17 18:13 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | **Additiver Read-View (TL-21 Slice 2) → CO/CG entfallen** (kompakte Projektion vorhandener Daten, Design gepinnt in `TL-21-skeleton-disclosure.md`, Präzedenz #281). Neues MCP-Tool `list_capabilities_overview` → `{skills,count}` = dieselbe „Name+1 Satz"-Übersicht wie REST `GET /api/capabilities/overview`, für Agent-Kontext-Ökonomie (Details via `query_capabilities`). Neu reine Funktion `buildCapabilityOverview` als **eine Quelle der Wahrheit**, von REST **und** MCP benutzt → strukturelle Parität. **TS:** +6 Tests (echtes registriertes Tool via `_registeredTools[name].handler` invoked + Envelope-Unit), Suite **1752 grün** (128 Files), tsc(strict)/neue-Datei-Lint 0. **CR:** adversariales Claude-Subagent (codex/agy nicht im PATH, `[[pal-review-backend-agy-missing]]`) — **kein HIGH**; Rate-Limit-Abwesenheit als kein Problem eingestuft (auth. lokaler stdio-Transport, Geschwister-Tools ebenso, strikte Teilmenge von `query_capabilities`); **1 MEDIUM an der Wurzel gefixt** (Envelope-Parität via gemeinsamem Builder statt nur Test-Assertion). **PC:** Secret-Scan clean. Kein Merge (Review-of-record-Blocker, s. #283/#284). |
+
+**Typ:** Daemon-Feature (read-only, additiv, TL-21 Slice 2 MCP-Tool). Kein bestehendes Verhalten geändert. **DO:** `changes/2026-07-17_tl21-slice2-mcp-overview.md`, `CHANGES.md`, `TODO.md`, dieser Eintrag.
+
 ---
 
-*Letzte Aktualisierung: 2026-07-17 17:06 — #284 docs(kw29): Bug-Pfad 2 Log-Flut Beleg/Issue-Vorlage (2a geschlossen / 2b offen: keine Logrotation); Doc-only, CR Doc-Accuracy kein HIGH/MEDIUM, Suite 1746 grün.*
+*Letzte Aktualisierung: 2026-07-17 18:13 — #285 feat(mcp): TL-21 Slice 2 list_capabilities_overview (gemeinsamer Envelope REST+MCP, strukturelle Parität); Suite 1752 grün.*

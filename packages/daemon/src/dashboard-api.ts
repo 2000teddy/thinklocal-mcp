@@ -24,7 +24,7 @@ import type { CredentialVault } from './vault.js';
 import type { TaskExecutor } from './task-executor.js';
 import type { SkillHealthStatus } from './skill-health-monitor.js';
 import type { BuildInfo } from './build-info.js';
-import { buildCapabilitySkeleton } from './capability-skeleton.js';
+import { buildCapabilityOverview } from './capability-skeleton.js';
 
 export interface DashboardApiDeps {
   mesh: MeshManager;
@@ -187,8 +187,7 @@ export function registerDashboardApi(server: FastifyInstance, deps: DashboardApi
   // Siehe docs/architecture/TL-21-skeleton-disclosure.md.
   server.get('/api/capabilities/overview', async (request: FastifyRequest, reply: FastifyReply) => {
     if (!checkRateLimit(request, reply)) return;
-    const skills = buildCapabilitySkeleton(registry.getAllCapabilities());
-    return { skills, count: skills.length };
+    return buildCapabilityOverview(registry.getAllCapabilities());
   });
 
   // GET /api/tasks — Alle Tasks
