@@ -16,10 +16,13 @@
  * --------------------------
  * Grün über echten Loopback-Socket: §3 Subscribe-Form, §4 Zero-Content-Wire-Shape, §3/§5 directed
  * deny-by-default + Match, §8.1 Frame-Pfad, §2 Loopback-Positivpfad.
- * §2 mTLS-Pflicht (KW30 cert-fixture Slice): ein zweiter Harness fährt den echten cardServer-TLS-Transport
- * (Fastify `https` + requestCert + rejectUnauthorized) mit In-Memory-CA/Server-/Client-Leaf (node-forge)
- * hoch → gültiges Client-Cert erreicht /ws (system:connected), cert-lose bzw. `ws://`-Verbindungen werden
- * auf TLS-Ebene resettet.
+ * §2 mTLS-Pflicht (KW30 cert-fixture Slice): ein zweiter Harness fährt Fastify mit DEMSELBEN mTLS-Vertrag,
+ * den der cardServer produktiv setzt — `https` + requestCert + rejectUnauthorized (agent-card.ts:229-230) —
+ * mit In-Memory-CA/Server-/Client-Leaf (node-forge) hoch → gültiges Client-Cert erreicht /ws
+ * (system:connected), cert-lose bzw. `ws://`-Verbindungen werden auf TLS-Ebene resettet. ABGRENZUNG (CR-M2):
+ * dies beweist die mTLS-SEMANTIK des /ws-Handlers unter diesen Flags, NICHT die Produktions-Verdrahtung
+ * selbst (der Harness repliziert die Flags, statt agent-card.ts zu importieren) — ein Regress, der
+ * `requestCert` in agent-card.ts umlegt, wird hier NICHT gefangen (eigener Cardserver-Wiring-Test = Follow-up).
  * §2 Nicht-Loopback-`4003`-Reject: ein dritter Harness bindet an eine echte Nicht-Loopback-IPv4 der
  * Maschine (kein trustProxy → req.ip = Socket-Peer, nicht spoofbar) → agent-gefilterter Connect wird mit
  * `4003` geschlossen. Auf reinen Loopback-Hosts (keine externe IPv4) wird NUR dieser eine Fall via
@@ -136,8 +139,9 @@ const q = (s: string): string => encodeURIComponent(s);
 
 // ── §2 mTLS-Fixtures: In-Memory-CA + Server-/Client-Leaf (node-forge), nur für diese Datei. ──
 // Die mTLS-Pflicht ist eine Transport-Schicht des cardServers (Fastify `https` + requestCert), NICHT Teil
-// von registerWebSocket. Dieser Harness fährt genau diese Transportschicht real hoch → der /ws-Pfad ist
-// beweisbar nur über mTLS erreichbar (cert-lose/`ws://`-Verbindung wird auf TLS-Ebene resettet).
+// von registerWebSocket. Dieser Harness setzt denselben Vertrag (requestCert+rejectUnauthorized, wie
+// agent-card.ts:229-230) real auf → der /ws-Pfad ist unter diesen Flags nur über mTLS erreichbar (cert-los/
+// `ws://` → TLS-Reset). Er repliziert die Flags (statt agent-card.ts zu importieren) → siehe ABGRENZUNG CR-M2.
 let certSerial = 0x10;
 function makeTestCa(): { caCertPem: string; caCert: forge.pki.Certificate; caKey: forge.pki.PrivateKey } {
   const keys = forge.pki.rsa.generateKeyPair(2048);
@@ -234,10 +238,15 @@ function openWssClient(port: number, path: string, connect: Agent.Options['conne
   return ws;
 }
 
-/** Verbindungs-Ausgang eines undici-Clients: 'open' (Handshake ok) oder 'error' (TLS/Transport-Reset). */
-function connectOutcome(ws: WsClient, timeoutMs = 2500): Promise<'open' | 'error'> {
+/**
+ * Verbindungs-Ausgang eines undici-Clients: 'open' (Handshake ok), 'error' (TLS/Transport-Reset) oder
+ * 'timeout' (weder noch). Der 'timeout'-Sentinel ist bewusst von 'error' getrennt (CR-M1): ein Negativ-Test
+ * MUSS ein echtes Reset-Event sehen (`.toBe('error')`) — ein bloßes Hängen (kein Reset) fällt dann als
+ * 'timeout' laut durch, statt fälschlich als „kein open" grün zu werden.
+ */
+function connectOutcome(ws: WsClient, timeoutMs = 2500): Promise<'open' | 'error' | 'timeout'> {
   return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve('error'), timeoutMs);
+    const timer = setTimeout(() => resolve('timeout'), timeoutMs);
     ws.addEventListener('open', () => { clearTimeout(timer); resolve('open'); }, { once: true });
     ws.addEventListener('error', () => { clearTimeout(timer); resolve('error'); }, { once: true });
   });
@@ -284,7 +293,8 @@ function waitForCloseCode(ws: WsClient, timeoutMs = 2500): Promise<number> {
 function findNonLoopbackIpv4(): string | null {
   for (const addrs of Object.values(networkInterfaces())) {
     for (const a of addrs ?? []) {
-      if (a.family === 'IPv4' && !a.internal) return a.address;
+      // Link-Local (169.254.x, APIPA) ausschließen — nicht zuverlässig verbindbar (CR-L3, Flake-Vermeidung).
+    if (a.family === 'IPv4' && !a.internal && !a.address.startsWith('169.254.')) return a.address;
     }
   }
   return null;
@@ -414,8 +424,11 @@ describe('TL-11 Wake-Wire-Conformance (echter /ws-Socket, Loopback)', () => {
       key: h.tls.clientKeyPem,
       servername: 'localhost',
     });
+    // Message-Listener VOR dem open-await anhängen (CR-L2): system:connected kommt direkt nach dem
+    // 101-Upgrade — sonst latenter Race (Frame vor Listener → 1500ms-Timeout, Flake).
+    const connected = waitForClientType(ws, 'system:connected');
     expect(await connectOutcome(ws)).toBe('open');
-    const welcome = await waitForClientType(ws, 'system:connected');
+    const welcome = await connected;
     expect(welcome['type']).toBe('system:connected');
   });
 
