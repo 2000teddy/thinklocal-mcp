@@ -73,13 +73,21 @@ Dieser Pfad durchläuft den Loopback-Gate (`websocket.ts`, §2) und ist der **em
 
 ## 4. Payload-Schema (`agent:wake`)
 
+**Wire-Form (verifiziert, `tl11-wake-wire.conformance.test.ts`):** der Fanout sendet das GANZE `MeshEvent`
+(`websocket.ts:266`, `JSON.stringify(event)`). Auf dem Draht ist der Wake also ein Umschlag mit dem Payload
+**unter `.data`** — nicht flach:
 ```jsonc
 {
-  "instance_id": "<lokale Agent-Instanz-ID>",   // string, nicht-leer
-  "spiffe_uri":  "spiffe://thinklocal/node/<PeerID>", // 4-Komponenten-SPIFFE der Instanz, nicht-leer
-  "reason":      "inbox"                          // WakeReason — aktuell einziger Wert
+  "type": "agent:wake",                 // Event-Typ (der Konsument prüft ev.type)
+  "timestamp": "2026-07-17T06:00:00.000Z", // ISO-8601 (MeshEvent-Metadatum)
+  "data": {                             // ← der eigentliche Payload liegt HIER
+    "instance_id": "<lokale Agent-Instanz-ID>",         // string, nicht-leer
+    "spiffe_uri":  "spiffe://thinklocal/node/<PeerID>", // 4-Komponenten-SPIFFE der Instanz, nicht-leer
+    "reason":      "inbox"                              // WakeReason — aktuell einziger Wert
+  }
 }
 ```
+> **Achtung Konsument:** `reason`/`instance_id`/`spiffe_uri` unter **`ev.data`** lesen, nicht `ev.reason`.
 
 - **Zero-Content (invariant):** der Payload trägt **keinen** Nachrichteninhalt — nicht einmal
   `message_id` oder einen Count (`WakeSignal`, `wake-contract.ts:18`). Bedeutung ist ausschließlich
@@ -115,7 +123,7 @@ function connect() {
   ws.on('open',  () => pokeCli('cold-start sweep'));         // §5: beim Connect IMMER einmal pollen
   ws.on('message', (raw) => {
     const ev = JSON.parse(raw);
-    if (ev.type === 'agent:wake') pokeCli(ev.reason);        // Zero-Content → nur Trigger
+    if (ev.type === 'agent:wake') pokeCli(ev.data?.reason);  // Zero-Content → nur Trigger (Payload unter .data, §4)
   });
   ws.on('close', () => setTimeout(connect, backoff()));      // Reconnect; die Lücke deckt der Sweep
 }
@@ -139,6 +147,26 @@ Der einzige nicht-triviale Teil — `pokeCli()` (wie genau wird der CLI-Prozess 
 | directed: nicht-passender Filter → drop (deny-by-default) (§3) | `websocket.test.ts:107` |
 | Event-Typ-Filter greift zuerst (nur `inbox:new` abonniert → kein Wake) (§3) | `websocket.test.ts:112` |
 | Regression: nicht-directed Event an Ungefilterten → unverändert Delivery | `websocket.test.ts:117` |
+
+### 7.1 Draht-Ebene (echter `/ws`-Socket, nicht nur reine Funktionen) — `tl11-wake-wire.conformance.test.ts`
+
+Die Tabelle oben bewacht die **Routing-Logik** (reine Funktionen). Zusätzlich treibt ein Conformance-Test
+den **realen Loopback-Socket** so, wie der Supervisor ihn trifft (connect → subscribe → Frame empfangen):
+
+| Wire-Garantie (§) | Beleg |
+|---|---|
+| §3 Query-Subscribe → `system:connected` spiegelt `agentFilter` | `tl11-wake-wire.conformance.test.ts` |
+| §4 adressiert+gefiltert → genau 1 Zero-Content-Frame, Payload **unter `.data`** | ″ |
+| §3 directed Match per `instance_id` (nicht nur SPIFFE) | ″ |
+| §3/§5 deny-by-default: **ungefilterter** Client bekommt NIE `agent:wake` (Same-Socket-Barrier) | ″ |
+| §3/§5 directed drop: falscher Filter → kein Wake | ″ |
+| §8.1 Frame-Pfad von Loopback: `agent` per Frame gesetzt → Wake zugestellt | ″ |
+| §2 Loopback-Positivpfad: agent-gefilterter Connect von 127.0.0.1 nicht geschlossen | ″ |
+
+**Deckungsgrenze (als `it.todo` markiert, eigener schwererer Slice):** §2 mTLS-Pflicht (cert-lose/`ws://` →
+TLS-Reset) braucht cardServer-TLS + Client-Cert-Fixtures; der Nicht-Loopback-`4003`-Reject braucht eine
+Bindung an ein Nicht-Loopback-Interface (auf einem 127.0.0.1-Harness ist `req.ip` ohne `trustProxy` immer
+Loopback). Diese bleiben unit-bewacht (`rejectsAgentFilter`/`isLoopbackIp`), bis die Fixtures stehen.
 
 ## 8. Was bleibt extern-blocked (präzise, mit Beleg)
 

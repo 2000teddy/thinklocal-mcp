@@ -8,6 +8,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### test(tl11): Draht-Ebenen-Conformance für den Wake-Kontrakt (Scaffold) (2026-07-17 06:38)
+Die §2–§5-Garantien der `TL-11-wake-consumer-contract.md` waren nur auf Pure-Function-/Routing-Ebene bewacht
+(`matchesSubscription`/`rejectsAgentFilter`/`isLoopbackIp` — kein Socket). Neu `tl11-wake-wire.conformance.test.ts`:
+echter Fastify-Server + `registerWebSocket` auf `127.0.0.1:<ephemeral>`, ein echter WS-Client (Node-22-global
+`WebSocket`, kein neuer Dependency) treibt connect → subscribe → `agent:wake`-Frame. **7 grün + 2 `it.todo`**.
+Negativ-Tests via Same-Socket-Barrier (deterministisch, kein `sleep`). Wire-Shape-Befund: der Fanout sendet das
+GANZE `MeshEvent` → Payload liegt **unter `.data`** (`{type, timestamp, data:{…}}`); Consumer-Doc §4/§6
+korrigiert (`ev.reason` → `ev.data.reason`), §7.1 Wire-Bindungen ergänzt. Deckungsgrenze (todo, braucht
+Cert-Fixtures bzw. Nicht-Loopback-Bindung): §2 mTLS-Pflicht + Nicht-Loopback-`4003`-Reject — bleiben unit-bewacht.
+De-riskt TL-11 Slice B, ohne den Out-of-Repo-Supervisor→CLI-Hop zu bauen. Suite **1721 grün + 2 todo**,
+tsc(strict)/neue-Datei-Lint 0. Kein Runtime-Change, kein Deploy.
+
 ### fix(api): TL-21 Skelett-Übersicht total gegen malformed CRDT-Daten (CR-MEDIUM codex-Review #281) (2026-07-17 06:14)
 Robustheits-Fix auf dem offenen PR #281: `firstSentence(text)` nahm einen Laufzeit-**String** an
 (`(text ?? '').trim()`), aber `Capability.description` ist runtime-untyped — `importPeerCapabilities()`
