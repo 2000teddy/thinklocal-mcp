@@ -9,16 +9,21 @@
  * bislang NUR auf Pure-Function-/Routing-Ebene bewacht (`wake-contract.test.ts`, `websocket.test.ts`:
  * `matchesSubscription`/`rejectsAgentFilter`/`isLoopbackIp` — reine Funktionen, kein Socket). Es fehlte ein
  * Test, der den **realen `/ws`-Socket** so treibt, wie der Supervisor ihn trifft: connect → subscribe →
- * `agent:wake`-Frame empfangen. Diese Datei schließt genau diese Lücke — **strictly in-repo, kein Deploy,
- * keine Certs-Fixtures nötig für die hier grünen Fälle** — und de-riskt Slice B über die Unit-Ebene hinaus.
+ * `agent:wake`-Frame empfangen. Diese Datei schließt genau diese Lücke — **strictly in-repo, kein Deploy** —
+ * und de-riskt Slice B über die Unit-Ebene hinaus.
  *
- * DECKUNGSGRENZE (bewusst, ehrlich)
- * ---------------------------------
- * Grün hier (über echten Loopback-Socket erreichbar): §3 Subscribe-Form, §4 Zero-Content-Wire-Shape,
- * §3/§5 directed deny-by-default + Match, §8.1 Frame-Pfad, §2 Loopback-Positivpfad.
- * NICHT hier (brauchen mTLS-Cert-Fixtures bzw. eine Nicht-Loopback-Bindung → eigener, schwererer Slice,
- * als `it.todo` markiert): §2 mTLS-Pflicht (cert-lose/`ws://`-Verbindung TLS-reset) und der Nicht-Loopback-
- * `4003`-Reject (req.ip ist auf einem 127.0.0.1-Harness immer Loopback; ohne trustProxy nicht spoofbar).
+ * DECKUNG (bewusst, ehrlich)
+ * --------------------------
+ * Grün über echten Loopback-Socket: §3 Subscribe-Form, §4 Zero-Content-Wire-Shape, §3/§5 directed
+ * deny-by-default + Match, §8.1 Frame-Pfad, §2 Loopback-Positivpfad.
+ * §2 mTLS-Pflicht (KW30 cert-fixture Slice): ein zweiter Harness fährt den echten cardServer-TLS-Transport
+ * (Fastify `https` + requestCert + rejectUnauthorized) mit In-Memory-CA/Server-/Client-Leaf (node-forge)
+ * hoch → gültiges Client-Cert erreicht /ws (system:connected), cert-lose bzw. `ws://`-Verbindungen werden
+ * auf TLS-Ebene resettet.
+ * §2 Nicht-Loopback-`4003`-Reject: ein dritter Harness bindet an eine echte Nicht-Loopback-IPv4 der
+ * Maschine (kein trustProxy → req.ip = Socket-Peer, nicht spoofbar) → agent-gefilterter Connect wird mit
+ * `4003` geschlossen. Auf reinen Loopback-Hosts (keine externe IPv4) wird NUR dieser eine Fall via
+ * `it.skipIf` übersprungen (statt falsch grün); der isLoopbackIp-Prädikatstest bleibt unit-bewacht.
  *
  * WIRE-SHAPE-BEFUND (vom Scaffold aufgedeckt)
  * ------------------------------------------
@@ -28,13 +33,16 @@
  * Consumer-Spec §6 las `ev.reason` (statt `ev.data.reason`); mit diesem Slice auf `ev.data.reason` korrigiert.
  */
 import { describe, it, expect, afterEach } from 'vitest';
+import { networkInterfaces } from 'node:os';
 import Fastify, { type FastifyInstance } from 'fastify';
+import forge from 'node-forge';
+import { WebSocket as WsClient, Agent } from 'undici';
 import { MeshEventBus } from './events.js';
 import { registerWebSocket } from './websocket.js';
 
 // ── Harness: echter Fastify-Server + registerWebSocket, lauschend auf 127.0.0.1:<ephemeral> (Loopback). ──
-// Plain HTTP genügt für die hier grünen Fälle: der Loopback-Gate (§2) prüft `req.ip`, nicht TLS; die
-// mTLS-Pflicht ist eine cardServer-TLS-Config-Schicht (eigener it.todo-Slice mit Cert-Fixtures).
+// Plain HTTP genügt für die Loopback-Routing-Fälle: der Loopback-Gate (§2) prüft `req.ip`, nicht TLS. Die
+// mTLS-Pflicht ist eine cardServer-TLS-Config-Schicht → eigener `startMtlsWakeWireHarness` (Cert-Fixtures).
 interface WireHarness {
   bus: MeshEventBus;
   port: number;
@@ -43,7 +51,8 @@ interface WireHarness {
 }
 
 const openHarnesses: WireHarness[] = [];
-const openSockets: WebSocket[] = [];
+const openSockets: Array<{ close: () => void }> = [];
+const openAgents: Agent[] = [];
 
 async function startWakeWireHarness(): Promise<WireHarness> {
   const bus = new MeshEventBus();
@@ -125,10 +134,187 @@ const SPIFFE = 'spiffe://thinklocal/node/12D3KooTestPeerID';
 const INSTANCE = 'claude-code-abc123';
 const q = (s: string): string => encodeURIComponent(s);
 
+// ── §2 mTLS-Fixtures: In-Memory-CA + Server-/Client-Leaf (node-forge), nur für diese Datei. ──
+// Die mTLS-Pflicht ist eine Transport-Schicht des cardServers (Fastify `https` + requestCert), NICHT Teil
+// von registerWebSocket. Dieser Harness fährt genau diese Transportschicht real hoch → der /ws-Pfad ist
+// beweisbar nur über mTLS erreichbar (cert-lose/`ws://`-Verbindung wird auf TLS-Ebene resettet).
+let certSerial = 0x10;
+function makeTestCa(): { caCertPem: string; caCert: forge.pki.Certificate; caKey: forge.pki.PrivateKey } {
+  const keys = forge.pki.rsa.generateKeyPair(2048);
+  const cert = forge.pki.createCertificate();
+  cert.publicKey = keys.publicKey;
+  cert.serialNumber = '01';
+  cert.validity.notBefore = new Date(Date.now() - 60_000);
+  cert.validity.notAfter = new Date(Date.now() + 864e5);
+  const attrs = [{ name: 'commonName', value: 'tl11 wire test ca' }];
+  cert.setSubject(attrs);
+  cert.setIssuer(attrs);
+  cert.setExtensions([{ name: 'basicConstraints', cA: true }, { name: 'keyUsage', keyCertSign: true }]);
+  cert.sign(keys.privateKey, forge.md.sha256.create());
+  return { caCertPem: forge.pki.certificateToPem(cert), caCert: cert, caKey: keys.privateKey };
+}
+
+function issueLeaf(
+  caCert: forge.pki.Certificate,
+  caKey: forge.pki.PrivateKey,
+  cn: string,
+  serverSan: boolean,
+): { certPem: string; keyPem: string } {
+  const keys = forge.pki.rsa.generateKeyPair(2048);
+  const cert = forge.pki.createCertificate();
+  cert.publicKey = keys.publicKey;
+  cert.serialNumber = (certSerial++).toString(16).padStart(4, '0');
+  cert.validity.notBefore = new Date(Date.now() - 60_000);
+  cert.validity.notAfter = new Date(Date.now() + 864e5);
+  cert.setSubject([{ name: 'commonName', value: cn }]);
+  cert.setIssuer(caCert.subject.attributes);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const extensions: any[] = [
+    { name: 'basicConstraints', cA: false },
+    { name: 'keyUsage', digitalSignature: true, keyEncipherment: true },
+    { name: 'extKeyUsage', serverAuth: true, clientAuth: true },
+  ];
+  if (serverSan) {
+    extensions.push({
+      name: 'subjectAltName',
+      altNames: [
+        { type: 2, value: 'localhost' }, // DNS
+        { type: 7, ip: '127.0.0.1' }, // IP
+      ],
+    });
+  }
+  cert.setExtensions(extensions);
+  cert.sign(caKey, forge.md.sha256.create());
+  return { certPem: forge.pki.certificateToPem(cert), keyPem: forge.pki.privateKeyToPem(keys.privateKey) };
+}
+
+interface MtlsHarness extends WireHarness {
+  tls: { caPem: string; clientCertPem: string; clientKeyPem: string };
+}
+
+/** Fastify mit echtem mTLS-Transport (requestCert + rejectUnauthorized) + registerWebSocket, Loopback. */
+async function startMtlsWakeWireHarness(): Promise<MtlsHarness> {
+  const ca = makeTestCa();
+  const server = issueLeaf(ca.caCert, ca.caKey, 'localhost', true);
+  const client = issueLeaf(ca.caCert, ca.caKey, 'tl11-test-client', false);
+  const bus = new MeshEventBus();
+  const app = Fastify({
+    logger: false,
+    https: {
+      key: server.keyPem,
+      cert: server.certPem,
+      ca: ca.caCertPem,
+      requestCert: true,
+      rejectUnauthorized: true,
+    },
+  });
+  await registerWebSocket(app, bus);
+  await app.listen({ port: 0, host: '127.0.0.1' });
+  const addr = app.server.address();
+  if (addr == null || typeof addr === 'string') throw new Error('kein TCP-Port vom mTLS-Harness');
+  const harness: MtlsHarness = {
+    bus,
+    port: addr.port,
+    app,
+    tls: { caPem: ca.caCertPem, clientCertPem: client.certPem, clientKeyPem: client.keyPem },
+    close: async () => {
+      await app.close();
+    },
+  };
+  openHarnesses.push(harness);
+  return harness;
+}
+
+/** Öffnet einen echten wss-Client (undici) mit den gegebenen TLS-connect-Optionen; trackt Socket+Agent. */
+function openWssClient(port: number, path: string, connect: Agent.Options['connect']): WsClient {
+  const agent = new Agent({ connect });
+  openAgents.push(agent);
+  const ws = new WsClient(`wss://127.0.0.1:${port}/ws${path}`, { dispatcher: agent });
+  openSockets.push(ws);
+  return ws;
+}
+
+/** Verbindungs-Ausgang eines undici-Clients: 'open' (Handshake ok) oder 'error' (TLS/Transport-Reset). */
+function connectOutcome(ws: WsClient, timeoutMs = 2500): Promise<'open' | 'error'> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve('error'), timeoutMs);
+    ws.addEventListener('open', () => { clearTimeout(timer); resolve('open'); }, { once: true });
+    ws.addEventListener('error', () => { clearTimeout(timer); resolve('error'); }, { once: true });
+  });
+}
+
+/** Nächste Nachricht eines bestimmten `type` von einem undici-Client (analog waitForType). */
+function waitForClientType(ws: WsClient, type: string, timeoutMs = 1500): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      ws.removeEventListener('message', onMsg);
+      reject(new Error(`timeout: kein Frame vom Typ ${type}`));
+    }, timeoutMs);
+    const onMsg = (ev: MessageEvent): void => {
+      const parsed = JSON.parse(String(ev.data)) as Record<string, unknown>;
+      if (parsed['type'] === type) {
+        clearTimeout(timer);
+        ws.removeEventListener('message', onMsg);
+        resolve(parsed);
+      }
+    };
+    ws.addEventListener('message', onMsg);
+  });
+}
+
+/** Wartet auf den WS-Close-Code (z.B. 4003). */
+function waitForCloseCode(ws: WsClient, timeoutMs = 2500): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timeout: kein close-Frame')), timeoutMs);
+    ws.addEventListener(
+      'close',
+      (ev) => {
+        clearTimeout(timer);
+        resolve((ev as unknown as { code: number }).code);
+      },
+      { once: true },
+    );
+  });
+}
+
+// ── §2 Nicht-Loopback: Bindung an eine echte Nicht-Loopback-IPv4 (falls vorhanden). ──
+// req.ip = Socket-Peer (kein trustProxy → nicht spoofbar). Auf einem 127.0.0.1-Harness ist req.ip immer
+// Loopback; erst eine echte Nicht-Loopback-Bindung treibt den 4003-Reject-Pfad. Auf reinen Loopback-Hosts
+// (keine externe IPv4) wird der Test übersprungen (ehrliche Deckungsgrenze) statt falsch grün zu sein.
+function findNonLoopbackIpv4(): string | null {
+  for (const addrs of Object.values(networkInterfaces())) {
+    for (const a of addrs ?? []) {
+      if (a.family === 'IPv4' && !a.internal) return a.address;
+    }
+  }
+  return null;
+}
+const NON_LOOPBACK_IPV4 = findNonLoopbackIpv4();
+
+async function startNonLoopbackHarness(ip: string): Promise<WireHarness> {
+  const bus = new MeshEventBus();
+  const app = Fastify({ logger: false });
+  await registerWebSocket(app, bus);
+  await app.listen({ port: 0, host: ip });
+  const addr = app.server.address();
+  if (addr == null || typeof addr === 'string') throw new Error('kein TCP-Port vom Nicht-Loopback-Harness');
+  const harness: WireHarness = { bus, port: addr.port, app, close: async () => { await app.close(); } };
+  openHarnesses.push(harness);
+  return harness;
+}
+
 afterEach(async () => {
   for (const ws of openSockets.splice(0)) {
     try {
       ws.close();
+    } catch {
+      /* already closed */
+    }
+  }
+  // undici-Agents schließen — sonst halten Keep-Alive-Sockets den Event-Loop offen (Test-Hang).
+  for (const a of openAgents.splice(0)) {
+    try {
+      await a.close();
     } catch {
       /* already closed */
     }
@@ -219,11 +405,47 @@ describe('TL-11 Wake-Wire-Conformance (echter /ws-Socket, Loopback)', () => {
     expect(ws.readyState).toBe(WebSocket.OPEN);
   });
 
-  // ── Deckungsgrenze: braucht mTLS-Cert-Fixtures bzw. Nicht-Loopback-Bindung (eigener, schwererer Slice) ──
-  it.todo(
-    '§2 mTLS-Pflicht: cert-lose / ws://-Verbindung wird auf TLS-Ebene resettet — braucht cardServer-TLS + Client-Cert-Fixtures',
-  );
-  it.todo(
-    '§2 Nicht-Loopback → Close 4003: agent-Filter von ≠127.0.0.1 abgelehnt — braucht Bindung an ein Nicht-Loopback-Interface (req.ip ohne trustProxy = Socket-Peer)',
+  // ── §2 mTLS-Pflicht (echter cardServer-TLS-Transport + In-Memory-Cert-Fixtures) ──
+  it('§2 mTLS: gültiges Client-Cert → /ws über wss erreichbar (system:connected)', async () => {
+    const h = await startMtlsWakeWireHarness();
+    const ws = openWssClient(h.port, `?subscribe=agent:wake&agent=${q(SPIFFE)}`, {
+      ca: h.tls.caPem,
+      cert: h.tls.clientCertPem,
+      key: h.tls.clientKeyPem,
+      servername: 'localhost',
+    });
+    expect(await connectOutcome(ws)).toBe('open');
+    const welcome = await waitForClientType(ws, 'system:connected');
+    expect(welcome['type']).toBe('system:connected');
+  });
+
+  it('§2 mTLS-Pflicht: Client OHNE Cert → auf TLS-Ebene resettet (kein system:connected)', async () => {
+    const h = await startMtlsWakeWireHarness();
+    // CA vertraut (Server-Cert validiert), aber KEIN Client-Cert präsentiert → requestCert+rejectUnauthorized reset.
+    const ws = openWssClient(h.port, `?subscribe=agent:wake&agent=${q(SPIFFE)}`, {
+      ca: h.tls.caPem,
+      servername: 'localhost',
+    });
+    expect(await connectOutcome(ws)).toBe('error');
+  });
+
+  it('§2 mTLS-Pflicht: Plaintext ws:// gegen den TLS-Port → TLS-Reset', async () => {
+    const h = await startMtlsWakeWireHarness();
+    const ws = new WsClient(`ws://127.0.0.1:${h.port}/ws?subscribe=agent:wake`);
+    openSockets.push(ws);
+    expect(await connectOutcome(ws)).toBe('error');
+  });
+
+  // ── §2 Nicht-Loopback → 4003 (echte Nicht-Loopback-Bindung; auf reinen Loopback-Hosts übersprungen) ──
+  it.skipIf(NON_LOOPBACK_IPV4 == null)(
+    '§2 Nicht-Loopback → Close 4003: agent-Filter von ≠Loopback-req.ip wird abgelehnt',
+    async () => {
+      const ip = NON_LOOPBACK_IPV4 as string;
+      const h = await startNonLoopbackHarness(ip);
+      // Connect von/zu einer echten Nicht-Loopback-IPv4 → req.ip ist nicht-Loopback → 4003.
+      const ws = new WsClient(`ws://${ip}:${h.port}/ws?subscribe=agent:wake&agent=${q(SPIFFE)}`);
+      openSockets.push(ws);
+      expect(await waitForCloseCode(ws)).toBe(4003);
+    },
   );
 });
