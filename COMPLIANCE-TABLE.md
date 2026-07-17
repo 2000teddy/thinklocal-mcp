@@ -1800,6 +1800,10 @@ CHANGES.md, `changes/2026-07-07_doc-compliance-gate.md`, dieser Eintrag; Rollen/
 
 **Typ:** Test-Infra (cert-fixture Slice, TL-11 §2 mTLS + Nicht-Loopback-4003). Kein Runtime-Change. **DO:** `changes/2026-07-17_tl11-cert-fixtures.md`, `CHANGES.md`, `TODO.md`, Header-Doc der Testdatei, dieser Eintrag.
 
+| #284 | (offen, base=main) | 2026-07-17 17:06 | n/a | n/a | n/a | ✅ | ✅ | ✅ | **Doc-only (KW29 Bug-Pfad 2 einsortieren) → CO/CG/TS entfallen** (kein Code, keine Design-Entscheidung — 2b-Weg-Wahl explizit an CO delegiert). Neu `docs/BUGPFAD-2-logflut-status.md` = konsolidierter Beleg + Issue-Vorlage (KW29-Freitag-Deliverable). Trennt die **zwei** Hälften: **2a** `mount:command not found`-Flut/Unit-PATH = repo-seitig GESCHLOSSEN (#273 `f57ae5a`, 7 PATH-Stellen, `launchd-plist.test.ts` 25 grün, `.55`-Live-Beleg operator-gated); **2b** unbegrenztes Log-Wachstum = **OFFEN** (append-only Senken `plist:37/40`/`service:25-26` + Logger-stdout `logger.ts:5-11` pino `destination:1`, **kein** Rotations-/Cap-/newsyslog-/logrotate-Mechanismus im Repo — Grep-Falsifikation negativ). `TODO.md` Bug-Pfad-2-Eintrag ergänzt. **CR:** Doc-Accuracy-Subagent (adversarial, jede Datei:Zeile geprüft, „no rotation" aktiv falsifiziert) — **kein HIGH/MEDIUM**, 1 LOW (`maxBytes`-Label) gefixt. **PC:** Secret-Scan clean. Volle Suite **1746 grün** (Regressions-Absicherung). Kein Merge (Review-of-record-Blocker, s. #283). |
+
+**Typ:** Doc-only (KW29 Bug-Pfad 2 Log-Flut Beleg/Issue-Vorlage). Kein Runtime-Change. **DO:** `docs/BUGPFAD-2-logflut-status.md`, `changes/2026-07-17_bugpath2-logflut-evidence.md`, `CHANGES.md`, `TODO.md`, dieser Eintrag.
+
 ---
 
-*Letzte Aktualisierung: 2026-07-17 13:34 — #283 CR ✅ (Claude-Pfad Hausregel-bestätigt, codex/agy nicht im PATH); merge-blocked: kein GH-Review-of-record, geparkt bis formaler Approve, keine Christian-Eskalation.*
+*Letzte Aktualisierung: 2026-07-17 17:06 — #284 docs(kw29): Bug-Pfad 2 Log-Flut Beleg/Issue-Vorlage (2a geschlossen / 2b offen: keine Logrotation); Doc-only, CR Doc-Accuracy kein HIGH/MEDIUM, Suite 1746 grün.*

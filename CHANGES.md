@@ -8,6 +8,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs(kw29): Bug-Pfad 2 Log-Flut — konsolidierter Beleg + Issue-Vorlage (2026-07-17 17:06)
+KW29-Freitag-Deliverable („Logrotation + PATH-/`mount`-Fehler einsortieren, saubere Belegdatei/Issue-Vorlage").
+Neu `docs/BUGPFAD-2-logflut-status.md` — trennt die **zwei** Hälften von Bug-Pfad 2: **2a** `mount: command not
+found`-Flut/Unit-PATH ist repo-seitig GESCHLOSSEN (#273 `f57ae5a`, 7 PATH-Stellen, Regression-Test 25 grün,
+`.55`-Live-Beleg operator-gated), **2b** unbegrenztes Log-Wachstum ist **OFFEN** (append-only Senken +
+Logger-stdout `logger.ts` pino `destination:1`, **keine** Rotation/Size-Cap/newsyslog/logrotate im Repo —
+Grep-Falsifikation negativ; Optionen newsyslog.d/logrotate/pino-roll skizziert, nicht umgesetzt, Weg-Wahl = CO).
+`TODO.md` Bug-Pfad-2-Eintrag ergänzt (fehlte). Doc-only, kein Runtime-Change; CR Doc-Accuracy-Subagent (kein
+HIGH/MEDIUM, 1 LOW gefixt), Suite 1746 grün.
+
 ### test(tl11): §2 mTLS-Pflicht + Nicht-Loopback-4003 Draht-Conformance (cert-fixture Slice) (2026-07-17 13:05)
 Zieht die zwei offenen `it.todo` des Wire-Scaffolds an → `tl11-wake-wire.conformance.test.ts` jetzt **11 grün**
 (0 todo). **§2 mTLS-Pflicht:** zweiter Harness mit demselben Vertrag wie der cardServer (Fastify `https` +
