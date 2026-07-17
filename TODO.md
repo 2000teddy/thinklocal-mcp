@@ -121,6 +121,12 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     `?subscribe=agent:wake&agent=<spiffe>`, Zero-Content-Payload-Schema, best-effort/lossy/coalesced-Semantik,
     Referenz-Loop, jede Garantie testgebunden). **De-riskt** Slice B, ohne den externen Hop zu bauen; kein
     neuer Beschluss (aus gemergtem #271/#277-Code abgeleitet).
+  - [x] **TL-11 Wire-Conformance-Scaffold** (2026-07-17): `tl11-wake-wire.conformance.test.ts` — treibt den
+    **realen `/ws`-Socket** (echter Fastify-Server + `registerWebSocket`, Node-22-`WebSocket`-Client, Loopback)
+    statt nur reine Funktionen: **7 grün** (§3 Subscribe, §4 Zero-Content-Wire-Shape, directed Match/deny/drop,
+    §8.1 Frame-Pfad, §2 Loopback-Positivpfad) **+ 2 `it.todo`** (§2 mTLS-Pflicht + Nicht-Loopback-`4003` →
+    brauchen Cert-Fixtures bzw. Nicht-Loopback-Bindung). Wire-Shape-Befund: Payload liegt **unter `.data`** →
+    Consumer-Doc §4/§6/§7.1 korrigiert. De-riskt Slice B, ohne den externen Hop zu bauen.
   - [ ] **TL-11 Slice B** (extern-blocked): Out-of-Repo Agent-Home-Supervisor konsumiert `agent:wake` →
     weckt CLI (`pokeCli`); **Zwei-Peer-Live-Proof** (CLI-Reaktion ohne dazwischenliegenden Poll). Gegen den
     fixen Consumer-Contract (s.o.) baubar. **Echter Blocker:** der letzte Hop (Supervisor → CLI) ist
