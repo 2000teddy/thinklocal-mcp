@@ -1804,6 +1804,10 @@ CHANGES.md, `changes/2026-07-07_doc-compliance-gate.md`, dieser Eintrag; Rollen/
 
 **Typ:** Doc-only (KW29 Bug-Pfad 2 Log-Flut Beleg/Issue-Vorlage). Kein Runtime-Change. **DO:** `docs/BUGPFAD-2-logflut-status.md`, `changes/2026-07-17_bugpath2-logflut-evidence.md`, `CHANGES.md`, `TODO.md`, dieser Eintrag.
 
+| #286 | (offen, base=main) | 2026-07-18 06:04 | n/a | n/a | n/a | ✅ | ✅ | ✅ | **Doc-only (Reconcile-Cursor-Hygiene) → CO/CG/TS entfallen** (kein Code, keine Design-Frage). Reconcile-Wächter (`reports/reconcile-drift-2026-07-18-0332.md`) meldete Drift: TODO.md höchste PR-Ref nur **#277** (Cursor 7 hinter #284), CHANGES.md-#284-Eintrag ohne „#284"-Marker. Live verifiziert: die Einträge der gemergten Slices #281–#284 existierten ohne PR-Nummer. Fix: PR-Nummern an die **bestehenden** TODO/CHANGES-Einträge annotiert (#281 TL-21 Slice 1, #282 Wire-Scaffold, #283 cert-fixture, #284 Bug-Pfad 2 Doc) → Cursor rückt auf #284. `COMPLIANCE-TABLE` war bereits aktuell. **CR:** Self-CR mechanisch — jede der 8 Annotationen per `git log origin/main` gegen ihren Merge-Commit gegengeprüft (830feed/898802b/94f24f7/58c7df9), kein Mis-Mapping. **PC:** Secret-Scan clean. Doku-Compliance-Gate deckt Konsistenz. Kein Merge (Review-of-record-Blocker, s. #283–#285). |
+
+**Typ:** Doc-only (Reconcile-Cursor-Hygiene, PR-Nummern in TODO/CHANGES nachgezogen). Kein Runtime-Change. **DO:** `changes/2026-07-18_reconcile-doc-cursor.md`, `CHANGES.md`, `TODO.md`, dieser Eintrag.
+
 ---
 
-*Letzte Aktualisierung: 2026-07-17 17:06 — #284 docs(kw29): Bug-Pfad 2 Log-Flut Beleg/Issue-Vorlage (2a geschlossen / 2b offen: keine Logrotation); Doc-only, CR Doc-Accuracy kein HIGH/MEDIUM, Suite 1746 grün.*
+*Letzte Aktualisierung: 2026-07-18 06:04 — #286 docs(reconcile): PR-Nummern-Cursor in TODO/CHANGES nachgezogen (#281–#284); Doc-only, Cursor auf #284.*
