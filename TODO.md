@@ -140,11 +140,17 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     §2 **Nicht-Loopback-`4003`** über Bindung an eine echte Nicht-Loopback-IPv4 (kein `trustProxy` → `req.ip` =
     Socket-Peer, `it.skipIf` auf reinen Loopback-Hosts). Offen als Follow-up: cardServer-Wiring-Test (CR-M2 —
     ein Regress von `requestCert` in agent-card.ts wird hier bewusst NICHT gefangen).
+  - [x] **TL-11 Slice-B Integrations-Runbook (Prep)** (2026-07-19): `docs/RUNBOOK-TL-11-wake-supervisor.md` —
+    operativer Companion zur Consumer-Contract-Spec: Verortung (derselbe Host/Loopback, sonst `4003`),
+    vorhandenes Client-Cert (kein Secret), Subscribe-Form, `.data`-Payload-Reaktion, Cold-Start-Sweep-Pflicht,
+    **Zwei-Peer-Proof-Prozedur** + Verifikations-Checkliste + No-op-Rückfall. **De-riskt** Slice B, entfernt
+    den Blocker NICHT (letzter Hop out-of-repo, Host-/Fenster-gated). Doc-only, kein Deploy/Secret.
   - [ ] **TL-11 Slice B** (extern-blocked): Out-of-Repo Agent-Home-Supervisor konsumiert `agent:wake` →
     weckt CLI (`pokeCli`); **Zwei-Peer-Live-Proof** (CLI-Reaktion ohne dazwischenliegenden Poll). Gegen den
-    fixen Consumer-Contract (s.o.) baubar. **Echter Blocker:** der letzte Hop (Supervisor → CLI) ist
-    out-of-repo + Deploy/Host-gated (vgl. `[[dod-two-peer-mcp-proof]]`, `[[week1-remote-restart-rollout]]`).
-    Optional/danach: WS-Instanz-Bindung, Opt-in-Broadcast-Wake, Reconciliation-Sweep.
+    fixen Consumer-Contract (s.o.) **und jetzt das Runbook** baubar. **Echter Blocker:** der letzte Hop
+    (Supervisor → CLI) ist out-of-repo + Deploy/Host-gated (vgl. `[[dod-two-peer-mcp-proof]]`,
+    `[[week1-remote-restart-rollout]]`). Optional/danach: WS-Instanz-Bindung, Opt-in-Broadcast-Wake,
+    Reconciliation-Sweep.
   - [x] 🟠 **TL-11 Sicherheits-Härtung: Frame-Pfad-Loopback-Loch GESCHLOSSEN** (entdeckt+gefixt 2026-07-16) —
     der `4003`-Loopback-Gate prüfte nur `query.agent` beim Connect; der Frame-Pfad `{type:'subscribe',agent:…}`
     setzte `agentFilter` **ohne** Loopback-Check → Nicht-Loopback-mTLS-Peer konnte per Frame fremde `agent:wake`
