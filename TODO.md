@@ -173,7 +173,7 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     **Same-Vendor-2-Modell-Panel** (claude-opus 8/10 + claude-sonnet 7/10; `codex`+`agy` fehlen im PATH,
     `[[pal-review-backend-agy-missing]]` → kein Cross-Vendor-Pass). **Einstimmig 5/6** bestätigt; einzige
     Divergenz **D3-Laufzeit** (beide verwerfen ≥5 J: opus 12–24 Mon., sonnet 3 J → Korridor ~1–3 J, Owner-
-    Entscheidung). Auflagen A (pathLen/Chain-Enforcement in `verifyPeerCert` `tls.ts:371-388`), B (Intermediate-
+    Entscheidung). Auflagen A (pathLen/Chain-Enforcement in `verifyPeerCert` `tls.ts:729`), B (Intermediate-
     Expiry-Monitoring fehlt), C (keine Revocation-Infra; sonnet: gepinnte Denylist statt CRL/OCSP) — beide
     Modelle: **blockierend**. **Optional:** Re-Run mit codex/agy für Cross-Vendor.
   - [ ] **Auflage A + B klären** (Enforcement-Prüfung + Intermediate-Expiry-Monitoring) — von beiden Modellen

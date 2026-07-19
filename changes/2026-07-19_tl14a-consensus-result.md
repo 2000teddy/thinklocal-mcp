@@ -19,7 +19,7 @@ festzuhalten — repo-lokal, ohne verbindliche Entscheidung.
   **beide verwerfen ≥5 J** (opus 12–24 Monate, sonnet 3 Jahre → Korridor ~1–3 J; online/ko-lokalisierter
   Intermediate-Key = Kompromittierungs-Hotspot; sonnet warnt zugleich vor Rushed-Ceremony bei zu kurzen
   Intervallen). Auflagen (beide: **blockierend**): **A** Chain-Building/pathLen-Enforcement in
-  `verifyPeerCert`/`verifyCanonicalNodeCert` (`tls.ts:371-388`) — sonst D2/D4 nur Papier (Fingerprint-Pin
+  `verifyPeerCert` (`tls.ts:729`, heute flacher Ein-CA-Verify ohne Chain-Building) — sonst D2/D4 nur Papier (Fingerprint-Pin
   validiert ggf. nicht die Kette); **B** Intermediate-Expiry-Monitoring fehlt (`cert-expiry-monitor` nur
   Leafs), Vorbedingung für D3; **C** keine Revocation-Infra — sonnet: gepinnte Fingerprint-Denylist statt
   CRL/OCSP. Reihenfolge: A+B → D3-Zahl → ADR.
@@ -37,7 +37,9 @@ Entscheidungs-Input. Die D3-Laufzeit ist eine **neue Owner-Entscheidung** und bl
   (Lauf lieferte ein Ergebnis; die neue Owner-Frage — D3-Laufzeit — ist als Sign-off-Punkt geparkt, nicht
   gesetzt).
 - **CG/TS:** entfallen — kein Code, keine Skripte.
-- **CR:** Doc-Accuracy self — Anker/Zitate gegen die Quelle verifiziert (`tls.ts:371-388/534-537`,
+- **CR:** Claude-Review-Subagent (Doc-Accuracy) — 3 Anker-/Konsistenz-Defekte gefunden + gefixt (erfundener
+  `verifyCanonicalNodeCert` entfernt, Anker `verifyPeerCert` auf `tls.ts:729` korrigiert, „Ein-Modell"-Rest
+  auf 2-Modell vereinheitlicht); Zitate gegen die Quelle verifiziert (`tls.ts:729/534-537`,
   `cert-issuer.ts`, `cert-expiry-monitor`).
 - **PC:** `git diff` gesichtet, Secret-Scan clean (nur Doku).
 - **DO:** dieser Eintrag, `CHANGES.md`, `COMPLIANCE-TABLE.md`, `TODO.md`, die Ergebnis-Note.

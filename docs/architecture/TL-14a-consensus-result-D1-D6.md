@@ -34,8 +34,9 @@ Zahl bleibt Owner-Entscheidung. Beide stufen die Auflagen A–C als **blockieren
 
 ## Querschnittliche Auflagen (beide Modelle einig: **blockierend, nicht optional**)
 - **A · Enforcement-Blocker (höchste Priorität, VOR der ADR):** `pathLen 0` (D2) und der Doppel-Pin-Cutover
-  (D4) sind nur wirksam, wenn `verifyPeerCert`/`verifyCanonicalNodeCert` (`tls.ts:371-388`) **echtes
-  Chain-Building + pathLen-Enforcement** leisten. sonnet-Zusatz: der heutige **Multi-Fingerprint-Pin** matcht
+  (D4) sind nur wirksam, wenn die Peer-Verifikation (`verifyPeerCert`, `tls.ts:729` — heute ein **flacher
+  Ein-CA-Verify** ohne Chain-Building) künftig **echtes Chain-Building + pathLen-Enforcement** leistet.
+  sonnet-Zusatz: der heutige **Multi-Fingerprint-Pin** matcht
   ggf. direkt gegen bekannte Fingerprints, **statt** die Kette zu validieren → dann ist D2 reine Doku ohne
   Durchsetzung. **Prüf-/ggf. Code-Slice VOR TL-14b.** Explizit-Test: Intermediate darf **keine** Sub-CA
   ausstellen.
@@ -69,5 +70,5 @@ Zahl bleibt Owner-Entscheidung. Beide stufen die Auflagen A–C als **blockieren
 
 ## Abgrenzung
 Doc/Design only. **Keine** verbindliche Entscheidung getroffen; protokolliert ein `pal:consensus`-Ergebnis
-(Ein-Modell, infra-bedingt) als Input für Sign-off + ADR. **Kein** Code/Config/Skript, kein
+(Same-Vendor-2-Modell-Panel; infra-bedingt kein Cross-Vendor-Pass) als Input für Sign-off + ADR. **Kein** Code/Config/Skript, kein
 Deploy/Secret/Cross-Host.

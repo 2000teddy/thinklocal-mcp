@@ -17,7 +17,7 @@ Cross-Vendor-Pass; konsultierbar waren die beiden claude-CLI-Modelle → **Same-
 Divergenz **D3-Laufzeit**: **beide verwerfen ≥5 J** (opus 12–24 Monate, sonnet 3 Jahre → Korridor ~1–3 J,
 Owner-Entscheidung; online/ko-lokalisierter Intermediate-Key = Rotations-Hotspot). Drei querschnittliche
 Auflagen, von **beiden als blockierend** eingestuft: A (Chain-Building/pathLen-Enforcement in `verifyPeerCert`
-`tls.ts:371-388`, sonst D2/D4 kosmetisch — heutiger Fingerprint-Pin validiert ggf. nicht die Kette), B
+`tls.ts:729`, sonst D2/D4 kosmetisch — heutiger Fingerprint-Pin validiert ggf. nicht die Kette), B
 (Intermediate-Expiry-Monitoring fehlt, Vorbedingung für D3), C (keine Revocation-Infra; sonnet-Vorschlag:
 gepinnte Fingerprint-Denylist statt CRL/OCSP). Empfohlene Reihenfolge A+B → D3-Zahl → ADR. **Trifft keine
 verbindliche Entscheidung** — Input für Christian-Sign-off + ADR. Kein Code/Config/Skript, kein
