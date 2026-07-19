@@ -8,6 +8,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs(tl14a): CA-Zweistufen-Umzug — Consensus-Ergebnis D1–D6 (2026-07-19 11:34)
+Protokolliert den tatsächlichen `pal:consensus`-Lauf über die D1–D6-Abstimmungsvorlage (`TL-14a-consensus-
+brief-D1-D6.md`, #290) in `docs/architecture/TL-14a-consensus-result-D1-D6.md`. **Infra-Ehrlichkeit:**
+`gpt-5.5`/`codex` und `gemini-pro`/`agy` fehlen im PATH (`[[pal-review-backend-agy-missing]]`) → kein
+Cross-Vendor-Pass; konsultierbar waren die beiden claude-CLI-Modelle → **Same-Vendor-2-Modell-Panel**
+(claude-opus 8/10 + claude-sonnet 7/10). Inhalt: **einstimmig 5/6 bestätigt** (D1/D2/D4/D5/D6). Einzige
+Divergenz **D3-Laufzeit**: **beide verwerfen ≥5 J** (opus 12–24 Monate, sonnet 3 Jahre → Korridor ~1–3 J,
+Owner-Entscheidung; online/ko-lokalisierter Intermediate-Key = Rotations-Hotspot). Drei querschnittliche
+Auflagen, von **beiden als blockierend** eingestuft: A (Chain-Building/pathLen-Enforcement in `verifyPeerCert`
+`tls.ts:729`, sonst D2/D4 kosmetisch — heutiger Fingerprint-Pin validiert ggf. nicht die Kette), B
+(Intermediate-Expiry-Monitoring fehlt, Vorbedingung für D3), C (keine Revocation-Infra; sonnet-Vorschlag:
+gepinnte Fingerprint-Denylist statt CRL/OCSP). Empfohlene Reihenfolge A+B → D3-Zahl → ADR. **Trifft keine
+verbindliche Entscheidung** — Input für Christian-Sign-off + ADR. Kein Code/Config/Skript, kein
+Deploy/Secret/Cross-Host.
+
 ### docs(tl14a): CA-Zweistufen-Umzug — Entscheidungs-Checkliste (Change-Order) (2026-07-19 09:12)
 Folge-Artefakt zu `TL-14a-ca-two-stage-scoping.md` §5: überführt die **6 offenen Entscheidungen** in ein
 aktionierbares **Change-Order-Register** `docs/architecture/TL-14a-decision-checklist.md` — je Entscheidung
