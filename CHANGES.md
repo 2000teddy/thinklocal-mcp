@@ -8,6 +8,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### test(tl14a): Blocker-A Charakterisierungs-Test — verifyPeerCert baut keine Kette (2026-07-19 17:35)
+Macht die code-gegroundete Vorbedingung A (ADR-045 / `TL-14a-blocker-AB-grounding.md`) **regressionsfest**.
+Neu `packages/daemon/src/tls-chain-characterization.test.ts`: baut eine echte zweistufige Kette (Root →
+forge-Intermediate `cA:true`, von der Root signiert → Leaf via `createNodeCert`) und belegt, dass
+`verifyPeerCert` ein **flacher Ein-Aussteller-Verify** ist — `verifyPeerCert(root, leaf@intermediate)` →
+**`false`**, während der **direkte** Aussteller (Intermediate → Leaf, Root → Intermediate) → `true`. Damit
+ist die „kein Chain-Building/pathLen"-Lücke testgebunden; wird der Test eines Tages rot (Root verifiziert das
+Leaf), ist `verifyPeerCert` chain-fähig geworden. **Kein Fix, kein Verhaltens-Change** — reine Charakterisierung
+(+4 Tests, Suite **1756 grün**, tsc(strict)/Lint 0). Kein Deploy/Secret/Cross-Host.
+
 ### docs(adr): ADR-045 CA-Zweistufen-Hierarchie — Draft (Status Proposed) (2026-07-19 14:04)
 Faltet den D1–D6-Konsens (`TL-14a-consensus-result-D1-D6.md`, opus 8/10 + sonnet 7/10) und die code-gegroundeten
 Blocker A/B (`TL-14a-blocker-AB-grounding.md`) in eine Architektur-Entscheidung `docs/architecture/ADR-045-ca-
