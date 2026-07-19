@@ -8,6 +8,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs(tl14a): Consensus-Blocker A & B code-gegroundet (vor ADR) (2026-07-19 13:34)
+Verifiziert die zwei als **blockierend** markierten Consensus-Auflagen am tatsächlichen Code in
+`docs/architecture/TL-14a-blocker-AB-grounding.md`. **A (pathLen/Chain):** NICHT garantiert — die App-Ebene
+`verifyPeerCert` (`tls.ts:729`) ist ein **flacher Ein-Aussteller-Verify** (`caCert.verify(peerCert)` + Leaf-/
+Issuer-Fenster), **kein** Chain-Building/pathLen; `verifyCertificateChain`/`createCaStore` = **0 Treffer** im eigenen Code
+(`packages/daemon/src/`); genutzt von Pin-/Retention-/Trust-Distribution (`tls.ts:388/516/769`). Die Transport-mTLS-Ebene
+(`agent-card.ts:225-231`, Node-TLS `ca`+`requestCert`+`rejectUnauthorized`) **würde** Chain/pathLen prüfen,
+ist aber an eine **einstufige** ca-Bundle-Verdrahtung gebunden und für zwei Stufen **ungetestet** → D2
+(`pathLen 0`) ist auf dem App-Pfad kosmetisch. **B (Intermediate-Expiry):** **fehlt ganz** — der Monitor liest
+nur `node.crt.pem` (`getCertDaysLeft` → `index.ts:1613`, `tls.ts:708-724`), prüft die CA/Intermediate **nie**
+und rotiert nicht → Vorbedingung für D3. Discovery/Doc only, kein Code/Config geändert, kein Deploy/Secret/
+Cross-Host. Vorgeschlagene Folge-Slices (chain-fähiger Verify + Charakterisierungs-Test; CA-Expiry-Quelle)
+sind benannt, nicht umgesetzt.
+
 ### docs(tl11): Slice-B Integrations-Runbook — Agent-Home-Supervisor + Zwei-Peer-Wake-Proof (2026-07-19 13:04)
 Repo-lokaler, doc-only Prep-Slice für den extern-blockierten TL-11 Slice B. Neu `docs/RUNBOOK-TL-11-wake-
 supervisor.md`: operativer Companion zur Protokoll-Spec `TL-11-wake-consumer-contract.md` — Schritte statt

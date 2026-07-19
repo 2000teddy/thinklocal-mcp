@@ -182,8 +182,15 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     Entscheidung). Auflagen A (pathLen/Chain-Enforcement in `verifyPeerCert` `tls.ts:729`), B (Intermediate-
     Expiry-Monitoring fehlt), C (keine Revocation-Infra; sonnet: gepinnte Denylist statt CRL/OCSP) — beide
     Modelle: **blockierend**. **Optional:** Re-Run mit codex/agy für Cross-Vendor.
-  - [ ] **Auflage A + B klären** (Enforcement-Prüfung + Intermediate-Expiry-Monitoring) — von beiden Modellen
-    VOR die ADR gezogen.
+  - [~] **Auflage A + B gegroundet** (2026-07-19): `docs/architecture/TL-14a-blocker-AB-grounding.md` —
+    code-verifiziert. **A:** pathLen/Chain **NICHT garantiert** — App-`verifyPeerCert` (`tls.ts:729`) ist ein
+    flacher Ein-Aussteller-Verify (kein Chain-Building/pathLen; `verifyCertificateChain`/`createCaStore` = 0
+    Treffer), genutzt von Pin-/Retention-/Trust-Distribution (`tls.ts:388/516/769`); Transport-mTLS
+    (`agent-card.ts:225-231`) würde via Node-TLS prüfen, ist aber einstufig verdrahtet + für 2 Stufen
+    ungetestet → D2 auf App-Pfad kosmetisch. **B:** **kein** Intermediate/CA-Expiry-Monitoring — Monitor liest
+    nur `node.crt.pem` (`getCertDaysLeft`, `index.ts:1613`, `tls.ts:708-724`), rotiert nicht → Vorbedingung
+    für D3. **Offene Folge-Slices (Code):** chain-fähiger Verify + Charakterisierungs-Test (A); `getCertDaysLeft`
+    um CA/Intermediate-Quelle erweitern (B).
   - [ ] **Christian-Sign-off** über D1–D6 (insb. D3-Laufzeit-Korridor 1–3 J + D1/D4/D5/D6) → ADR (CA-Hierarchie/
     Offline-Root), Auflagen A–C vermerkt.
   - [ ] **Runbook-Volltext + Zeremonie-Skripte** (nach Sign-off/ADR, Papier+Skripte, non-gated).
