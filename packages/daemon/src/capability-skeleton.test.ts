@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 import { describe, it, expect } from 'vitest';
-import { firstSentence, buildCapabilitySkeleton } from './capability-skeleton.js';
+import { firstSentence, buildCapabilitySkeleton, buildCapabilityOverview } from './capability-skeleton.js';
 import type { Capability, CapabilityHealth } from './registry.js';
 
 function cap(p: Partial<Capability> & { skill_id: string; agent_id: string }): Capability {
@@ -160,5 +160,22 @@ describe('buildCapabilitySkeleton', () => {
         bad({ skill_id: 'real', agent_id: 'x', description: 'Echt. mehr', health: 'degraded' }),
       ]),
     ).not.toThrow();
+  });
+});
+
+describe('buildCapabilityOverview (gemeinsamer Envelope, REST + MCP)', () => {
+  it('wraps buildCapabilitySkeleton als { skills, count } mit count === skills.length', () => {
+    const caps = [
+      cap({ skill_id: 'b.two', agent_id: 'a1', description: 'Zwei.' }),
+      cap({ skill_id: 'a.one', agent_id: 'a1', description: 'Eins.' }),
+    ];
+    const ov = buildCapabilityOverview(caps);
+    expect(ov.skills).toEqual(buildCapabilitySkeleton(caps));
+    expect(ov.count).toBe(ov.skills.length);
+    expect(ov.count).toBe(2);
+  });
+
+  it('leere Eingabe → { skills: [], count: 0 }', () => {
+    expect(buildCapabilityOverview([])).toEqual({ skills: [], count: 0 });
   });
 });

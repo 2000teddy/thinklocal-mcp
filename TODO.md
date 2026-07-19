@@ -128,12 +128,12 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     `?subscribe=agent:wake&agent=<spiffe>`, Zero-Content-Payload-Schema, best-effort/lossy/coalesced-Semantik,
     Referenz-Loop, jede Garantie testgebunden). **De-riskt** Slice B, ohne den externen Hop zu bauen; kein
     neuer Beschluss (aus gemergtem #271/#277-Code abgeleitet).
-  - [x] **TL-11 Wire-Conformance-Scaffold** (2026-07-17): `tl11-wake-wire.conformance.test.ts` — treibt den
+  - [x] **TL-11 Wire-Conformance-Scaffold** (2026-07-17, #282): `tl11-wake-wire.conformance.test.ts` — treibt den
     **realen `/ws`-Socket** (echter Fastify-Server + `registerWebSocket`, Node-22-`WebSocket`-Client, Loopback)
     statt nur reine Funktionen: **7 grün** (§3 Subscribe, §4 Zero-Content-Wire-Shape, directed Match/deny/drop,
     §8.1 Frame-Pfad, §2 Loopback-Positivpfad). Wire-Shape-Befund: Payload liegt **unter `.data`** →
     Consumer-Doc §4/§6/§7.1 korrigiert. De-riskt Slice B, ohne den externen Hop zu bauen.
-  - [x] **TL-11 cert-fixture Slice** (2026-07-17): die zwei ex-`it.todo` sind jetzt **echte Tests** (→ **11 grün**):
+  - [x] **TL-11 cert-fixture Slice** (2026-07-17, #283): die zwei ex-`it.todo` sind jetzt **echte Tests** (→ **11 grün**):
     §2 **mTLS-Pflicht** über einen zweiten Harness mit demselben Vertrag wie der cardServer (Fastify `https` +
     `requestCert`+`rejectUnauthorized`, agent-card.ts:229-230), In-Memory-CA/Server-/Client-Leaf (node-forge),
     undici-`WebSocket`+`Agent`-Client → gültiges Client-Cert erreicht `/ws`, cert-los/`ws://` werden TLS-resettet;
@@ -172,11 +172,14 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
 - [ ] **[v5.1] TL-20 (≈3 h)** Pro-Rechner-Transportpolitik (ADR-031) + Relay netzweit „aus" (Entsch. 5).
 - [~] **[v5.1] TL-21 (≈4 h)** Skelett-Auskunft (Kap. 06): zweistufig „Übersicht (Name + 1 Satz) → Details
   auf Abruf" am lokalen Daemon. Design: `docs/architecture/TL-21-skeleton-disclosure.md`.
-  - [x] **Slice 1** (2026-07-16): REST `GET /api/capabilities/overview` (dedupliziert pro `skill_id`, Name +
+  - [x] **Slice 1** (2026-07-16, #281): REST `GET /api/capabilities/overview` (dedupliziert pro `skill_id`, Name +
     erster Satz + Health-Aggregation) + reines Modul `capability-skeleton.ts` (`firstSentence`,
     `buildCapabilitySkeleton`), +13 Tests. Stufe 2 = bestehendes `/api/capabilities?skill_id=`. Read-only/additiv.
-  - [ ] **Slice 2**: identische Skelett-Projektion als MCP-Tool `list_capabilities_overview` (Agent-Kontext-
-    Ökonomie), dieselbe reine Funktion. Optional danach: Skelett für Peers/Tools/Tasks.
+  - [x] **Slice 2** (2026-07-17): identische Skelett-Projektion als MCP-Tool `list_capabilities_overview`
+    (Agent-Kontext-Ökonomie). Gemeinsamer Envelope-Builder `buildCapabilityOverview` von REST **und** MCP
+    benutzt → strukturelle Parität (kein Drift, CR-MEDIUM-Fix). +6 Tests (echtes registriertes Tool via
+    `_registeredTools[name].handler` invoked; Envelope-Unit). Read-only/additiv. Optional danach: Skelett
+    für Peers/Tools/Tasks.
 
 ### P2 — Ausbau
 - [ ] **[v5.1] TL-22a (≈4 h)** Mesh-Dateiübertragung Slice 1 (Chunk-Endpunkt am 9440, Prüfsummen je Stück;
@@ -243,7 +246,7 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
 - [ ] 🟡 **Owner-wins Phase-2: signierte Per-Key-Origin-Provenance** (ADR-020 v2.2 Phase-2) — additiv, Schema-Feld `provenance` reserviert. Nötig falls Mesh sparse/partitioniert.
 - [ ] 🟡 **CLI-Join: request-lokaler TLS-Skip statt prozessweit** (v0.30.1) — undici-`Agent({connect:{rejectUnauthorized:false}})` + dispatcher; braucht undici als CLI-Dep.
 - [x] 🟡 **KW29 Bug-Pfad 1 — Phantom-ROT von unten (`peers_online=0` trotz bekannter Peers)** (2026-07-16 14:50) — `/api/status` exponierte nur `peers_online`; ein fehlschlagender **ausgehender** HTTP-Heartbeat (CA-Rotation/SAN/EHOSTUNREACH) markiert alle Peers `offline`, obwohl sie im Map bleiben → Board färbt ROT ohne „0 bekannt" von „N bekannt, 0 online" trennen zu können. ✅ **Sichtbar gemacht (PR-Slice `getPeerCounts` → `peers_known`/`peers_offline` auf `/api/status` + `mesh_status`; Live-Beleg TH01 6 known / 3 online; DIAGNOSE §9; CR APPROVE, 1706 grün).** **Offen (out of scope, Christian-gated):** das eigentliche Cert-/CA-/SAN-Heilen der Fleet (`mesh-ca-rotation-repair-all` / `th55-pathA-cert-san-blocker` / `th55-ehostunreach-host-routing`). Transport-Phantom-ROT (Konsument→Knoten) = #272.
-- [~] 🟡 **KW29 Bug-Pfad 2 — `.55` Log-Flut (zwei getrennte Hälften)** (einsortiert 2026-07-17) — Beleg/Issue-Vorlage: `docs/BUGPFAD-2-logflut-status.md`.
+- [~] 🟡 **KW29 Bug-Pfad 2 — `.55` Log-Flut (zwei getrennte Hälften)** (einsortiert 2026-07-17, #284) — Beleg/Issue-Vorlage: `docs/BUGPFAD-2-logflut-status.md`.
   - [x] **2a `mount: command not found`-Flut (Unit-PATH ohne `/sbin`)** — repo-seitig GESCHLOSSEN: #273 (`f57ae5a`) `/usr/sbin:/sbin` an allen 7 Unit-PATH-Stellen + Regression-Test `launchd-plist.test.ts` (25 grün). Root-Cause: `DIAGNOSE-55-mount-command-not-found-flood.md`. **Offen:** `.55`-Live-Beleg (Runbook `VERIFY-55-mount-flood-fix.md`, operator-/deploy-gated, kein Christian-Gate).
   - [ ] **2b Unbegrenztes Log-Wachstum (keine Rotation)** — OFFEN: `daemon.log`/`daemon.error.log` append-only (launchd `StandardErrorPath` / systemd `append:`), Logger nach stdout (`logger.ts` pino `destination:1`), **keine** Rotation/Size-Cap/newsyslog/logrotate im Repo. Fix = eigener Deploy-/Unit-Slice (macOS `newsyslog.d` / Linux `logrotate`) oder daemon-seitig `pino-roll` (Code-Slice, **CO** zur Weg-Wahl). Noch NICHT umgesetzt.
 
