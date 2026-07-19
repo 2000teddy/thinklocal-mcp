@@ -82,8 +82,10 @@ describe('TL-14a Blocker A — verifyPeerCert ist ein flacher Ein-Aussteller-Ver
 
   it('CHARAKTERISIERUNG: Root verifiziert das Leaf NICHT (zwei Hops, kein Chain-Building) → false', () => {
     // Genau die dokumentierte Lücke (Blocker A): verifyPeerCert baut keine Kette
-    // Root→Intermediate→Leaf. Das Leaf ist vom Intermediate-Key signiert, nicht vom
-    // Root-Key → der flache caCert.verify(peerCert) der Root schlägt fehl.
+    // Root→Intermediate→Leaf. Der flache caCert.verify(peerCert) der Root scheitert bereits
+    // an der Issuer-DN — forge bricht in cert.issued() ab (Leaf.issuer = Intermediate-Subject
+    // ≠ Root-Subject), BEVOR es die Signatur prüft (die gegen den Root-Key ohnehin fehlschlüge,
+    // da das Leaf vom Intermediate-Key signiert ist). Beide Wege → false.
     expect(verifyPeerCert(root.caCertPem, leaf.certPem)).toBe(false);
   });
 
