@@ -12,8 +12,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 Verifiziert die zwei als **blockierend** markierten Consensus-Auflagen am tatsächlichen Code in
 `docs/architecture/TL-14a-blocker-AB-grounding.md`. **A (pathLen/Chain):** NICHT garantiert — die App-Ebene
 `verifyPeerCert` (`tls.ts:729`) ist ein **flacher Ein-Aussteller-Verify** (`caCert.verify(peerCert)` + Leaf-/
-Issuer-Fenster), **kein** Chain-Building/pathLen; `verifyCertificateChain`/`createCaStore` = **0 Treffer**
-repo-weit; genutzt von Pin-/Retention-/Trust-Distribution (`tls.ts:388/516/769`). Die Transport-mTLS-Ebene
+Issuer-Fenster), **kein** Chain-Building/pathLen; `verifyCertificateChain`/`createCaStore` = **0 Treffer** im eigenen Code
+(`packages/daemon/src/`); genutzt von Pin-/Retention-/Trust-Distribution (`tls.ts:388/516/769`). Die Transport-mTLS-Ebene
 (`agent-card.ts:225-231`, Node-TLS `ca`+`requestCert`+`rejectUnauthorized`) **würde** Chain/pathLen prüfen,
 ist aber an eine **einstufige** ca-Bundle-Verdrahtung gebunden und für zwei Stufen **ungetestet** → D2
 (`pathLen 0`) ist auf dem App-Pfad kosmetisch. **B (Intermediate-Expiry):** **fehlt ganz** — der Monitor liest

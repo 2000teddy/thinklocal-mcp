@@ -48,10 +48,12 @@ serverOpts['https'] = {
 };
 ```
 - Hier verifiziert **Node/OpenSSL** das Client-Cert gegen `ca`. OpenSSL **enforced** bei der Kettenprüfung
-  standardmäßig `basicConstraints`/`pathLen`. **Aber:** `trustedCa` ist heute eine **einzelne** Self-Signed-
-  Mesh-CA (`createMeshCA`, `tls.ts:59`, kein Intermediate). Ob eine echte zwei-stufige Kette (Peer
-  präsentiert Leaf+Intermediate, Trust-Anker = Root) hier korrekt gebaut/enforced wird, ist **im Repo nicht
-  bewiesen** — es gibt keinen Test, der einen `pathLen`-Verstoß auf dieser Ebene ablehnt.
+  standardmäßig `basicConstraints`/`pathLen`. **Aber:** `trustedCa` ist heute ein **flaches, einstufiges**
+  ca-Bundle — die eigene Mesh-CA **plus** gepairte Peer-CAs (`trustedCaBundle`, `agent-card.ts:221-224`, Fallback
+  einzelne `caCertPem`), **jede** via `createMeshCA` (`tls.ts:59`) self-signed, **kein Intermediate**. Ob eine
+  echte zwei-stufige Kette (Peer präsentiert Leaf+Intermediate, Trust-Anker = Root) hier korrekt gebaut/enforced
+  wird, ist **im Repo nicht bewiesen** — es gibt keinen Test, der einen `pathLen`-Verstoß auf dieser Ebene
+  ablehnt (die mTLS-Tests `mtls-issuer-fingerprint.test.ts`/`mesh-connect.test.ts` fahren nur eine einstufige CA).
 
 ### A.3 Verdikt A
 - **pathLen-Enforcement ist NICHT garantiert.** Auf der App-Ebene (`verifyPeerCert`) **fehlt** Chain/pathLen
@@ -77,10 +79,14 @@ serverOpts['https'] = {
   beim Neustart" (`cert-expiry-monitor.ts:2-15`).
 
 ### B.2 Verdikt B
-- **Es gibt KEIN Intermediate-/CA-Expiry-Monitoring.** Ein langlebiges Intermediate (D3) liefe **lautlos**
-  ab → Ausstellungs-Tod, exakt wie opus/sonnet warnten. Zusätzlich: der Monitor **rotiert nicht**; selbst
-  das Node-Leaf wird nur beim **Neustart** neu ausgestellt (`loadOrCreateTlsBundle`, Behalten-Gate
-  `daysLeft > renew_before_days`).
+- **Es gibt KEIN _Live_-Intermediate-/CA-Expiry-Monitoring.** Der laufende Monitor sieht die CA nie.
+  **Nuance (fairnesshalber):** beim **Start** prüft `loadOrCreateTlsBundle` (`tls.ts:426-451`) das CA-
+  Gültigkeitsfenster und reissued eine **abgelaufene eigene** CA (`!caValid → needsCaReissue`) — für einen
+  **own-CA-Node** ist die CA-Expiry also beim (Wochen-)Neustart nicht ganz blind. **Echt exponiert bleiben:**
+  (a) **token-onboarded Nodes**, die sich **nicht** selbst re-issuen können (die gelieferte CA ist ihr Anker);
+  (b) ein **künftiges Intermediate** (D3), für das es **weder** Live-Monitoring **noch** einen Reissue-Pfad
+  gibt → dort ist der „lautlose Ausstellungs-Tod" real. Zusätzlich: der Monitor **rotiert nicht**; das
+  Node-Leaf wird nur beim **Neustart** neu ausgestellt (Behalten-Gate `daysLeft > renew_before_days`).
 - **ADR-Konsequenz:** B ist **Vorbedingung für D3** (lange Intermediate-Laufzeit) — ohne eigenen
   Intermediate-Restlaufzeit-Alarm ist jede Laufzeit > Node-Rhythmus blind. Kleinster Fix-Vorschlag:
   `getCertDaysLeft` auf `ca.crt.pem` (bzw. Intermediate) als **zweite** Quelle erweitern und der Monitor
@@ -93,7 +99,7 @@ serverOpts['https'] = {
 | Blocker | Befund (code-gegroundet) | Status | ADR-Konsequenz |
 |---------|--------------------------|--------|----------------|
 | **A** pathLen/Chain | App-`verifyPeerCert` flach (kein Chain/pathLen; `verifyCertificateChain`=0 Treffer); Transport-mTLS würde prüfen, aber einstufig verdrahtet + für 2 Stufen ungetestet | **teils fehlend** | ca-Bundle 2-stufig + App-Pfad chain-fähig **oder** Trust nur via Transport; Charakterisierungs-Test als Vor-Slice |
-| **B** Intermediate-Expiry | Monitor liest nur `node.crt.pem` (`getCertDaysLeft`, `index.ts:1613`); CA/Intermediate nie geprüft; rotiert nicht | **fehlt ganz** | Vorbedingung für D3; `getCertDaysLeft` um CA/Intermediate-Quelle erweitern |
+| **B** Intermediate-Expiry | Live-Monitor liest nur `node.crt.pem` (`getCertDaysLeft`, `index.ts:1613`); CA/Intermediate **live nie** geprüft (nur Start-Reissue für **own-CA**, `tls.ts:426-451`); rotiert nicht | **Live-Monitoring fehlt; Intermediate hätte gar keinen Pfad** | Vorbedingung für D3; `getCertDaysLeft` um CA/Intermediate-Quelle erweitern |
 
 ## Abgrenzung
 Discovery/Doc only — **kein** Code/Config/Skript geändert, kein Deploy/Secret/Cross-Host. Verifiziert die zwei

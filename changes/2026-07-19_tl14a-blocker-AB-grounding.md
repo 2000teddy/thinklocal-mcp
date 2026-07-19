@@ -36,8 +36,12 @@ nicht umgesetzt. Kein Deploy/Secret/Cross-Host. Faktenbasis für die künftige C
 
 ## Compliance
 - **CO/CG/TS:** entfallen — Discovery/Doc, kein Code, kein neuer Beschluss.
-- **CR:** Doc-Accuracy self — jeder Anker gegen die Quelle verifiziert (`tls.ts:729/388/516/769/708-724`,
-  `agent-card.ts:225-231`, `index.ts:1613`, `cert-expiry-monitor.ts`; `grep`-Falsifikation für
-  `verifyCertificateChain`/`createCaStore`).
+- **CR:** adversarischer Claude-Review-Subagent (soll die Verhaltens-Claims widerlegen) — Kern-Befunde A & B
+  **bestätigt**, alle Anker akkurat; **3 Präzisions-Defekte gefixt**: (1) „0 Treffer repo-weit" → korrekt auf
+  `packages/daemon/src/` gescopet (node_modules/node-forge hat Treffer); (2) `trustedCa` „einzelne CA" →
+  flaches **Multi-CA-Bundle** (eigene + Peer-CAs, `agent-card.ts:221-224`); (3) B-Nuance ergänzt:
+  `loadOrCreateTlsBundle` (`tls.ts:426-451`) reissued abgelaufene **own-CA** beim Start → „lautlos" korrekt
+  gescopet auf token-onboarded Nodes + künftiges Intermediate. Anker verifiziert (`tls.ts:729/388/516/769/
+  708-724/426-451`, `agent-card.ts:221-231`, `index.ts:1613`).
 - **PC:** `git diff` gesichtet, Secret-Scan clean (nur Doku).
 - **DO:** dieser Eintrag, `CHANGES.md`, `COMPLIANCE-TABLE.md`, `TODO.md`, das Grounding-Doc.
