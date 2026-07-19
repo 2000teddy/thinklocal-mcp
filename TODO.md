@@ -167,8 +167,20 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     §5-Punkte als aktionierbares Change-Order-Register (Frage/Optionen/nicht-bindende Empfehlung/Abhängigkeit/
     Entscheider/blockiert/Status) + Kopf-Tabelle + Sign-off-Zeile. Nächster Schritt: Folge-CO (`pal:consensus`)
     über D1–D6 + Christian-Sign-off (D1/D4/D5/D6) → ADR.
-  - [ ] **Folge-CO über D1–D6** (`pal:consensus`) + Christian-Sign-off → ADR (CA-Hierarchie/Offline-Root).
-  - [ ] **Runbook-Volltext + Zeremonie-Skripte** (nach CO/ADR, Papier+Skripte, non-gated).
+  - [x] **Consensus-Brief D1–D6** (2026-07-19, #290): `docs/architecture/TL-14a-consensus-brief-D1-D6.md` —
+    kompakte Abstimmungsvorlage.
+  - [~] **`pal:consensus`-Lauf** (2026-07-19): `docs/architecture/TL-14a-consensus-result-D1-D6.md` —
+    **Same-Vendor-2-Modell-Panel** (claude-opus 8/10 + claude-sonnet 7/10; `codex`+`agy` fehlen im PATH,
+    `[[pal-review-backend-agy-missing]]` → kein Cross-Vendor-Pass). **Einstimmig 5/6** bestätigt; einzige
+    Divergenz **D3-Laufzeit** (beide verwerfen ≥5 J: opus 12–24 Mon., sonnet 3 J → Korridor ~1–3 J, Owner-
+    Entscheidung). Auflagen A (pathLen/Chain-Enforcement in `verifyPeerCert` `tls.ts:371-388`), B (Intermediate-
+    Expiry-Monitoring fehlt), C (keine Revocation-Infra; sonnet: gepinnte Denylist statt CRL/OCSP) — beide
+    Modelle: **blockierend**. **Optional:** Re-Run mit codex/agy für Cross-Vendor.
+  - [ ] **Auflage A + B klären** (Enforcement-Prüfung + Intermediate-Expiry-Monitoring) — von beiden Modellen
+    VOR die ADR gezogen.
+  - [ ] **Christian-Sign-off** über D1–D6 (insb. D3-Laufzeit-Korridor 1–3 J + D1/D4/D5/D6) → ADR (CA-Hierarchie/
+    Offline-Root), Auflagen A–C vermerkt.
+  - [ ] **Runbook-Volltext + Zeremonie-Skripte** (nach Sign-off/ADR, Papier+Skripte, non-gated).
 - [ ] **[v5.1] TL-14b (≈4 h, ⛔ Termin)** CA-Umzug durchführen (mit Christian). ↔ vgl. Decision-7
   Trust-Domain-Flip (KW30).
 - [ ] **[v5.1] TL-15 (≈3 h)** Uhr-Abweichungs-Erkennung zwischen Partnern (Skew-Messung im
