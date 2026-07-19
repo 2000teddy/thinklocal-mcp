@@ -191,9 +191,15 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     nur `node.crt.pem` (`getCertDaysLeft`, `index.ts:1613`, `tls.ts:708-724`), rotiert nicht → Vorbedingung
     für D3. **Offene Folge-Slices (Code):** chain-fähiger Verify + Charakterisierungs-Test (A); `getCertDaysLeft`
     um CA/Intermediate-Quelle erweitern (B).
-  - [ ] **Christian-Sign-off** über D1–D6 (insb. D3-Laufzeit-Korridor 1–3 J + D1/D4/D5/D6) → ADR (CA-Hierarchie/
-    Offline-Root), Auflagen A–C vermerkt.
-  - [ ] **Runbook-Volltext + Zeremonie-Skripte** (nach Sign-off/ADR, Papier+Skripte, non-gated).
+  - [~] **ADR-044 CA-Zweistufen-Hierarchie (Draft)** (2026-07-19): `docs/architecture/ADR-044-ca-two-stage-
+    hierarchy.md` — **Status Proposed**. Entscheidet D1 (entkoppeln), D2 (`pathLen 0`), D4 (Doppel-Pin-Cutover),
+    D5 (Token-Re-Onboard), D6 (TH02 kalt) konsens-getragen; **parkt D3** (Intermediate-Laufzeit, Korridor
+    1–3 J) als einzige Owner-Entscheidung. Vorbedingungen A/B als blockierende Code-Folge-Slices verankert.
+  - [ ] **Christian-Sign-off** — exakte D3-Laufzeit (1–3 J) setzen → ADR-044 auf `Accepted`; D1/D4/D5/D6-Gates
+    bestätigen.
+  - [ ] **Vorbedingungs-Slices A + B** (Code, repo-safe, non-gated): chain-fähiger Verify + Charakterisierungs-
+    Test (A); `getCertDaysLeft` um CA/Intermediate-Quelle (B).
+  - [ ] **Runbook-Volltext + Zeremonie-Skripte** (nach Sign-off/ADR-044, Papier+Skripte, non-gated).
 - [ ] **[v5.1] TL-14b (≈4 h, ⛔ Termin)** CA-Umzug durchführen (mit Christian). ↔ vgl. Decision-7
   Trust-Domain-Flip (KW30).
 - [ ] **[v5.1] TL-15 (≈3 h)** Uhr-Abweichungs-Erkennung zwischen Partnern (Skew-Messung im
