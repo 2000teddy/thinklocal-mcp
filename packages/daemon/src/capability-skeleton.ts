@@ -110,3 +110,19 @@ export function buildCapabilitySkeleton(capabilities: Capability[]): CapabilityS
 
   return entries.sort((a, b) => cmpStr(a.skill_id, b.skill_id));
 }
+
+/** Envelope der Skelett-Übersicht (`{ skills, count }`). Kein I/O, deterministisch. */
+export interface CapabilityOverview {
+  skills: CapabilitySkeletonEntry[];
+  count: number;
+}
+
+/**
+ * EINE Quelle der Wahrheit für die TL-21-Übersicht-Nutzlast — von REST `GET /api/capabilities/overview`
+ * UND dem MCP-Tool `list_capabilities_overview` (Slice 2) benutzt, damit beide Oberflächen NICHT driften
+ * können (CR-MEDIUM: Parität strukturell, nicht nur per Test asserted). `count` ist immer `skills.length`.
+ */
+export function buildCapabilityOverview(capabilities: Capability[]): CapabilityOverview {
+  const skills = buildCapabilitySkeleton(capabilities);
+  return { skills, count: skills.length };
+}

@@ -9,6 +9,7 @@
  * MCP Tools:
  * - discover_peers: Alle verbundenen Peers auflisten
  * - query_capabilities: Faehigkeiten im Mesh suchen
+ * - list_capabilities_overview: TL-21 Skelett-Uebersicht (Name + 1 Satz je Skill)
  * - get_agent_card: Agent Card eines Peers abrufen
  * - delegate_task: Task an einen Peer delegieren
  * - list_credentials: Vault-Credentials auflisten
@@ -25,6 +26,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import type { MeshManager } from './mesh.js';
 import type { CapabilityRegistry } from './registry.js';
+import { buildCapabilityOverview } from './capability-skeleton.js';
 import type { TaskManager } from './tasks.js';
 import type { CredentialVault } from './vault.js';
 import type { AuditLog } from './audit.js';
@@ -96,6 +98,26 @@ export function createMcpServer(deps: McpServerDeps): McpServer {
             count: caps.length,
             hash: registry.getCapabilityHash(),
           }, null, 2),
+        }],
+      };
+    },
+  );
+
+  // list_capabilities_overview: TL-21 Skelett-Auskunft (Kap. 06) — kompakte „Name + ein Satz"-Übersicht
+  // pro skill_id (Health-aggregiert), Details auf Abruf via query_capabilities. Kontext-ökonomisch für
+  // Agenten: dieselbe reine Projektion wie REST GET /api/capabilities/overview (Slice 1). Read-only, additiv.
+  // Siehe docs/architecture/TL-21-skeleton-disclosure.md.
+  server.tool(
+    'list_capabilities_overview',
+    'TL-21 Skelett-Auskunft: kompakte Übersicht der Mesh-Skills (pro Skill Name + ein Satz + Health), Details auf Abruf via query_capabilities. Read-only, kontext-ökonomisch.',
+    {},
+    async () => {
+      // Gemeinsamer Envelope-Builder wie REST /api/capabilities/overview → strukturelle Parität (kein Drift).
+      const overview = buildCapabilityOverview(registry.getAllCapabilities());
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify(overview, null, 2),
         }],
       };
     },
