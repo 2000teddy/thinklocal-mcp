@@ -1812,6 +1812,10 @@ CHANGES.md, `changes/2026-07-07_doc-compliance-gate.md`, dieser Eintrag; Rollen/
 
 **Typ:** Doc-only (Reconcile-Cursor-Hygiene, PR-Nummern in TODO/CHANGES nachgezogen). Kein Runtime-Change. **DO:** `changes/2026-07-18_reconcile-doc-cursor.md`, `CHANGES.md`, `TODO.md`, dieser Eintrag.
 
+| #287 | (offen, base=main) | 2026-07-18 13:02 | ⚠️ | n/a | n/a | ✅ | ✅ | ✅ | **Doc-only (TL-10 Freigabe-Matrix v1 Scoping/Discovery, Design-Doku VOR Code) → CG/TS entfallen** (kein Code). Neu `docs/architecture/TL-10-freigabe-matrix-scoping.md`: groundet den `resolveApproval`-Seam (`mcp-ingress.ts:105-110`, nur `tier==='gate'`) — heute wählt `MeldekanalRegistry.requestApproval` den ersten gesunden Kanal terminal (`meldekanal.ts:194-213`); TL-10 ersetzt genau diese Auswahl durch matrix-getriebenes Routing, Auswertung bleibt `isApproved`-Allowlist (`:83-85`). Pinnt die CO-Auflagen (2026-07-15: tier statt tool_class, Parse-Rejects, `isRoutable()`-Guard), v1-Vorschlag (Schema/Spezifität/decider-Grammatik), Slice-Zerlegung A(rein)→B(Verdrahtung). **§5: 5 exakt offene Entscheidungen als Code-Gate.** **CO ⚠️:** CO-Auflagen liegen vor (2026-07-15) → Note **konsolidiert** sie, trifft **keine** neue Design-Entscheidung (§5 bleibt offen für Folge-CO) → kein neuer CO-Lauf. **CR:** Doc-Accuracy self — jedes Code-Zitat per grep/sed gegen die Quelle verifiziert. **PC:** Secret-Scan clean. Kein Slice implementiert, kein Runtime-Change. Review-of-record: `peppiseppiullmann-ci` APPROVED (2026-07-19), gemergt. |
+
+**Typ:** Doc-only (TL-10 Freigabe-Matrix v1 Scoping/Discovery-Note, Design VOR Code). Kein Runtime-Change. **DO:** `docs/architecture/TL-10-freigabe-matrix-scoping.md`, `changes/2026-07-18_tl10-freigabe-matrix-scoping.md`, `CHANGES.md`, `TODO.md`, dieser Eintrag.
+
 ---
 
-*Letzte Aktualisierung: 2026-07-18 06:04 — #286 docs(reconcile): PR-Nummern-Cursor in TODO/CHANGES nachgezogen (#281–#284); Doc-only, Cursor auf #284.*
+*Letzte Aktualisierung: 2026-07-18 13:02 — #287 docs(tl10): Freigabe-Matrix v1 Scoping/Discovery (Seam gegroundet, CO-Auflagen gepinnt, §5 5 offene Entscheidungen); Doc-only, kein Slice.*

@@ -8,6 +8,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs(tl10): Freigabe-Matrix v1 Scoping/Discovery-Note (2026-07-18 13:02, #287)
+Design-Doku VOR Code (CLAUDE.md Schritt 3) für TL-10 (Freigabe-Matrix: Werkzeug-Stufe → Kanal → Entscheider).
+Neu `docs/architecture/TL-10-freigabe-matrix-scoping.md`: groundet den `resolveApproval`-Seam (`mcp-ingress.ts:105-110`,
+nur `tier==='gate'`) — heute wählt die Registry den ersten gesunden Kanal terminal (`meldekanal.ts:194-213`); TL-10
+ersetzt genau diese Auswahl durch matrix-getriebenes Routing, Auswertung bleibt `isApproved`-Allowlist. Pinnt die
+CO-Auflagen (tier statt tool_class; Parse-Rejects; `isRoutable()`-Guard), macht den v1-Vorschlag explizit
+(Schema/Spezifität/decider-Grammatik) und listet **5 exakt offene Entscheidungen (§5)** als Code-Gate; Slice-Zerlegung
+A(rein)→B(Verdrahtung) analog TL-09. Kein Code/Slice implementiert; kein Runtime-Change.
+
 ### docs(reconcile): PR-Nummern-Cursor in TODO/CHANGES nachgezogen (#281–#284) (2026-07-18 06:04, #286)
 Reconcile-Wächter (2026-07-18 03:32) meldete Doku-Drift gegen `main`: TODO.md referenzierte als höchste PR nur
 #277 (Cursor 7 hinter #284), CHANGES.md-#284-Eintrag ohne „#284"-Marker. Die Einträge der gemergten Slices

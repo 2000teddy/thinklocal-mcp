@@ -79,11 +79,18 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     outcome/channelId) VOR Dispatch/Denial (CR-Codex #264). `meldekanal.ts` hat jetzt einen lebenden Consumer.
   - [ ] **TL-09c** (offen): realer `TelegramMeldekanal` (Inline-Keyboard-Callback → `approvals.ts`-Store)
     in die Registry injizieren. **Erst hiermit kann eine gate-Freigabe real `approved` werden.**
-- [ ] **[v5.1] TL-10 (≈3 h)** Freigabe-Matrix v1 (Werkzeug-Klasse → Kanal → Entscheider), Auswertung im Gate.
+- [~] **[v5.1] TL-10 (≈3 h)** Freigabe-Matrix v1 (Werkzeug-Klasse → Kanal → Entscheider), Auswertung im Gate.
   Schiebt sich zwischen Ingress (TL-09b, verdrahtet) und Registry — der `resolveApproval`-Seam existiert jetzt.
   CO-Auflagen (2026-07-15): Feld `tier` statt `tool_class` (tier = harter Predikat-Filter, nie Label);
   Parse-Rejects (tool-ohne-server, Duplikat-Spezifität, unbekannte Keys, non-kanonischer Server,
   unbekannte decider-Grammatik, `consensus` ohne `quorum:N` N≥2); `isRoutable()`-Guard analog `isApproved`.
+  - [x] **Scoping/Discovery** (2026-07-18, #287): `docs/architecture/TL-10-freigabe-matrix-scoping.md` — Seam
+    gegroundet (Matrix ersetzt die „erster-gesunder-Kanal"-Auswahl `meldekanal.ts:194-213` am `resolveApproval`-
+    Seam `mcp-ingress.ts:105-110`), CO-Auflagen gepinnt, v1-Vorschlag (Schema/Spezifität/decider-Grammatik) +
+    Slice-Zerlegung A(rein)→B(Verdrahtung). **§5: 5 exakt offene Entscheidungen VOR Code** (Matrix-Quelle/TOML,
+    Kanal-Bindung `channelId` vs. Instanz, decider-v1-Semantik, kanonische Server-Prüfquelle, leere-Matrix=403).
+  - [ ] **Slice A** (rein, nach §5-Klärung): `freigabe-matrix.ts` (`parseFreigabeMatrix`/`resolveEntry`/`isRoutable`) + Tests, keine Verdrahtung.
+  - [ ] **Slice B** (Verdrahtung): Resolver konsultiert die Matrix vor `registry.requestApproval` (Env-Flag wie TL-09b).
 
 ### P1 — Identität, Autonomie, Robustheit
 > **Discovery + Reihenfolge (CO 2026-07-15, opus+sonnet einstimmig):** **TL-12 VOR TL-11.** TL-12 Slice A
