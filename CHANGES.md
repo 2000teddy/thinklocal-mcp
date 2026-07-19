@@ -8,6 +8,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs(tl14a): CA-Zweistufen-Umzug — Entscheidungs-Checkliste (Change-Order) (2026-07-19 09:12)
+Folge-Artefakt zu `TL-14a-ca-two-stage-scoping.md` §5: überführt die **6 offenen Entscheidungen** in ein
+aktionierbares **Change-Order-Register** `docs/architecture/TL-14a-decision-checklist.md` — je Entscheidung
+(D1 Trust-Domain-Kopplung, D2 `pathLen`, D3 Intermediate-Validität, D4 Cross-Sign vs. Cutover, D5 Chain-
+Ausroll-Mechanik, D6 TH02-Rolle) Frage/Optionen/**nicht-bindende** Empfehlung/Abhängigkeit/Entscheider/
+blockiert/Status, plus Kopf-Übersichtstabelle und leere Sign-off-Zeile. Empfehlungen sind gegroundet
+(`createMeshCA` `tls.ts:59/84`, `resolveAttestingCaFingerprints` `cert-issuer.ts:121`, `renew_before_days`
+`config.ts:165/251`, `ca.crt.legacy.pem` `tls.ts:437`, Fallen `[[cert-clobber-on-ca-reissue]]`/
+`[[th02-phase3-flip-blocker]]`). **Trifft keine Entscheidung** — macht D1–D6 abstimmbar (Folge-CO
+`pal:consensus` + Christian-Sign-off → ADR). Kein Code/Config/Skript, kein Deploy/Secret/Cross-Host.
+
 ### docs(tl14a): CA-Zweistufen-Umzug — Scoping/Discovery-Note (2026-07-19 08:40)
 Design-Doku VOR Runbook/Skripten (CLAUDE.md Schritt 3) für TL-14a (CA-Zweistufen-Umzug: Offline-Wurzel →
 Intermediate TH01 → Geschwister-Intermediate TH02). Neu `docs/architecture/TL-14a-ca-two-stage-scoping.md`:

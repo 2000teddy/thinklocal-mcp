@@ -163,7 +163,12 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     bindende Beschlüsse konsolidiert (ADR-022/024/034, Decision-7, TL-13-Vorlauf), Runbook-Skelett (7 Schritte).
     **§5: 6 exakt offene Entscheidungen VOR Runbook-Volltext + Skripten** (Trust-Domain-Kopplung, `pathLen`,
     Intermediate-Validität, Cross-Sign vs. Cutover, Chain-Ausroll-Mechanik = TL-14b-Kern, TH02-Rolle).
-  - [ ] **Runbook-Volltext + Zeremonie-Skripte** (nach §5-Klärung, Papier+Skripte, non-gated).
+  - [x] **Entscheidungs-Checkliste** (2026-07-19): `docs/architecture/TL-14a-decision-checklist.md` — die 6
+    §5-Punkte als aktionierbares Change-Order-Register (Frage/Optionen/nicht-bindende Empfehlung/Abhängigkeit/
+    Entscheider/blockiert/Status) + Kopf-Tabelle + Sign-off-Zeile. Nächster Schritt: Folge-CO (`pal:consensus`)
+    über D1–D6 + Christian-Sign-off (D1/D4/D5/D6) → ADR.
+  - [ ] **Folge-CO über D1–D6** (`pal:consensus`) + Christian-Sign-off → ADR (CA-Hierarchie/Offline-Root).
+  - [ ] **Runbook-Volltext + Zeremonie-Skripte** (nach CO/ADR, Papier+Skripte, non-gated).
 - [ ] **[v5.1] TL-14b (≈4 h, ⛔ Termin)** CA-Umzug durchführen (mit Christian). ↔ vgl. Decision-7
   Trust-Domain-Flip (KW30).
 - [ ] **[v5.1] TL-15 (≈3 h)** Uhr-Abweichungs-Erkennung zwischen Partnern (Skew-Messung im

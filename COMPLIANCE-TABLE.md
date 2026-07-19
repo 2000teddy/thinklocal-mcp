@@ -1820,6 +1820,10 @@ CHANGES.md, `changes/2026-07-07_doc-compliance-gate.md`, dieser Eintrag; Rollen/
 
 **Typ:** Doc-only (TL-14a CA-Zweistufen-Umzug Scoping/Discovery-Note, Design VOR Runbook/Skripten). Kein Runtime-Change. **DO:** `docs/architecture/TL-14a-ca-two-stage-scoping.md`, `changes/2026-07-19_tl14a-ca-two-stage-scoping.md`, `CHANGES.md`, `TODO.md`, dieser Eintrag.
 
+| (TL-14a-CO) | (offen, base=main) | 2026-07-19 09:12 | ⚠️ | n/a | n/a | ✅ | ✅ | ✅ | **Doc-only (TL-14a Entscheidungs-Checkliste / Change-Order, Folge zu Scoping-§5) → CG/TS entfallen** (kein Code, keine Skripte). Neu `docs/architecture/TL-14a-decision-checklist.md`: die 6 §5-Entscheidungen (D1 Trust-Domain-Kopplung, D2 `pathLen`, D3 Intermediate-Validität, D4 Cross-Sign vs. Cutover, D5 Chain-Ausroll-Mechanik = TL-14b-Kern, D6 TH02-Rolle) als aktionierbares Register — je Eintrag Frage/Optionen/**nicht-bindende** Empfehlung/Abhängigkeit/Entscheider/blockiert/Status + Kopf-Tabelle + leere Sign-off-Zeile. **CO ⚠️:** Artefakt **trifft keine** Entscheidung — es macht D1–D6 abstimmbar (Empfehlungen gegroundet: `createMeshCA` `tls.ts:59/84`, `resolveAttestingCaFingerprints` `cert-issuer.ts:121`, `renew_before_days` `config.ts:165/251`, `ca.crt.legacy.pem` `tls.ts:437`), Beschluss fällt per Folge-CO (`pal:consensus`) + Christian-Sign-off → ADR → kein neuer CO-Lauf jetzt. **CR:** Doc-Accuracy self — jedes Code-Zitat per grep/sed verifiziert. **PC:** Secret-Scan clean (nur Doku). Kein Runbook-Volltext, keine Skripte, kein Deploy/Cross-Host. |
+
+**Typ:** Doc-only (TL-14a Entscheidungs-Checkliste / Change-Order, §5 → aktionierbares Register). Kein Runtime-Change. **DO:** `docs/architecture/TL-14a-decision-checklist.md`, `changes/2026-07-19_tl14a-decision-checklist.md`, `CHANGES.md`, `TODO.md`, dieser Eintrag.
+
 ---
 
-*Letzte Aktualisierung: 2026-07-19 08:40 — TL-14a docs: CA-Zweistufen-Umzug Scoping/Discovery (Ist-Zustand gegroundet: flache Self-Signed-Root; Ziel offline Root+Intermediates; §5 6 offene Entscheidungen); Doc-only, kein Runbook/Skript.*
+*Letzte Aktualisierung: 2026-07-19 09:12 — TL-14a docs: Entscheidungs-Checkliste (Change-Order) — §5 D1–D6 als aktionierbares Register mit nicht-bindenden Empfehlungen + Sign-off; Doc-only, keine Entscheidung getroffen.*
