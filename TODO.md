@@ -197,8 +197,14 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     1–3 J) als einzige Owner-Entscheidung. Vorbedingungen A/B als blockierende Code-Folge-Slices verankert.
   - [ ] **Christian-Sign-off** — exakte D3-Laufzeit (1–3 J) setzen → ADR-045 auf `Accepted`; D1/D4/D5/D6-Gates
     bestätigen.
-  - [ ] **Vorbedingungs-Slices A + B** (Code, repo-safe, non-gated): chain-fähiger Verify + Charakterisierungs-
-    Test (A); `getCertDaysLeft` um CA/Intermediate-Quelle (B).
+  - [~] **Vorbedingungs-Slices A + B** (Code, repo-safe, non-gated):
+    - [x] **A — Charakterisierungs-Test** (2026-07-19): `tls-chain-characterization.test.ts` — belegt
+      regressionsfest, dass `verifyPeerCert` ein **flacher Ein-Aussteller-Verify** ist:
+      `verifyPeerCert(root, leaf@intermediate) === false`, nur der **direkte** Aussteller (Intermediate)
+      verifiziert (+4 Tests, Suite 1756 grün). **Kein Fix** — dokumentiert die Lücke.
+    - [ ] **A — chain-fähiger Verify** (eigentlicher Fix): `verifyPeerCert` chain-/pathLen-fähig **oder**
+      Trust-Entscheidungen dokumentiert auf die Transport-mTLS-Ebene beschränken.
+    - [ ] **B** — `getCertDaysLeft` um CA/Intermediate-Quelle erweitern (Live-Expiry-Monitoring).
   - [ ] **Runbook-Volltext + Zeremonie-Skripte** (nach Sign-off/ADR-045, Papier+Skripte, non-gated).
 - [ ] **[v5.1] TL-14b (≈4 h, ⛔ Termin)** CA-Umzug durchführen (mit Christian). ↔ vgl. Decision-7
   Trust-Domain-Flip (KW30).

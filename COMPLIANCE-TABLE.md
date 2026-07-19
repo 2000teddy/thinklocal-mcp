@@ -1840,6 +1840,10 @@ CHANGES.md, `changes/2026-07-07_doc-compliance-gate.md`, dieser Eintrag; Rollen/
 
 **Typ:** Doc-only (ADR-045 CA-Zweistufen-Hierarchie, Draft/Proposed). Kein Runtime-Change. **DO:** `docs/architecture/ADR-045-ca-two-stage-hierarchy.md`, `changes/2026-07-19_adr-045-ca-hierarchy.md`, `CHANGES.md`, `TODO.md`, dieser Eintrag.
 
+| (TL-14a-A-test) | (offen, base=main) | 2026-07-19 17:35 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | **Test-only (TL-14a Vorbedingung-A Charakterisierung) → CO/CG entfallen** (kein Design-Beschluss, kein Verhaltens-Change). Neu `packages/daemon/src/tls-chain-characterization.test.ts`: baut Root → forge-Intermediate (`cA:true`) → Leaf und belegt regressionsfest, dass `verifyPeerCert` ein **flacher Ein-Aussteller-Verify** ist — `verifyPeerCert(root, leaf@intermediate)` = **false**, nur direkter Aussteller = true. Groundet Blocker A (ADR-045); **kein Fix**, dokumentiert die Lücke (rot ⇒ chain-fähig geworden). **TS:** +4 Tests, Suite **1756 grün**, tsc(strict)/Lint 0. **CR:** externer Claude-Review-Subagent folgt vor Merge. **PC:** Secret-Scan clean. Kein Deploy/Secret/Cross-Host. |
+
+**Typ:** Test-only (TL-14a Vorbedingung-A Charakterisierungs-Test, kein Fix/Verhaltens-Change). Kein Runtime-Change. **DO:** `packages/daemon/src/tls-chain-characterization.test.ts`, `changes/2026-07-19_tl14a-blockerA-char-test.md`, `CHANGES.md`, `TODO.md`, dieser Eintrag.
+
 ---
 
-*Letzte Aktualisierung: 2026-07-19 14:04 — ADR-045 CA-Zweistufen-Hierarchie (Draft/Proposed): D1/D2/D4/D5/D6 konsens-entschieden, D3 (Laufzeit 1–3 J) als Owner-Sign-off geparkt, Vorbedingungen A/B verankert; Doc-only.*
+*Letzte Aktualisierung: 2026-07-19 17:35 — test(tl14a): Blocker-A Charakterisierungs-Test (verifyPeerCert baut keine Kette — root→leaf@intermediate=false); +4 Tests, Suite 1756 grün, kein Fix.*
