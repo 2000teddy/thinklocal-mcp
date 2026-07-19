@@ -1828,6 +1828,10 @@ CHANGES.md, `changes/2026-07-07_doc-compliance-gate.md`, dieser Eintrag; Rollen/
 
 **Typ:** Doc-only (TL-14a `pal:consensus`-Ergebnis-Protokoll D1–D6, Same-Vendor-2-Modell-Panel). Kein Runtime-Change. **DO:** `docs/architecture/TL-14a-consensus-result-D1-D6.md`, `changes/2026-07-19_tl14a-consensus-result.md`, `CHANGES.md`, `TODO.md`, dieser Eintrag.
 
+| (TL-11-RB) | (offen, base=main) | 2026-07-19 13:04 | n/a | n/a | n/a | ✅ | ✅ | ✅ | **Doc-only (TL-11 Slice-B Integrations-Runbook, Prep) → CO/CG/TS entfallen** (kein Code, kein neuer Beschluss — leitet aus gemergtem Kontrakt + Spec ab). Neu `docs/RUNBOOK-TL-11-wake-supervisor.md`: operativer Companion zur Consumer-Contract-Spec — Verortung (derselbe Host/Loopback sonst `4003`), vorhandenes Client-Cert (kein Secret), Subscribe-Form, `.data`-Payload-Reaktion, Cold-Start-Sweep-Pflicht, **Zwei-Peer-Proof-Prozedur** (`[[dod-two-peer-mcp-proof]]`) + Verifikations-Checkliste (gegen testgebundene Invarianten) + No-op-Rückfall. De-riskt Slice B, **entfernt den Blocker nicht** (letzter Hop `pokeCli` out-of-repo, Host-/Deploy-gated). §9 hält TL-08/09/10-Wahrheit sichtbar. **CR:** Claude-Review-Subagent (Doc-Accuracy) — Anker/`pokeCli`-Out-of-Repo-Klarstellung gegen Quelle verifiziert. **PC:** Secret-Scan clean (nur Doku). Kein Deploy/Secret/Cross-Host, keine Supervisor-Änderung. |
+
+**Typ:** Doc-only (TL-11 Slice-B Integrations-Runbook, Prep — de-riskt den extern-blockierten Slice B). Kein Runtime-Change. **DO:** `docs/RUNBOOK-TL-11-wake-supervisor.md`, `changes/2026-07-19_tl11-sliceb-runbook.md`, `CHANGES.md`, `TODO.md`, dieser Eintrag.
+
 ---
 
-*Letzte Aktualisierung: 2026-07-19 11:34 — TL-14a docs: `pal:consensus`-Ergebnis D1–D6 (2-Modell-Panel opus 8/10 + sonnet 7/10, codex+agy fehlend; einstimmig 5/6, D3-Divergenz Korridor 1–3 J, Auflagen A–C blockierend); Doc-only, keine Entscheidung getroffen.*
+*Letzte Aktualisierung: 2026-07-19 13:04 — TL-11 docs: Slice-B Integrations-Runbook (Agent-Home-Supervisor + Zwei-Peer-Wake-Proof, Companion zur Consumer-Contract-Spec); de-riskt den extern-blockierten Slice B; Doc-only, kein Deploy/Secret.*

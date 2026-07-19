@@ -8,6 +8,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs(tl11): Slice-B Integrations-Runbook — Agent-Home-Supervisor + Zwei-Peer-Wake-Proof (2026-07-19 13:04)
+Repo-lokaler, doc-only Prep-Slice für den extern-blockierten TL-11 Slice B. Neu `docs/RUNBOOK-TL-11-wake-
+supervisor.md`: operativer Companion zur Protokoll-Spec `TL-11-wake-consumer-contract.md` — Schritte statt
+Nacherzählung. Inhalt: Verortung (**derselbe Host/Loopback**, sonst Close `4003`), vorhandenes Mesh-Client-
+Cert (**kein** Secret), vorgeschriebene Subscribe-Form (`?subscribe=agent:wake&agent=spiffe://…/node/<PeerID>`),
+Reaktion auf den `.data`-Payload (Zero-Content, `reason:'inbox'`), **Cold-Start-Sweep-Pflicht** (best-effort/
+coalesced/fail-closed), **Zwei-Peer-Live-Proof-Prozedur** (`[[dod-two-peer-mcp-proof]]`), Verifikations-
+Checkliste (gegen die testgebundenen Invarianten) und No-op-Rückfall. **De-riskt** Slice B — entfernt den
+Blocker NICHT: der letzte Hop (Supervisor→CLI, `pokeCli` = **out-of-repo**) bleibt Host-/Deploy-gated. §9
+hält die TL-08/09/10-Wahrheit sichtbar (2c BLOCKED · 09c braucht Secret · 10-A hinter §5-CO). Kein Code/
+Config/Skript, kein Deploy/Secret/Cross-Host, keine Supervisor-Änderung in diesem Repo.
+
 ### docs(tl14a): CA-Zweistufen-Umzug — Consensus-Ergebnis D1–D6 (2026-07-19 11:34)
 Protokolliert den tatsächlichen `pal:consensus`-Lauf über die D1–D6-Abstimmungsvorlage (`TL-14a-consensus-
 brief-D1-D6.md`, #290) in `docs/architecture/TL-14a-consensus-result-D1-D6.md`. **Infra-Ehrlichkeit:**
