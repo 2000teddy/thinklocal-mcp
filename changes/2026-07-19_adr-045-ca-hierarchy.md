@@ -1,4 +1,4 @@
-# changes/2026-07-19 — docs(adr): ADR-044 CA-Zweistufen-Hierarchie (Draft/Proposed)
+# changes/2026-07-19 — docs(adr): ADR-045 CA-Zweistufen-Hierarchie (Draft/Proposed)
 
 **Typ:** Doc-only (Architektur-Entscheidung, Draft). **Kein** Code/Runtime-Change, **keine** Skripte, **kein**
 Deploy/Secret/Cross-Host-Schritt.
@@ -9,7 +9,7 @@ hat alle Bausteine geliefert, um die CA-Zweistufen-Hierarchie **als ADR** festzu
 Schritt VOR Runbook-Volltext + Zeremonie-Skripten (CLAUDE.md Schritt 3, Design-Doku vor Code).
 
 ## Was
-- **Neu `docs/architecture/ADR-044-ca-two-stage-hierarchy.md`** (Status **Proposed**):
+- **Neu `docs/architecture/ADR-045-ca-two-stage-hierarchy.md`** (Status **Proposed**):
   - **Zielhierarchie:** Offline-Root (pathLen 0) → Intermediate TH01 → kalte Geschwister-Reserve TH02.
   - **Entscheidet konsens-getragen:** D1 Trust-Domain **entkoppeln**, D2 **`pathLen 0`**, D4 **Doppel-Pin-
     Cutover**, D5 **Token-Re-Onboard je Node**, D6 **TH02 kalt** — jeweils mit Auflagen (D1 terminierte
@@ -21,7 +21,7 @@ Schritt VOR Runbook-Volltext + Zeremonie-Skripten (CLAUDE.md Schritt 3, Design-D
     Intermediate-Expiry-Monitoring (fehlt → Vorbedingung für D3) — beide als **blockierende** Code-Folge-Slices.
   - **Verworfene Alternativen** (gekoppelter Domain-Flip, `pathLen 1`, Cross-Sign, Chain-Swap, heißes TH02,
     ≥5 J) + Konsequenzen + Nächste Schritte.
-- **`TODO.md`:** ADR-044-Draft-Sub eingetragen; Sign-off auf „exakte D3-Laufzeit setzen → Accepted"
+- **`TODO.md`:** ADR-045-Draft-Sub eingetragen; Sign-off auf „exakte D3-Laufzeit setzen → Accepted"
   präzisiert; Vorbedingungs-Slices A/B als eigene offene Code-Slices.
 
 ## Abgrenzung

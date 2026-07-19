@@ -8,9 +8,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### docs(adr): ADR-044 CA-Zweistufen-Hierarchie — Draft (Status Proposed) (2026-07-19 14:04)
+### docs(adr): ADR-045 CA-Zweistufen-Hierarchie — Draft (Status Proposed) (2026-07-19 14:04)
 Faltet den D1–D6-Konsens (`TL-14a-consensus-result-D1-D6.md`, opus 8/10 + sonnet 7/10) und die code-gegroundeten
-Blocker A/B (`TL-14a-blocker-AB-grounding.md`) in eine Architektur-Entscheidung `docs/architecture/ADR-044-ca-
+Blocker A/B (`TL-14a-blocker-AB-grounding.md`) in eine Architektur-Entscheidung `docs/architecture/ADR-045-ca-
 two-stage-hierarchy.md`. **Entscheidet** konsens-getragen: D1 Trust-Domain **entkoppeln**, D2 **`pathLen 0`**,
 D4 **Doppel-Pin-Cutover**, D5 **Token-Re-Onboard je Node**, D6 **TH02 kalt**. **Parkt D3** (Intermediate-
 Laufzeit, Korridor **1–3 J**, beide Modelle verwerfen ≥5 J) als **einzige offene Owner-Entscheidung** → ADR

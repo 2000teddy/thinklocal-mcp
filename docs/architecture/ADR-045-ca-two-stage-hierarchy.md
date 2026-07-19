@@ -1,4 +1,4 @@
-# ADR-044 — CA-Zweistufen-Hierarchie (Offline-Root → Intermediate TH01 / Geschwister TH02)
+# ADR-045 — CA-Zweistufen-Hierarchie (Offline-Root → Intermediate TH01 / Geschwister TH02)
 
 **Status:** Proposed (Draft — **kein** Deploy/Merge-in-Prod ohne Christians Wort; **eine** offene Owner-
 Entscheidung, s. §D3)
