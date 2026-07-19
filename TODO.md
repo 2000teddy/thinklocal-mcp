@@ -155,8 +155,15 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
 - [ ] **[v5.1] TL-13 (≈1 h je Rechner + ⛔ Fenster)** Re-Enroll .56/.222/.94 → `node/<PeerID>`; danach
   Duldungs-Ende Alt-Format aktivieren (Entsch. 17, spätestens **01.08.**). ↔ vgl. „Produktiv-Flotten-Flip"
   + `TLMCP_STRICT_IDENTITY`.
-- [ ] **[v5.1] TL-14a (≈3 h)** CA-Zweistufen-Umzug: Runbook (Offline-Wurzel-Zeremonie, Intermediate TH01,
+- [~] **[v5.1] TL-14a (≈3 h)** CA-Zweistufen-Umzug: Runbook (Offline-Wurzel-Zeremonie, Intermediate TH01,
   Geschwister-Intermediate TH02) — nur Papier+Skripte.
+  - [x] **Scoping/Discovery** (2026-07-19): `docs/architecture/TL-14a-ca-two-stage-scoping.md` — Ist-Zustand
+    gegroundet (heute flache Self-Signed-Root `createMeshCA` `tls.ts:59`, Root-Key online + ko-lokalisiert;
+    Attesting-Pfad `cert-issuer.ts`), Zielhierarchie (offline Root → Intermediate TH01 → Geschwister TH02),
+    bindende Beschlüsse konsolidiert (ADR-022/024/034, Decision-7, TL-13-Vorlauf), Runbook-Skelett (7 Schritte).
+    **§5: 6 exakt offene Entscheidungen VOR Runbook-Volltext + Skripten** (Trust-Domain-Kopplung, `pathLen`,
+    Intermediate-Validität, Cross-Sign vs. Cutover, Chain-Ausroll-Mechanik = TL-14b-Kern, TH02-Rolle).
+  - [ ] **Runbook-Volltext + Zeremonie-Skripte** (nach §5-Klärung, Papier+Skripte, non-gated).
 - [ ] **[v5.1] TL-14b (≈4 h, ⛔ Termin)** CA-Umzug durchführen (mit Christian). ↔ vgl. Decision-7
   Trust-Domain-Flip (KW30).
 - [ ] **[v5.1] TL-15 (≈3 h)** Uhr-Abweichungs-Erkennung zwischen Partnern (Skew-Messung im

@@ -8,6 +8,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs(tl14a): CA-Zweistufen-Umzug — Scoping/Discovery-Note (2026-07-19 08:40)
+Design-Doku VOR Runbook/Skripten (CLAUDE.md Schritt 3) für TL-14a (CA-Zweistufen-Umzug: Offline-Wurzel →
+Intermediate TH01 → Geschwister-Intermediate TH02). Neu `docs/architecture/TL-14a-ca-two-stage-scoping.md`:
+groundet den Ist-Zustand — die Mesh-CA ist heute **flach/einstufig** (`createMeshCA` `tls.ts:59`, self-signed
+Root `cA:true`/`keyCertSign` `tls.ts:84-85`, **kein** Intermediate; Root-Key online + ko-lokalisiert mit dem
+Aussteller `cert-issuer.ts`/`tls.ts:403-404`). Zielhierarchie mit **offline** Root, konsolidiert die bindenden
+Beschlüsse (ADR-022/024/034, Decision-7 Trust-Domain-Kopplung, TL-13-Vorlauf), skizziert die 7-Schritt-Runbook-
+Struktur und listet **6 exakt offene Entscheidungen (§5)** als Gate VOR Runbook-Volltext + Skripten (Trust-Domain-
+Kopplung, `pathLen`, Intermediate-Validität, Cross-Sign-vs.-Cutover, Chain-Ausroll-Mechanik = TL-14b-Kern, TH02-
+Rolle). Kein Runbook-Volltext, **keine** Skripte, kein Code/Config angefasst; kein Deploy/Secret/Cross-Host. Die
+Durchführung bleibt **TL-14b** (⛔ termin- + Christian-gated).
+
 ### docs(tl10): Freigabe-Matrix v1 Scoping/Discovery-Note (2026-07-18 13:02, #287)
 Design-Doku VOR Code (CLAUDE.md Schritt 3) für TL-10 (Freigabe-Matrix: Werkzeug-Stufe → Kanal → Entscheider).
 Neu `docs/architecture/TL-10-freigabe-matrix-scoping.md`: groundet den `resolveApproval`-Seam (`mcp-ingress.ts:105-110`,
