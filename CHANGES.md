@@ -8,7 +8,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### feat(mcp): TL-21 Slice 2 — MCP-Tool `list_capabilities_overview` (2026-07-17 18:13)
+### docs(reconcile): PR-Nummern-Cursor in TODO/CHANGES nachgezogen (#281–#284) (2026-07-18 06:04, #286)
+Reconcile-Wächter (2026-07-18 03:32) meldete Doku-Drift gegen `main`: TODO.md referenzierte als höchste PR nur
+#277 (Cursor 7 hinter #284), CHANGES.md-#284-Eintrag ohne „#284"-Marker. Die Einträge der gemergten Slices
+#281 (TL-21 Slice 1), #282 (Wire-Scaffold), #283 (cert-fixture), #284 (Bug-Pfad 2 Doc) existierten, trugen aber
+keine PR-Nummer → Cursor stale. Fix: PR-Nummern an die bestehenden TODO/CHANGES-Einträge annotiert, jede gegen
+den echten Merge-Commit verifiziert (`git log origin/main`). COMPLIANCE-TABLE war bereits aktuell (#284). Reine
+Doku-Hygiene, kein Code/Runtime-Change.
+
+### feat(mcp): TL-21 Slice 2 — MCP-Tool `list_capabilities_overview` (2026-07-17 18:13, #285)
 Slice 1 (#281) lieferte die Skelett-Übersicht als REST `GET /api/capabilities/overview`; Slice 2 macht dieselbe
 kompakte „Name + ein Satz je Skill"-Projektion als **MCP-Tool** verfügbar (Agent-Kontext-Ökonomie, Details auf
 Abruf via `query_capabilities`). Neu: reine Funktion `buildCapabilityOverview(capabilities)` → `{skills,count}`
@@ -18,7 +26,7 @@ Read-only/additiv, strikte Teilmenge von `query_capabilities`. +6 Tests (echtes 
 Claude-Subagent (codex/agy nicht im PATH), kein HIGH; Rate-Limit-Abwesenheit als kein Problem eingestuft
 (authentifizierter lokaler stdio-Transport, Geschwister-Tools ebenso).
 
-### docs(kw29): Bug-Pfad 2 Log-Flut — konsolidierter Beleg + Issue-Vorlage (2026-07-17 17:06)
+### docs(kw29): Bug-Pfad 2 Log-Flut — konsolidierter Beleg + Issue-Vorlage (2026-07-17 17:06, #284)
 KW29-Freitag-Deliverable („Logrotation + PATH-/`mount`-Fehler einsortieren, saubere Belegdatei/Issue-Vorlage").
 Neu `docs/BUGPFAD-2-logflut-status.md` — trennt die **zwei** Hälften von Bug-Pfad 2: **2a** `mount: command not
 found`-Flut/Unit-PATH ist repo-seitig GESCHLOSSEN (#273 `f57ae5a`, 7 PATH-Stellen, Regression-Test 25 grün,
@@ -28,7 +36,7 @@ Grep-Falsifikation negativ; Optionen newsyslog.d/logrotate/pino-roll skizziert, 
 `TODO.md` Bug-Pfad-2-Eintrag ergänzt (fehlte). Doc-only, kein Runtime-Change; CR Doc-Accuracy-Subagent (kein
 HIGH/MEDIUM, 1 LOW gefixt), Suite 1746 grün.
 
-### test(tl11): §2 mTLS-Pflicht + Nicht-Loopback-4003 Draht-Conformance (cert-fixture Slice) (2026-07-17 13:05)
+### test(tl11): §2 mTLS-Pflicht + Nicht-Loopback-4003 Draht-Conformance (cert-fixture Slice) (2026-07-17 13:05, #283)
 Zieht die zwei offenen `it.todo` des Wire-Scaffolds an → `tl11-wake-wire.conformance.test.ts` jetzt **11 grün**
 (0 todo). **§2 mTLS-Pflicht:** zweiter Harness mit demselben Vertrag wie der cardServer (Fastify `https` +
 `requestCert`+`rejectUnauthorized`, agent-card.ts:229-230), In-Memory-CA/Server-/Client-Leaf (node-forge),
@@ -40,7 +48,7 @@ Negatives beweisen echten Reset), M2 (Abgrenzung: mTLS-Semantik ≠ Prod-Verdrah
 Follow-up), L2 (Listener-Race), L3 (Link-Local-Ausschluss) adressiert. Suite **1746 grün**, tsc(strict)/Lint 0.
 Kein Runtime-Change, kein Deploy.
 
-### test(tl11): Draht-Ebenen-Conformance für den Wake-Kontrakt (Scaffold) (2026-07-17 06:38)
+### test(tl11): Draht-Ebenen-Conformance für den Wake-Kontrakt (Scaffold) (2026-07-17 06:38, #282)
 Die §2–§5-Garantien der `TL-11-wake-consumer-contract.md` waren nur auf Pure-Function-/Routing-Ebene bewacht
 (`matchesSubscription`/`rejectsAgentFilter`/`isLoopbackIp` — kein Socket). Neu `tl11-wake-wire.conformance.test.ts`:
 echter Fastify-Server + `registerWebSocket` auf `127.0.0.1:<ephemeral>`, ein echter WS-Client (Node-22-global
@@ -66,7 +74,7 @@ den ganzen Request zu fehlern. CR-LOW Doku-Drift: `SUMMARY_MAX_LEN=160` als **In
 `skill_id`/`category`/`agent_id` + Endpoint malformed→**200**). Suite **1735 grün**, tsc(strict)/neue-
 Dateien-Lint 0. Kein Merge (Christian-gated).
 
-### feat(api): TL-21 Skelett-Auskunft `GET /api/capabilities/overview` (Kap. 06) (2026-07-16 18:10)
+### feat(api): TL-21 Skelett-Auskunft `GET /api/capabilities/overview` (Kap. 06) (2026-07-16 18:10, #281)
 Kontext-Ökonomie: ein Agent bekam bei „was kann dieser Knoten?" entweder zu wenig (`list_skills` ohne
 Beschreibung) oder zu viel (`/api/capabilities` volle Objekte je Provider). Neu: kompakte **Skelett-
 Übersicht** (pro Skill **Name + ein Satz**), Details erst auf Abruf. `capability-skeleton.ts` (reines Modul:
