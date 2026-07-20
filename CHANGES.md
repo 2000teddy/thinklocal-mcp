@@ -8,6 +8,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(mcp): TL-21 Peer-Skelett als MCP-Tool — `list_peers_overview` (2026-07-20 16:36)
+Additives, **read-only** MCP-Companion zur bereits gemergten REST-Peer-Übersicht (`GET /api/peers/overview`,
+#303) — genau die Slice-1→Slice-2-Trennung, mit der schon `list_capabilities_overview` von seinem
+REST-Zwilling getrennt wurde. Neues MCP-Tool `list_peers_overview` (keine Parameter) in `mcp-server.ts`,
+direkt hinter `discover_peers`, ruft den **gemeinsamen** Envelope-Builder `buildPeerOverview(mesh.getOnlinePeers())`
+auf — **dieselbe reine Funktion und dieselbe Datenquelle** wie REST → strukturelle Parität, kein Drift
+(exakt das Muster von `list_capabilities_overview`/`buildCapabilityOverview`). Kein neuer Builder/Getter,
+reine Transport-Wiederverwendung: ein Agent im Mesh erhält die kompakte „wer ist im Mesh?"-Skelett-Sicht nun
+auch per MCP statt nur per REST-Umweg; Details bleiben auf Abruf über das unveränderte `discover_peers`/
+`get_agent_card`. **TS:** +4 Tests (`mcp-server.test.ts`: echtes registriertes Tool via
+`_registeredTools[name].handler`, Envelope-Parität mit REST, leeres Mesh→kein throw, geforgte Wire-Card→total),
+Suite **1828 grün** (134 Files), tsc(strict) 0, geänderte Dateien eslint/prettier 0. **CR:** code-review-Skill
+(medium) — keine Korrektheits-Bugs, kein HIGH/CRITICAL (1:1-Spiegel des gemergten Slice-2/3-Pfads). **PC:**
+Secret-Scan clean. `index.ts` unangetastet, kein State/Deploy/Secret, Risiko-Delta **null**.
+
 ### feat(api): TL-21 Peer-Skelett-Auskunft — `GET /api/peers/overview` (2026-07-20 14:12)
 Additive, **read-only** Zweitstufe der TL-21-Skelett-Offenlegung (Kap. 06), nach `capabilities/overview`
 (Slice 1/2) jetzt für **Peers**. Neu `packages/daemon/src/peer-skeleton.ts`: reine, deterministische

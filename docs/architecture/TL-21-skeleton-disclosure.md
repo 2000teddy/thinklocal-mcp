@@ -61,9 +61,13 @@ Ein Skelett-Eintrag:
   `agent_id`) ersetzt für „wer ist im Mesh?" die vollen Agent-Card-`capabilities`-Arrays durch **Zähler**;
   Details bleiben auf Abruf über das unveränderte `GET /api/peers`. **Same-source** `mesh.getOnlinePeers()`
   (Verhaltensparität; `status` ist wie bei `/api/peers` faktisch immer `online`). Total gegen malformed/
-  geforgte Wire-Card-Daten (kein 500er). Read-only, additiv. **Folge (optional):** MCP-Tool
-  `list_peers_overview` (derselbe Builder, wie Slice 1→2). Eine All-known-Variante (inkl. offline-Peers)
+  geforgte Wire-Card-Daten (kein 500er). Read-only, additiv. Eine All-known-Variante (inkl. offline-Peers)
   bräuchte einen neuen Mesh-Getter → eigener Slice.
+- **Slice 4 (Peer-MCP-Tool, umgesetzt 2026-07-20):** identische Peer-Skelett-Projektion als **MCP-Tool**
+  `list_peers_overview` für die Agent-Kontext-Ökonomie — derselbe reine Envelope-Builder `buildPeerOverview`
+  von REST **und** MCP benutzt (same-source `mesh.getOnlinePeers()`) → strukturelle Parität, kein Drift.
+  Genau die Trennung, mit der Slice 1 → Slice 2 bei den Capabilities getrennt wurde (kleine, separat
+  reviewbare MCP-Fläche). Read-only, additiv.
 - **Nicht in Scope:** Skelett für Tools/Tasks (dasselbe Muster später anwendbar); Paginierung
   (die Skill-/Peer-Menge ist heute klein); Volltext-Suche.
 
