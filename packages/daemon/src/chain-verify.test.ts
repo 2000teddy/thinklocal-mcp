@@ -95,4 +95,33 @@ describe('verifyPeerCertChain — chain-fähiger Verify (ADR-045 Vorbedingung A)
     expect(verifyPeerCertChain([], [leaf.certPem])).toBe(false);
     expect(verifyPeerCertChain([root.caCertPem], [])).toBe(false);
   });
+
+  it('ADR-024 MEDIUM-1: ein ABGELAUFENER Trust-Anker wird abgelehnt (forge prüft das Anker-Fenster nicht)', () => {
+    // Anker mit notAfter in der Vergangenheit; das Leaf ist von diesem Anker signiert und selbst gültig.
+    const keys = forge.pki.rsa.generateKeyPair(2048);
+    const cert = forge.pki.createCertificate();
+    cert.publicKey = keys.publicKey;
+    cert.serialNumber = '01' + forge.util.bytesToHex(forge.random.getBytesSync(15));
+    cert.validity.notBefore = new Date(Date.now() - 2 * 86400000);
+    cert.validity.notAfter = new Date(Date.now() - 86400000); // gestern abgelaufen
+    const subject = [
+      { name: 'commonName', value: 'thinklocal Root expired' },
+      { name: 'organizationName', value: 'thinklocal-mcp' },
+    ];
+    cert.setSubject(subject);
+    cert.setIssuer(subject);
+    cert.setExtensions([
+      { name: 'basicConstraints', cA: true, critical: true, pathLenConstraint: 1 },
+      { name: 'keyUsage', keyCertSign: true, cRLSign: true, critical: true },
+      { name: 'subjectKeyIdentifier' },
+    ]);
+    cert.sign(keys.privateKey, forge.md.sha256.create());
+    const expiredRoot: CaBundle = {
+      caCertPem: forge.pki.certificateToPem(cert),
+      caKeyPem: forge.pki.privateKeyToPem(keys.privateKey),
+    };
+    const leaf = createNodeCert(expiredRoot, 'node', LEAF_URI, []);
+    // Ohne die explizite Anker-Fenster-Prüfung gäbe forge hier fälschlich `true` zurück.
+    expect(verifyPeerCertChain([expiredRoot.caCertPem], [leaf.certPem])).toBe(false);
+  });
 });

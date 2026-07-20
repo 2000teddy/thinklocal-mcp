@@ -8,6 +8,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(cert): Rewire `isRetainableCanonicalCert` auf Chain-Verify + Anker-Validity-Härtung (2026-07-20 07:36)
+Stellt die erste Trust-Entscheidung von der flachen Ein-Aussteller-Prüfung auf die chain-fähige Primitive um:
+`isRetainableCanonicalCert` nutzt jetzt `verifyPeerCertChain(trustedAttestingCaPems, [certPem])` statt
+`some(verifyPeerCert(ca, cert))` — für die heutige **einstufige** CA äquivalent (Leaf direkt von einer
+Attesting-CA signiert), aber **chain-ready** für 2-Tier (TL-14b). **Voraussetzung gehärtet:** eine Probe zeigte,
+dass `verifyPeerCertChain` das **Anker-Gültigkeitsfenster nicht** prüfte (`verifyPeerCertChain([expiredCA],
+[leaf])` → fälschlich `true`), weil forge den caStore-Anker nie durchläuft — das hätte die **ADR-024-MEDIUM-1**-
+Garantie (abgelaufene Attesting-CA darf ein kanonisches Cert nicht behalten) regressiert. Fix: explizite
+`notBefore`/`notAfter`-Prüfung des Ankers in `verifyPeerCertChain` (fail-closed) + Regressionstest. **Bewusst
+NICHT rewired:** `selectTrustDistributionCa` (gibt die CA zurück, nicht bool) + Token-Onboard (Single-Anchor-
+Direktprüfung) — dort ist der flache `verifyPeerCert` der natürliche Fit. `tls.test.ts` 49/49 grün (inkl.
+abgelaufene-Attesting-CA-Retention), +1 chain-verify-Test, Suite **1769 grün**, tsc(strict)/neue-Code-Lint 0.
+Kein Deploy/Secret/Cross-Host.
+
 ### feat(cert): chain-fähiger Verify + pathLen-Enforcement (ADR-045 Vorbedingung A) (2026-07-20 07:18)
 Schließt die Primitive-Seite von Blocker A: der flache `verifyPeerCert` konnte ein Leaf nur gegen seinen
 **direkten** Aussteller prüfen (keine Kette, kein `pathLen` — belegt in `tls-chain-characterization.test.ts`
