@@ -156,8 +156,15 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     `requestCert`+`rejectUnauthorized`, agent-card.ts:229-230), In-Memory-CA/Server-/Client-Leaf (node-forge),
     undici-`WebSocket`+`Agent`-Client → gültiges Client-Cert erreicht `/ws`, cert-los/`ws://` werden TLS-resettet;
     §2 **Nicht-Loopback-`4003`** über Bindung an eine echte Nicht-Loopback-IPv4 (kein `trustProxy` → `req.ip` =
-    Socket-Peer, `it.skipIf` auf reinen Loopback-Hosts). Offen als Follow-up: cardServer-Wiring-Test (CR-M2 —
-    ein Regress von `requestCert` in agent-card.ts wird hier bewusst NICHT gefangen).
+    Socket-Peer, `it.skipIf` auf reinen Loopback-Hosts).
+  - [x] **TL-11 cardServer-Wiring-Test (CR-M2)** (2026-07-20): der #283-Slice prüfte die mTLS-Pflicht über
+    einen ZWEITEN Harness — nicht die reale Klasse; ein Regress von `requestCert` in `agent-card.ts` blieb
+    ungefangen. Neu `agent-card-mtls-wiring.test.ts` (+3): konstruiert den ECHTEN `AgentCardServer` mit
+    In-Memory-TLS-Bundle (`createMeshCA`/`createNodeCert`, kein Secret, kein Port-Listen) und liest
+    `requestCert`/`rejectUnauthorized` direkt vom darunterliegenden Node-`tls.Server` (`fastify.server`) ab
+    — beweist agent-card.ts:229-230 (`requestCert=true` UND `rejectUnauthorized=true`), plus Bundle-Pfad
+    schwächt nicht + Negativkontrolle. **Mutations-verifiziert** (`requestCert:false` → Test rot). Suite
+    **1831 grün**. Test-only/additiv, kein Deploy/Secret.
   - [x] **TL-11 Slice-B Integrations-Runbook (Prep)** (2026-07-19): `docs/RUNBOOK-TL-11-wake-supervisor.md` —
     operativer Companion zur Consumer-Contract-Spec: Verortung (derselbe Host/Loopback, sonst `4003`),
     vorhandenes Client-Cert (kein Secret), Subscribe-Form, `.data`-Payload-Reaktion, Cold-Start-Sweep-Pflicht,
