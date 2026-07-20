@@ -797,13 +797,15 @@ export function verifyPeerCertChain(
     const anchors = trustAnchorPems.map((p) => forge.pki.certificateFromPem(p));
     const caStore = forge.pki.createCaStore(anchors);
     const chain = chainPems.map((p) => forge.pki.certificateFromPem(p));
-    // forge prüft Signaturen, Gültigkeitsfenster jeder Stufe UND das `cA`-Flag (ein Nicht-CA als
-    // Zwischenglied wird abgelehnt) — aber NICHT `pathLenConstraint`. verifyCertificateChain wirft bei
-    // Verstoß; Erfolg ⇒ true.
+    // forge prüft Signaturen, Gültigkeitsfenster jeder Stufe, das `cA`-Flag (ein Nicht-CA als Zwischenglied
+    // wird abgelehnt) UND das `pathLenConstraint` der **In-Chain-Intermediates**. Was forge NICHT prüft: das
+    // eigene `pathLenConstraint` des **Trust-Ankers** — die Root liegt im caStore und wird von forge nie
+    // durchlaufen. verifyCertificateChain wirft bei Verstoß; Erfolg ⇒ true.
     if (!forge.pki.verifyCertificateChain(caStore, chain)) return false;
 
-    // pathLen selbst erzwingen (forge-Lücke). Vollen Pfad root→leaf rekonstruieren: den Anker finden, der
-    // die Kettenspitze signiert hat, davor setzen; die gelieferte Kette ist leaf-first.
+    // Genau diese Anker-Lücke schließen: den vollen Pfad root→leaf rekonstruieren (Anker voranstellen; die
+    // gelieferte Kette ist leaf-first) und pathLen über ALLE CA-Stufen erzwingen — inkl. der Root, und
+    // robuster als forges In-Chain-Check (der bei fehlendem `keyUsage` übersprungen wird).
     const top = chain[chain.length - 1];
     if (!top) return false;
     const anchor = anchors.find((a) => {
@@ -825,6 +827,8 @@ export function verifyPeerCertChain(
  * Erzwingt `pathLenConstraint` über einen geordneten Pfad (root→leaf). Für jede CA-Stufe mit gesetztem
  * `pathLenConstraint = L` darf die Zahl der ihr folgenden **untergeordneten CAs** L nicht übersteigen
  * (RFC 5280 §4.2.1.9). Kein Constraint gesetzt ⇒ unbegrenzt. Rein, fail-closed vom Aufrufer umschlossen.
+ * Konservativ: zählt ALLE `cA`-Certs (inkl. hypothetisch self-issued, die RFC ausnähme) → höchstens
+ * strenger als der Standard, nie ein Bypass; self-issued Intermediates kommen im Mesh ohnehin nicht vor.
  */
 function enforcePathLenConstraint(orderedPath: readonly forge.pki.Certificate[]): boolean {
   for (let i = 0; i < orderedPath.length; i++) {

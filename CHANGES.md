@@ -13,9 +13,12 @@ Schließt die Primitive-Seite von Blocker A: der flache `verifyPeerCert` konnte 
 **direkten** Aussteller prüfen (keine Kette, kein `pathLen` — belegt in `tls-chain-characterization.test.ts`
 #295). Neu **`verifyPeerCertChain(trustAnchorPems, chainPems)`** (`tls.ts`): baut die volle Kette (leaf-first)
 und verifiziert sie gegen einen/mehrere Root-Anker via forge `verifyCertificateChain` (Signaturen,
-Gültigkeitsfenster, `cA`-Flag). **Befund:** forge erzwingt `pathLenConstraint` **nicht** (ein pathLen-0-Root
-akzeptierte fälschlich eine Intermediate-Kette) → **manuelles pathLen-Enforcement** über den vollen
-root→leaf-Pfad ergänzt (RFC 5280 §4.2.1.9; untergeordnete CAs pro Stufe ≤ deklariertem `pathLen`). +6 Tests
+Gültigkeitsfenster, `cA`-Flag). **Befund:** forge erzwingt das `pathLen` der **In-Chain-Intermediates**, aber
+**nicht** das eigene `pathLen` des **Trust-Ankers** (die Root liegt im caStore und wird nie durchlaufen) → ein
+pathLen-0-**Root** akzeptierte fälschlich eine Intermediate-Kette. **Manuelles pathLen-Enforcement** über den
+vollen root→leaf-Pfad ergänzt, das genau diese Anker-Lücke schließt (RFC 5280 §4.2.1.9; untergeordnete CAs pro
+Stufe ≤ deklariertem `pathLen`; zusätzlich robuster als forges In-Chain-Check, der bei fehlendem `keyUsage`
+übersprungen wird). +6 Tests
 (`chain-verify.test.ts`: gültige 2-Stufen-Kette akzeptiert, **pathLen-0-Verstoß abgelehnt**, Charakterisierungs-
 Kontrast, Fremd-Anker/unvollständige Kette/leer = false). **Additiv:** der flache `verifyPeerCert` + seine
 Trust-Caller (`isRetainableCanonicalCert`/`selectTrustDistributionCa`/Token-Onboard) bleiben **unverändert**;
