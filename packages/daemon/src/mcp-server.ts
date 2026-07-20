@@ -8,6 +8,7 @@
  *
  * MCP Tools:
  * - discover_peers: Alle verbundenen Peers auflisten
+ * - list_peers_overview: TL-21 Skelett-Uebersicht der Peers (Zaehler statt voller Card)
  * - query_capabilities: Faehigkeiten im Mesh suchen
  * - list_capabilities_overview: TL-21 Skelett-Uebersicht (Name + 1 Satz je Skill)
  * - get_agent_card: Agent Card eines Peers abrufen
@@ -27,6 +28,7 @@ import { z } from 'zod';
 import type { MeshManager } from './mesh.js';
 import type { CapabilityRegistry } from './registry.js';
 import { buildCapabilityOverview } from './capability-skeleton.js';
+import { buildPeerOverview } from './peer-skeleton.js';
 import type { TaskManager } from './tasks.js';
 import type { CredentialVault } from './vault.js';
 import type { AuditLog } from './audit.js';
@@ -72,6 +74,27 @@ export function createMcpServer(deps: McpServerDeps): McpServer {
     }));
     return { content: [{ type: 'text' as const, text: JSON.stringify({ peers, count: peers.length }, null, 2) }] };
   });
+
+  // list_peers_overview: TL-21 Skelett-Auskunft (Kap. 06) — kompakte „ein Eintrag pro Peer"-Übersicht
+  // ({ agent_id, name, status, version, skills:Zähler, load_percent }) statt der vollen Agent-Card, die
+  // discover_peers/GET /api/peers liefern. Dieselbe reine Projektion und derselbe Envelope-Builder wie
+  // REST GET /api/peers/overview (same-source mesh.getOnlinePeers()) → strukturelle Parität, kein Drift.
+  // Read-only, additiv, kontext-ökonomisch. Siehe docs/architecture/TL-21-skeleton-disclosure.md §4.
+  server.tool(
+    'list_peers_overview',
+    'TL-21 Skelett-Auskunft: kompakte ein-Zeile-pro-Peer-Übersicht des Mesh (agent_id, name, status, version, skills-Zähler, load_percent) statt der vollen Agent-Cards. Details auf Abruf via discover_peers/get_agent_card. Read-only, kontext-ökonomisch.',
+    {},
+    async () => {
+      // Gemeinsamer Envelope-Builder wie REST /api/peers/overview → strukturelle Parität (kein Drift).
+      const overview = buildPeerOverview(mesh.getOnlinePeers());
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify(overview, null, 2),
+        }],
+      };
+    },
+  );
 
   // query_capabilities: Faehigkeiten suchen
   server.tool(

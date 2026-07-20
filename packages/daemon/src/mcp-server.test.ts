@@ -12,7 +12,10 @@
 import { describe, it, expect } from 'vitest';
 import { createMcpServer } from './mcp-server.js';
 import { buildCapabilityOverview } from './capability-skeleton.js';
+import { buildPeerOverview } from './peer-skeleton.js';
 import type { Capability } from './registry.js';
+import type { MeshPeer, PeerStatus } from './mesh.js';
+import type { AgentCard } from './agent-card.js';
 
 type Deps = Parameters<typeof createMcpServer>[0];
 
@@ -97,5 +100,86 @@ describe('MCP list_capabilities_overview (TL-21 Slice 2)', () => {
     ];
     const payload = await callOverview(caps);
     expect(payload).toEqual(buildCapabilityOverview(caps));
+  });
+});
+
+// --- list_peers_overview (TL-21 Peer-Slice, MCP-Companion zu REST GET /api/peers/overview) ---
+
+/** Minimal-Agent-Card mit nur den vom Peer-Skelett gelesenen Feldern (analog peer-skeleton.test). */
+function peerCard(p: { version?: string; skills?: string[]; load_percent?: number } = {}): AgentCard {
+  return {
+    name: 'card-name',
+    version: p.version ?? '1.0.0',
+    capabilities: { agents: [], skills: p.skills ?? [], services: [], connectors: [] },
+    worker: { active_tasks: 0, completed_tasks: 0, failed_tasks: 0, load_percent: p.load_percent ?? 0 },
+  } as unknown as AgentCard;
+}
+
+function peer(p: Partial<MeshPeer> & { agentId: string }): MeshPeer {
+  return {
+    name: p.name ?? p.agentId,
+    host: '10.10.10.1',
+    port: 9440,
+    endpoint: 'https://10.10.10.1:9440',
+    status: 'online' as PeerStatus,
+    lastSeen: 0,
+    missedBeats: 0,
+    agentCard: null,
+    libp2p: { peerId: null, peerIdVerified: false, listenMultiaddrs: [], connected: false, status: 'unavailable' },
+    ...p,
+  } as MeshPeer;
+}
+
+function makePeerServer(peers: MeshPeer[]): ReturnType<typeof createMcpServer> {
+  const deps = {
+    // Nur mesh.getOnlinePeers() wird vom getesteten Tool benutzt; Rest sind Stubs.
+    mesh: { getOnlinePeers: (): MeshPeer[] => peers },
+    registry: {},
+    tasks: {},
+    vault: {},
+    audit: {},
+    skills: {},
+    identity: {},
+    config: {},
+  } as unknown as Deps;
+  return createMcpServer(deps);
+}
+
+async function callPeerOverview(peers: MeshPeer[]): Promise<{ peers: unknown[]; count: number }> {
+  const server = makePeerServer(peers);
+  const res = await getTool(server, 'list_peers_overview').handler({}, {});
+  expect(res.content[0].type).toBe('text');
+  return JSON.parse(res.content[0].text) as { peers: unknown[]; count: number };
+}
+
+describe('MCP list_peers_overview (TL-21 Peer-Slice)', () => {
+  it('ist unter dem exakten Namen registriert', () => {
+    expect(getTool(makePeerServer([]), 'list_peers_overview')).toBeTruthy();
+  });
+
+  it('content ist EXAKT buildPeerOverview(mesh.getOnlinePeers()) — Envelope-Parität mit REST', async () => {
+    const peers = [
+      peer({ agentId: 'b', name: 'Beta', agentCard: peerCard({ version: '2.1.0', skills: ['s1', 's2'], load_percent: 42 }) }),
+      peer({ agentId: 'a', name: 'Alpha', status: 'offline' as PeerStatus }),
+    ];
+    const payload = await callPeerOverview(peers);
+    // Gegen den GEMEINSAMEN Envelope-Builder (den auch der REST-Endpoint aufruft) → deckt Envelope-Drift auf.
+    expect(payload).toEqual(buildPeerOverview(peers));
+    expect(payload.count).toBe(payload.peers.length);
+  });
+
+  it('leeres Mesh → { peers: [], count: 0 } (wirft nicht)', async () => {
+    expect(await callPeerOverview([])).toEqual({ peers: [], count: 0 });
+  });
+
+  it('malformed Wire-Card-Daten kippen das Tool nicht (Totalität wie REST)', async () => {
+    // Geforgte Card-Felder (non-string version, non-array skills, unbekannter status) — Tool bleibt total, kein throw.
+    const forged = { version: 123, capabilities: { skills: 'nope' }, worker: { load_percent: 'x' } } as unknown as AgentCard;
+    const peers = [
+      peer({ agentId: 'ok', name: 'Sauber', agentCard: peerCard({ skills: ['s1'] }) }),
+      peer({ agentId: 'bad', name: 'Geforgt', status: 'weird' as PeerStatus, agentCard: forged }),
+    ];
+    const payload = await callPeerOverview(peers);
+    expect(payload).toEqual(buildPeerOverview(peers));
   });
 });
