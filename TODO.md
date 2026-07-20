@@ -77,8 +77,14 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     (Default aus, leere Registry → 403 = verhaltensidentisch). Nur `isApproved` lässt durch; `consensus`
     bleibt 403; fail-closed bei Throw/malformed. **Korrelierbares `MCP_FORWARD_GATE`-Audit** (requestId/
     outcome/channelId) VOR Dispatch/Denial (CR-Codex #264). `meldekanal.ts` hat jetzt einen lebenden Consumer.
-  - [ ] **TL-09c** (offen): realer `TelegramMeldekanal` (Inline-Keyboard-Callback → `approvals.ts`-Store)
-    in die Registry injizieren. **Erst hiermit kann eine gate-Freigabe real `approved` werden.**
+  - [x] **TL-09c** (2026-07-20, ADR-038): realer `TelegramMeldekanal implements Meldekanal` — Inline-Keyboard
+    (`tlgate:approve|reject:<id>`) → durabler `approvals.ts`-Store (`type:'mcp_gate'`). **Injizierbar** in die
+    Registry; ein Test beweist end-to-end `approved → ApprovalDecision('approved')` über eine reale Registry.
+    Fail-closed (ADR-036 C1/C2): Abort terminal (später Klick No-op), fremder Chat/malformed ignoriert,
+    Doppelklick idempotent, Persistenz-/Sende-Fehler ⇒ `error` (nie stilles `approved`). Bot-Glue über schmalen
+    `TelegramApprovalTransport` (kein zweiter Polling-Bot). **`index.ts` unangetastet** (Registry weiter leer →
+    gate=403, Risiko-Delta null). **OFFEN (Aktivierung, Christian-gegatet, RUNBOOK-TL-11 §TL-09c):** Gateway-Bot
+    als Transport hereinreichen + Freigabe-Chat setzen — braucht Bot-Token/Secret, kein Repo-Schritt.
 - [~] **[v5.1] TL-10 (≈3 h)** Freigabe-Matrix v1 (Werkzeug-Klasse → Kanal → Entscheider), Auswertung im Gate.
   Schiebt sich zwischen Ingress (TL-09b, verdrahtet) und Registry — der `resolveApproval`-Seam existiert jetzt.
   CO-Auflagen (2026-07-15): Feld `tier` statt `tool_class` (tier = harter Predikat-Filter, nie Label);
