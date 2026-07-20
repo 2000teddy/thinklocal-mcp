@@ -24,8 +24,14 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
   Pfad A/C2". **.52-Fenster aktiv (heute Nacht, zielt auf TL-07-Beweis).**
 - [ ] **[v5.1] TL-00c (≈2 h)** Cert-Dry-Run: Test-Peer-Cert <30 Tage → Wochen-Restart simulieren → Reissue
   + Schlüssel-Sync verifiziert. **Abnahmekriterium vor weiterem Staffel-Rollout.** ↔ vgl. #242 renew_before_days.
-- [ ] **[v5.1] TL-00d (≈1 h)** #242-Konfig-Keys dokumentieren (`cert.renew_before_days`,
-  `TLMCP_CERT_RENEW_BEFORE_DAYS`). ↔ vgl. #243 (KW28 §2 B, USER-GUIDE) — evtl. bereits erledigt, verifizieren.
+- [x] **[v5.1] TL-00d** #242-Konfig-Keys dokumentieren (`cert.renew_before_days`,
+  `TLMCP_CERT_RENEW_BEFORE_DAYS`) — **verifiziert erledigt (2026-07-20)** gegen HEAD: `docs/USER-GUIDE.md`
+  deckt **beide** Knobs vollständig & korrekt ab — TOML-`[cert]`-Beispiel (l.79-82) + Env-Var-Tabelle (l.105) +
+  dedizierter Abschnitt „Zertifikats-Erneuerung (`[cert]`)" mit Mapping-Tabelle TOML-Key ↔ Env ↔ Default `30` ↔
+  Wertebereich `[1, 89]` ↔ Bedeutung (l.115-117), #242-Attribution + Validierungs-Begründung. Doku stimmt mit
+  HEAD überein (`NODE_CERT_VALIDITY_DAYS=90` → gültig `[1, 89]`; Default `config.ts:251`; Env-Wiring
+  `config.ts:406-407`; Post-Merge-Validator `config.ts:465-476`). Ursprüngliche Abdeckung via #243 (KW28 §2 B).
+  Kein weiterer Doc-Change nötig.
 
 ### P0 — Weg zum Zwei-Rechner-Beweis (Kap. 07; Status: Code in main, live beweisen)
 - [ ] **[v5.1] TL-01 (≈2–3 h)** `[[mcp.share]]` für `pal`+`unifi` (remote-forward-only). *Fertig wenn:*

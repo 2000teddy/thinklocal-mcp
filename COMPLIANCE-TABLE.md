@@ -1882,6 +1882,10 @@ CHANGES.md, `changes/2026-07-07_doc-compliance-gate.md`, dieser Eintrag; Rollen/
 
 **Typ:** Test-only Regressions-Absicherung (TL-11 cardServer-mTLS-Wiring, CR-M2 — kein Produktionscode, `agent-card.ts` unangetastet). Kein Deploy/Secret. **DO:** `packages/daemon/src/agent-card-mtls-wiring.test.ts`, `changes/2026-07-20_tl11-cardserver-mtls-wiring-test.md`, `CHANGES.md`, `TODO.md`, dieser Eintrag.
 
+| (offen, base=main) | 2026-07-20 18:05 | n/a | n/a | n/a | n/a | ✅ | ✅ | **Doc-only Backlog-Cleanup (TL-00d verifiziert erledigt) → CO/CG/TS/CR entfallen** (kein Code-/Test-/Design-Diff; Doc-only-Ausnahme wie #84). Wahrheitsgetreue Verifikation gegen HEAD: TL-00d („#242-Konfig-Keys `cert.renew_before_days` + `TLMCP_CERT_RENEW_BEFORE_DAYS` dokumentieren") ist **vollständig** in `docs/USER-GUIDE.md` abgedeckt — TOML-`[cert]`-Beispiel (l.79-82), Env-Var-Tabelle mit Wertebereich `[1, 89]`/Default `30` (l.105), dedizierter Abschnitt „Zertifikats-Erneuerung" mit Mapping-Tabelle TOML-Key ↔ Env ↔ Default ↔ Bereich ↔ Bedeutung + #242-Attribution + Validierungs-Begründung (l.115-117). Doku **akkurat** ggü. Code bei HEAD: `[1, 89]` ⇐ `NODE_CERT_VALIDITY_DAYS=90` + Validator `config.ts:465-476`; Default `30` ⇐ `config.ts:251`; Env-Wiring `config.ts:406-407`. → Keine fehlende/falsche Abdeckung, kein zusätzlicher Doc-Change; TL-00d in `TODO.md` auf `[x]` mit belegter Notiz. **PC:** Secret-Scan clean. Kein Code/Test/State/Deploy/Secret, Risiko-Delta **null**. |
+
+**Typ:** Doc-only Backlog-Cleanup (TL-00d Verifikation — kein Code/Test, USER-GUIDE bereits vollständig). Kein Deploy/Secret. **DO:** `TODO.md`, `changes/2026-07-20_tl00d-verify-cert-renew-knobs-documented.md`, `CHANGES.md`, dieser Eintrag.
+
 ---
 
-*Letzte Aktualisierung: 2026-07-20 17:15 — test(tls): TL-11 cardServer-mTLS-Wiring-Test (CR-M2-Follow-up); test-only Regressions-Absicherung, konstruiert den echten `AgentCardServer` + prüft `requestCert`/`rejectUnauthorized` am Node-`tls.Server`, mutations-verifiziert; `agent-card.ts` unverändert.*
+*Letzte Aktualisierung: 2026-07-20 18:05 — docs(todo): TL-00d verifiziert erledigt; wahrheitsgetreue HEAD-Prüfung — beide cert-renew-Knobs (`cert.renew_before_days` + `TLMCP_CERT_RENEW_BEFORE_DAYS`) vollständig & akkurat in `docs/USER-GUIDE.md` dokumentiert, kein weiterer Doc-Change; doc-only, kein Code/Deploy/Secret.*

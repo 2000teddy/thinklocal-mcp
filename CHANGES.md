@@ -8,6 +8,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs(todo): TL-00d verifiziert erledigt — cert-renew-Knobs dokumentiert (2026-07-20 18:05)
+**Doc-only** Backlog-Cleanup. TL-00d („#242-Konfig-Keys `cert.renew_before_days` + `TLMCP_CERT_RENEW_BEFORE_DAYS`
+dokumentieren") stand mit „evtl. bereits erledigt, verifizieren" offen. Wahrheitsgetreue Prüfung gegen HEAD:
+`docs/USER-GUIDE.md` deckt **beide** Knobs vollständig & korrekt ab — TOML-`[cert]`-Beispiel (l.79-82) +
+Env-Var-Tabelle mit Wertebereich `[1, 89]`/Default `30` (l.105) + dedizierter Abschnitt „Zertifikats-Erneuerung"
+mit Mapping-Tabelle TOML-Key ↔ Env ↔ Default ↔ Bereich ↔ Bedeutung, #242-Attribution + Validierungs-Begründung
+(l.115-117). Doku stimmt mit Code bei HEAD überein (`NODE_CERT_VALIDITY_DAYS=90` → gültig `[1, 89]`, Validator
+`config.ts:465-476`; Default `config.ts:251`; Env-Wiring `config.ts:406-407`). → Keine fehlende/falsche
+Abdeckung, kein zusätzlicher Doc-Change nötig; TL-00d in `TODO.md` auf `[x]` mit belegter Verifikationsnotiz.
+Kein Code/Test/Deploy/Secret.
+
 ### test(tls): TL-11 cardServer-mTLS-Wiring-Test — CR-M2-Follow-up (2026-07-20 17:15)
 **Test-only**, additive Regressions-Absicherung — schließt die im CR von #283 offengelassene Coverage-Lücke
 (CR-M2). #283 prüfte die mTLS-Pflicht (`requestCert`/`rejectUnauthorized`) über einen **zweiten** Harness,
