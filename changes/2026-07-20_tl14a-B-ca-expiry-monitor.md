@@ -17,7 +17,8 @@ frischen Charakterisierungs-Test #295 umwerfen).
   `getCaCertDaysLeft(dataDir)` liest `tls/ca.crt.pem`.
 - **`cert-expiry-monitor.ts`:** optionales `subject` in `CertExpiryMonitorDeps` (Default `'Node'`) → Log-
   Meldungen (`${subject}-Cert …`) + Audit-Detail (`{ subject, daysLeft, tier, action }`) attributierbar. Der
-  Default hält den bestehenden Node-Pfad **byte-identisch** (bestehende 21 Monitor-Tests unverändert grün).
+  Default `'Node'` hält die Log-**Meldungen byte-identisch**; das Audit-Detail-JSON ist eine **additive
+  Obermenge** (neues `subject`-Feld) → die bestehenden 21 Monitor-Tests (Substring-Assertions) bleiben grün.
 - **`index.ts`:** zweiter `startCertExpiryMonitor` für die CA (`getDaysLeft: getCaCertDaysLeft`, subject
   `'CA'`, gleiche Schwellen/Intervall); Timer `unref()`'d + im Shutdown via `clearInterval` geräumt.
 - **`ca-cert-expiry.test.ts` (neu, +6 Tests):** `getCaCertDaysLeft` (Restlaufzeit ~365 d, null-Fälle,

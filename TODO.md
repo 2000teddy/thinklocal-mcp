@@ -205,7 +205,7 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     - [ ] **A — chain-fähiger Verify** (eigentlicher Fix): `verifyPeerCert` chain-/pathLen-fähig **oder**
       Trust-Entscheidungen dokumentiert auf die Transport-mTLS-Ebene beschränken.
     - [x] **B — CA/Intermediate-Expiry-Monitoring** (2026-07-20): neue Quelle `getCaCertDaysLeft` (`tls.ts`,
-      liest `tls/ca.crt.pem`) + `subject`-Label im `cert-expiry-monitor` (Default `'Node'` byte-identisch) +
+      liest `tls/ca.crt.pem`) + `subject`-Label im `cert-expiry-monitor` (Default `'Node'` → Meldungen byte-identisch, Audit-Detail additiv) +
       zweiter CA-Monitor in `index.ts` (subject `'CA'`, gleiche Schwellen, im Shutdown geräumt). Damit ist die
       CA/das Intermediate **live** überwacht (vorher nur Node-Leaf). +6 Tests, Suite **1762 grün**. Reissue
       bleibt Start-gebunden (own-CA); token-onboarded/künftiges Intermediate = eigener Pfad.

@@ -13,8 +13,9 @@ Schließt die code-gegroundete Vorbedingung B: der Live-Ablauf-Monitor sah bishe
 (`getCertDaysLeft` → `tls/node.crt.pem`) — eine ablaufende **CA/ein Intermediate** lief lautlos ab
 (Ausstellungs-Tod). Neu: **`getCaCertDaysLeft(dataDir)`** (`tls.ts`, liest `tls/ca.crt.pem`; gemeinsamer
 Helper `certDaysLeftAtPath`, `getCertDaysLeft`-Signatur unverändert); **`subject`-Label** in
-`cert-expiry-monitor.ts` (Default `'Node'` → Node-Pfad **byte-identisch**, Meldungen/Audit-Detail jetzt
-attributierbar) + **zweiter CA-Monitor** in `index.ts` (subject `'CA'`, gleiche Schwellen/Intervall,
+`cert-expiry-monitor.ts` (Default `'Node'` → Log-**Meldungen byte-identisch**; das Audit-Detail-JSON ist eine
+**additive Obermenge** um ein `subject`-Feld — bestehende 21 Monitor-Tests via Substring-Assertions
+unverändert grün) + **zweiter CA-Monitor** in `index.ts` (subject `'CA'`, gleiche Schwellen/Intervall,
 `unref()`'d + im Shutdown `clearInterval`). **Additiv, keine Änderung an `verifyPeerCert`/Trust-Semantik.**
 +6 Tests (`ca-cert-expiry.test.ts`: getrennte CA-/Node-Quelle, null-Fälle, subject-Audit), Full-Suite **1762
 grün**, tsc(strict) 0, neue-Datei-Lint 0. Reissue bleibt Start-gebunden (own-CA); token-onboarded Nodes / ein
