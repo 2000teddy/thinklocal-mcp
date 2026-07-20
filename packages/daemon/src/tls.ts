@@ -771,6 +771,84 @@ export function verifyPeerCert(caCertPem: string, peerCertPem: string): boolean 
 }
 
 /**
+ * ADR-045 Vorbedingung A (TL-14a): **chain-fähige** Peer-Verifikation.
+ *
+ * `verifyPeerCert` (oben) ist ein **flacher Ein-Aussteller-Verify** — er kann ein Leaf nur gegen seinen
+ * DIREKTEN Aussteller prüfen, baut keine Kette und erzwingt kein `pathLenConstraint` (belegt in
+ * `tls-chain-characterization.test.ts`). In einer zweistufigen Hierarchie (Root → Intermediate → Leaf, ADR-045)
+ * reicht das nicht: der Trust-Anker ist die **Root**, das Leaf aber vom **Intermediate** signiert.
+ *
+ * Diese Funktion baut die volle Kette und verifiziert sie gegen einen oder mehrere **Trust-Anker** (Roots)
+ * via forge `verifyCertificateChain` — inkl. Enforcement von `basicConstraints{cA}` + `pathLenConstraint`
+ * (eine `pathLen`-Verletzung ⇒ Ablehnung) und der Gültigkeitsfenster jeder Kettenstufe.
+ *
+ * @param trustAnchorPems  Vertrauensanker (Root-CA-PEMs); ein Treffer genügt.
+ * @param chainPems        Die zu prüfende Kette **leaf-first**: `[leafPem, intermediatePem, …]`
+ *                         (die Root NICHT einschließen — sie kommt aus `trustAnchorPems`).
+ * @returns `true` nur, wenn die Kette lückenlos zu einem Anker verifiziert (Signaturen, Gültigkeit,
+ *          CA-Constraints, `pathLen`). Jeder Fehler/jede Verletzung ⇒ `false` (fail-closed).
+ */
+export function verifyPeerCertChain(
+  trustAnchorPems: readonly string[],
+  chainPems: readonly string[],
+): boolean {
+  if (trustAnchorPems.length === 0 || chainPems.length === 0) return false;
+  try {
+    const anchors = trustAnchorPems.map((p) => forge.pki.certificateFromPem(p));
+    const caStore = forge.pki.createCaStore(anchors);
+    const chain = chainPems.map((p) => forge.pki.certificateFromPem(p));
+    // forge prüft Signaturen, Gültigkeitsfenster jeder Stufe, das `cA`-Flag (ein Nicht-CA als Zwischenglied
+    // wird abgelehnt) UND das `pathLenConstraint` der **In-Chain-Intermediates**. Was forge NICHT prüft: das
+    // eigene `pathLenConstraint` des **Trust-Ankers** — die Root liegt im caStore und wird von forge nie
+    // durchlaufen. verifyCertificateChain wirft bei Verstoß; Erfolg ⇒ true.
+    if (!forge.pki.verifyCertificateChain(caStore, chain)) return false;
+
+    // Genau diese Anker-Lücke schließen: den vollen Pfad root→leaf rekonstruieren (Anker voranstellen; die
+    // gelieferte Kette ist leaf-first) und pathLen über ALLE CA-Stufen erzwingen — inkl. der Root, und
+    // robuster als forges In-Chain-Check (der bei fehlendem `keyUsage` übersprungen wird).
+    const top = chain[chain.length - 1];
+    if (!top) return false;
+    const anchor = anchors.find((a) => {
+      try {
+        return a.verify(top);
+      } catch {
+        return false;
+      }
+    });
+    if (!anchor) return false;
+    const orderedPath = [anchor, ...[...chain].reverse()]; // root → … → leaf
+    return enforcePathLenConstraint(orderedPath);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Erzwingt `pathLenConstraint` über einen geordneten Pfad (root→leaf). Für jede CA-Stufe mit gesetztem
+ * `pathLenConstraint = L` darf die Zahl der ihr folgenden **untergeordneten CAs** L nicht übersteigen
+ * (RFC 5280 §4.2.1.9). Kein Constraint gesetzt ⇒ unbegrenzt. Rein, fail-closed vom Aufrufer umschlossen.
+ * Konservativ: zählt ALLE `cA`-Certs (inkl. hypothetisch self-issued, die RFC ausnähme) → höchstens
+ * strenger als der Standard, nie ein Bypass; self-issued Intermediates kommen im Mesh ohnehin nicht vor.
+ */
+function enforcePathLenConstraint(orderedPath: readonly forge.pki.Certificate[]): boolean {
+  for (let i = 0; i < orderedPath.length; i++) {
+    const bc = orderedPath[i]?.getExtension('basicConstraints') as
+      | { cA?: boolean; pathLenConstraint?: number }
+      | undefined;
+    if (!bc || bc.cA !== true) continue;
+    const limit = bc.pathLenConstraint;
+    if (limit === undefined || limit === null) continue; // kein Limit
+    let subordinateCAs = 0;
+    for (let j = i + 1; j < orderedPath.length; j++) {
+      const bcj = orderedPath[j]?.getExtension('basicConstraints') as { cA?: boolean } | undefined;
+      if (bcj && bcj.cA === true) subordinateCAs++;
+    }
+    if (subordinateCAs > limit) return false;
+  }
+  return true;
+}
+
+/**
  * ADR-024 MEDIUM-2 (Trust-Distribution-Lifecycle, fail-closed): Wählt die CA, die an
  * gepairte Peers verteilt wird. Die verteilte CA MUSS das eigene Serving-Cert kryptografisch
  * verifizieren — sonst könnten neu gepairte Peers unseren Server nicht validieren (CR-HIGH-2).

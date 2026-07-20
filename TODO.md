@@ -202,8 +202,14 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
       regressionsfest, dass `verifyPeerCert` ein **flacher Ein-Aussteller-Verify** ist:
       `verifyPeerCert(root, leaf@intermediate) === false`, nur der **direkte** Aussteller (Intermediate)
       verifiziert (+4 Tests, Suite 1756 grün). **Kein Fix** — dokumentiert die Lücke.
-    - [ ] **A — chain-fähiger Verify** (eigentlicher Fix): `verifyPeerCert` chain-/pathLen-fähig **oder**
-      Trust-Entscheidungen dokumentiert auf die Transport-mTLS-Ebene beschränken.
+    - [~] **A — chain-fähiger Verify** (2026-07-20): neue Primitive `verifyPeerCertChain(trustAnchorPems,
+      chainPems)` (`tls.ts`) — volle Ketten-Verifikation (forge `verifyCertificateChain`: Signaturen/
+      Gültigkeit/`cA`-Flag) **+ manuelles `pathLenConstraint`-Enforcement** (forge-Lücke: forge prüft pathLen
+      NICHT — belegt + gefixt). +6 Tests (`chain-verify.test.ts`: gültige 2-Stufen-Kette, **pathLen-0-Reject**,
+      Charakterisierung-Kontrast, Fremd-Anker, unvollständige Kette, fail-closed). Der **flache** `verifyPeerCert`
+      + Charakterisierungs-Test #295 bleiben unverändert. **Offen (Folge-Slice, erst mit 2-Tier-Deploy/TL-14b):**
+      die Trust-Entscheidungen (`isRetainableCanonicalCert`/`selectTrustDistributionCa`/Token-Onboard) auf
+      `verifyPeerCertChain` umstellen — heute einstufig, daher noch nicht verdrahtet.
     - [x] **B — CA/Intermediate-Expiry-Monitoring** (2026-07-20): neue Quelle `getCaCertDaysLeft` (`tls.ts`,
       liest `tls/ca.crt.pem`) + `subject`-Label im `cert-expiry-monitor` (Default `'Node'` → Meldungen byte-identisch, Audit-Detail additiv) +
       zweiter CA-Monitor in `index.ts` (subject `'CA'`, gleiche Schwellen, im Shutdown geräumt). Damit ist die
