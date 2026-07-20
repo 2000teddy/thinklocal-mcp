@@ -8,6 +8,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs(security): TL-10 Freigabe-Matrix — Guardrails + „deklarativ ≠ enforced" (D3) (2026-07-20 11:44)
+Neue SECURITY.md-Sektion „Freigabe-Matrix (TL-10) — Freigabe-/Runtime-Entscheidung & Guardrails" (der vom
+§5-CO geforderte D3-Anteil, VOR Slice B). Kernaussage sichtbar gemacht: **`decider: human:<id>` ist v1 REIN
+DEKLARATIV, NICHT durchgesetzt** — Betreiber dürfen sich nicht als Zugriffskontrolle darauf verlassen;
+`consensus:quorum=N` ist ebenfalls nur parse-validiert (Consensus-Pfad = hartes 403). Dokumentiert die
+Fail-closed-Guardrails (Parse-Reject ⇒ ganze Matrix ungültig; Default-Deny 403 bei kein-Match/leer; einziger
+`isRoutable`-Auswertungspfad; Server-Validierung gegen `resolveMcp`), die **4 Vorbedingungen vor Aktivierung**
+(D3-Owner-Sign-off, D2-Registry-Bindung, Env-Flag Default-AUS + Startup-Warn, reviewte `freigabe-matrix.toml`)
+und die **owner-gated** Teile (Aktivierungs-Flag-Flip, D3-Enforcement-Design, Policy-Änderungen). **Doc-only,
+kein Runtime-Change, kein Deploy/Secret** — der Resolver (Slice A) bleibt unverdrahtet.
+
 ### feat(gate): TL-10 Freigabe-Matrix Slice A — reiner Parser/Resolver/Guard (2026-07-20 11:12)
 Erste repo-schreibende TL-10-Slice, freigeschaltet durch den read-only §5-CO (`pal:consensus` opus 8/10 +
 sonnet 8/10, einstimmig). Neu `packages/daemon/src/freigabe-matrix.ts` — **reine Funktionen, KEINE
