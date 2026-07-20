@@ -8,7 +8,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### test(tl14a): Blocker-A Charakterisierungs-Test — verifyPeerCert baut keine Kette (2026-07-19 17:35)
+### docs(reconcile): PR-Nummern-Nachtrag COMPLIANCE + CHANGES (#288–#295) + fehlender #290-Eintrag (2026-07-20 06:08)
+Reconcile-Wächter (2026-07-20 03:34) meldete Doku-Drift gegen `main`: die CHANGES-Einträge **und**
+COMPLIANCE-TABLE-Zeilen für die gemergten PRs **#288–#295** trugen **keine PR-Nummer** (nur Timestamp bzw.
+Spalte `(offen, base=main)` + Topic-Label), und **#290** (docs(ca) Consensus-Brief, Peer-Agent-PR) hatte
+**weder** einen CHANGES- **noch** einen COMPLIANCE-Eintrag. Fix (reine Doku-Hygiene): (a) PR-Nummer an die 7
+bestehenden CHANGES-Überschriften (#288/#289/#291/#292/#293/#294/#295) annotiert; (b) den fehlenden
+**#290**-CHANGES-Eintrag ergänzt; (c) die 7 COMPLIANCE-Zeilen-PR-Spalten von `(offen, base=main)` auf die
+**echte gemergte PR-Nummer** gesetzt + die fehlende **#290**-COMPLIANCE-Zeile ergänzt. Jede Zuordnung gegen
+den echten Merge-Commit verifiziert (`gh pr view … mergeCommit`: #288 `f630c38` · #289 `1a2557e` · #290
+`4c8898d` · #291 `16cc43b` · #292 `80cde74` · #293 `a49325f` · #294 `80e4826` · #295 `41a4603`). Kein Code/
+Runtime-Change, kein Deploy/Secret.
+
+### test(tl14a): Blocker-A Charakterisierungs-Test — verifyPeerCert baut keine Kette (2026-07-19 17:35, #295)
 Macht die code-gegroundete Vorbedingung A (ADR-045 / `TL-14a-blocker-AB-grounding.md`) **regressionsfest**.
 Neu `packages/daemon/src/tls-chain-characterization.test.ts`: baut eine echte zweistufige Kette (Root →
 forge-Intermediate `cA:true`, von der Root signiert → Leaf via `createNodeCert`) und belegt, dass
@@ -18,7 +30,7 @@ ist die „kein Chain-Building/pathLen"-Lücke testgebunden; wird der Test eines
 Leaf), ist `verifyPeerCert` chain-fähig geworden. **Kein Fix, kein Verhaltens-Change** — reine Charakterisierung
 (+4 Tests, Suite **1756 grün**, tsc(strict)/Lint 0). Kein Deploy/Secret/Cross-Host.
 
-### docs(adr): ADR-045 CA-Zweistufen-Hierarchie — Draft (Status Proposed) (2026-07-19 14:04)
+### docs(adr): ADR-045 CA-Zweistufen-Hierarchie — Draft (Status Proposed) (2026-07-19 14:04, #294)
 Faltet den D1–D6-Konsens (`TL-14a-consensus-result-D1-D6.md`, opus 8/10 + sonnet 7/10) und die code-gegroundeten
 Blocker A/B (`TL-14a-blocker-AB-grounding.md`) in eine Architektur-Entscheidung `docs/architecture/ADR-045-ca-
 two-stage-hierarchy.md`. **Entscheidet** konsens-getragen: D1 Trust-Domain **entkoppeln**, D2 **`pathLen 0`**,
@@ -29,7 +41,7 @@ Enforcement: App-`verifyPeerCert` flach → D2 sonst kosmetisch) und B (Intermed
 Vorbedingung für D3) als blockierende Code-Folge-Slices, plus verworfene Alternativen + Konsequenzen. Doc-only,
 kein Code/Config/Skript, kein Deploy/Secret/Cross-Host; Durchführung bleibt TL-14b (⛔ gated).
 
-### docs(tl14a): Consensus-Blocker A & B code-gegroundet (vor ADR) (2026-07-19 13:34)
+### docs(tl14a): Consensus-Blocker A & B code-gegroundet (vor ADR) (2026-07-19 13:34, #293)
 Verifiziert die zwei als **blockierend** markierten Consensus-Auflagen am tatsächlichen Code in
 `docs/architecture/TL-14a-blocker-AB-grounding.md`. **A (pathLen/Chain):** NICHT garantiert — die App-Ebene
 `verifyPeerCert` (`tls.ts:729`) ist ein **flacher Ein-Aussteller-Verify** (`caCert.verify(peerCert)` + Leaf-/
@@ -43,7 +55,7 @@ und rotiert nicht → Vorbedingung für D3. Discovery/Doc only, kein Code/Config
 Cross-Host. Vorgeschlagene Folge-Slices (chain-fähiger Verify + Charakterisierungs-Test; CA-Expiry-Quelle)
 sind benannt, nicht umgesetzt.
 
-### docs(tl11): Slice-B Integrations-Runbook — Agent-Home-Supervisor + Zwei-Peer-Wake-Proof (2026-07-19 13:04)
+### docs(tl11): Slice-B Integrations-Runbook — Agent-Home-Supervisor + Zwei-Peer-Wake-Proof (2026-07-19 13:04, #292)
 Repo-lokaler, doc-only Prep-Slice für den extern-blockierten TL-11 Slice B. Neu `docs/RUNBOOK-TL-11-wake-
 supervisor.md`: operativer Companion zur Protokoll-Spec `TL-11-wake-consumer-contract.md` — Schritte statt
 Nacherzählung. Inhalt: Verortung (**derselbe Host/Loopback**, sonst Close `4003`), vorhandenes Mesh-Client-
@@ -55,7 +67,7 @@ Blocker NICHT: der letzte Hop (Supervisor→CLI, `pokeCli` = **out-of-repo**) bl
 hält die TL-08/09/10-Wahrheit sichtbar (2c BLOCKED · 09c braucht Secret · 10-A hinter §5-CO). Kein Code/
 Config/Skript, kein Deploy/Secret/Cross-Host, keine Supervisor-Änderung in diesem Repo.
 
-### docs(tl14a): CA-Zweistufen-Umzug — Consensus-Ergebnis D1–D6 (2026-07-19 11:34)
+### docs(tl14a): CA-Zweistufen-Umzug — Consensus-Ergebnis D1–D6 (2026-07-19 11:34, #291)
 Protokolliert den tatsächlichen `pal:consensus`-Lauf über die D1–D6-Abstimmungsvorlage (`TL-14a-consensus-
 brief-D1-D6.md`, #290) in `docs/architecture/TL-14a-consensus-result-D1-D6.md`. **Infra-Ehrlichkeit:**
 `gpt-5.5`/`codex` und `gemini-pro`/`agy` fehlen im PATH (`[[pal-review-backend-agy-missing]]`) → kein
@@ -70,7 +82,14 @@ gepinnte Fingerprint-Denylist statt CRL/OCSP). Empfohlene Reihenfolge A+B → D3
 verbindliche Entscheidung** — Input für Christian-Sign-off + ADR. Kein Code/Config/Skript, kein
 Deploy/Secret/Cross-Host.
 
-### docs(tl14a): CA-Zweistufen-Umzug — Entscheidungs-Checkliste (Change-Order) (2026-07-19 09:12)
+### docs(ca): TL-14a Consensus-Brief D1–D6 vorbereitet (2026-07-19 09:33, #290)
+Peer-Agent-PR (nachträglich in die Historie einsortiert — Reconcile 2026-07-20). Neu
+`docs/architecture/TL-14a-consensus-brief-D1-D6.md`: kompakte Abstimmungsvorlage, die die 6 §5-Entscheidungen
+(D1–D6) aus der Decision-Checklist (#289) für den `pal:consensus`-Lauf aufbereitet — je Entscheidung Frage/
+Optionen/nicht-bindende Empfehlung + Nächste-Schritte. **Trifft keine Entscheidung** (Vorlage). Führte direkt
+zum Consensus-Ergebnis #291. Doc-only, kein Runtime-Change.
+
+### docs(tl14a): CA-Zweistufen-Umzug — Entscheidungs-Checkliste (Change-Order) (2026-07-19 09:12, #289)
 Folge-Artefakt zu `TL-14a-ca-two-stage-scoping.md` §5: überführt die **6 offenen Entscheidungen** in ein
 aktionierbares **Change-Order-Register** `docs/architecture/TL-14a-decision-checklist.md` — je Entscheidung
 (D1 Trust-Domain-Kopplung, D2 `pathLen`, D3 Intermediate-Validität, D4 Cross-Sign vs. Cutover, D5 Chain-
@@ -81,7 +100,7 @@ blockiert/Status, plus Kopf-Übersichtstabelle und leere Sign-off-Zeile. Empfehl
 `[[th02-phase3-flip-blocker]]`). **Trifft keine Entscheidung** — macht D1–D6 abstimmbar (Folge-CO
 `pal:consensus` + Christian-Sign-off → ADR). Kein Code/Config/Skript, kein Deploy/Secret/Cross-Host.
 
-### docs(tl14a): CA-Zweistufen-Umzug — Scoping/Discovery-Note (2026-07-19 08:40)
+### docs(tl14a): CA-Zweistufen-Umzug — Scoping/Discovery-Note (2026-07-19 08:40, #288)
 Design-Doku VOR Runbook/Skripten (CLAUDE.md Schritt 3) für TL-14a (CA-Zweistufen-Umzug: Offline-Wurzel →
 Intermediate TH01 → Geschwister-Intermediate TH02). Neu `docs/architecture/TL-14a-ca-two-stage-scoping.md`:
 groundet den Ist-Zustand — die Mesh-CA ist heute **flach/einstufig** (`createMeshCA` `tls.ts:59`, self-signed
