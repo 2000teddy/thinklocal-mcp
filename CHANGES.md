@@ -8,6 +8,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(api): TL-21 Peer-Skelett-Auskunft — `GET /api/peers/overview` (2026-07-20 14:12)
+Additive, **read-only** Zweitstufe der TL-21-Skelett-Offenlegung (Kap. 06), nach `capabilities/overview`
+(Slice 1/2) jetzt für **Peers**. Neu `packages/daemon/src/peer-skeleton.ts`: reine, deterministische
+Projektion `buildPeerSkeleton`/`buildPeerOverview` (`{ agent_id, name, status, version, skills:count,
+load_percent }`, sortiert nach `agent_id`, locale-unabhängig) — ersetzt für die Erst-Orientierung „wer ist
+im Mesh?" die vollen Agent-Card-`capabilities`-Arrays durch **Zähler**. **Total gegen malformed/geforgte
+CRDT-/Wire-Card-Daten** (non-string → `''`/`null`, non-array skills → `0`, non-finite `load_percent` →
+`null`, unbekannter `status` → `'unknown'`): die additive Read-View kippt **nicht** in einen 500er (gleiche
+Härtungs-Klasse wie #281). Neuer Endpoint `GET /api/peers/overview` (rate-limited, **same-source**
+`mesh.getOnlinePeers()` wie `GET /api/peers` → kein neuer Daten-/Identitätspfad); Details bleiben auf Abruf
+über das unveränderte `GET /api/peers`. **`index.ts` unangetastet**, kein State/Deploy/Secret, Risiko-Delta
+**null**. Optionales Folgeslice: MCP-Tool `list_peers_overview` (derselbe Builder, wie Slice 1→2). +15
+Tests, Full-Suite **1824 grün** (134 Files), `tsc` strict 0, eslint/prettier neue Dateien 0.
+
 ### feat(gate): TL-09c realer TelegramMeldekanal — Inline-Keyboard → approvals.ts (2026-07-20 12:58)
 Erster **realer** `Meldekanal`: `TelegramMeldekanal implements Meldekanal` (ADR-038, neu
 `packages/daemon/src/telegram-meldekanal.ts`). Legt eine angehaltene schreibende MCP-`gate`-Anfrage per

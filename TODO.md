@@ -263,6 +263,13 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     benutzt → strukturelle Parität (kein Drift, CR-MEDIUM-Fix). +6 Tests (echtes registriertes Tool via
     `_registeredTools[name].handler` invoked; Envelope-Unit). Read-only/additiv. Optional danach: Skelett
     für Peers/Tools/Tasks.
+  - [x] **Slice 3 (Peers)** (2026-07-20): REST `GET /api/peers/overview` + reines Modul `peer-skeleton.ts`
+    (`buildPeerSkeleton`/`buildPeerOverview`, `{ agent_id, name, status, version, skills:count, load_percent }`,
+    sortiert nach `agent_id`) — ersetzt für „wer ist im Mesh?" die vollen Agent-Card-`capabilities`-Arrays durch
+    **Zähler**; same-source `getOnlinePeers()`, Details via unverändertes `GET /api/peers`. Total gegen malformed
+    Wire-Card-Daten (kein 500er). +15 Tests, Suite **1824 grün**. Read-only/additiv. Optional danach: MCP-Tool
+    `list_peers_overview` (derselbe Builder, wie Slice 1→2); All-known-Variante (inkl. offline) = eigener Slice
+    (neuer Mesh-Getter). Tools/Tasks-Skelett bleibt offen.
 
 ### P2 — Ausbau
 - [ ] **[v5.1] TL-22a (≈4 h)** Mesh-Dateiübertragung Slice 1 (Chunk-Endpunkt am 9440, Prüfsummen je Stück;

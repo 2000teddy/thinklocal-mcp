@@ -4,6 +4,7 @@
  *
  * Stellt Mesh-Zustandsdaten über REST bereit:
  * - GET /api/peers         — Alle bekannten Peers mit Status
+ * - GET /api/peers/overview — TL-21 Skelett: kompakte ein-Zeile-pro-Peer-Übersicht (Zähler statt Card)
  * - GET /api/capabilities  — Alle registrierten Capabilities
  * - GET /api/tasks         — Alle Tasks mit Status
  * - GET /api/audit         — Audit-Log (paginiert)
@@ -25,6 +26,7 @@ import type { TaskExecutor } from './task-executor.js';
 import type { SkillHealthStatus } from './skill-health-monitor.js';
 import type { BuildInfo } from './build-info.js';
 import { buildCapabilityOverview } from './capability-skeleton.js';
+import { buildPeerOverview } from './peer-skeleton.js';
 
 export interface DashboardApiDeps {
   mesh: MeshManager;
@@ -156,6 +158,15 @@ export function registerDashboardApi(server: FastifyInstance, deps: DashboardApi
         : null,
     }));
     return { peers, count: peers.length };
+  });
+
+  // GET /api/peers/overview — TL-21 Skelett-Auskunft für Peers (Kap. 06):
+  // kompakte „ein Eintrag pro Peer"-Übersicht (Zähler statt voller Agent-Card), same-source wie
+  // GET /api/peers (getOnlinePeers). Details auf Abruf über das unveränderte GET /api/peers.
+  // Read-only, additiv. Siehe docs/architecture/TL-21-skeleton-disclosure.md §4.
+  server.get('/api/peers/overview', async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!checkRateLimit(request, reply)) return;
+    return buildPeerOverview(mesh.getOnlinePeers());
   });
 
   // GET /api/capabilities — Alle Capabilities

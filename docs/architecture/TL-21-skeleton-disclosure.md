@@ -55,8 +55,17 @@ Ein Skelett-Eintrag:
   (`list_capabilities_overview`) für die Agent-Kontext-Ökonomie — dieselbe reine Funktion, anderer
   Transport. Bewusst getrennt, damit Slice 1 klein/testbar bleibt und die MCP-Tool-Fläche separat
   reviewt wird.
-- **Nicht in Scope:** Skelett für Peers/Tools/Tasks (dasselbe Muster später anwendbar); Paginierung
-  (die Skill-Menge ist heute klein); Volltext-Suche.
+- **Slice 3 (Peers, umgesetzt 2026-07-20):** dasselbe Muster für **Peers** — REST-Skelett
+  `GET /api/peers/overview` + reines Modul `peer-skeleton.ts` (`buildPeerSkeleton`/`buildPeerOverview`).
+  Ein Eintrag pro Peer (`{ agent_id, name, status, version, skills:count, load_percent }`, sortiert nach
+  `agent_id`) ersetzt für „wer ist im Mesh?" die vollen Agent-Card-`capabilities`-Arrays durch **Zähler**;
+  Details bleiben auf Abruf über das unveränderte `GET /api/peers`. **Same-source** `mesh.getOnlinePeers()`
+  (Verhaltensparität; `status` ist wie bei `/api/peers` faktisch immer `online`). Total gegen malformed/
+  geforgte Wire-Card-Daten (kein 500er). Read-only, additiv. **Folge (optional):** MCP-Tool
+  `list_peers_overview` (derselbe Builder, wie Slice 1→2). Eine All-known-Variante (inkl. offline-Peers)
+  bräuchte einen neuen Mesh-Getter → eigener Slice.
+- **Nicht in Scope:** Skelett für Tools/Tasks (dasselbe Muster später anwendbar); Paginierung
+  (die Skill-/Peer-Menge ist heute klein); Volltext-Suche.
 
 ## 5. Invarianten (VOR Code)
 1. **Read-only, additiv** — kein neuer State, `/api/capabilities` (Details) unverändert.

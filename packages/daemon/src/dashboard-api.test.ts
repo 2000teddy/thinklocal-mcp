@@ -264,3 +264,57 @@ describe('GET /api/capabilities/overview — TL-21 Skelett-Auskunft', () => {
     await app.close();
   });
 });
+
+describe('GET /api/peers/overview — TL-21 Peer-Skelett-Auskunft', () => {
+  const peer = (o: Record<string, unknown>) => ({
+    name: 'p', host: '10.10.10.1', port: 9440, status: 'online', lastSeen: 0, missedBeats: 0,
+    agentCard: null, libp2p: { peerId: null, peerIdVerified: false, listenMultiaddrs: [], connected: false, status: 'unavailable' },
+    ...o,
+  });
+
+  it('liefert die kompakte Peer-Übersicht (Zähler statt voller Card), sortiert nach agent_id', async () => {
+    const mesh = {
+      getOnlinePeers: () => [
+        peer({
+          agentId: 'spiffe://thinklocal/node/beta', name: 'beta', status: 'online',
+          agentCard: { name: 'beta', version: '2.0.0', capabilities: { agents: [], skills: ['s1', 's2', 's3'], services: [], connectors: [] }, worker: { load_percent: 33 } },
+        }),
+        peer({ agentId: 'spiffe://thinklocal/node/alpha', name: 'alpha', status: 'offline', agentCard: null }),
+      ],
+    };
+    const { app } = buildApp({ mesh: mesh as never });
+    const res = await app.inject({ method: 'GET', url: '/api/peers/overview' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.count).toBe(2);
+    expect(body.peers.map((p: { agent_id: string }) => p.agent_id)).toEqual([
+      'spiffe://thinklocal/node/alpha',
+      'spiffe://thinklocal/node/beta',
+    ]);
+    expect(body.peers.find((p: { agent_id: string }) => p.name === 'beta')).toMatchObject({
+      status: 'online', version: '2.0.0', skills: 3, load_percent: 33,
+    });
+    await app.close();
+  });
+
+  it('keine Peers → count 0', async () => {
+    const { app } = buildApp({ mesh: { getOnlinePeers: () => [] } as never });
+    const res = await app.inject({ method: 'GET', url: '/api/peers/overview' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ peers: [], count: 0 });
+    await app.close();
+  });
+
+  it('malformed Agent-Card (geforgte skills/status) → 200, KEIN 500', async () => {
+    const mesh = {
+      getOnlinePeers: () => [
+        peer({ agentId: 'x', status: 'PWNED', agentCard: { capabilities: { skills: 'nope' }, worker: { load_percent: 'high' } } }),
+      ],
+    };
+    const { app } = buildApp({ mesh: mesh as never });
+    const res = await app.inject({ method: 'GET', url: '/api/peers/overview' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().peers[0]).toMatchObject({ agent_id: 'x', status: 'unknown', skills: 0, load_percent: null });
+    await app.close();
+  });
+});
