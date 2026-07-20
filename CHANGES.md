@@ -8,6 +8,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(cert): CA/Intermediate-Expiry-Monitoring (ADR-045 Vorbedingung B) (2026-07-20 06:40)
+Schließt die code-gegroundete Vorbedingung B: der Live-Ablauf-Monitor sah bisher **nur** das Node-Leaf
+(`getCertDaysLeft` → `tls/node.crt.pem`) — eine ablaufende **CA/ein Intermediate** lief lautlos ab
+(Ausstellungs-Tod). Neu: **`getCaCertDaysLeft(dataDir)`** (`tls.ts`, liest `tls/ca.crt.pem`; gemeinsamer
+Helper `certDaysLeftAtPath`, `getCertDaysLeft`-Signatur unverändert); **`subject`-Label** in
+`cert-expiry-monitor.ts` (Default `'Node'` → Node-Pfad **byte-identisch**, Meldungen/Audit-Detail jetzt
+attributierbar) + **zweiter CA-Monitor** in `index.ts` (subject `'CA'`, gleiche Schwellen/Intervall,
+`unref()`'d + im Shutdown `clearInterval`). **Additiv, keine Änderung an `verifyPeerCert`/Trust-Semantik.**
++6 Tests (`ca-cert-expiry.test.ts`: getrennte CA-/Node-Quelle, null-Fälle, subject-Audit), Full-Suite **1762
+grün**, tsc(strict) 0, neue-Datei-Lint 0. Reissue bleibt Start-gebunden (own-CA); token-onboarded Nodes / ein
+künftiges Intermediate brauchen weiter einen manuellen Pfad (dokumentiert). Kein Deploy/Secret/Cross-Host.
+
 ### docs(reconcile): PR-Nummern-Nachtrag COMPLIANCE + CHANGES (#288–#295) + fehlender #290-Eintrag (2026-07-20 06:08)
 Reconcile-Wächter (2026-07-20 03:34) meldete Doku-Drift gegen `main`: die CHANGES-Einträge **und**
 COMPLIANCE-TABLE-Zeilen für die gemergten PRs **#288–#295** trugen **keine PR-Nummer** (nur Timestamp bzw.

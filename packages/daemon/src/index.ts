@@ -5,7 +5,7 @@ import { Agent as UndiciAgent, fetch } from 'undici';
 import { loadConfig } from './config.js';
 import { createLogger } from './logger.js';
 import { loadOrCreateIdentity } from './identity.js';
-import { loadOrCreateTlsBundle, getCertDaysLeft, extractSpiffeUris, verifyPeerCert, selectTrustDistributionCa, type NodeCertBundle } from './tls.js';
+import { loadOrCreateTlsBundle, getCertDaysLeft, getCaCertDaysLeft, extractSpiffeUris, verifyPeerCert, selectTrustDistributionCa, type NodeCertBundle } from './tls.js';
 import { startCertExpiryMonitor } from './cert-expiry-monitor.js';
 import { readRamUsedPercent, readResourceMetrics } from './resource-metrics.js';
 import { existsSync as fsExistsSync } from 'node:fs';
@@ -1611,6 +1611,26 @@ async function main(): Promise<void> {
   const certExpiryTimer = startCertExpiryMonitor(
     {
       getDaysLeft: () => getCertDaysLeft(config.daemon.data_dir),
+      subject: 'Node',
+      thresholds: {
+        warnDays: config.cert.expiry_warn_days,
+        criticalDays: config.cert.expiry_critical_days,
+      },
+      log,
+      audit,
+      eventBus,
+    },
+    config.cert.expiry_check_interval_ms,
+  );
+
+  // ADR-045 Vorbedingung B (TL-14a): zweiter Monitor für die CA/das Intermediate
+  // (`tls/ca.crt.pem`). Der Node-Monitor oben sah die CA nie → eine ablaufende CA
+  // lief lautlos ab (Ausstellungs-Tod). Gleiche Schwellen/Intervall, subject 'CA'
+  // (accurate Log-/Audit-Attribution). Reissue bleibt Start-gebunden (own-CA).
+  const caCertExpiryTimer = startCertExpiryMonitor(
+    {
+      getDaysLeft: () => getCaCertDaysLeft(config.daemon.data_dir),
+      subject: 'CA',
       thresholds: {
         warnDays: config.cert.expiry_warn_days,
         criticalDays: config.cert.expiry_critical_days,
@@ -1627,6 +1647,7 @@ async function main(): Promise<void> {
     log.info({ signal }, 'Shutdown eingeleitet...');
     clearInterval(storageMaintenanceTimer); // ADR-030 (T1.3)
     clearInterval(certExpiryTimer); // T2.1
+    clearInterval(caCertExpiryTimer); // ADR-045 Vorbedingung B (CA-Expiry-Monitor)
     clearInterval(resourceRefreshTimer); // T2.4
     if (mdnsRequeryTimer) clearInterval(mdnsRequeryTimer); // ADR-035 A4
     if (peerCacheFlushTimer) clearInterval(peerCacheFlushTimer); // ADR-035 A1

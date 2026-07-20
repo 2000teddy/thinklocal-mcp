@@ -702,15 +702,11 @@ export function loadOrCreateTlsBundle(
 }
 
 /**
- * Gibt die verbleibenden Tage bis zum Ablauf des Node-Zertifikats zurueck.
- * Nützlich fuer proaktive Warnungen im Dashboard und Telegram.
+ * Restlaufzeit (in Tagen) eines PEM-Certs an `certPath`. Rein: kein I/O-Fehler
+ * propagiert (fehlend/unlesbar/unparsebar → `null`). Gemeinsame Basis von
+ * `getCertDaysLeft` (Node-Leaf) und `getCaCertDaysLeft` (CA/Intermediate).
  */
-export function getCertDaysLeft(dataDir: string): number | null {
-  // SECURITY (PR #77 GPT-5.4 review LOW finding): The path was wrong —
-  // pointed at dataDir/certs/node.crt but loadOrCreateTlsBundle writes to
-  // dataDir/tls/node.crt.pem. As a result startup warnings for soon-to-expire
-  // certs never fired.
-  const certPath = resolve(dataDir, 'tls', 'node.crt.pem');
+function certDaysLeftAtPath(certPath: string): number | null {
   if (!existsSync(certPath)) return null;
   try {
     const certPem = readFileSync(certPath, 'utf-8');
@@ -720,6 +716,31 @@ export function getCertDaysLeft(dataDir: string): number | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Gibt die verbleibenden Tage bis zum Ablauf des Node-Zertifikats zurueck.
+ * Nützlich fuer proaktive Warnungen im Dashboard und Telegram.
+ */
+export function getCertDaysLeft(dataDir: string): number | null {
+  // SECURITY (PR #77 GPT-5.4 review LOW finding): The path was wrong —
+  // pointed at dataDir/certs/node.crt but loadOrCreateTlsBundle writes to
+  // dataDir/tls/node.crt.pem. As a result startup warnings for soon-to-expire
+  // certs never fired.
+  return certDaysLeftAtPath(resolve(dataDir, 'tls', 'node.crt.pem'));
+}
+
+/**
+ * Restlaufzeit (in Tagen) des CA-/Intermediate-Zertifikats (`tls/ca.crt.pem`).
+ * ADR-045 Vorbedingung B (TL-14a): der Live-Ablauf-Monitor sah bisher **nur**
+ * das Node-Leaf (`getCertDaysLeft`) — eine ablaufende CA/ein ablaufendes
+ * Intermediate lief lautlos ab (Ausstellungs-Tod). Diese Quelle macht die CA
+ * sichtbar; die Klassifikation/Alarmierung übernimmt `cert-expiry-monitor.ts`
+ * (subject `'CA'`). Reissue bleibt Start-gebunden (own-CA); token-onboarded
+ * Nodes/ein künftiges Intermediate brauchen ohnehin einen manuellen Pfad.
+ */
+export function getCaCertDaysLeft(dataDir: string): number | null {
+  return certDaysLeftAtPath(resolve(dataDir, 'tls', 'ca.crt.pem'));
 }
 
 /**

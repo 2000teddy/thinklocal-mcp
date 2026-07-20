@@ -204,7 +204,11 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
       verifiziert (+4 Tests, Suite 1756 grün). **Kein Fix** — dokumentiert die Lücke.
     - [ ] **A — chain-fähiger Verify** (eigentlicher Fix): `verifyPeerCert` chain-/pathLen-fähig **oder**
       Trust-Entscheidungen dokumentiert auf die Transport-mTLS-Ebene beschränken.
-    - [ ] **B** — `getCertDaysLeft` um CA/Intermediate-Quelle erweitern (Live-Expiry-Monitoring).
+    - [x] **B — CA/Intermediate-Expiry-Monitoring** (2026-07-20): neue Quelle `getCaCertDaysLeft` (`tls.ts`,
+      liest `tls/ca.crt.pem`) + `subject`-Label im `cert-expiry-monitor` (Default `'Node'` byte-identisch) +
+      zweiter CA-Monitor in `index.ts` (subject `'CA'`, gleiche Schwellen, im Shutdown geräumt). Damit ist die
+      CA/das Intermediate **live** überwacht (vorher nur Node-Leaf). +6 Tests, Suite **1762 grün**. Reissue
+      bleibt Start-gebunden (own-CA); token-onboarded/künftiges Intermediate = eigener Pfad.
   - [ ] **Runbook-Volltext + Zeremonie-Skripte** (nach Sign-off/ADR-045, Papier+Skripte, non-gated).
 - [ ] **[v5.1] TL-14b (≈4 h, ⛔ Termin)** CA-Umzug durchführen (mit Christian). ↔ vgl. Decision-7
   Trust-Domain-Flip (KW30).
