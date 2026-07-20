@@ -29,8 +29,14 @@ export interface CertExpiryThresholds {
 
 /** Strukturell getippte Abhängigkeiten — hält das Modul unit-testbar. */
 export interface CertExpiryMonitorDeps {
-  /** Liefert verbleibende Tage des Node-Certs, oder null wenn unlesbar. */
+  /** Liefert verbleibende Tage des überwachten Certs, oder null wenn unlesbar. */
   getDaysLeft: () => number | null;
+  /**
+   * Label des überwachten Certs für Log/Audit (z.B. `'Node'`, `'CA'`). Default `'Node'`
+   * → unverändertes Verhalten für den bestehenden Node-Monitor. ADR-045 Vorbedingung B:
+   * ein zweiter Monitor mit `subject: 'CA'` macht CA/Intermediate-Ablauf sichtbar.
+   */
+  subject?: string;
   thresholds: CertExpiryThresholds;
   log: Pick<Logger, 'debug' | 'info' | 'warn' | 'error'>;
   audit: { append: (type: AuditEventType, peerId?: string, details?: string) => void };
@@ -60,27 +66,28 @@ export function classifyCertExpiry(
  * debug/warn-Log. So bleibt der Audit-Log ein Signal, kein Heartbeat.
  */
 export function runCertExpiryCheck(deps: CertExpiryMonitorDeps): CertExpiryTier {
+  const subject = deps.subject ?? 'Node';
   const daysLeft = deps.getDaysLeft();
   const tier = classifyCertExpiry(daysLeft, deps.thresholds);
 
   if (tier === 'unknown') {
-    deps.log.warn('[cert-monitor] Node-Cert-Restlaufzeit nicht ermittelbar (Cert unlesbar?)');
+    deps.log.warn(`[cert-monitor] ${subject}-Cert-Restlaufzeit nicht ermittelbar (Cert unlesbar?)`);
     return tier;
   }
   if (tier === 'ok') {
-    deps.log.debug({ daysLeft }, '[cert-monitor] Node-Cert gültig');
+    deps.log.debug({ daysLeft, subject }, `[cert-monitor] ${subject}-Cert gültig`);
     return tier;
   }
 
   // warn | critical → sichtbar + durabel.
   const restartHint =
     'Reissue passiert erst beim Daemon-Neustart (loadOrCreateTlsBundle, daysLeft <= cert.renew_before_days, Default 30) — KEINE In-Process-Rotation.';
-  const details = JSON.stringify({ daysLeft, tier, action: restartHint });
+  const details = JSON.stringify({ subject, daysLeft, tier, action: restartHint });
 
   if (tier === 'critical') {
-    deps.log.error({ daysLeft, action: restartHint }, '[cert-monitor] KRITISCH: TLS-Node-Cert läuft sehr bald ab — Neustart für Reissue erforderlich');
+    deps.log.error({ daysLeft, subject, action: restartHint }, `[cert-monitor] KRITISCH: TLS-${subject}-Cert läuft sehr bald ab — Neustart für Reissue erforderlich`);
   } else {
-    deps.log.warn({ daysLeft, action: restartHint }, '[cert-monitor] TLS-Node-Cert läuft bald ab');
+    deps.log.warn({ daysLeft, subject, action: restartHint }, `[cert-monitor] TLS-${subject}-Cert läuft bald ab`);
   }
 
   // Signiertes Audit-Event (kein stiller Fehler) + EventBus für Dashboard/SSE.
