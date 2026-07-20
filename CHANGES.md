@@ -8,6 +8,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(cert): chain-fähiger Verify + pathLen-Enforcement (ADR-045 Vorbedingung A) (2026-07-20 07:18)
+Schließt die Primitive-Seite von Blocker A: der flache `verifyPeerCert` konnte ein Leaf nur gegen seinen
+**direkten** Aussteller prüfen (keine Kette, kein `pathLen` — belegt in `tls-chain-characterization.test.ts`
+#295). Neu **`verifyPeerCertChain(trustAnchorPems, chainPems)`** (`tls.ts`): baut die volle Kette (leaf-first)
+und verifiziert sie gegen einen/mehrere Root-Anker via forge `verifyCertificateChain` (Signaturen,
+Gültigkeitsfenster, `cA`-Flag). **Befund:** forge erzwingt `pathLenConstraint` **nicht** (ein pathLen-0-Root
+akzeptierte fälschlich eine Intermediate-Kette) → **manuelles pathLen-Enforcement** über den vollen
+root→leaf-Pfad ergänzt (RFC 5280 §4.2.1.9; untergeordnete CAs pro Stufe ≤ deklariertem `pathLen`). +6 Tests
+(`chain-verify.test.ts`: gültige 2-Stufen-Kette akzeptiert, **pathLen-0-Verstoß abgelehnt**, Charakterisierungs-
+Kontrast, Fremd-Anker/unvollständige Kette/leer = false). **Additiv:** der flache `verifyPeerCert` + seine
+Trust-Caller (`isRetainableCanonicalCert`/`selectTrustDistributionCa`/Token-Onboard) bleiben **unverändert**;
+das Umstellen auf die Chain-Primitive ist ein Folge-Slice (erst mit echter 2-Tier-Hierarchie / TL-14b). Suite
+**1768 grün**, tsc(strict) 0, neue-Datei-Lint 0. Kein Deploy/Secret/Cross-Host.
+
 ### feat(cert): CA/Intermediate-Expiry-Monitoring (ADR-045 Vorbedingung B) (2026-07-20 06:40)
 Schließt die code-gegroundete Vorbedingung B: der Live-Ablauf-Monitor sah bisher **nur** das Node-Leaf
 (`getCertDaysLeft` → `tls/node.crt.pem`) — eine ablaufende **CA/ein Intermediate** lief lautlos ab
