@@ -207,9 +207,15 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
       Gültigkeit/`cA`-Flag) **+ manuelles `pathLenConstraint`-Enforcement** (forge-Lücke: forge prüft pathLen
       NICHT — belegt + gefixt). +6 Tests (`chain-verify.test.ts`: gültige 2-Stufen-Kette, **pathLen-0-Reject**,
       Charakterisierung-Kontrast, Fremd-Anker, unvollständige Kette, fail-closed). Der **flache** `verifyPeerCert`
-      + Charakterisierungs-Test #295 bleiben unverändert. **Offen (Folge-Slice, erst mit 2-Tier-Deploy/TL-14b):**
-      die Trust-Entscheidungen (`isRetainableCanonicalCert`/`selectTrustDistributionCa`/Token-Onboard) auf
-      `verifyPeerCertChain` umstellen — heute einstufig, daher noch nicht verdrahtet.
+      + Charakterisierungs-Test #295 bleiben unverändert.
+      - [x] **A2 — Rewire `isRetainableCanonicalCert`** (2026-07-20): auf `verifyPeerCertChain(attestingCaPems,
+        [certPem])` umgestellt (single-tier äquivalent). **Voraussetzung dafür gehärtet:** `verifyPeerCertChain`
+        prüft jetzt auch das **Anker-Gültigkeitsfenster** (ADR-024 MEDIUM-1) — forge tut das nicht (Probe:
+        `verifyPeerCertChain([expiredCA],[leaf])` gab fälschlich `true`); +1 Test. `tls.test.ts` 49/49 grün
+        (inkl. abgelaufene-Attesting-CA-Retention), Suite **1769 grün**.
+      - [ ] **A2-rest** (bewusst NICHT rewired): `selectTrustDistributionCa` (Semantik „welche CA verifiziert
+        direkt" → gibt CA zurück, nicht bool) + Token-Onboard (Single-Anchor-Direktprüfung) — flacher
+        `verifyPeerCert` ist dort der natürliche Fit; Rewire erst falls 2-Tier es erfordert (TL-14b).
     - [x] **B — CA/Intermediate-Expiry-Monitoring** (2026-07-20): neue Quelle `getCaCertDaysLeft` (`tls.ts`,
       liest `tls/ca.crt.pem`) + `subject`-Label im `cert-expiry-monitor` (Default `'Node'` → Meldungen byte-identisch, Audit-Detail additiv) +
       zweiter CA-Monitor in `index.ts` (subject `'CA'`, gleiche Schwellen, im Shutdown geräumt). Damit ist die

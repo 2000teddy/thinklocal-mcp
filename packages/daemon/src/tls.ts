@@ -385,7 +385,11 @@ export function isRetainableCanonicalCert(args: {
   // (Migrations-Cert) sind erlaubt, aber jede `node/`-SAN muss die eigene sein — sonst würde
   // ein überbreites Cert eine zweite Identität mit-attestieren.
   if (sans.some((u) => u.startsWith('spiffe://thinklocal/node/') && u !== canonicalSpiffeUri)) return false;
-  return trustedAttestingCaPems.some((caPem) => verifyPeerCert(caPem, certPem));
+  // ADR-045 Vorbedingung A: chain-fähiger Verify gegen die gepinnten Attesting-CAs als Trust-Anker. Für die
+  // heutige einstufige CA ist die Kette `[certPem]` (Leaf direkt von einer Attesting-CA signiert) — verhält
+  // sich äquivalent zum bisherigen `some(verifyPeerCert(ca, cert))`, inkl. Leaf-/Anker-Gültigkeit (MEDIUM-1).
+  // Sobald ein Intermediate zwischentritt (2-Tier/TL-14b), kann der Aufrufer die volle Kette übergeben.
+  return verifyPeerCertChain(trustedAttestingCaPems, [certPem]);
 }
 
 export function loadOrCreateTlsBundle(
@@ -816,6 +820,14 @@ export function verifyPeerCertChain(
       }
     });
     if (!anchor) return false;
+
+    // ADR-024 MEDIUM-1 (fail-closed): forge validiert das Gültigkeitsfenster der Kettenglieder, aber NICHT
+    // das des Trust-Ankers (die Root wird nie durchlaufen — dieselbe Lücke wie bei pathLen). Ohne diese
+    // Prüfung würde eine abgelaufene/noch-nicht-gültige Anker-CA als Vertrauensanker akzeptiert (Regression
+    // ggü. dem flachen `verifyPeerCert`). Also das Anker-Fenster hier explizit prüfen.
+    const now = new Date();
+    if (now < anchor.validity.notBefore || now > anchor.validity.notAfter) return false;
+
     const orderedPath = [anchor, ...[...chain].reverse()]; // root → … → leaf
     return enforcePathLenConstraint(orderedPath);
   } catch {

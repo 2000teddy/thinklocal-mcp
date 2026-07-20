@@ -1860,6 +1860,10 @@ CHANGES.md, `changes/2026-07-07_doc-compliance-gate.md`, dieser Eintrag; Rollen/
 
 **Typ:** Daemon-Feature (ADR-045 Vorbedingung A, chain-fähiger Verify + pathLen; additiv, flacher Pfad unverändert). Kein Deploy/Secret. **DO:** `packages/daemon/src/tls.ts`, `packages/daemon/src/chain-verify.test.ts`, `changes/2026-07-20_tl14a-A-chain-verify.md`, `CHANGES.md`, `TODO.md`, dieser Eintrag.
 
+| (offen, base=main) | 2026-07-20 07:36 | n/a | n/a | ✅ | ✅ | ✅ | ✅ | **Daemon-Feature (ADR-045 A2: Rewire erste Trust-Entscheidung auf Chain-Verify + Anker-Validity-Härtung) → CO/CG entfallen** (additiv). `isRetainableCanonicalCert` nutzt jetzt `verifyPeerCertChain(attestingCaPems, [certPem])` statt `some(verifyPeerCert(...))` — single-tier äquivalent, chain-ready für 2-Tier. **Voraussetzung gehärtet:** Probe zeigte `verifyPeerCertChain([expiredCA],[leaf]) = true` (forge prüft das caStore-**Anker**-Fenster nicht) → hätte **ADR-024 MEDIUM-1** regressiert; explizite `notBefore`/`notAfter`-Anker-Prüfung + Regressionstest ergänzt. **Bewusst NICHT rewired:** `selectTrustDistributionCa` (gibt CA zurück) + Token-Onboard (Single-Anchor) — flacher Verify natürlicher Fit. **TS:** `tls.test.ts` 49/49 (inkl. abgelaufene-Attesting-CA), +1 chain-verify-Test, Suite **1769 grün**, tsc(strict) 0, neue-Code-Lint 0. **CR:** externer Claude-Review-Subagent folgt vor Merge. **PC:** Secret-Scan clean. Kein Deploy/Secret/Cross-Host. |
+
+**Typ:** Daemon-Feature (ADR-045 A2: Chain-Verify-Rewire `isRetainableCanonicalCert` + Anker-Validity; additiv, ADR-024-MEDIUM-1-erhaltend). Kein Deploy/Secret. **DO:** `packages/daemon/src/tls.ts`, `packages/daemon/src/chain-verify.test.ts`, `changes/2026-07-20_tl14a-A2-rewire-chain-verify.md`, `CHANGES.md`, `TODO.md`, dieser Eintrag.
+
 ---
 
-*Letzte Aktualisierung: 2026-07-20 07:18 — feat(cert): chain-fähiger Verify + pathLen-Enforcement (ADR-045 Vorbedingung A) — verifyPeerCertChain (forge-chain + manuelles pathLen; forge erzwingt pathLen nicht); +6 Tests, Suite 1768 grün, flacher verifyPeerCert unverändert.*
+*Letzte Aktualisierung: 2026-07-20 07:36 — feat(cert): Rewire `isRetainableCanonicalCert` auf verifyPeerCertChain + Anker-Validity-Härtung (ADR-024 MEDIUM-1 erhalten); tls.test 49/49, Suite 1769 grün, single-tier äquivalent.*
