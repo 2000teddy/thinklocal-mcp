@@ -8,6 +8,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(gate): TL-10 Freigabe-Matrix Slice A — reiner Parser/Resolver/Guard (2026-07-20 11:12)
+Erste repo-schreibende TL-10-Slice, freigeschaltet durch den read-only §5-CO (`pal:consensus` opus 8/10 +
+sonnet 8/10, einstimmig). Neu `packages/daemon/src/freigabe-matrix.ts` — **reine Funktionen, KEINE
+Verdrahtung**: `parseFreigabeMatrix(raw, knownServers)` (fail-closed, alle CO-§2.2-Rejects: unbekannte Keys,
+tool-ohne-server, non-kanonischer Server [D4, injizierte `knownServers`], ungültige `tier`/`decider`-Grammatik,
+`consensus:quorum=N` N≥2, **Duplikat-Spezifität**), `resolveEntry(matrix, ctx)` (spezifischster Eintrag: exakter
+`tool` > Wildcard `*`; kein Match ⇒ `null`), `isRoutable(target)` (der **einzige** Guard, analog `isApproved`),
+`FreigabeMatrixError`. Vertrag aus dem §5-CO: **D1** eigene Datei `config/freigabe-matrix.toml` (Loader = Slice
+B), **D4** gegen `resolveMcp`-`knownServers`, **D5** leer/kein-Match ⇒ Default-Deny 403. +28 Tests, Full-Suite
+**1797 grün**, tsc(strict)/neue-Datei-Lint 0. **Bewusst außer Scope (Slice B, gated):** D2 (Registry-
+`requestApprovalOn` + Kanal-Liveness) und **D3** — `decider: human:<id>` ist v1 **rein deklarativ** (nur
+Grammatik-validiert, NICHT durchgesetzt); braucht Christian-Sign-off + SECURITY.md-Notiz „deklarativ ≠ enforced"
+VOR Slice B. `mcp-ingress.ts`/`-api.ts` unangetastet, kein Runtime-Change, kein Deploy/Secret.
+
 ### feat(cert): Rewire `isRetainableCanonicalCert` auf Chain-Verify + Anker-Validity-Härtung (2026-07-20 07:36)
 Stellt die erste Trust-Entscheidung von der flachen Ein-Aussteller-Prüfung auf die chain-fähige Primitive um:
 `isRetainableCanonicalCert` nutzt jetzt `verifyPeerCertChain(trustedAttestingCaPems, [certPem])` statt
