@@ -8,6 +8,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### test(tls): TL-11 cardServer-mTLS-Wiring-Test — CR-M2-Follow-up (2026-07-20 17:15)
+**Test-only**, additive Regressions-Absicherung — schließt die im CR von #283 offengelassene Coverage-Lücke
+(CR-M2). #283 prüfte die mTLS-Pflicht (`requestCert`/`rejectUnauthorized`) über einen **zweiten** Harness,
+**nicht** die reale Klasse `AgentCardServer` → ein Regress von `requestCert` in `agent-card.ts` blieb
+ungefangen und hätte die Zero-Trust-Grenze still aufgeweicht. Neu `agent-card-mtls-wiring.test.ts` (+3):
+konstruiert den **echten** `AgentCardServer` mit In-Memory-TLS-Bundle (`createMeshCA`/`createNodeCert`, kein
+Secret, kein Port-Listen, kein Host-Hop) und liest `requestCert`/`rejectUnauthorized` **direkt vom
+darunterliegenden Node-`tls.Server`** (`fastify.server`) ab → beweist agent-card.ts:229-230
+(`requestCert=true` UND `rejectUnauthorized=true`), plus „Bundle-Pfad schwächt nicht" + Negativkontrolle
+(ohne TLS kein aktives `requestCert`). **Mutations-verifiziert:** `requestCert:false` → Test rot, dann
+revertiert; der Guard beißt nachweislich. Full-Suite **1831 grün** (135 Files), tsc(strict) 0, neue Datei
+eslint 0 + prettier clean. `agent-card.ts` unverändert, kein Produktionscode/State/Deploy/Secret.
+
 ### feat(mcp): TL-21 Peer-Skelett als MCP-Tool — `list_peers_overview` (2026-07-20 16:36)
 Additives, **read-only** MCP-Companion zur bereits gemergten REST-Peer-Übersicht (`GET /api/peers/overview`,
 #303) — genau die Slice-1→Slice-2-Trennung, mit der schon `list_capabilities_overview` von seinem
