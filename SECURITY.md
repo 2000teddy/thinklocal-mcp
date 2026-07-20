@@ -317,6 +317,49 @@ Die Zugangs-/Identitätsgrenze des LAN-Mesh ist **mTLS + Mesh-CA + .94-Issuer-Pi
 
 Hinweis zum ersten Punkt: Im Standard-Installationspfad reduziert `127.0.0.1` die Angriffsoberflaeche erheblich. Das Risiko gilt weiterhin fuer bewusst netzwerkexponierte Daemon-Instanzen.
 
+### Freigabe-Matrix (TL-10) — Freigabe-/Runtime-Entscheidung & Guardrails
+
+Die **Freigabe-Matrix** routet einen schreibend/kritischen MCP-Aufruf am `gate`-Tier `(tier, server, tool)`
+auf einen **Meldekanal + Entscheider**, bevor die Meldekanal-Registry eine Freigabe einholt (ersetzt die
+heutige „erster-gesunder-Kanal"-Auswahl `meldekanal.ts`). Sie sitzt am `resolveApproval`-Seam zwischen
+Ingress (TL-09b) und Registry. Design: `docs/architecture/TL-10-freigabe-matrix-scoping.md` + ADR (nach
+ADR-043). **Slice A** (reiner Parser/Resolver/Guard `freigabe-matrix.ts`, PR #300) ist gemergt; **Slice B**
+(Runtime-Verdrahtung) ist **noch nicht aktiv**.
+
+**⚠️ Kernaussage — `decider: human:<id>` ist in v1 REIN DEKLARATIV, NICHT durchgesetzt.**
+Ein Matrix-Eintrag wie `decider = "human:christian"` sieht wie eine Zugriffskontrolle aus, **ist es aber
+nicht**: v1 validiert nur die **Grammatik** des Feldes (Audit/Anzeige) und leitet auf den zugeordneten Kanal.
+**Welcher** Mensch tatsächlich freigibt, wird **nicht** erzwungen — jeder gesunde Zielkanal kann approven.
+Ebenso ist `decider: consensus:quorum=N` nur **parse-validiert** (N≥2); der Consensus-Pfad bleibt im Ingress
+ein hartes `403`. **Betreiber dürfen sich NICHT auf `decider` als Zugriffskontrolle verlassen**, solange diese
+Notiz gilt. (Konsens-CO 2026-07-20, opus+sonnet einstimmig: „deklarativ ≠ enforced" muss sichtbar dokumentiert
+sein, bevor Slice B aktiviert wird.)
+
+**Guardrails (fail-closed, bereits in Slice A verankert):**
+- **Fail-closed Parse:** ein einziger Verstoß (unbekannte Keys, tool-ohne-server, non-kanonischer Server,
+  ungültige `tier`/`decider`-Grammatik, `consensus` ohne `quorum≥2`, **Duplikat-Spezifität**) ⇒ die **ganze**
+  Matrix ist ungültig (`FreigabeMatrixError`, kein Teil-Laden).
+- **Default-Deny:** kein passender Eintrag **oder** leere/fehlende Matrix ⇒ nicht routable ⇒ `403` (konsistent
+  mit TL-09b leerer Registry). Es gibt **keinen** Fail-open-Pfad.
+- **Ein einziger Auswertungspfad:** Routbarkeit **ausschließlich** über `isRoutable(resolveEntry(...))`
+  (analog `isApproved`); Aufrufer prüfen **nie** selbst Teilbedingungen.
+- **Server-Validierung** gegen die kanonische `resolveMcp`-Serverliste (kein freies Label), damit Matrix- und
+  Ingress-Sicht nicht driften.
+
+**Was VOR Aktivierung / Sign-off erfüllt sein MUSS (Slice B):**
+1. **Owner-Sign-off (Christian) zu D3** — bewusste Bestätigung, dass `human:<id>` v1 nicht durchgesetzt wird
+   (diese Notiz ist die Grundlage dafür).
+2. **Registry-Bindung (D2):** `MeldekanalRegistry.requestApprovalOn(channelId)` — die Kanalauswahl wird auf den
+   **Matrix-Kanal** beschränkt (statt „erster gesunder"); unbekannte `channelId`/kranker Kanal ⇒ nicht routable.
+3. **Env-Flag-Regime wie TL-09b:** Default **AUS** ⇒ verhaltensidentisch zu heute; die Aktivierung ist ein
+   bewusster, geloggter Schritt (lauter Startup-Warn bei „Flag an, Matrix leer/fehlt", gegen die Betriebsfalle).
+4. **Kuratierte, reviewte Matrix-Datei** `config/freigabe-matrix.toml` (D1) — ihr Inhalt ist eine
+   Sicherheitspolicy und gehört wie Code reviewt.
+
+**Owner-gated bleibt:** die tatsächliche **Aktivierung** (Env-Flag-Flip in einer laufenden/Live-Instanz), das
+**D3-Enforcement-Design** (falls „welcher Mensch" später erzwungen werden soll) und jede Änderung der
+produktiven Matrix-Policy. Slice A/diese Notiz ändern **kein** Runtime-Verhalten (der Resolver ist unverdrahtet).
+
 ### Durchgefuehrte Security-Reviews
 
 | Datum | Reviewer | Fokus | Findings | Status |

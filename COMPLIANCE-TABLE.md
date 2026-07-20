@@ -1868,6 +1868,10 @@ CHANGES.md, `changes/2026-07-07_doc-compliance-gate.md`, dieser Eintrag; Rollen/
 
 **Typ:** Daemon-Feature (TL-10 Freigabe-Matrix Slice A, reines Modul ohne Verdrahtung; D2/D3 = Slice B, gated). Kein Deploy/Secret. **DO:** `packages/daemon/src/freigabe-matrix.ts`, `packages/daemon/src/freigabe-matrix.test.ts`, `changes/2026-07-20_tl10-sliceA-freigabe-matrix.md`, `CHANGES.md`, `TODO.md`, dieser Eintrag.
 
+| (offen, base=main) | 2026-07-20 11:44 | n/a | n/a | n/a | ✅ | ✅ | ✅ | **Doc-only (SECURITY.md-Anteil TL-10 Freigabe-Matrix: D3-Guardrail + Aktivierungs-Vorbedingungen) → CO/CG/TS entfallen** (kein Code, der §5-CO-geforderte D3-Doc-Anteil). Neue SECURITY.md-Sektion „Freigabe-Matrix (TL-10)": macht sichtbar, dass **`decider: human:<id>` v1 REIN DEKLARATIV / NICHT durchgesetzt** ist (keine Zugriffskontrolle; `consensus:quorum=N` nur parse-validiert), dokumentiert die Fail-closed-Guardrails (Parse-Reject/Default-Deny 403/einziger `isRoutable`-Pfad/`resolveMcp`-Server-Check), die **4 Aktivierungs-Vorbedingungen** (D3-Sign-off, D2-Registry-Bindung, Env-Flag Default-AUS + Startup-Warn, reviewte `freigabe-matrix.toml`) und die owner-gated Teile (Flag-Flip, D3-Enforcement, Policy-Änderungen). **CR:** externer Claude-Review-Subagent folgt vor Merge. **PC:** Secret-Scan clean (nur Doku). Kein Runtime-Change (Resolver unverdrahtet), kein Deploy/Secret. |
+
+**Typ:** Doc-only (SECURITY.md D3-Guardrail für TL-10 Freigabe-Matrix; VOR Slice B, kein Runtime-Change). Kein Deploy/Secret. **DO:** `SECURITY.md`, `changes/2026-07-20_tl10-security-freigabe-matrix.md`, `CHANGES.md`, `TODO.md`, dieser Eintrag.
+
 ---
 
-*Letzte Aktualisierung: 2026-07-20 11:12 — feat(gate): TL-10 Freigabe-Matrix Slice A (reiner Parser/Resolver/isRoutable-Guard, §5-CO-Vertrag D1/D4/D5; D2/D3 = Slice B gated); +28 Tests, Suite 1797 grün, keine Verdrahtung.*
+*Letzte Aktualisierung: 2026-07-20 11:44 — docs(security): TL-10 Freigabe-Matrix Guardrails + „deklarativ ≠ enforced" (D3); Aktivierungs-Vorbedingungen + owner-gated Teile; Doc-only, Resolver unverdrahtet.*

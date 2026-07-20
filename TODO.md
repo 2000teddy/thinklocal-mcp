@@ -97,9 +97,12 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
   - [x] **Slice A** (rein, 2026-07-20): `freigabe-matrix.ts` (`parseFreigabeMatrix`/`resolveEntry`/`isRoutable`
     + `FreigabeMatrixError`) — fail-closed Parser (alle §2.2-Rejects), Spezifitäts-Resolver (exakt > `*`),
     einziger `isRoutable`-Guard. **Keine Verdrahtung.** +28 Tests, Suite **1797 grün**, tsc(strict)/Lint 0.
+  - [x] **SECURITY.md-Anteil (D3-Guardrail)** (2026-07-20): neue Sektion „Freigabe-Matrix (TL-10)" —
+    „`decider: human:<id>` ist v1 REIN DEKLARATIV, NICHT durchgesetzt", Fail-closed/Default-Deny-Guardrails,
+    4 Aktivierungs-Vorbedingungen, owner-gated-Teile. Doc-only, kein Runtime-Change.
   - [ ] **Slice B** (Verdrahtung, **D2/D3-gated**): Resolver konsultiert die Matrix vor `registry.requestApproval`
-    (Env-Flag wie TL-09b); braucht D2 (Registry-`requestApprovalOn(channelId)`) + D3 (Christian-Sign-off +
-    SECURITY.md „deklarativ ≠ enforced").
+    (Env-Flag wie TL-09b); braucht D2 (Registry-`requestApprovalOn(channelId)`) + **D3 Christian-Sign-off**
+    (SECURITY.md-Note liegt jetzt vor). **Owner-gated:** Aktivierungs-Flag-Flip.
 
 ### P1 — Identität, Autonomie, Robustheit
 > **Discovery + Reihenfolge (CO 2026-07-15, opus+sonnet einstimmig):** **TL-12 VOR TL-11.** TL-12 Slice A
