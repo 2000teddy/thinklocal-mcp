@@ -8,6 +8,22 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(gate): TL-09c realer TelegramMeldekanal — Inline-Keyboard → approvals.ts (2026-07-20 12:58)
+Erster **realer** `Meldekanal`: `TelegramMeldekanal implements Meldekanal` (ADR-038, neu
+`packages/daemon/src/telegram-meldekanal.ts`). Legt eine angehaltene schreibende MCP-`gate`-Anfrage per
+Telegram-Inline-Keyboard vor (`tlgate:approve|reject:<id>`) und spiegelt die Entscheidung durablen in den
+`approvals.ts`-Store (`ApprovalType` additiv um `'mcp_gate'` erweitert). Damit **KANN** eine gate-Freigabe
+technisch `approved` werden — der `approved`-Pfad ist über eine reale `MeldekanalRegistry` **beweisbar**
+erreichbar (Injektions-Test). Bot-Glue über schmalen `TelegramApprovalTransport` (kein zweiter Polling-Bot
+→ kein Telegram-`409`; die gegatete Aktivierung reicht den bestehenden Gateway-Bot herein). **Fail-closed
+(ADR-036 C1/C2):** Abort terminal (späterer Klick = No-op), fremder Chat/malformed `callback_data`
+ignoriert, Doppelklick idempotent, `create`/`decide`/`sendPrompt`-Fehler ⇒ `error`, **nie stilles
+`approved`**. CR-HIGH gefunden & gefixt (Abort **während** `sendPrompt`-in-flight leakte den pending-Eintrag
+→ später Klick setzte die durable Zeile nach Timeout auf `approved`; Fix = `signal.aborted`-Recheck vor
+`pending.set`) + Regressionstest. **`index.ts` unangetastet** (Registry weiter leer → gate=403, Risiko-Delta
+**null**); Aktivierung (Bot-Token/Freigabe-Chat) Christian-gegatet. +12 Tests, Full-Suite 1809 grün (133
+Files), `tsc` strict 0.
+
 ### docs(security): TL-10 Freigabe-Matrix — Guardrails + „deklarativ ≠ enforced" (D3) (2026-07-20 11:44)
 Neue SECURITY.md-Sektion „Freigabe-Matrix (TL-10) — Freigabe-/Runtime-Entscheidung & Guardrails" (der vom
 §5-CO geforderte D3-Anteil, VOR Slice B). Kernaussage sichtbar gemacht: **`decider: human:<id>` ist v1 REIN

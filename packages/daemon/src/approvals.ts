@@ -28,7 +28,15 @@ import { mkdirSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import type { Logger } from 'pino';
 
-export type ApprovalType = 'peer_join' | 'skill_activate' | 'credential_share' | 'config_change';
+export type ApprovalType =
+  | 'peer_join'
+  | 'skill_activate'
+  | 'credential_share'
+  | 'config_change'
+  // ADR-038 (TL-09c): eine über einen Meldekanal (z.B. Telegram) angehaltene, schreibende
+  // MCP-`gate`-Freigabe. Additiv — es gibt keinen exhaustiven Switch über ApprovalType,
+  // der Wert wird als freies TEXT-Feld persistiert (durable Audit-/Korrelations-Spur).
+  | 'mcp_gate';
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
 
 export interface ApprovalRow {
