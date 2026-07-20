@@ -1864,6 +1864,10 @@ CHANGES.md, `changes/2026-07-07_doc-compliance-gate.md`, dieser Eintrag; Rollen/
 
 **Typ:** Daemon-Feature (ADR-045 A2: Chain-Verify-Rewire `isRetainableCanonicalCert` + Anker-Validity; additiv, ADR-024-MEDIUM-1-erhaltend). Kein Deploy/Secret. **DO:** `packages/daemon/src/tls.ts`, `packages/daemon/src/chain-verify.test.ts`, `changes/2026-07-20_tl14a-A2-rewire-chain-verify.md`, `CHANGES.md`, `TODO.md`, dieser Eintrag.
 
+| (offen, base=main) | 2026-07-20 11:12 | ✅ | n/a | ✅ | ✅ | ✅ | ✅ | **Daemon-Feature (TL-10 Freigabe-Matrix Slice A: reiner Parser/Resolver/Guard, KEINE Verdrahtung).** Neu `freigabe-matrix.ts`: `parseFreigabeMatrix(raw, knownServers)` (fail-closed, alle CO-§2.2-Rejects: unbekannte Keys, tool-ohne-server, non-kanonischer Server [D4], `tier`/`decider`-Grammatik, `consensus:quorum=N` N≥2, Duplikat-Spezifität), `resolveEntry` (exakt > Wildcard `*`; kein Match ⇒ null), `isRoutable` (einziger Guard analog `isApproved`), `FreigabeMatrixError`. **CO ✅:** read-only §5-CO (`pal:consensus` opus 8/10 + sonnet 8/10 einstimmig) fixierte D1 (eigene TOML-Datei), D4 (`resolveMcp`-`knownServers`), D5 (Default-Deny 403) als Slice-A-Vertrag. **Bewusst außer Scope (Slice B, gated):** D2 (Registry-`requestApprovalOn`) + **D3** (`human:<id>` v1 deklarativ, nur parse-validiert → Christian-Sign-off + SECURITY.md VOR Slice B). **TS:** +28 Tests (`freigabe-matrix.test.ts`), Suite **1797 grün**, tsc(strict)/neue-Datei-Lint 0. **CR:** externer Claude-Review-Subagent folgt vor Merge. **PC:** Secret-Scan clean. `mcp-ingress` unangetastet, kein Runtime-Change/Deploy/Secret. |
+
+**Typ:** Daemon-Feature (TL-10 Freigabe-Matrix Slice A, reines Modul ohne Verdrahtung; D2/D3 = Slice B, gated). Kein Deploy/Secret. **DO:** `packages/daemon/src/freigabe-matrix.ts`, `packages/daemon/src/freigabe-matrix.test.ts`, `changes/2026-07-20_tl10-sliceA-freigabe-matrix.md`, `CHANGES.md`, `TODO.md`, dieser Eintrag.
+
 ---
 
-*Letzte Aktualisierung: 2026-07-20 07:36 — feat(cert): Rewire `isRetainableCanonicalCert` auf verifyPeerCertChain + Anker-Validity-Härtung (ADR-024 MEDIUM-1 erhalten); tls.test 49/49, Suite 1769 grün, single-tier äquivalent.*
+*Letzte Aktualisierung: 2026-07-20 11:12 — feat(gate): TL-10 Freigabe-Matrix Slice A (reiner Parser/Resolver/isRoutable-Guard, §5-CO-Vertrag D1/D4/D5; D2/D3 = Slice B gated); +28 Tests, Suite 1797 grün, keine Verdrahtung.*

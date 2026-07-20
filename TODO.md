@@ -89,8 +89,17 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     Seam `mcp-ingress.ts:105-110`), CO-Auflagen gepinnt, v1-Vorschlag (Schema/Spezifität/decider-Grammatik) +
     Slice-Zerlegung A(rein)→B(Verdrahtung). **§5: 5 exakt offene Entscheidungen VOR Code** (Matrix-Quelle/TOML,
     Kanal-Bindung `channelId` vs. Instanz, decider-v1-Semantik, kanonische Server-Prüfquelle, leere-Matrix=403).
-  - [ ] **Slice A** (rein, nach §5-Klärung): `freigabe-matrix.ts` (`parseFreigabeMatrix`/`resolveEntry`/`isRoutable`) + Tests, keine Verdrahtung.
-  - [ ] **Slice B** (Verdrahtung): Resolver konsultiert die Matrix vor `registry.requestApproval` (Env-Flag wie TL-09b).
+  - [x] **§5-CO** (2026-07-20, read-only `pal:consensus` opus 8/10 + sonnet 8/10 einstimmig): D1 eigene Datei
+    `config/freigabe-matrix.toml`; D2 `channelId`-Ref + Registry-`requestApprovalOn` (Slice B); D3 `human:<id>`
+    v1 **deklarativ** (nur parse-validiert) → **Owner-Sign-off + SECURITY.md-Notiz VOR Slice B**; D4 gegen
+    `resolveMcp`-`knownServers` (injiziert); D5 leer/kein-Match ⇒ 403 Default-Deny. **Slice A entsperrt** (D1/D4/D5
+    als Vertrag), nur Slice B ist D2/D3-gated.
+  - [x] **Slice A** (rein, 2026-07-20): `freigabe-matrix.ts` (`parseFreigabeMatrix`/`resolveEntry`/`isRoutable`
+    + `FreigabeMatrixError`) — fail-closed Parser (alle §2.2-Rejects), Spezifitäts-Resolver (exakt > `*`),
+    einziger `isRoutable`-Guard. **Keine Verdrahtung.** +28 Tests, Suite **1797 grün**, tsc(strict)/Lint 0.
+  - [ ] **Slice B** (Verdrahtung, **D2/D3-gated**): Resolver konsultiert die Matrix vor `registry.requestApproval`
+    (Env-Flag wie TL-09b); braucht D2 (Registry-`requestApprovalOn(channelId)`) + D3 (Christian-Sign-off +
+    SECURITY.md „deklarativ ≠ enforced").
 
 ### P1 — Identität, Autonomie, Robustheit
 > **Discovery + Reihenfolge (CO 2026-07-15, opus+sonnet einstimmig):** **TL-12 VOR TL-11.** TL-12 Slice A
