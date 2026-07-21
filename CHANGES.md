@@ -8,6 +8,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs(arch): TL-14a Cross-Vendor-Consensus-Nachlauf + Decision-Handoff (2026-07-21 15:40)
+**Doc-only.** Führt den in `TL-14a-consensus-result-D1-D6.md` benannten Cross-Vendor-`pal:consensus`-Re-Versuch
+aus: Roster `gpt-5.5`(codex) + `gemini-pro`(agy) — **beide erneut Provider-Fehler** (`codex`/`agy` weiterhin
+NOT in PATH, 2026-07-21 verifiziert) → Cross-Vendor-Pass **unverändert infra-blockiert**. Kein Konsens-
+Fehlschlag (der Same-Vendor-Claude-Stand ist 5/6 konvergent), nur die zusätzliche GPT/Gemini-Sicht fehlt →
+kein Christian-Ping. Neue Note `docs/architecture/TL-14a-consensus-crossvendor-followup-2026-07-21.md`
+konsolidiert den entscheidungsreifen Stand als Sign-off-Handoff: D1/D2/D4/D5/D6 modellbestätigt, D3 = Owner-
+Entscheidung (Korridor 1–3 J), Auflagen A/B/C blockierend; die einzigen agent-ausführbaren Lane-Bausteine
+bleiben die Code-Slices A (chain-fähiger `verifyPeerCert` + pathLen-Enforcement) und B (Intermediate-Expiry-
+Monitoring) vor der ADR-045-Finalisierung. `TODO.md` + `changes/2026-07-21_tl14a-crossvendor-followup.md`.
+
 ### feat(mcp,api): TL-21 Slice 5 — Task-Skelett (`GET /api/tasks/overview` + `list_tasks_overview`) (2026-07-21 09:45)
 **Additiver Read-View** (Kap. 06, Kontext-Ökonomie) — dasselbe Muster wie das Peer-Skelett (Slice 3/4, #303/#304).
 Neues reines Modul `task-skeleton.ts` (`buildTaskSkeleton`/`buildTaskHistogram`/`buildTaskOverview`, deterministisch,
