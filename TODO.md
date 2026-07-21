@@ -228,6 +228,12 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     Entscheidung). Auflagen A (pathLen/Chain-Enforcement in `verifyPeerCert` `tls.ts:729`), B (Intermediate-
     Expiry-Monitoring fehlt), C (keine Revocation-Infra; sonnet: gepinnte Denylist statt CRL/OCSP) — beide
     Modelle: **blockierend**. **Optional:** Re-Run mit codex/agy für Cross-Vendor.
+  - [x] **Cross-Vendor-Re-Versuch + Decision-Handoff** (2026-07-21): `docs/architecture/TL-14a-consensus-crossvendor-followup-2026-07-21.md`
+    — `pal:consensus` mit `gpt-5.5`(codex) + `gemini-pro`(agy) **erneut ausgeführt**; **beide erneut Provider-
+    Fehler** (`codex`/`agy` weiterhin NOT in PATH, 2026-07-21 verifiziert) → Cross-Vendor-Pass **unverändert
+    infra-blockiert**. **Kein** Konsens-Fehlschlag (5/6 stehen), nur die zusätzliche GPT/Gemini-Sicht fehlt →
+    **kein Christian-Ping** aus diesem Grund. Note konsolidiert den entscheidungsreifen Stand als Sign-off-
+    Handoff; agent-ausführbare Lane-Bausteine bleiben **nur** die Code-Slices A + B (vor ADR-Finalisierung).
   - [~] **Auflage A + B gegroundet** (2026-07-19): `docs/architecture/TL-14a-blocker-AB-grounding.md` —
     code-verifiziert. **A:** pathLen/Chain **NICHT garantiert** — App-`verifyPeerCert` (`tls.ts:729`) ist ein
     flacher Ein-Aussteller-Verify (kein Chain-Building/pathLen; `verifyCertificateChain`/`createCaStore` = 0
