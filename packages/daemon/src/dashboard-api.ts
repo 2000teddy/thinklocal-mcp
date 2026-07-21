@@ -7,6 +7,7 @@
  * - GET /api/peers/overview — TL-21 Skelett: kompakte ein-Zeile-pro-Peer-Übersicht (Zähler statt Card)
  * - GET /api/capabilities  — Alle registrierten Capabilities
  * - GET /api/tasks         — Alle Tasks mit Status
+ * - GET /api/tasks/overview — TL-21 Skelett: Signale + Status-Histogramm statt voller Task-Blobs
  * - GET /api/audit         — Audit-Log (paginiert)
  * - GET /api/status        — Gesamtstatus des Daemon
  *
@@ -27,6 +28,7 @@ import type { SkillHealthStatus } from './skill-health-monitor.js';
 import type { BuildInfo } from './build-info.js';
 import { buildCapabilityOverview } from './capability-skeleton.js';
 import { buildPeerOverview } from './peer-skeleton.js';
+import { buildTaskOverview } from './task-skeleton.js';
 
 export interface DashboardApiDeps {
   mesh: MeshManager;
@@ -225,6 +227,16 @@ export function registerDashboardApi(server: FastifyInstance, deps: DashboardApi
       })),
       count: allTasks.length,
     };
+  });
+
+  // GET /api/tasks/overview — TL-21 Skelett-Auskunft für Tasks (Kap. 06):
+  // kompakte „ein Eintrag pro Task"-Übersicht (Signale statt input/result/error-Blobs) plus
+  // Status-Histogramm `by_state`, same-source wie GET /api/tasks (getAllTasks). Details auf Abruf
+  // über das unveränderte GET /api/tasks. Read-only, additiv.
+  // Siehe docs/architecture/TL-21-skeleton-disclosure.md §4 (Slice 5).
+  server.get('/api/tasks/overview', async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!checkRateLimit(request, reply)) return;
+    return buildTaskOverview(tasks.getAllTasks());
   });
 
   // GET /api/audit — Audit-Log (paginiert)

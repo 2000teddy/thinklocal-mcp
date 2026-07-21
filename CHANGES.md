@@ -8,6 +8,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(mcp,api): TL-21 Slice 5 — Task-Skelett (`GET /api/tasks/overview` + `list_tasks_overview`) (2026-07-21 09:45)
+**Additiver Read-View** (Kap. 06, Kontext-Ökonomie) — dasselbe Muster wie das Peer-Skelett (Slice 3/4, #303/#304).
+Neues reines Modul `task-skeleton.ts` (`buildTaskSkeleton`/`buildTaskHistogram`/`buildTaskOverview`, deterministisch,
+kein Date/Random, total gegen malformed Felder), ein REST-Endpoint `GET /api/tasks/overview` und ein MCP-Tool
+`list_tasks_overview` — **beide** über den **einen** Envelope-Builder `buildTaskOverview(tasks.getAllTasks())`
+(same-source wie `GET /api/tasks`) → strukturelle Parität, kein Drift. Ein Eintrag pro Task ersetzt die vollen
+`input`/`result`/`error`-Blobs durch Signale (`{ id, skill_id, state, executor, has_result, has_error }`, sortiert
+nach `id`); zusätzlich ein Status-Histogramm `by_state` (Invariante `Summe(by_state)===count`) für die
+Erst-Orientierung „was läuft gerade?". Details bleiben auf Abruf über das unveränderte `GET /api/tasks`. Kein neuer
+State, `index.ts` unangetastet, kein Deploy/Secret/Gate. **+25 Tests** (18 pure + 4 MCP-Tool + 3 REST-Endpoint),
+Suite **1856 grün**. Doku: `docs/architecture/TL-21-skeleton-disclosure.md` §4 (Slice 5), `docs/API-REFERENCE.md`
+(tasks/overview **und** die bislang undokumentierte peers/overview-Zeile nachgetragen), `TODO.md`,
+`changes/2026-07-21_tl21-tasks-overview.md`.
+
 ### docs(arch): ADR-046 Wire-Feature/Version-Exchange — Scoping (2026-07-21 08:10)
 **Doc-only** ADR (Status **Proposed**). Scoping des TL-12-Slice-C-Prerequisites (aus dem Slice-C-Park #307):
 das fehlende maschinen-prüfbare „Peer ≥ Feature X"-Signal. Ist-Stand geerdet: `AgentCard`

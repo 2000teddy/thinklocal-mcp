@@ -13,9 +13,11 @@ import { describe, it, expect } from 'vitest';
 import { createMcpServer } from './mcp-server.js';
 import { buildCapabilityOverview } from './capability-skeleton.js';
 import { buildPeerOverview } from './peer-skeleton.js';
+import { buildTaskOverview } from './task-skeleton.js';
 import type { Capability } from './registry.js';
 import type { MeshPeer, PeerStatus } from './mesh.js';
 import type { AgentCard } from './agent-card.js';
+import type { Task, TaskState } from './tasks.js';
 
 type Deps = Parameters<typeof createMcpServer>[0];
 
@@ -34,7 +36,10 @@ function cap(p: Partial<Capability> & { skill_id: string; agent_id: string }): C
 
 interface RegisteredTool {
   description?: string;
-  handler: (args: unknown, extra: unknown) => Promise<{ content: Array<{ type: string; text: string }> }>;
+  handler: (
+    args: unknown,
+    extra: unknown,
+  ) => Promise<{ content: Array<{ type: string; text: string }> }>;
 }
 
 function getTool(server: unknown, name: string): RegisteredTool {
@@ -77,8 +82,18 @@ describe('MCP list_capabilities_overview (TL-21 Slice 2)', () => {
 
   it('content ist EXAKT buildCapabilityOverview(registry) — Envelope-Parität mit REST', async () => {
     const caps = [
-      cap({ skill_id: 'net.scan', agent_id: 'a1', description: 'Scannt das Netz. Mehr Details hier.', category: 'network' }),
-      cap({ skill_id: 'net.scan', agent_id: 'a2', description: 'Duplikat anderer Provider.', health: 'degraded' }),
+      cap({
+        skill_id: 'net.scan',
+        agent_id: 'a1',
+        description: 'Scannt das Netz. Mehr Details hier.',
+        category: 'network',
+      }),
+      cap({
+        skill_id: 'net.scan',
+        agent_id: 'a2',
+        description: 'Duplikat anderer Provider.',
+        health: 'degraded',
+      }),
       cap({ skill_id: 'fs.read', agent_id: 'a1', description: 'Liest Dateien.' }),
     ];
     const payload = await callOverview(caps);
@@ -96,7 +111,11 @@ describe('MCP list_capabilities_overview (TL-21 Slice 2)', () => {
     const caps = [
       cap({ skill_id: 'ok.skill', agent_id: 'a1', description: 'Sauber.' }),
       cap({ skill_id: 'bad.desc', agent_id: 'a2', description: 123 as unknown as string }),
-      cap({ skill_id: '' as unknown as string, agent_id: 'a3', description: 'Leerer Key wird übersprungen.' }),
+      cap({
+        skill_id: '' as unknown as string,
+        agent_id: 'a3',
+        description: 'Leerer Key wird übersprungen.',
+      }),
     ];
     const payload = await callOverview(caps);
     expect(payload).toEqual(buildCapabilityOverview(caps));
@@ -106,12 +125,19 @@ describe('MCP list_capabilities_overview (TL-21 Slice 2)', () => {
 // --- list_peers_overview (TL-21 Peer-Slice, MCP-Companion zu REST GET /api/peers/overview) ---
 
 /** Minimal-Agent-Card mit nur den vom Peer-Skelett gelesenen Feldern (analog peer-skeleton.test). */
-function peerCard(p: { version?: string; skills?: string[]; load_percent?: number } = {}): AgentCard {
+function peerCard(
+  p: { version?: string; skills?: string[]; load_percent?: number } = {},
+): AgentCard {
   return {
     name: 'card-name',
     version: p.version ?? '1.0.0',
     capabilities: { agents: [], skills: p.skills ?? [], services: [], connectors: [] },
-    worker: { active_tasks: 0, completed_tasks: 0, failed_tasks: 0, load_percent: p.load_percent ?? 0 },
+    worker: {
+      active_tasks: 0,
+      completed_tasks: 0,
+      failed_tasks: 0,
+      load_percent: p.load_percent ?? 0,
+    },
   } as unknown as AgentCard;
 }
 
@@ -125,7 +151,13 @@ function peer(p: Partial<MeshPeer> & { agentId: string }): MeshPeer {
     lastSeen: 0,
     missedBeats: 0,
     agentCard: null,
-    libp2p: { peerId: null, peerIdVerified: false, listenMultiaddrs: [], connected: false, status: 'unavailable' },
+    libp2p: {
+      peerId: null,
+      peerIdVerified: false,
+      listenMultiaddrs: [],
+      connected: false,
+      status: 'unavailable',
+    },
     ...p,
   } as MeshPeer;
 }
@@ -159,7 +191,11 @@ describe('MCP list_peers_overview (TL-21 Peer-Slice)', () => {
 
   it('content ist EXAKT buildPeerOverview(mesh.getOnlinePeers()) — Envelope-Parität mit REST', async () => {
     const peers = [
-      peer({ agentId: 'b', name: 'Beta', agentCard: peerCard({ version: '2.1.0', skills: ['s1', 's2'], load_percent: 42 }) }),
+      peer({
+        agentId: 'b',
+        name: 'Beta',
+        agentCard: peerCard({ version: '2.1.0', skills: ['s1', 's2'], load_percent: 42 }),
+      }),
       peer({ agentId: 'a', name: 'Alpha', status: 'offline' as PeerStatus }),
     ];
     const payload = await callPeerOverview(peers);
@@ -174,12 +210,101 @@ describe('MCP list_peers_overview (TL-21 Peer-Slice)', () => {
 
   it('malformed Wire-Card-Daten kippen das Tool nicht (Totalität wie REST)', async () => {
     // Geforgte Card-Felder (non-string version, non-array skills, unbekannter status) — Tool bleibt total, kein throw.
-    const forged = { version: 123, capabilities: { skills: 'nope' }, worker: { load_percent: 'x' } } as unknown as AgentCard;
+    const forged = {
+      version: 123,
+      capabilities: { skills: 'nope' },
+      worker: { load_percent: 'x' },
+    } as unknown as AgentCard;
     const peers = [
       peer({ agentId: 'ok', name: 'Sauber', agentCard: peerCard({ skills: ['s1'] }) }),
       peer({ agentId: 'bad', name: 'Geforgt', status: 'weird' as PeerStatus, agentCard: forged }),
     ];
     const payload = await callPeerOverview(peers);
     expect(payload).toEqual(buildPeerOverview(peers));
+  });
+});
+
+// --- list_tasks_overview (TL-21 Slice 5, MCP-Companion zu REST GET /api/tasks/overview) ---
+
+function task(p: Partial<Task> & { id: string }): Task {
+  return {
+    correlationId: p.id,
+    requester: 'spiffe://thinklocal/host/h/agent/req',
+    executor: null,
+    state: 'requested' as TaskState,
+    skillId: 'skill.default',
+    input: {},
+    result: null,
+    error: null,
+    createdAt: '2026-07-21T09:00:00.000Z',
+    deadline: null,
+    updatedAt: '2026-07-21T09:00:00.000Z',
+    ...p,
+  } as Task;
+}
+
+function makeTaskServer(tasks: Task[]): ReturnType<typeof createMcpServer> {
+  const deps = {
+    // Nur tasks.getAllTasks() wird vom getesteten Tool benutzt; Rest sind Stubs.
+    mesh: {},
+    registry: {},
+    tasks: { getAllTasks: (): Task[] => tasks },
+    vault: {},
+    audit: {},
+    skills: {},
+    identity: {},
+    config: {},
+  } as unknown as Deps;
+  return createMcpServer(deps);
+}
+
+async function callTaskOverview(
+  tasks: Task[],
+): Promise<{ tasks: unknown[]; count: number; by_state: Record<string, number> }> {
+  const server = makeTaskServer(tasks);
+  const res = await getTool(server, 'list_tasks_overview').handler({}, {});
+  expect(res.content[0].type).toBe('text');
+  return JSON.parse(res.content[0].text) as {
+    tasks: unknown[];
+    count: number;
+    by_state: Record<string, number>;
+  };
+}
+
+describe('MCP list_tasks_overview (TL-21 Slice 5)', () => {
+  it('ist unter dem exakten Namen registriert', () => {
+    expect(getTool(makeTaskServer([]), 'list_tasks_overview')).toBeTruthy();
+  });
+
+  it('content ist EXAKT buildTaskOverview(tasks.getAllTasks()) — Envelope-Parität mit REST', async () => {
+    const tasks = [
+      task({ id: 'b', skillId: 'net.scan', state: 'completed', result: { rows: 3 } }),
+      task({ id: 'a', skillId: 'fs.read', state: 'failed', error: 'boom' }),
+    ];
+    const payload = await callTaskOverview(tasks);
+    // Gegen den GEMEINSAMEN Envelope-Builder (den auch der REST-Endpoint aufruft) → deckt Envelope-Drift auf.
+    expect(payload).toEqual(buildTaskOverview(tasks));
+    expect(payload.count).toBe(payload.tasks.length);
+  });
+
+  it('leere Task-Menge → { tasks: [], count: 0, by_state: Null-Histogramm } (wirft nicht)', async () => {
+    const payload = await callTaskOverview([]);
+    expect(payload).toEqual(buildTaskOverview([]));
+    expect(payload.count).toBe(0);
+  });
+
+  it('malformed Laufzeitdaten kippen das Tool nicht (Totalität wie REST)', async () => {
+    // Geforgte Felder (non-string id/skillId, unbekannter state, non-string executor) — Tool bleibt total.
+    const tasks = [
+      task({ id: 'ok', skillId: 'clean.skill', state: 'accepted' }),
+      task({
+        id: 123 as unknown as string,
+        skillId: { evil: true } as unknown as string,
+        state: 'PWNED' as unknown as TaskState,
+        executor: 42 as unknown as string,
+      }),
+    ];
+    const payload = await callTaskOverview(tasks);
+    expect(payload).toEqual(buildTaskOverview(tasks));
   });
 });

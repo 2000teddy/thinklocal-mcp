@@ -11,6 +11,7 @@
  * - list_peers_overview: TL-21 Skelett-Uebersicht der Peers (Zaehler statt voller Card)
  * - query_capabilities: Faehigkeiten im Mesh suchen
  * - list_capabilities_overview: TL-21 Skelett-Uebersicht (Name + 1 Satz je Skill)
+ * - list_tasks_overview: TL-21 Skelett-Uebersicht der Tasks (Signale + Status-Histogramm)
  * - get_agent_card: Agent Card eines Peers abrufen
  * - delegate_task: Task an einen Peer delegieren
  * - list_credentials: Vault-Credentials auflisten
@@ -29,6 +30,7 @@ import type { MeshManager } from './mesh.js';
 import type { CapabilityRegistry } from './registry.js';
 import { buildCapabilityOverview } from './capability-skeleton.js';
 import { buildPeerOverview } from './peer-skeleton.js';
+import { buildTaskOverview } from './task-skeleton.js';
 import type { TaskManager } from './tasks.js';
 import type { CredentialVault } from './vault.js';
 import type { AuditLog } from './audit.js';
@@ -180,6 +182,28 @@ export function createMcpServer(deps: McpServerDeps): McpServer {
             skill_id: task.skillId,
             message: 'Task erstellt. Warte auf Accept von einem Peer mit diesem Skill.',
           }, null, 2),
+        }],
+      };
+    },
+  );
+
+  // list_tasks_overview: TL-21 Skelett-Auskunft (Kap. 06) — kompakte „ein Eintrag pro Task"-Übersicht
+  // ({ id, skill_id, state, executor, has_result, has_error }) plus Status-Histogramm `by_state` statt
+  // der vollen input/result/error-Blobs, die GET /api/tasks am Task-Objekt hängen hat. Derselbe reine
+  // Envelope-Builder wie REST GET /api/tasks/overview (same-source tasks.getAllTasks()) → strukturelle
+  // Parität, kein Drift. Read-only, additiv, kontext-ökonomisch.
+  // Siehe docs/architecture/TL-21-skeleton-disclosure.md §4 (Slice 5).
+  server.tool(
+    'list_tasks_overview',
+    'TL-21 Skelett-Auskunft: kompakte ein-Zeile-pro-Task-Übersicht (id, skill_id, state, executor, has_result, has_error) plus Status-Histogramm by_state statt der vollen Task-Blobs. Details auf Abruf via list_tasks/GET /api/tasks. Read-only, kontext-ökonomisch.',
+    {},
+    async () => {
+      // Gemeinsamer Envelope-Builder wie REST /api/tasks/overview → strukturelle Parität (kein Drift).
+      const overview = buildTaskOverview(tasks.getAllTasks());
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify(overview, null, 2),
         }],
       };
     },

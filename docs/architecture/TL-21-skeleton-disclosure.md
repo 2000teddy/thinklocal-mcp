@@ -68,8 +68,22 @@ Ein Skelett-Eintrag:
   von REST **und** MCP benutzt (same-source `mesh.getOnlinePeers()`) → strukturelle Parität, kein Drift.
   Genau die Trennung, mit der Slice 1 → Slice 2 bei den Capabilities getrennt wurde (kleine, separat
   reviewbare MCP-Fläche). Read-only, additiv.
-- **Nicht in Scope:** Skelett für Tools/Tasks (dasselbe Muster später anwendbar); Paginierung
-  (die Skill-/Peer-Menge ist heute klein); Volltext-Suche.
+- **Slice 5 (Tasks, umgesetzt 2026-07-21):** dasselbe Muster für **Tasks** — REST-Skelett
+  `GET /api/tasks/overview` + MCP-Tool `list_tasks_overview`, beide über den **einen** reinen
+  Envelope-Builder `buildTaskOverview` (`task-skeleton.ts`) → strukturelle Parität, kein Drift.
+  Same-source `TaskManager.getAllTasks()` (Verhaltensparität zu `GET /api/tasks`). Ein Eintrag pro
+  Task ersetzt die vollen `input`/`result`/`error`-Blobs durch **Signale**
+  (`{ id, skill_id, state, executor, has_result, has_error }`, sortiert nach `id`); zusätzlich ein
+  **Status-Histogramm** `by_state` (`Record<TaskState, number>`), das die Erst-Orientierungsfrage
+  „was läuft gerade?" ohne Durchblättern beantwortet — der eigentliche Kontext-Ökonomie-Gewinn bei
+  Tasks (anders als bei Skills/Peers, wo jeder Eintrag selbst der Punkt ist). Details bleiben auf
+  Abruf über das unveränderte `GET /api/tasks` (bzw. `?state=`). `state` wird gegen die sechs
+  gültigen `TaskState`-Werte geprüft; ein unbekannter/geforgter Wert wird **konsistent** auf
+  `'requested'` normalisiert — im Eintrag **und** im Histogramm dort gezählt (kein frei erfundener
+  Union-Wert, kein erfundener Histogramm-Schlüssel). Damit gilt invariant
+  `Summe(by_state) === count`. Total gegen malformed Felder (kein 500er). Read-only, additiv.
+- **Nicht in Scope:** Skelett für **Tools** (MCP-Tool-Fläche selbst — dasselbe Muster später
+  anwendbar); Paginierung (die Skill-/Peer-/Task-Menge ist heute klein); Volltext-Suche.
 
 ## 5. Invarianten (VOR Code)
 1. **Read-only, additiv** — kein neuer State, `/api/capabilities` (Details) unverändert.
