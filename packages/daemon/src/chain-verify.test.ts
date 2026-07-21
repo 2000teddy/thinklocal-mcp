@@ -42,7 +42,10 @@ function mintCA(issuer: CaBundle | null, cn: string, pathLen: number): CaBundle 
     cert.setIssuer(subject);
     cert.sign(keys.privateKey, forge.md.sha256.create());
   }
-  return { caCertPem: forge.pki.certificateToPem(cert), caKeyPem: forge.pki.privateKeyToPem(keys.privateKey) };
+  return {
+    caCertPem: forge.pki.certificateToPem(cert),
+    caKeyPem: forge.pki.privateKeyToPem(keys.privateKey),
+  };
 }
 
 const LEAF_URI = 'spiffe://thinklocal/node/CHAIN-VERIFY-PEERID';
@@ -61,6 +64,29 @@ describe('verifyPeerCertChain — chain-fähiger Verify (ADR-045 Vorbedingung A)
     const leaf = createNodeCert(inter, 'node', LEAF_URI, []);
     // Die Kette ist kryptografisch korrekt signiert, verletzt aber pathLen → Ablehnung.
     expect(verifyPeerCertChain([root.caCertPem], [leaf.certPem, inter.caCertPem])).toBe(false);
+  });
+
+  it('ENFORCET pathLen am INTERMEDIATE: ein Intermediate (pathLen 0) darf KEINE Sub-CA ausstellen (D2-Invariante)', () => {
+    // Kern-Sicherheitseigenschaft von D2/ADR-045: in der Zweistufen-Hierarchie darf ein Intermediate
+    // keine weiteren CAs unter sich ausstellen. Anders als der bestehende pathLen-Test (Constraint am
+    // ROOT) sitzt der Constraint hier am INTERMEDIATE — isoliert, damit AUSSCHLIESSLICH dessen
+    // pathLen 0 die Ablehnung verursacht:
+    //   Root(pathLen 2) → Intermediate(pathLen 0) → Sub-CA → Leaf
+    // Der Root ist mit pathLen 2 bewusst großzügig (2 untergeordnete CAs erlaubt), also NICHT die
+    // Ursache; die einzige Verletzung ist die vom Intermediate ausgestellte Sub-CA (1 > 0).
+    const root = mintCA(null, 'thinklocal Root subca', 2); // großzügig → Root ist nicht die Ursache
+    const inter = mintCA(root, 'thinklocal Intermediate subca', 0); // pathLen 0 → keine Sub-CA erlaubt
+    const subCa = mintCA(inter, 'thinklocal FORBIDDEN Sub-CA', 0); // die verbotene, vom Intermediate signierte CA
+    const leaf = createNodeCert(subCa, 'node', LEAF_URI, []);
+    // Kryptografisch lückenlos signiert, aber verletzt die pathLen-0-Grenze des Intermediates → Ablehnung
+    // (fail-closed über beide Ebenen: forge-In-Chain-Check UND enforcePathLenConstraint).
+    expect(
+      verifyPeerCertChain([root.caCertPem], [leaf.certPem, subCa.caCertPem, inter.caCertPem]),
+    ).toBe(false);
+    // Gegenprobe: dieselbe Hierarchie OHNE die verbotene Sub-CA (Leaf direkt vom Intermediate) ist gültig
+    // — beweist, dass die Ablehnung an der Sub-CA hängt und nicht an einem anderen Kettendefekt.
+    const directLeaf = createNodeCert(inter, 'node', LEAF_URI, []);
+    expect(verifyPeerCertChain([root.caCertPem], [directLeaf.certPem, inter.caCertPem])).toBe(true);
   });
 
   it('Charakterisierung bleibt erhalten: der FLACHE verifyPeerCert(root, leaf) = false, der chain-Pfad = true', () => {

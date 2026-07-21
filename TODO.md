@@ -260,6 +260,12 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
       NICHT — belegt + gefixt). +6 Tests (`chain-verify.test.ts`: gültige 2-Stufen-Kette, **pathLen-0-Reject**,
       Charakterisierung-Kontrast, Fremd-Anker, unvollständige Kette, fail-closed). Der **flache** `verifyPeerCert`
       + Charakterisierungs-Test #295 bleiben unverändert.
+      - [x] **A — D2-Invariante direkt getestet** (2026-07-21): fokussierter Negativtest — ein **Intermediate**
+        mit `pathLen 0` darf **keine Sub-CA** ausstellen (`Root(pathLen 2)→Intermediate(pathLen 0)→Sub-CA→Leaf`
+        wird abgelehnt). Ergänzt den bestehenden pathLen-Test (Constraint am **Root**) um den Fall mit Constraint
+        am **Intermediate** — isoliert (Root großzügig) + gepaarte Gegenprobe (dieselbe Kette **ohne** Sub-CA =
+        gültig). **Code unverändert** (#298/#299 deckt es bereits ab); rein additive Coverage der D2-Kern-
+        Sicherheitseigenschaft. +1 Test (`chain-verify.test.ts` 8), Suite **1857 grün**.
       - [x] **A2 — Rewire `isRetainableCanonicalCert`** (2026-07-20): auf `verifyPeerCertChain(attestingCaPems,
         [certPem])` umgestellt (single-tier äquivalent). **Voraussetzung dafür gehärtet:** `verifyPeerCertChain`
         prüft jetzt auch das **Anker-Gültigkeitsfenster** (ADR-024 MEDIUM-1) — forge tut das nicht (Probe:
