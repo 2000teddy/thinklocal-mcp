@@ -14,6 +14,7 @@ import { createMcpServer } from './mcp-server.js';
 import { buildCapabilityOverview } from './capability-skeleton.js';
 import { buildPeerOverview } from './peer-skeleton.js';
 import { buildTaskOverview } from './task-skeleton.js';
+import { buildToolOverview } from './tool-skeleton.js';
 import type { Capability } from './registry.js';
 import type { MeshPeer, PeerStatus } from './mesh.js';
 import type { AgentCard } from './agent-card.js';
@@ -306,5 +307,76 @@ describe('MCP list_tasks_overview (TL-21 Slice 5)', () => {
     ];
     const payload = await callTaskOverview(tasks);
     expect(payload).toEqual(buildTaskOverview(tasks));
+  });
+});
+
+// --- list_tools_overview (TL-21 Slice 6, MCP-Companion zu REST GET /api/tools/overview) ---
+
+/** Minimal-MCP-Service-Capability (category='mcp', skill_id='mcp:<server>') für den Tool-Skelett-Test. */
+function mcpCap(server: string, p: Partial<Capability> & { agent_id: string }): Capability {
+  return {
+    skill_id: `mcp:${server}`,
+    category: 'mcp',
+    version: '1.0.0',
+    description: p.description ?? 'Ein MCP-Server.',
+    health: 'healthy',
+    trust_level: 3,
+    permissions: [],
+    updated_at: '2026-07-21T00:00:00.000Z',
+    ...p,
+  } as Capability;
+}
+
+async function callToolOverview(caps: Capability[]): Promise<{ tools: unknown[]; count: number }> {
+  const server = makeServer(caps); // makeServer verdrahtet registry.getAllCapabilities()
+  const res = await getTool(server, 'list_tools_overview').handler({}, {});
+  expect(res.content[0].type).toBe('text');
+  return JSON.parse(res.content[0].text) as { tools: unknown[]; count: number };
+}
+
+describe('MCP list_tools_overview (TL-21 Slice 6)', () => {
+  it('ist unter dem exakten Namen registriert', () => {
+    expect(getTool(makeServer([]), 'list_tools_overview')).toBeTruthy();
+  });
+
+  it('content ist EXAKT buildToolOverview(registry) — Envelope-Parität mit REST', async () => {
+    const caps = [
+      mcpCap('unifi', {
+        agent_id: 'a1',
+        description: 'Steuert UniFi. Details hier.',
+        permissions: ['write'],
+      }),
+      mcpCap('unifi', { agent_id: 'a2', description: 'Zweiter Provider.', permissions: ['read'] }),
+      // Nicht-MCP-Capability wird ignoriert (nur category=mcp zählt):
+      cap({ skill_id: 'net.scan', agent_id: 'a1', description: 'Kein MCP.' }),
+    ];
+    const payload = await callToolOverview(caps);
+    // Gegen den GEMEINSAMEN Envelope-Builder (den auch der REST-Endpoint aufruft) → deckt Envelope-Drift auf.
+    expect(payload).toEqual(buildToolOverview(caps));
+    expect(payload.count).toBe(payload.tools.length);
+    expect(payload.tools).toHaveLength(1); // beide unifi-Provider dedupliziert
+  });
+
+  it('leere Registry → { tools: [], count: 0 } (wirft nicht)', async () => {
+    expect(await callToolOverview([])).toEqual({ tools: [], count: 0 });
+  });
+
+  it('malformed mcp-Capability kippt das Tool nicht (Totalität wie REST)', async () => {
+    const caps = [
+      mcpCap('ok', { agent_id: 'a1' }),
+      {
+        skill_id: 123,
+        category: 'mcp',
+        agent_id: 'a2',
+        description: 'x',
+        health: 'healthy',
+        trust_level: 3,
+        permissions: [],
+        version: '1',
+        updated_at: '',
+      } as unknown as Capability,
+    ];
+    const payload = await callToolOverview(caps);
+    expect(payload).toEqual(buildToolOverview(caps));
   });
 });

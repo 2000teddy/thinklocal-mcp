@@ -190,6 +190,7 @@ Authorization: Bearer tlmcp_AbCdEf...
 | GET | `/api/capabilities/overview` | **TL-21 Skelett-Auskunft (Kap. 06):** kompakte Übersicht, dedupliziert pro `skill_id` — `{ skills: [{ skill_id, summary, category, providers, health }], count }`. Details auf Abruf via `/api/capabilities?skill_id=`. |
 | GET | `/api/tasks` | Tasks mit Status |
 | GET | `/api/tasks/overview` | **TL-21 Skelett-Auskunft (Kap. 06):** kompakte „ein Eintrag pro Task"-Übersicht (Signale statt `input`/`result`/`error`-Blobs) plus Status-Histogramm — `{ tasks: [{ id, skill_id, state, executor, has_result, has_error }], count, by_state }`. Details auf Abruf via `/api/tasks`. |
+| GET | `/api/tools/overview` | **TL-21 Skelett-Auskunft (Kap. 06):** kompakte „ein Eintrag pro geteiltem MCP-Server"-Übersicht (dedupliziert pro Server) — `{ tools: [{ server, summary, execution_tier, providers, health }], count }`. `execution_tier` (`self`/`gate`/`consensus`) ist die konservativ-restriktivste Stufe über alle Provider. Details auf Abruf via `/api/capabilities?category=mcp`. |
 | GET | `/api/audit?limit=N` | Audit-Log (paginiert, newest-first). Neu: `entity_type` + `entity_id` Felder (ADR-007). |
 | POST | `/api/tasks/execute` | Fuehrt einen lokalen Skill synchron aus |
 | GET | `/api/vault/credentials` | Listet Credentials (ohne Werte) |

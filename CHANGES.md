@@ -8,6 +8,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(mcp,api): TL-21 Slice 6 — Tool-Skelett (`GET /api/tools/overview` + `list_tools_overview`) (2026-07-21 17:15)
+**Additiver Read-View** (Kap. 06) — schließt TL-21 ab (Skills/Peers/Tasks/Tools je REST+MCP). Neues reines
+Modul `tool-skeleton.ts` (`buildToolSkeleton`/`buildToolOverview`) projiziert die im Mesh geteilten
+**MCP-Server** (Capabilities mit `category='mcp'`) in eine „ein Eintrag pro Server"-Übersicht
+`{ server, summary, execution_tier, providers, health }` (dedupliziert pro kanonisiertem Server). REST
+`GET /api/tools/overview` **und** MCP `list_tools_overview` rufen **denselben** Envelope-Builder
+`buildToolOverview(registry.getAllCapabilities())` → strukturelle Parität, kein Drift. Tool-spezifisch:
+**`execution_tier`** (self/gate/consensus) **konservativ** als restriktivste Stufe (`maxTier`) über alle
+Provider. **CR (adversariales Claude-Subagent, `agy` fehlt für `pal:codereview`): kein HIGH; 1 MEDIUM
+gefixt** — malformed `permissions` (non-array) waren fail-**open** (→ `self`) und wichen von `resolveMcp`
+ab → jetzt fail-**closed** auf mind. `gate` (`providerTier`), plus 3 Regressionstests inkl. Parität mit
+`resolveMcp`. Total gegen malformed Felder (kein 500er). +33 Tests, Suite **1887 grün**, `index.ts`
+unangetastet. Doku: `TL-21-skeleton-disclosure.md` §4 (Slice 6), `docs/API-REFERENCE.md`, `TODO.md`
+(TL-21 → vollständig), `changes/2026-07-21_tl21-tools-overview.md`.
+
 ### test(tls): TL-14a Slice A — D2-Invariante „Intermediate darf keine Sub-CA ausstellen" (2026-07-21 16:10)
 **Test-only.** Der chain-fähige Verify + `pathLenConstraint`-Enforcement (`verifyPeerCertChain`/
 `enforcePathLenConstraint`, `tls.ts`) war bereits gelandet (#298/#299) — **nichts re-implementiert.** Der

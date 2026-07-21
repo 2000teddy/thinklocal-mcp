@@ -8,6 +8,7 @@
  * - GET /api/capabilities  — Alle registrierten Capabilities
  * - GET /api/tasks         — Alle Tasks mit Status
  * - GET /api/tasks/overview — TL-21 Skelett: Signale + Status-Histogramm statt voller Task-Blobs
+ * - GET /api/tools/overview — TL-21 Skelett: geteilte MCP-Server (Name + 1 Satz + execution_tier)
  * - GET /api/audit         — Audit-Log (paginiert)
  * - GET /api/status        — Gesamtstatus des Daemon
  *
@@ -29,6 +30,7 @@ import type { BuildInfo } from './build-info.js';
 import { buildCapabilityOverview } from './capability-skeleton.js';
 import { buildPeerOverview } from './peer-skeleton.js';
 import { buildTaskOverview } from './task-skeleton.js';
+import { buildToolOverview } from './tool-skeleton.js';
 
 export interface DashboardApiDeps {
   mesh: MeshManager;
@@ -201,6 +203,16 @@ export function registerDashboardApi(server: FastifyInstance, deps: DashboardApi
   server.get('/api/capabilities/overview', async (request: FastifyRequest, reply: FastifyReply) => {
     if (!checkRateLimit(request, reply)) return;
     return buildCapabilityOverview(registry.getAllCapabilities());
+  });
+
+  // GET /api/tools/overview — TL-21 Skelett-Auskunft für die geteilte MCP-Tool-Fläche (Kap. 06):
+  // kompakte „ein Eintrag pro MCP-Server"-Übersicht ({ server, summary, execution_tier, providers, health },
+  // dedupliziert pro Server), same-source wie GET /api/capabilities (registry.getAllCapabilities(),
+  // gefiltert auf category='mcp'). Details auf Abruf über GET /api/capabilities?category=mcp. Read-only, additiv.
+  // Siehe docs/architecture/TL-21-skeleton-disclosure.md §4 (Slice 6).
+  server.get('/api/tools/overview', async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!checkRateLimit(request, reply)) return;
+    return buildToolOverview(registry.getAllCapabilities());
   });
 
   // GET /api/tasks — Alle Tasks

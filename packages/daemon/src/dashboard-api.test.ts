@@ -484,3 +484,94 @@ describe('GET /api/tasks/overview — TL-21 Task-Skelett-Auskunft (Slice 5)', ()
     await app.close();
   });
 });
+
+describe('GET /api/tools/overview — TL-21 MCP-Tool-Skelett-Auskunft (Slice 6)', () => {
+  const mcpCap = (server: string, o: Record<string, unknown>) => ({
+    skill_id: `mcp:${server}`,
+    category: 'mcp',
+    version: '1.0.0',
+    description: 'Ein MCP-Server.',
+    health: 'healthy',
+    trust_level: 3,
+    permissions: [],
+    updated_at: '2026-07-21T09:00:00.000Z',
+    ...o,
+  });
+
+  it('liefert die kompakte MCP-Server-Übersicht (Name + Satz + execution_tier), dedupliziert + sortiert', async () => {
+    const registry = {
+      getAllCapabilities: () => [
+        mcpCap('unifi', {
+          agent_id: 'a2',
+          description: 'Steuert UniFi. Details.',
+          permissions: ['delete'],
+          trust_level: 5,
+        }),
+        mcpCap('unifi', {
+          agent_id: 'a1',
+          description: 'Zweiter Provider.',
+          permissions: ['read'],
+        }),
+        mcpCap('markitdown', {
+          agent_id: 'a1',
+          description: 'Wandelt Dokumente um.',
+          permissions: ['read'],
+        }),
+        // Nicht-MCP-Capability wird ignoriert:
+        {
+          skill_id: 'net.scan',
+          category: 'network',
+          agent_id: 'a1',
+          description: 'Kein MCP.',
+          health: 'healthy',
+          trust_level: 3,
+          permissions: [],
+          version: '1',
+          updated_at: '',
+        },
+      ],
+    };
+    const { app } = buildApp({ registry: registry as never });
+    const res = await app.inject({ method: 'GET', url: '/api/tools/overview' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.count).toBe(2);
+    expect(body.tools.map((t: { server: string }) => t.server)).toEqual(['markitdown', 'unifi']);
+    // unifi: zwei Provider dedupliziert; execution_tier konservativ = restriktivste (delete → consensus)
+    const unifi = body.tools.find((t: { server: string }) => t.server === 'unifi');
+    expect(unifi).toMatchObject({ providers: 2, execution_tier: 'consensus', health: 'healthy' });
+    await app.close();
+  });
+
+  it('keine MCP-Server → count 0', async () => {
+    const { app } = buildApp({ registry: { getAllCapabilities: () => [] } as never });
+    const res = await app.inject({ method: 'GET', url: '/api/tools/overview' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ tools: [], count: 0 });
+    await app.close();
+  });
+
+  it('malformed mcp-Capability (non-string skill_id) → 200, KEIN 500', async () => {
+    const registry = {
+      getAllCapabilities: () => [
+        {
+          skill_id: 123,
+          category: 'mcp',
+          agent_id: 'a',
+          description: 'x',
+          health: 'healthy',
+          trust_level: 3,
+          permissions: [],
+          version: '1',
+          updated_at: '',
+        },
+        mcpCap('ok', { agent_id: 'a', permissions: ['read'] }),
+      ],
+    };
+    const { app } = buildApp({ registry: registry as never });
+    const res = await app.inject({ method: 'GET', url: '/api/tools/overview' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().tools.map((t: { server: string }) => t.server)).toEqual(['ok']);
+    await app.close();
+  });
+});

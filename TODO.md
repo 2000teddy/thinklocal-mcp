@@ -293,8 +293,10 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
 - [ ] **[v5.1] TL-19 (≈4 h)** Verbindungs-Pooling + Sicherungs-Schalter je Owner-Peer; `resolveMcp` meidet
   kranke Anbieter.
 - [ ] **[v5.1] TL-20 (≈3 h)** Pro-Rechner-Transportpolitik (ADR-031) + Relay netzweit „aus" (Entsch. 5).
-- [~] **[v5.1] TL-21 (≈4 h)** Skelett-Auskunft (Kap. 06): zweistufig „Übersicht (Name + 1 Satz) → Details
+- [x] **[v5.1] TL-21 (≈4 h)** Skelett-Auskunft (Kap. 06): zweistufig „Übersicht (Name + 1 Satz) → Details
   auf Abruf" am lokalen Daemon. Design: `docs/architecture/TL-21-skeleton-disclosure.md`.
+  **Vollständig (2026-07-21):** Skills (Slice 1/2), Peers (Slice 3/4), Tasks (Slice 5), Tools (Slice 6) —
+  je REST + MCP über einen gemeinsamen Envelope-Builder.
   - [x] **Slice 1** (2026-07-16, #281): REST `GET /api/capabilities/overview` (dedupliziert pro `skill_id`, Name +
     erster Satz + Health-Aggregation) + reines Modul `capability-skeleton.ts` (`firstSentence`,
     `buildCapabilitySkeleton`), +13 Tests. Stufe 2 = bestehendes `/api/capabilities?skill_id=`. Read-only/additiv.
@@ -323,8 +325,20 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     Status-Histogramm `by_state` (Invariante `Summe===count`) — der Kontext-Ökonomie-Gewinn „was läuft gerade?".
     Total gegen malformed/geforgte Felder (kein 500er; unbekannter `state`→`requested` konsistent gezählt).
     +25 Tests (18 pure `task-skeleton.test.ts` + 4 MCP `mcp-server.test.ts` + 3 REST `dashboard-api.test.ts`),
-    Suite **1856 grün**. Read-only/additiv, `index.ts` unangetastet. Verbleibt offen: **Tools**-Skelett
-    (MCP-Tool-Fläche selbst) = eigener Slice, dasselbe Muster.
+    Suite **1856 grün**. Read-only/additiv, `index.ts` unangetastet.
+  - [x] **Slice 6 (Tool-Skelett REST + MCP)** (2026-07-21): dasselbe Muster für die **MCP-Tool-Fläche** —
+    reines Modul `tool-skeleton.ts` (`buildToolSkeleton`/`buildToolOverview`), REST `GET /api/tools/overview`
+    + MCP-Tool `list_tools_overview`, beide über den **einen** Envelope-Builder
+    `buildToolOverview(registry.getAllCapabilities())` (same-source, gefiltert auf `category='mcp'`) →
+    strukturelle Parität, kein Drift. Ein Eintrag pro **Server** (dedupliziert über Provider, kanonisierter
+    Name): `{ server, summary, execution_tier, providers, health }`, sortiert nach `server`. Tool-spezifisch:
+    **`execution_tier`** (self/gate/consensus) **konservativ** als restriktivste Stufe (`maxTier`) über alle
+    Provider. **CR (Claude-Subagent, `agy` fehlt): kein HIGH; 1 MEDIUM gefixt** — malformed `permissions`
+    (non-array) waren fail-**open** (→ `self`) und wichen von `resolveMcp` ab → jetzt fail-**closed** auf
+    mind. `gate` (`providerTier`) + 3 Regressionstests inkl. Parität mit `resolveMcp`. Total gegen
+    malformed/geforgte Felder (kein 500er). +33 Tests (23 pure `tool-skeleton.test.ts` + 4 MCP + 3 REST +
+    die 3 CR-Regressionen sind Teil der 23), Suite **1887 grün**. Read-only/additiv, `index.ts` unangetastet.
+    **→ TL-21 damit vollständig** (Skills/Peers/Tasks/Tools).
 
 ### P2 — Ausbau
 - [ ] **[v5.1] TL-22a (≈4 h)** Mesh-Dateiübertragung Slice 1 (Chunk-Endpunkt am 9440, Prüfsummen je Stück;

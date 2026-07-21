@@ -12,6 +12,7 @@
  * - query_capabilities: Faehigkeiten im Mesh suchen
  * - list_capabilities_overview: TL-21 Skelett-Uebersicht (Name + 1 Satz je Skill)
  * - list_tasks_overview: TL-21 Skelett-Uebersicht der Tasks (Signale + Status-Histogramm)
+ * - list_tools_overview: TL-21 Skelett-Uebersicht der geteilten MCP-Server (Name + 1 Satz + execution_tier)
  * - get_agent_card: Agent Card eines Peers abrufen
  * - delegate_task: Task an einen Peer delegieren
  * - list_credentials: Vault-Credentials auflisten
@@ -29,6 +30,7 @@ import { z } from 'zod';
 import type { MeshManager } from './mesh.js';
 import type { CapabilityRegistry } from './registry.js';
 import { buildCapabilityOverview } from './capability-skeleton.js';
+import { buildToolOverview } from './tool-skeleton.js';
 import { buildPeerOverview } from './peer-skeleton.js';
 import { buildTaskOverview } from './task-skeleton.js';
 import type { TaskManager } from './tasks.js';
@@ -139,6 +141,28 @@ export function createMcpServer(deps: McpServerDeps): McpServer {
     async () => {
       // Gemeinsamer Envelope-Builder wie REST /api/capabilities/overview → strukturelle Parität (kein Drift).
       const overview = buildCapabilityOverview(registry.getAllCapabilities());
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify(overview, null, 2),
+        }],
+      };
+    },
+  );
+
+  // list_tools_overview: TL-21 Skelett-Auskunft (Kap. 06) — kompakte „ein Eintrag pro MCP-Server"-Übersicht
+  // der geteilten Tool-Fläche ({ server, summary, execution_tier, providers, health }, dedupliziert pro
+  // Server) statt der vollen mcp-Capabilities. Derselbe reine Envelope-Builder wie REST GET /api/tools/overview
+  // (same-source registry.getAllCapabilities(), gefiltert auf category='mcp') → strukturelle Parität, kein
+  // Drift. Details auf Abruf via query_capabilities/list_skills. Read-only, additiv, kontext-ökonomisch.
+  // Siehe docs/architecture/TL-21-skeleton-disclosure.md §4 (Slice 6).
+  server.tool(
+    'list_tools_overview',
+    'TL-21 Skelett-Auskunft: kompakte Übersicht der im Mesh geteilten MCP-Server/Tool-Fläche (pro Server Name + ein Satz + execution_tier self/gate/consensus + Provider-Zähler + Health). Details auf Abruf via query_capabilities. Read-only, kontext-ökonomisch.',
+    {},
+    async () => {
+      // Gemeinsamer Envelope-Builder wie REST /api/tools/overview → strukturelle Parität (kein Drift).
+      const overview = buildToolOverview(registry.getAllCapabilities());
       return {
         content: [{
           type: 'text' as const,

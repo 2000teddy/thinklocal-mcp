@@ -82,8 +82,27 @@ Ein Skelett-Eintrag:
   `'requested'` normalisiert — im Eintrag **und** im Histogramm dort gezählt (kein frei erfundener
   Union-Wert, kein erfundener Histogramm-Schlüssel). Damit gilt invariant
   `Summe(by_state) === count`. Total gegen malformed Felder (kein 500er). Read-only, additiv.
-- **Nicht in Scope:** Skelett für **Tools** (MCP-Tool-Fläche selbst — dasselbe Muster später
-  anwendbar); Paginierung (die Skill-/Peer-/Task-Menge ist heute klein); Volltext-Suche.
+- **Slice 6 (Tools, umgesetzt 2026-07-21):** dasselbe Muster für die **MCP-Tool-Fläche** — REST-Skelett
+  `GET /api/tools/overview` + MCP-Tool `list_tools_overview`, beide über den **einen** reinen
+  Envelope-Builder `buildToolOverview` (`tool-skeleton.ts`) → strukturelle Parität, kein Drift.
+  **Same-source** `registry.getAllCapabilities()`, gefiltert auf die MCP-Service-Einträge
+  (`category='mcp'`, `skill_id='mcp:<server>'`, `mcp-service-registry.ts`) — also eine **Spezialisierung**
+  des Capability-Skeletts auf die geteilte Tool-Fläche. Ein Eintrag pro **Server** (dedupliziert über
+  Provider): `{ server, summary, execution_tier, providers, health }`, sortiert nach `server`
+  (kanonisiert → `mcp:Unifi`/`mcp:unifi` mergen). `summary` = `firstSentence(description)` des
+  gesund-bevorzugten Providers (wiederverwendet aus `capability-skeleton.ts`); `health` aggregiert wie
+  §2. Der tool-spezifische Kontext-Gewinn ist die **`execution_tier`** (`self`/`gate`/`consensus`): sie
+  wird **konservativ** als restriktivste Stufe (`maxTier`) über **alle** Provider geführt — ein Agent
+  sieht nie eine zu niedrige Stufe. `execution_tier` ist **fail-closed** (CR-MEDIUM): malformed
+  `permissions` (kein Array bzw. Array mit verworfenen non-string-Elementen) werden auf mindestens
+  `gate` gebodet — sonst würde die Übersicht die Stufe unter-behaupten und vom realen Routing-Pfad
+  `resolveMcp` (der einen non-array-String Zeichen-für-Zeichen zu `gate` ableitet) abweichen. Details
+  bleiben auf Abruf über das unveränderte `GET /api/capabilities?category=mcp` bzw. `query_capabilities`.
+  Total gegen malformed Felder (kein 500er). Read-only, additiv. **Damit ist TL-21 (Kap. 06) vollständig:**
+  Skills, Peers, Tasks, Tools — je REST + MCP über einen gemeinsamen Envelope-Builder.
+- **Nicht in Scope:** Paginierung (die Skill-/Peer-/Task-/Server-Menge ist heute klein); Volltext-Suche;
+  ein per-**Werkzeug** (statt per-Server) Skelett — die CRDT-`Capability` faltet Tools in die
+  `description`, ein strukturiertes per-Tool-Feld wäre ein eigener Slice.
 
 ## 5. Invarianten (VOR Code)
 1. **Read-only, additiv** — kein neuer State, `/api/capabilities` (Details) unverändert.
