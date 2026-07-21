@@ -8,6 +8,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### test(tls): TL-14a Slice A — D2-Invariante „Intermediate darf keine Sub-CA ausstellen" (2026-07-21 16:10)
+**Test-only.** Der chain-fähige Verify + `pathLenConstraint`-Enforcement (`verifyPeerCertChain`/
+`enforcePathLenConstraint`, `tls.ts`) war bereits gelandet (#298/#299) — **nichts re-implementiert.** Der
+bestehende pathLen-Test setzte den Constraint aber am **Root**; die **D2-Kern-Sicherheitseigenschaft** (ein
+**Intermediate** mit `pathLen 0` darf **keine Sub-CA** ausstellen) war nicht direkt getestet. Neuer
+fokussierter Negativtest in `chain-verify.test.ts`: `Root(pathLen 2)→Intermediate(pathLen 0)→Sub-CA→Leaf`
+wird abgelehnt (Root großzügig → isoliert die Intermediate-Grenze), plus gepaarte Gegenprobe (dieselbe Kette
+**ohne** Sub-CA = gültig). +1 Test (jetzt 8), Suite **1857 grün**, `tls.ts` unverändert.
+`TODO.md` + `changes/2026-07-21_tl14a-sliceA-intermediate-subca-test.md`.
+
 ### docs(arch): TL-14a Cross-Vendor-Consensus-Nachlauf + Decision-Handoff (2026-07-21 15:40)
 **Doc-only.** Führt den in `TL-14a-consensus-result-D1-D6.md` benannten Cross-Vendor-`pal:consensus`-Re-Versuch
 aus: Roster `gpt-5.5`(codex) + `gemini-pro`(agy) — **beide erneut Provider-Fehler** (`codex`/`agy` weiterhin
