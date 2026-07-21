@@ -145,6 +145,13 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     ADR-pflichtig, weil `store()` an `AgentMessagePayload` gekoppelt ist (`agent-inbox.ts:256`) → wrapper-lose
     ORDER erzwingt neues message_id/subject/body/to-Mapping. **Ehrlicher nächster Baustein = Wire-Level-
     Feature/Version-Exchange (Agent-Card-Feld)**, nicht Slice C selbst.
+  - [~] **TL-12 Prereq — Wire-Feature/Version-Exchange** (Scoping: `docs/architecture/ADR-046-wire-feature-version-exchange.md`,
+    Status **Proposed**). Der Slice-C-Enabler: additiver `protocol`-Block auf der Agent-Card
+    (`protocol_version`/`min_compatible_version`/`features[]` aus `version-compat.ts`) + reiner fail-closed
+    Consumer-Helper `peerSupportsFeature(uri, feature)`. Konsumenten-Seite existiert schon (`mesh.getPeer`
+    hält die volle Card, `mesh.ts:20,189,258`); es fehlt nur die annoncierte Feld-Seite + `version-compat`-
+    Verdrahtung (heute tot). Seed-Flag `order-envelope-v2`. **Impl-Slice ist CO-gated** (Vokabular/Semver-
+    Governance) und rein additiv/rückwärtskompatibel; **kein** ORDER-Handler/Sender-Flip hier (= Slice C proper).
 - [~] **[v5.1] TL-11 (≈4 h)** Heartbeat-Weckruf (Entsch. 16): Daemon weckt Agenten; geweckter Agent prüft
   Mesh-Postfach. ↔ baut auf ADR-004.
   - [x] **TL-11 Slice A** (ADR-043): edge-driven Wake-Kontrakt — `wake-contract.ts` (fail-closed Resolver,

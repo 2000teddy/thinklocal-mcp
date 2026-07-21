@@ -8,6 +8,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs(arch): ADR-046 Wire-Feature/Version-Exchange — Scoping (2026-07-21 08:10)
+**Doc-only** ADR (Status **Proposed**). Scoping des TL-12-Slice-C-Prerequisites (aus dem Slice-C-Park #307):
+das fehlende maschinen-prüfbare „Peer ≥ Feature X"-Signal. Ist-Stand geerdet: `AgentCard`
+(`agent-card.ts:22-111`) hat kein `protocol_version`/`features`; `version-compat.ts` ist außerhalb Tests
+ungenutzt; **aber** die gefetchte Card wird pro Peer gehalten (`mesh.ts:20,189,258`, pinned Fetch
+`pinned-card-fetch.ts:35`, toleranter `as AgentCard`-Parse) → Consumer-Seite existiert schon. Vorschlag:
+additiver optionaler `protocol`-Block (`protocol_version`/`min_compatible_version`/`features[]`) aus
+`version-compat.ts` + fail-closed Consumer-Helper `peerSupportsFeature`; Seed-Flag `order-envelope-v2`.
+Entsperrt Slice-C-V2. **Impl CO-gated** (Vokabular/Semver-Governance), rein additiv; kein ORDER-Handler/
+Sender-Flip. Beleg: `docs/architecture/ADR-046-wire-feature-version-exchange.md`. Kein Code/Test/Deploy/Secret.
+
 ### docs(arch): TL-12 Slice C Scoping/Park — first-class ORDER Gate-Check (2026-07-21 07:20)
 **Doc-only** Scoping/Park (analog Slice-B-Scoping-Doc). Gate-Check für TL-12 Slice C (first-class
 `MessageType='ORDER'`, Marker ablösen) ergab **PARK — nicht ehrlich low-ambiguity baubar**: (V1) top-level
