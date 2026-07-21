@@ -8,6 +8,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs(arch): TL-12 Slice C Scoping/Park — first-class ORDER Gate-Check (2026-07-21 07:20)
+**Doc-only** Scoping/Park (analog Slice-B-Scoping-Doc). Gate-Check für TL-12 Slice C (first-class
+`MessageType='ORDER'`, Marker ablösen) ergab **PARK — nicht ehrlich low-ambiguity baubar**: (V1) top-level
+ORDER fällt in den `default`-Drop des Dispatch (`index.ts:932-934`) → still verworfen gegen nicht upgegradete
+Peers, einziger Send-Pfad ist AGENT_MESSAGE (`inbox-api.ts:277`), ORDER reist heute nur als Body-Marker
+(`signed-order.ts:63,75`); (V2) „Peers ≥ Version"-Gate nicht evaluierbar — `version-compat.ts` außerhalb Tests
+ungenutzt, kein Wire-Versionsaustausch; (V3) selbst der additive Empfänger-Handler ist ADR-pflichtig, weil
+`store()` an `AgentMessagePayload` gekoppelt ist (`agent-inbox.ts:256`). Ehrlicher nächster Baustein =
+Wire-Level-Feature/Version-Exchange (Agent-Card-Feld), nicht Slice C selbst. Beleg:
+`docs/architecture/TL-12-slice-c-scoping.md`. Kein Code/Test/Deploy/Secret.
+
 ### docs(todo): TL-00d verifiziert erledigt — cert-renew-Knobs dokumentiert (2026-07-20 18:05)
 **Doc-only** Backlog-Cleanup. TL-00d („#242-Konfig-Keys `cert.renew_before_days` + `TLMCP_CERT_RENEW_BEFORE_DAYS`
 dokumentieren") stand mit „evtl. bereits erledigt, verifizieren" offen. Wahrheitsgetreue Prüfung gegen HEAD:

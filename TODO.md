@@ -136,7 +136,15 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     `crl.ts` — Fingerprint-gekeyt+unverdrahtet) → B3 Ausführung hinter allen Gates + per-signer Rate-Fence.
     Offen (Christian): `[orders] execute` + `(signer_keyid×order_type)`-Allowlist, Epoch `T` vs. max-TTL,
     ausführbare Startmenge, Revocation-Autorität. Human-Approval-Gate existiert noch nicht → sensible Typen = Deny.
-  - [ ] **TL-12 Slice C**: first-class `MessageType='ORDER'` (Marker ablösen), sobald Peers ≥ dieser Version.
+  - [~] **TL-12 Slice C**: first-class `MessageType='ORDER'` (Marker ablösen), sobald Peers ≥ dieser Version.
+    **PARK (Gate-Check 2026-07-21, doc-first):** nicht ehrlich low-ambiguity baubar. Scoping/Beleg:
+    `docs/architecture/TL-12-slice-c-scoping.md`. Drei blockierende Vorbehalte: (V1) top-level ORDER fällt in
+    den `default`-Drop des Empfangs-Dispatch (`index.ts:932-934`) → still verworfen gegen jeden nicht
+    upgegradeten Peer; (V2) „Peers ≥ Version"-Gate nicht evaluierbar — `version-compat.ts` außerhalb Tests
+    nirgends aufgerufen, kein Wire-Versionsaustausch; (V3) selbst der additive Empfänger-Handler ist
+    ADR-pflichtig, weil `store()` an `AgentMessagePayload` gekoppelt ist (`agent-inbox.ts:256`) → wrapper-lose
+    ORDER erzwingt neues message_id/subject/body/to-Mapping. **Ehrlicher nächster Baustein = Wire-Level-
+    Feature/Version-Exchange (Agent-Card-Feld)**, nicht Slice C selbst.
 - [~] **[v5.1] TL-11 (≈4 h)** Heartbeat-Weckruf (Entsch. 16): Daemon weckt Agenten; geweckter Agent prüft
   Mesh-Postfach. ↔ baut auf ADR-004.
   - [x] **TL-11 Slice A** (ADR-043): edge-driven Wake-Kontrakt — `wake-contract.ts` (fail-closed Resolver,
