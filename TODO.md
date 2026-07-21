@@ -303,6 +303,16 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     Trennung wie Slice 1→2. +4 Tests (echtes registriertes Tool via `_registeredTools[name].handler`;
     Envelope-Parität; leeres Mesh; malformed-Card→kein throw), Suite **1828 grün**. Read-only/additiv.
     Tools/Tasks-Skelett bleibt offen.
+  - [x] **Slice 5 (Task-Skelett REST + MCP)** (2026-07-21): dasselbe Muster für **Tasks** — reines Modul
+    `task-skeleton.ts` (`buildTaskSkeleton`/`buildTaskHistogram`/`buildTaskOverview`), REST `GET /api/tasks/overview`
+    + MCP-Tool `list_tasks_overview`, beide über den **einen** Envelope-Builder `buildTaskOverview(tasks.getAllTasks())`
+    → strukturelle Parität, kein Drift. Ein Eintrag pro Task ersetzt die vollen `input`/`result`/`error`-Blobs durch
+    Signale (`{ id, skill_id, state, executor, has_result, has_error }`, sortiert nach `id`); zusätzlich ein
+    Status-Histogramm `by_state` (Invariante `Summe===count`) — der Kontext-Ökonomie-Gewinn „was läuft gerade?".
+    Total gegen malformed/geforgte Felder (kein 500er; unbekannter `state`→`requested` konsistent gezählt).
+    +25 Tests (18 pure `task-skeleton.test.ts` + 4 MCP `mcp-server.test.ts` + 3 REST `dashboard-api.test.ts`),
+    Suite **1856 grün**. Read-only/additiv, `index.ts` unangetastet. Verbleibt offen: **Tools**-Skelett
+    (MCP-Tool-Fläche selbst) = eigener Slice, dasselbe Muster.
 
 ### P2 — Ausbau
 - [ ] **[v5.1] TL-22a (≈4 h)** Mesh-Dateiübertragung Slice 1 (Chunk-Endpunkt am 9440, Prüfsummen je Stück;

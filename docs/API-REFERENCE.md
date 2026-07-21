@@ -185,9 +185,11 @@ Authorization: Bearer tlmcp_AbCdEf...
 |---|---|---|
 | GET | `/api/status` | Daemon-Status (Agent-ID, Peers, Capabilities, Uptime). Peer-Zahlen: `peers_online` (Heartbeat-frisch), `peers_known` (alle bekannten, inkl. offline), `peers_offline` (`known−online`). `peers_known>0 && peers_online==0` ⇒ Heartbeat-/Cert-Problem, kein „down" (Phantom-ROT, `docs/DIAGNOSE-api-status-phantom-rot.md` §9). |
 | GET | `/api/peers` | Online-Peers mit Name, Host, Status, Last-Seen |
+| GET | `/api/peers/overview` | **TL-21 Skelett-Auskunft (Kap. 06):** kompakte „ein Eintrag pro Peer"-Übersicht (Zähler statt voller Agent-Card) — `{ peers: [{ agent_id, name, status, version, skills, load_percent }], count }`. Details auf Abruf via `/api/peers`. |
 | GET | `/api/capabilities` | Registrierte Capabilities (filterbar per `skill_id`/`category`/`agent_id`) — **Details-Stufe** (volle Objekte je Provider) |
 | GET | `/api/capabilities/overview` | **TL-21 Skelett-Auskunft (Kap. 06):** kompakte Übersicht, dedupliziert pro `skill_id` — `{ skills: [{ skill_id, summary, category, providers, health }], count }`. Details auf Abruf via `/api/capabilities?skill_id=`. |
 | GET | `/api/tasks` | Tasks mit Status |
+| GET | `/api/tasks/overview` | **TL-21 Skelett-Auskunft (Kap. 06):** kompakte „ein Eintrag pro Task"-Übersicht (Signale statt `input`/`result`/`error`-Blobs) plus Status-Histogramm — `{ tasks: [{ id, skill_id, state, executor, has_result, has_error }], count, by_state }`. Details auf Abruf via `/api/tasks`. |
 | GET | `/api/audit?limit=N` | Audit-Log (paginiert, newest-first). Neu: `entity_type` + `entity_id` Felder (ADR-007). |
 | POST | `/api/tasks/execute` | Fuehrt einen lokalen Skill synchron aus |
 | GET | `/api/vault/credentials` | Listet Credentials (ohne Werte) |

@@ -6,7 +6,10 @@ import { registerDashboardApi, type DashboardApiDeps } from './dashboard-api.js'
 // Minimal-Deps: registerDashboardApi registriert alle Routen, ruft die Felder aber
 // erst im Handler. Für POST /api/registry/republish zählen nur audit, identity,
 // rateLimiter und registrySyncRepublish — der Rest bleibt unangetastet.
-function buildApp(overrides: Partial<DashboardApiDeps> = {}): { app: ReturnType<typeof Fastify>; append: ReturnType<typeof vi.fn> } {
+function buildApp(overrides: Partial<DashboardApiDeps> = {}): {
+  app: ReturnType<typeof Fastify>;
+  append: ReturnType<typeof vi.fn>;
+} {
   const append = vi.fn();
   const deps = {
     audit: { append, count: () => 0 },
@@ -128,10 +131,20 @@ describe('GET /api/status — T2.4-Folge: Self-Resources für least-loaded-Routi
       identity: { spiffeUri: 'spiffe://thinklocal/node/self' },
       selfIdentityUri: 'spiffe://thinklocal/node/self',
       config: {
-        daemon: { hostname: 'self', port: 9440, bind_host: '0.0.0.0', runtime_mode: 'lan', tls_enabled: true, agent_type: 'claude-code' },
+        daemon: {
+          hostname: 'self',
+          port: 9440,
+          bind_host: '0.0.0.0',
+          runtime_mode: 'lan',
+          tls_enabled: true,
+          agent_type: 'claude-code',
+        },
         libp2p: { enabled: false, listen_port: 0 },
       },
-      mesh: { getOnlinePeers: () => [], getPeerCounts: () => ({ known: 0, online: 0, offline: 0 }) },
+      mesh: {
+        getOnlinePeers: () => [],
+        getPeerCounts: () => ({ known: 0, online: 0, offline: 0 }),
+      },
       registry: { getAllCapabilities: () => [], getNodeResources },
       tasks: { getActiveTasks: () => [] },
       audit: { append: vi.fn(), count: () => 0 },
@@ -139,7 +152,13 @@ describe('GET /api/status — T2.4-Folge: Self-Resources für least-loaded-Routi
   }
 
   it('liefert die eigenen resources (Side-Map des selfIdentityUri)', async () => {
-    const resources = { free_ram_bytes: 8e9, ram_used_percent: 33.3, cpu_load: 7, agent_count: 2, updated_at: '2026-06-30T12:00:00.000Z' };
+    const resources = {
+      free_ram_bytes: 8e9,
+      ram_used_percent: 33.3,
+      cpu_load: 7,
+      agent_count: 2,
+      updated_at: '2026-06-30T12:00:00.000Z',
+    };
     const getNodeResources = vi.fn().mockReturnValue(resources);
     const { app } = buildApp(statusDeps(getNodeResources));
     const res = await app.inject({ method: 'GET', url: '/api/status' });
@@ -160,7 +179,11 @@ describe('GET /api/status — T2.4-Folge: Self-Resources für least-loaded-Routi
   it('exponiert peers_known/peers_offline aus getPeerCounts (Phantom-ROT-Observability, §9)', async () => {
     // known>0 && online==0 ⇒ „Phantom-ROT von unten": bekannte, aber Heartbeat-offline Peers.
     const deps = statusDeps(() => undefined);
-    (deps as { mesh: { getPeerCounts: () => unknown } }).mesh.getPeerCounts = () => ({ known: 6, online: 0, offline: 6 });
+    (deps as { mesh: { getPeerCounts: () => unknown } }).mesh.getPeerCounts = () => ({
+      known: 6,
+      online: 0,
+      offline: 6,
+    });
     const { app } = buildApp(deps);
     const res = await app.inject({ method: 'GET', url: '/api/status' });
     const body = res.json();
@@ -179,7 +202,11 @@ describe('POST /api/registry/republish (ADR-020 v1 safety valve)', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ status: 'ok', message: 'Registry republish triggered' });
     expect(republish).toHaveBeenCalledTimes(1);
-    expect(append).toHaveBeenCalledWith('REGISTRY_REPUBLISH', expect.any(String), expect.anything());
+    expect(append).toHaveBeenCalledWith(
+      'REGISTRY_REPUBLISH',
+      expect.any(String),
+      expect.anything(),
+    );
     await app.close();
   });
 
@@ -215,13 +242,24 @@ describe('POST /api/registry/republish (ADR-020 v1 safety valve)', () => {
 
 describe('GET /api/capabilities/overview — TL-21 Skelett-Auskunft', () => {
   const cap = (o: Record<string, unknown>) => ({
-    version: '1.0.0', description: '', health: 'healthy', trust_level: 3,
-    updated_at: '2026-07-16T00:00:00.000Z', category: 'misc', permissions: [], ...o,
+    version: '1.0.0',
+    description: '',
+    health: 'healthy',
+    trust_level: 3,
+    updated_at: '2026-07-16T00:00:00.000Z',
+    category: 'misc',
+    permissions: [],
+    ...o,
   });
 
   it('liefert deduplizierte „Name + ein Satz"-Übersicht', async () => {
     const caps = [
-      cap({ skill_id: 'db.read', agent_id: 'a', description: 'Liest DB. Details egal.', category: 'database' }),
+      cap({
+        skill_id: 'db.read',
+        agent_id: 'a',
+        description: 'Liest DB. Details egal.',
+        category: 'database',
+      }),
       cap({ skill_id: 'db.read', agent_id: 'b', description: 'Liest DB. y', health: 'offline' }),
       cap({ skill_id: 'ai.chat', agent_id: 'a', description: 'Chattet.' }),
     ];
@@ -230,9 +268,17 @@ describe('GET /api/capabilities/overview — TL-21 Skelett-Auskunft', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.count).toBe(2);
-    expect(body.skills.map((s: { skill_id: string }) => s.skill_id)).toEqual(['ai.chat', 'db.read']);
+    expect(body.skills.map((s: { skill_id: string }) => s.skill_id)).toEqual([
+      'ai.chat',
+      'db.read',
+    ]);
     const dbread = body.skills.find((s: { skill_id: string }) => s.skill_id === 'db.read');
-    expect(dbread).toMatchObject({ summary: 'Liest DB.', category: 'database', providers: 2, health: 'healthy' });
+    expect(dbread).toMatchObject({
+      summary: 'Liest DB.',
+      category: 'database',
+      providers: 2,
+      health: 'healthy',
+    });
     await app.close();
   });
 
@@ -258,17 +304,37 @@ describe('GET /api/capabilities/overview — TL-21 Skelett-Auskunft', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     // 'good' + 'bad.desc' + 'bad.cat' bleiben; der non-string-key wird übersprungen (bounded).
-    expect(body.skills.map((s: { skill_id: string }) => s.skill_id)).toEqual(['bad.cat', 'bad.desc', 'good']);
-    expect(body.skills.find((s: { skill_id: string }) => s.skill_id === 'bad.desc').summary).toBe('');
-    expect(body.skills.find((s: { skill_id: string }) => s.skill_id === 'bad.cat').category).toBe('');
+    expect(body.skills.map((s: { skill_id: string }) => s.skill_id)).toEqual([
+      'bad.cat',
+      'bad.desc',
+      'good',
+    ]);
+    expect(body.skills.find((s: { skill_id: string }) => s.skill_id === 'bad.desc').summary).toBe(
+      '',
+    );
+    expect(body.skills.find((s: { skill_id: string }) => s.skill_id === 'bad.cat').category).toBe(
+      '',
+    );
     await app.close();
   });
 });
 
 describe('GET /api/peers/overview — TL-21 Peer-Skelett-Auskunft', () => {
   const peer = (o: Record<string, unknown>) => ({
-    name: 'p', host: '10.10.10.1', port: 9440, status: 'online', lastSeen: 0, missedBeats: 0,
-    agentCard: null, libp2p: { peerId: null, peerIdVerified: false, listenMultiaddrs: [], connected: false, status: 'unavailable' },
+    name: 'p',
+    host: '10.10.10.1',
+    port: 9440,
+    status: 'online',
+    lastSeen: 0,
+    missedBeats: 0,
+    agentCard: null,
+    libp2p: {
+      peerId: null,
+      peerIdVerified: false,
+      listenMultiaddrs: [],
+      connected: false,
+      status: 'unavailable',
+    },
     ...o,
   });
 
@@ -276,10 +342,22 @@ describe('GET /api/peers/overview — TL-21 Peer-Skelett-Auskunft', () => {
     const mesh = {
       getOnlinePeers: () => [
         peer({
-          agentId: 'spiffe://thinklocal/node/beta', name: 'beta', status: 'online',
-          agentCard: { name: 'beta', version: '2.0.0', capabilities: { agents: [], skills: ['s1', 's2', 's3'], services: [], connectors: [] }, worker: { load_percent: 33 } },
+          agentId: 'spiffe://thinklocal/node/beta',
+          name: 'beta',
+          status: 'online',
+          agentCard: {
+            name: 'beta',
+            version: '2.0.0',
+            capabilities: { agents: [], skills: ['s1', 's2', 's3'], services: [], connectors: [] },
+            worker: { load_percent: 33 },
+          },
         }),
-        peer({ agentId: 'spiffe://thinklocal/node/alpha', name: 'alpha', status: 'offline', agentCard: null }),
+        peer({
+          agentId: 'spiffe://thinklocal/node/alpha',
+          name: 'alpha',
+          status: 'offline',
+          agentCard: null,
+        }),
       ],
     };
     const { app } = buildApp({ mesh: mesh as never });
@@ -292,7 +370,10 @@ describe('GET /api/peers/overview — TL-21 Peer-Skelett-Auskunft', () => {
       'spiffe://thinklocal/node/beta',
     ]);
     expect(body.peers.find((p: { agent_id: string }) => p.name === 'beta')).toMatchObject({
-      status: 'online', version: '2.0.0', skills: 3, load_percent: 33,
+      status: 'online',
+      version: '2.0.0',
+      skills: 3,
+      load_percent: 33,
     });
     await app.close();
   });
@@ -308,13 +389,98 @@ describe('GET /api/peers/overview — TL-21 Peer-Skelett-Auskunft', () => {
   it('malformed Agent-Card (geforgte skills/status) → 200, KEIN 500', async () => {
     const mesh = {
       getOnlinePeers: () => [
-        peer({ agentId: 'x', status: 'PWNED', agentCard: { capabilities: { skills: 'nope' }, worker: { load_percent: 'high' } } }),
+        peer({
+          agentId: 'x',
+          status: 'PWNED',
+          agentCard: { capabilities: { skills: 'nope' }, worker: { load_percent: 'high' } },
+        }),
       ],
     };
     const { app } = buildApp({ mesh: mesh as never });
     const res = await app.inject({ method: 'GET', url: '/api/peers/overview' });
     expect(res.statusCode).toBe(200);
-    expect(res.json().peers[0]).toMatchObject({ agent_id: 'x', status: 'unknown', skills: 0, load_percent: null });
+    expect(res.json().peers[0]).toMatchObject({
+      agent_id: 'x',
+      status: 'unknown',
+      skills: 0,
+      load_percent: null,
+    });
+    await app.close();
+  });
+});
+
+describe('GET /api/tasks/overview — TL-21 Task-Skelett-Auskunft (Slice 5)', () => {
+  const task = (o: Record<string, unknown>) => ({
+    id: 'id',
+    correlationId: 'c',
+    requester: 'r',
+    executor: null,
+    state: 'requested',
+    skillId: 's',
+    input: {},
+    result: null,
+    error: null,
+    createdAt: '2026-07-21T09:00:00.000Z',
+    deadline: null,
+    updatedAt: '2026-07-21T09:00:00.000Z',
+    ...o,
+  });
+
+  it('liefert Signale + Status-Histogramm (Blobs ersetzt), sortiert nach id', async () => {
+    const tasks = {
+      getAllTasks: () => [
+        task({ id: 'b', skillId: 'net.scan', state: 'completed', result: { rows: 3 } }),
+        task({ id: 'a', skillId: 'fs.read', state: 'failed', error: 'boom' }),
+      ],
+    };
+    const { app } = buildApp({ tasks: tasks as never });
+    const res = await app.inject({ method: 'GET', url: '/api/tasks/overview' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.count).toBe(2);
+    expect(body.tasks.map((t: { id: string }) => t.id)).toEqual(['a', 'b']);
+    // Blobs sind durch Signale ersetzt — kein input/result/error im Eintrag.
+    expect(Object.keys(body.tasks[0]).sort()).toEqual([
+      'executor',
+      'has_error',
+      'has_result',
+      'id',
+      'skill_id',
+      'state',
+    ]);
+    expect(body.tasks.find((t: { id: string }) => t.id === 'a')).toMatchObject({
+      state: 'failed',
+      has_error: true,
+      has_result: false,
+    });
+    expect(body.by_state).toMatchObject({ completed: 1, failed: 1, requested: 0 });
+    await app.close();
+  });
+
+  it('keine Tasks → count 0, Null-Histogramm', async () => {
+    const { app } = buildApp({ tasks: { getAllTasks: () => [] } as never });
+    const res = await app.inject({ method: 'GET', url: '/api/tasks/overview' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({
+      tasks: [],
+      count: 0,
+      by_state: { requested: 0, accepted: 0, rejected: 0, completed: 0, failed: 0, timeout: 0 },
+    });
+    await app.close();
+  });
+
+  it('malformed Task (geforgter state/executor) → 200, KEIN 500', async () => {
+    const tasks = {
+      getAllTasks: () => [task({ id: 'x', state: 'PWNED', executor: 42 })],
+    };
+    const { app } = buildApp({ tasks: tasks as never });
+    const res = await app.inject({ method: 'GET', url: '/api/tasks/overview' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.tasks[0]).toMatchObject({ id: 'x', state: 'requested', executor: null });
+    // Invariante: Summe(by_state) === count, auch bei malformed state.
+    const sum = Object.values(body.by_state as Record<string, number>).reduce((a, b) => a + b, 0);
+    expect(sum).toBe(body.count);
     await app.close();
   });
 });
