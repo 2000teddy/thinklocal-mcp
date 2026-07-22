@@ -75,7 +75,18 @@ export function buildGovernedToolListFetcher(deps: GovernedToolListFetcherDeps):
         `tool-class-drift: tools/list ${server} → 200 ohne result.tools-Array (unbrauchbar)`,
       );
     }
-    return extractToolNames(res.body);
+    const names = extractToolNames(res.body);
+    // CR-LOW (#315-Review): ein NICHT-leeres tools-Array, das KEINEN verwertbaren Namen liefert (alle
+    // Einträge malformed — MCP verlangt eigentlich `name`), ist ebenso unbrauchbar wie ein fehlendes
+    // Array: es als „Inventar = leer" zu lesen würde fälschlich ALLE kuratierten Tools als stale melden.
+    // Werfen → Seam → null → skip. Ein legitim LEERES Array (`[]`) bleibt gültiges leeres Inventar.
+    const rawTools = (res.body as { result?: { tools?: unknown } }).result?.tools;
+    if (Array.isArray(rawTools) && rawTools.length > 0 && names.length === 0) {
+      throw new Error(
+        `tool-class-drift: tools/list ${server} → 200 mit tools-Array ohne verwertbaren Namen (unbrauchbar)`,
+      );
+    }
+    return names;
   };
 }
 
