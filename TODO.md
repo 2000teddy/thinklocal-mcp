@@ -228,7 +228,7 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     Entscheidung). Auflagen A (pathLen/Chain-Enforcement in `verifyPeerCert` `tls.ts:729`), B (Intermediate-
     Expiry-Monitoring fehlt), C (keine Revocation-Infra; sonnet: gepinnte Denylist statt CRL/OCSP) — beide
     Modelle: **blockierend**. **Optional:** Re-Run mit codex/agy für Cross-Vendor.
-  - [x] **Cross-Vendor-Re-Versuch + Decision-Handoff** (2026-07-21): `docs/architecture/TL-14a-consensus-crossvendor-followup-2026-07-21.md`
+  - [x] **Cross-Vendor-Re-Versuch + Decision-Handoff** (2026-07-21, #310): `docs/architecture/TL-14a-consensus-crossvendor-followup-2026-07-21.md`
     — `pal:consensus` mit `gpt-5.5`(codex) + `gemini-pro`(agy) **erneut ausgeführt**; **beide erneut Provider-
     Fehler** (`codex`/`agy` weiterhin NOT in PATH, 2026-07-21 verifiziert) → Cross-Vendor-Pass **unverändert
     infra-blockiert**. **Kein** Konsens-Fehlschlag (5/6 stehen), nur die zusätzliche GPT/Gemini-Sicht fehlt →
@@ -254,19 +254,19 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
       regressionsfest, dass `verifyPeerCert` ein **flacher Ein-Aussteller-Verify** ist:
       `verifyPeerCert(root, leaf@intermediate) === false`, nur der **direkte** Aussteller (Intermediate)
       verifiziert (+4 Tests, Suite 1756 grün). **Kein Fix** — dokumentiert die Lücke.
-    - [~] **A — chain-fähiger Verify** (2026-07-20): neue Primitive `verifyPeerCertChain(trustAnchorPems,
+    - [~] **A — chain-fähiger Verify** (2026-07-20, #298): neue Primitive `verifyPeerCertChain(trustAnchorPems,
       chainPems)` (`tls.ts`) — volle Ketten-Verifikation (forge `verifyCertificateChain`: Signaturen/
       Gültigkeit/`cA`-Flag) **+ manuelles `pathLenConstraint`-Enforcement** (forge-Lücke: forge prüft pathLen
       NICHT — belegt + gefixt). +6 Tests (`chain-verify.test.ts`: gültige 2-Stufen-Kette, **pathLen-0-Reject**,
       Charakterisierung-Kontrast, Fremd-Anker, unvollständige Kette, fail-closed). Der **flache** `verifyPeerCert`
       + Charakterisierungs-Test #295 bleiben unverändert.
-      - [x] **A — D2-Invariante direkt getestet** (2026-07-21): fokussierter Negativtest — ein **Intermediate**
+      - [x] **A — D2-Invariante direkt getestet** (2026-07-21, #311): fokussierter Negativtest — ein **Intermediate**
         mit `pathLen 0` darf **keine Sub-CA** ausstellen (`Root(pathLen 2)→Intermediate(pathLen 0)→Sub-CA→Leaf`
         wird abgelehnt). Ergänzt den bestehenden pathLen-Test (Constraint am **Root**) um den Fall mit Constraint
         am **Intermediate** — isoliert (Root großzügig) + gepaarte Gegenprobe (dieselbe Kette **ohne** Sub-CA =
         gültig). **Code unverändert** (#298/#299 deckt es bereits ab); rein additive Coverage der D2-Kern-
         Sicherheitseigenschaft. +1 Test (`chain-verify.test.ts` 8), Suite **1857 grün**.
-      - [x] **A2 — Rewire `isRetainableCanonicalCert`** (2026-07-20): auf `verifyPeerCertChain(attestingCaPems,
+      - [x] **A2 — Rewire `isRetainableCanonicalCert`** (2026-07-20, #299): auf `verifyPeerCertChain(attestingCaPems,
         [certPem])` umgestellt (single-tier äquivalent). **Voraussetzung dafür gehärtet:** `verifyPeerCertChain`
         prüft jetzt auch das **Anker-Gültigkeitsfenster** (ADR-024 MEDIUM-1) — forge tut das nicht (Probe:
         `verifyPeerCertChain([expiredCA],[leaf])` gab fälschlich `true`); +1 Test. `tls.test.ts` 49/49 grün
@@ -274,7 +274,7 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
       - [ ] **A2-rest** (bewusst NICHT rewired): `selectTrustDistributionCa` (Semantik „welche CA verifiziert
         direkt" → gibt CA zurück, nicht bool) + Token-Onboard (Single-Anchor-Direktprüfung) — flacher
         `verifyPeerCert` ist dort der natürliche Fit; Rewire erst falls 2-Tier es erfordert (TL-14b).
-    - [x] **B — CA/Intermediate-Expiry-Monitoring** (2026-07-20): neue Quelle `getCaCertDaysLeft` (`tls.ts`,
+    - [x] **B — CA/Intermediate-Expiry-Monitoring** (2026-07-20, #297): neue Quelle `getCaCertDaysLeft` (`tls.ts`,
       liest `tls/ca.crt.pem`) + `subject`-Label im `cert-expiry-monitor` (Default `'Node'` → Meldungen byte-identisch, Audit-Detail additiv) +
       zweiter CA-Monitor in `index.ts` (subject `'CA'`, gleiche Schwellen, im Shutdown geräumt). Damit ist die
       CA/das Intermediate **live** überwacht (vorher nur Node-Leaf). +6 Tests, Suite **1762 grün**. Reissue
@@ -305,19 +305,19 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     benutzt → strukturelle Parität (kein Drift, CR-MEDIUM-Fix). +6 Tests (echtes registriertes Tool via
     `_registeredTools[name].handler` invoked; Envelope-Unit). Read-only/additiv. Optional danach: Skelett
     für Peers/Tools/Tasks.
-  - [x] **Slice 3 (Peers)** (2026-07-20): REST `GET /api/peers/overview` + reines Modul `peer-skeleton.ts`
+  - [x] **Slice 3 (Peers)** (2026-07-20, #303): REST `GET /api/peers/overview` + reines Modul `peer-skeleton.ts`
     (`buildPeerSkeleton`/`buildPeerOverview`, `{ agent_id, name, status, version, skills:count, load_percent }`,
     sortiert nach `agent_id`) — ersetzt für „wer ist im Mesh?" die vollen Agent-Card-`capabilities`-Arrays durch
     **Zähler**; same-source `getOnlinePeers()`, Details via unverändertes `GET /api/peers`. Total gegen malformed
     Wire-Card-Daten (kein 500er). +15 Tests, Suite **1824 grün**. Read-only/additiv. Optional danach: MCP-Tool
     All-known-Variante (inkl. offline) = eigener Slice (neuer Mesh-Getter). Tools/Tasks-Skelett bleibt offen.
-  - [x] **Slice 4 (Peer-MCP-Tool)** (2026-07-20): identische Peer-Skelett-Projektion als MCP-Tool
+  - [x] **Slice 4 (Peer-MCP-Tool)** (2026-07-20, #304): identische Peer-Skelett-Projektion als MCP-Tool
     `list_peers_overview` (Agent-Kontext-Ökonomie). Gemeinsamer Envelope-Builder `buildPeerOverview` von REST
     **und** MCP benutzt (same-source `getOnlinePeers()`) → strukturelle Parität, kein Drift — genau die
     Trennung wie Slice 1→2. +4 Tests (echtes registriertes Tool via `_registeredTools[name].handler`;
     Envelope-Parität; leeres Mesh; malformed-Card→kein throw), Suite **1828 grün**. Read-only/additiv.
     Tools/Tasks-Skelett bleibt offen.
-  - [x] **Slice 5 (Task-Skelett REST + MCP)** (2026-07-21): dasselbe Muster für **Tasks** — reines Modul
+  - [x] **Slice 5 (Task-Skelett REST + MCP)** (2026-07-21, #309): dasselbe Muster für **Tasks** — reines Modul
     `task-skeleton.ts` (`buildTaskSkeleton`/`buildTaskHistogram`/`buildTaskOverview`), REST `GET /api/tasks/overview`
     + MCP-Tool `list_tasks_overview`, beide über den **einen** Envelope-Builder `buildTaskOverview(tasks.getAllTasks())`
     → strukturelle Parität, kein Drift. Ein Eintrag pro Task ersetzt die vollen `input`/`result`/`error`-Blobs durch
@@ -326,7 +326,7 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     Total gegen malformed/geforgte Felder (kein 500er; unbekannter `state`→`requested` konsistent gezählt).
     +25 Tests (18 pure `task-skeleton.test.ts` + 4 MCP `mcp-server.test.ts` + 3 REST `dashboard-api.test.ts`),
     Suite **1856 grün**. Read-only/additiv, `index.ts` unangetastet.
-  - [x] **Slice 6 (Tool-Skelett REST + MCP)** (2026-07-21): dasselbe Muster für die **MCP-Tool-Fläche** —
+  - [x] **Slice 6 (Tool-Skelett REST + MCP)** (2026-07-21, #312): dasselbe Muster für die **MCP-Tool-Fläche** —
     reines Modul `tool-skeleton.ts` (`buildToolSkeleton`/`buildToolOverview`), REST `GET /api/tools/overview`
     + MCP-Tool `list_tools_overview`, beide über den **einen** Envelope-Builder
     `buildToolOverview(registry.getAllCapabilities())` (same-source, gefiltert auf `category='mcp'`) →

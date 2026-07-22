@@ -8,7 +8,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### feat(mcp,api): TL-21 Slice 6 — Tool-Skelett (`GET /api/tools/overview` + `list_tools_overview`) (2026-07-21 17:15)
+### docs(reconcile): PR-Nummern-Nachtrag COMPLIANCE + CHANGES + TODO-Cursor (#297–#312) (2026-07-22 06:05)
+**Doc-only** Bookkeeping-Reconcile (Hermes-Housekeeping nach den 2026-07-20/21-Merges). Seit #296 (deckte
+#288–#295 ab) waren **#297–#312** gemergt, aber unnummeriert: 16 COMPLIANCE-Zeilen mit `(offen, base=main)`,
+16 CHANGES-Überschriften ohne `#NNN`, TODO-höchste-PR-Ref bei #299. Fix: COMPLIANCE-Erst-Spalten auf die
+verifizierten Merge-Nummern (#297–#312, 9→10 Spalten) + #296-Selbst-Referenz; CHANGES-Überschriften um
+`, #NNN)` ergänzt (#296–#312); 9 gemergte TODO-Slice-Einträge annotiert → Cursor rückt auf **#312**. **Jede
+Zuordnung gegen den gemergten PR-Titel/-Timestamp verifiziert** (`gh pr list --state merged`); reine 1:1
+in-place-Annotation, keine Inhaltsänderung. `changes/2026-07-22_reconcile-pr-numbers-297-312.md`.
+
+### feat(mcp,api): TL-21 Slice 6 — Tool-Skelett (`GET /api/tools/overview` + `list_tools_overview`) (2026-07-21 17:15, #312)
 **Additiver Read-View** (Kap. 06) — schließt TL-21 ab (Skills/Peers/Tasks/Tools je REST+MCP). Neues reines
 Modul `tool-skeleton.ts` (`buildToolSkeleton`/`buildToolOverview`) projiziert die im Mesh geteilten
 **MCP-Server** (Capabilities mit `category='mcp'`) in eine „ein Eintrag pro Server"-Übersicht
@@ -23,7 +32,7 @@ ab → jetzt fail-**closed** auf mind. `gate` (`providerTier`), plus 3 Regressio
 unangetastet. Doku: `TL-21-skeleton-disclosure.md` §4 (Slice 6), `docs/API-REFERENCE.md`, `TODO.md`
 (TL-21 → vollständig), `changes/2026-07-21_tl21-tools-overview.md`.
 
-### test(tls): TL-14a Slice A — D2-Invariante „Intermediate darf keine Sub-CA ausstellen" (2026-07-21 16:10)
+### test(tls): TL-14a Slice A — D2-Invariante „Intermediate darf keine Sub-CA ausstellen" (2026-07-21 16:10, #311)
 **Test-only.** Der chain-fähige Verify + `pathLenConstraint`-Enforcement (`verifyPeerCertChain`/
 `enforcePathLenConstraint`, `tls.ts`) war bereits gelandet (#298/#299) — **nichts re-implementiert.** Der
 bestehende pathLen-Test setzte den Constraint aber am **Root**; die **D2-Kern-Sicherheitseigenschaft** (ein
@@ -33,7 +42,7 @@ wird abgelehnt (Root großzügig → isoliert die Intermediate-Grenze), plus gep
 **ohne** Sub-CA = gültig). +1 Test (jetzt 8), Suite **1857 grün**, `tls.ts` unverändert.
 `TODO.md` + `changes/2026-07-21_tl14a-sliceA-intermediate-subca-test.md`.
 
-### docs(arch): TL-14a Cross-Vendor-Consensus-Nachlauf + Decision-Handoff (2026-07-21 15:40)
+### docs(arch): TL-14a Cross-Vendor-Consensus-Nachlauf + Decision-Handoff (2026-07-21 15:40, #310)
 **Doc-only.** Führt den in `TL-14a-consensus-result-D1-D6.md` benannten Cross-Vendor-`pal:consensus`-Re-Versuch
 aus: Roster `gpt-5.5`(codex) + `gemini-pro`(agy) — **beide erneut Provider-Fehler** (`codex`/`agy` weiterhin
 NOT in PATH, 2026-07-21 verifiziert) → Cross-Vendor-Pass **unverändert infra-blockiert**. Kein Konsens-
@@ -44,7 +53,7 @@ Entscheidung (Korridor 1–3 J), Auflagen A/B/C blockierend; die einzigen agent-
 bleiben die Code-Slices A (chain-fähiger `verifyPeerCert` + pathLen-Enforcement) und B (Intermediate-Expiry-
 Monitoring) vor der ADR-045-Finalisierung. `TODO.md` + `changes/2026-07-21_tl14a-crossvendor-followup.md`.
 
-### feat(mcp,api): TL-21 Slice 5 — Task-Skelett (`GET /api/tasks/overview` + `list_tasks_overview`) (2026-07-21 09:45)
+### feat(mcp,api): TL-21 Slice 5 — Task-Skelett (`GET /api/tasks/overview` + `list_tasks_overview`) (2026-07-21 09:45, #309)
 **Additiver Read-View** (Kap. 06, Kontext-Ökonomie) — dasselbe Muster wie das Peer-Skelett (Slice 3/4, #303/#304).
 Neues reines Modul `task-skeleton.ts` (`buildTaskSkeleton`/`buildTaskHistogram`/`buildTaskOverview`, deterministisch,
 kein Date/Random, total gegen malformed Felder), ein REST-Endpoint `GET /api/tasks/overview` und ein MCP-Tool
@@ -58,7 +67,7 @@ Suite **1856 grün**. Doku: `docs/architecture/TL-21-skeleton-disclosure.md` §4
 (tasks/overview **und** die bislang undokumentierte peers/overview-Zeile nachgetragen), `TODO.md`,
 `changes/2026-07-21_tl21-tasks-overview.md`.
 
-### docs(arch): ADR-046 Wire-Feature/Version-Exchange — Scoping (2026-07-21 08:10)
+### docs(arch): ADR-046 Wire-Feature/Version-Exchange — Scoping (2026-07-21 08:10, #308)
 **Doc-only** ADR (Status **Proposed**). Scoping des TL-12-Slice-C-Prerequisites (aus dem Slice-C-Park #307):
 das fehlende maschinen-prüfbare „Peer ≥ Feature X"-Signal. Ist-Stand geerdet: `AgentCard`
 (`agent-card.ts:22-111`) hat kein `protocol_version`/`features`; `version-compat.ts` ist außerhalb Tests
@@ -69,7 +78,7 @@ additiver optionaler `protocol`-Block (`protocol_version`/`min_compatible_versio
 Entsperrt Slice-C-V2. **Impl CO-gated** (Vokabular/Semver-Governance), rein additiv; kein ORDER-Handler/
 Sender-Flip. Beleg: `docs/architecture/ADR-046-wire-feature-version-exchange.md`. Kein Code/Test/Deploy/Secret.
 
-### docs(arch): TL-12 Slice C Scoping/Park — first-class ORDER Gate-Check (2026-07-21 07:20)
+### docs(arch): TL-12 Slice C Scoping/Park — first-class ORDER Gate-Check (2026-07-21 07:20, #307)
 **Doc-only** Scoping/Park (analog Slice-B-Scoping-Doc). Gate-Check für TL-12 Slice C (first-class
 `MessageType='ORDER'`, Marker ablösen) ergab **PARK — nicht ehrlich low-ambiguity baubar**: (V1) top-level
 ORDER fällt in den `default`-Drop des Dispatch (`index.ts:932-934`) → still verworfen gegen nicht upgegradete
@@ -80,7 +89,7 @@ ungenutzt, kein Wire-Versionsaustausch; (V3) selbst der additive Empfänger-Hand
 Wire-Level-Feature/Version-Exchange (Agent-Card-Feld), nicht Slice C selbst. Beleg:
 `docs/architecture/TL-12-slice-c-scoping.md`. Kein Code/Test/Deploy/Secret.
 
-### docs(todo): TL-00d verifiziert erledigt — cert-renew-Knobs dokumentiert (2026-07-20 18:05)
+### docs(todo): TL-00d verifiziert erledigt — cert-renew-Knobs dokumentiert (2026-07-20 18:05, #306)
 **Doc-only** Backlog-Cleanup. TL-00d („#242-Konfig-Keys `cert.renew_before_days` + `TLMCP_CERT_RENEW_BEFORE_DAYS`
 dokumentieren") stand mit „evtl. bereits erledigt, verifizieren" offen. Wahrheitsgetreue Prüfung gegen HEAD:
 `docs/USER-GUIDE.md` deckt **beide** Knobs vollständig & korrekt ab — TOML-`[cert]`-Beispiel (l.79-82) +
@@ -91,7 +100,7 @@ mit Mapping-Tabelle TOML-Key ↔ Env ↔ Default ↔ Bereich ↔ Bedeutung, #242
 Abdeckung, kein zusätzlicher Doc-Change nötig; TL-00d in `TODO.md` auf `[x]` mit belegter Verifikationsnotiz.
 Kein Code/Test/Deploy/Secret.
 
-### test(tls): TL-11 cardServer-mTLS-Wiring-Test — CR-M2-Follow-up (2026-07-20 17:15)
+### test(tls): TL-11 cardServer-mTLS-Wiring-Test — CR-M2-Follow-up (2026-07-20 17:15, #305)
 **Test-only**, additive Regressions-Absicherung — schließt die im CR von #283 offengelassene Coverage-Lücke
 (CR-M2). #283 prüfte die mTLS-Pflicht (`requestCert`/`rejectUnauthorized`) über einen **zweiten** Harness,
 **nicht** die reale Klasse `AgentCardServer` → ein Regress von `requestCert` in `agent-card.ts` blieb
@@ -104,7 +113,7 @@ darunterliegenden Node-`tls.Server`** (`fastify.server`) ab → beweist agent-ca
 revertiert; der Guard beißt nachweislich. Full-Suite **1831 grün** (135 Files), tsc(strict) 0, neue Datei
 eslint 0 + prettier clean. `agent-card.ts` unverändert, kein Produktionscode/State/Deploy/Secret.
 
-### feat(mcp): TL-21 Peer-Skelett als MCP-Tool — `list_peers_overview` (2026-07-20 16:36)
+### feat(mcp): TL-21 Peer-Skelett als MCP-Tool — `list_peers_overview` (2026-07-20 16:36, #304)
 Additives, **read-only** MCP-Companion zur bereits gemergten REST-Peer-Übersicht (`GET /api/peers/overview`,
 #303) — genau die Slice-1→Slice-2-Trennung, mit der schon `list_capabilities_overview` von seinem
 REST-Zwilling getrennt wurde. Neues MCP-Tool `list_peers_overview` (keine Parameter) in `mcp-server.ts`,
@@ -119,7 +128,7 @@ Suite **1828 grün** (134 Files), tsc(strict) 0, geänderte Dateien eslint/prett
 (medium) — keine Korrektheits-Bugs, kein HIGH/CRITICAL (1:1-Spiegel des gemergten Slice-2/3-Pfads). **PC:**
 Secret-Scan clean. `index.ts` unangetastet, kein State/Deploy/Secret, Risiko-Delta **null**.
 
-### feat(api): TL-21 Peer-Skelett-Auskunft — `GET /api/peers/overview` (2026-07-20 14:12)
+### feat(api): TL-21 Peer-Skelett-Auskunft — `GET /api/peers/overview` (2026-07-20 14:12, #303)
 Additive, **read-only** Zweitstufe der TL-21-Skelett-Offenlegung (Kap. 06), nach `capabilities/overview`
 (Slice 1/2) jetzt für **Peers**. Neu `packages/daemon/src/peer-skeleton.ts`: reine, deterministische
 Projektion `buildPeerSkeleton`/`buildPeerOverview` (`{ agent_id, name, status, version, skills:count,
@@ -133,7 +142,7 @@ Härtungs-Klasse wie #281). Neuer Endpoint `GET /api/peers/overview` (rate-limit
 **null**. Optionales Folgeslice: MCP-Tool `list_peers_overview` (derselbe Builder, wie Slice 1→2). +15
 Tests, Full-Suite **1824 grün** (134 Files), `tsc` strict 0, eslint/prettier neue Dateien 0.
 
-### feat(gate): TL-09c realer TelegramMeldekanal — Inline-Keyboard → approvals.ts (2026-07-20 12:58)
+### feat(gate): TL-09c realer TelegramMeldekanal — Inline-Keyboard → approvals.ts (2026-07-20 12:58, #302)
 Erster **realer** `Meldekanal`: `TelegramMeldekanal implements Meldekanal` (ADR-038, neu
 `packages/daemon/src/telegram-meldekanal.ts`). Legt eine angehaltene schreibende MCP-`gate`-Anfrage per
 Telegram-Inline-Keyboard vor (`tlgate:approve|reject:<id>`) und spiegelt die Entscheidung durablen in den
@@ -149,7 +158,7 @@ ignoriert, Doppelklick idempotent, `create`/`decide`/`sendPrompt`-Fehler ⇒ `er
 **null**); Aktivierung (Bot-Token/Freigabe-Chat) Christian-gegatet. +12 Tests, Full-Suite 1809 grün (133
 Files), `tsc` strict 0.
 
-### docs(security): TL-10 Freigabe-Matrix — Guardrails + „deklarativ ≠ enforced" (D3) (2026-07-20 11:44)
+### docs(security): TL-10 Freigabe-Matrix — Guardrails + „deklarativ ≠ enforced" (D3) (2026-07-20 11:44, #301)
 Neue SECURITY.md-Sektion „Freigabe-Matrix (TL-10) — Freigabe-/Runtime-Entscheidung & Guardrails" (der vom
 §5-CO geforderte D3-Anteil, VOR Slice B). Kernaussage sichtbar gemacht: **`decider: human:<id>` ist v1 REIN
 DEKLARATIV, NICHT durchgesetzt** — Betreiber dürfen sich nicht als Zugriffskontrolle darauf verlassen;
@@ -160,7 +169,7 @@ Fail-closed-Guardrails (Parse-Reject ⇒ ganze Matrix ungültig; Default-Deny 40
 und die **owner-gated** Teile (Aktivierungs-Flag-Flip, D3-Enforcement-Design, Policy-Änderungen). **Doc-only,
 kein Runtime-Change, kein Deploy/Secret** — der Resolver (Slice A) bleibt unverdrahtet.
 
-### feat(gate): TL-10 Freigabe-Matrix Slice A — reiner Parser/Resolver/Guard (2026-07-20 11:12)
+### feat(gate): TL-10 Freigabe-Matrix Slice A — reiner Parser/Resolver/Guard (2026-07-20 11:12, #300)
 Erste repo-schreibende TL-10-Slice, freigeschaltet durch den read-only §5-CO (`pal:consensus` opus 8/10 +
 sonnet 8/10, einstimmig). Neu `packages/daemon/src/freigabe-matrix.ts` — **reine Funktionen, KEINE
 Verdrahtung**: `parseFreigabeMatrix(raw, knownServers)` (fail-closed, alle CO-§2.2-Rejects: unbekannte Keys,
@@ -174,7 +183,7 @@ B), **D4** gegen `resolveMcp`-`knownServers`, **D5** leer/kein-Match ⇒ Default
 Grammatik-validiert, NICHT durchgesetzt); braucht Christian-Sign-off + SECURITY.md-Notiz „deklarativ ≠ enforced"
 VOR Slice B. `mcp-ingress.ts`/`-api.ts` unangetastet, kein Runtime-Change, kein Deploy/Secret.
 
-### feat(cert): Rewire `isRetainableCanonicalCert` auf Chain-Verify + Anker-Validity-Härtung (2026-07-20 07:36)
+### feat(cert): Rewire `isRetainableCanonicalCert` auf Chain-Verify + Anker-Validity-Härtung (2026-07-20 07:36, #299)
 Stellt die erste Trust-Entscheidung von der flachen Ein-Aussteller-Prüfung auf die chain-fähige Primitive um:
 `isRetainableCanonicalCert` nutzt jetzt `verifyPeerCertChain(trustedAttestingCaPems, [certPem])` statt
 `some(verifyPeerCert(ca, cert))` — für die heutige **einstufige** CA äquivalent (Leaf direkt von einer
@@ -188,7 +197,7 @@ Direktprüfung) — dort ist der flache `verifyPeerCert` der natürliche Fit. `t
 abgelaufene-Attesting-CA-Retention), +1 chain-verify-Test, Suite **1769 grün**, tsc(strict)/neue-Code-Lint 0.
 Kein Deploy/Secret/Cross-Host.
 
-### feat(cert): chain-fähiger Verify + pathLen-Enforcement (ADR-045 Vorbedingung A) (2026-07-20 07:18)
+### feat(cert): chain-fähiger Verify + pathLen-Enforcement (ADR-045 Vorbedingung A) (2026-07-20 07:18, #298)
 Schließt die Primitive-Seite von Blocker A: der flache `verifyPeerCert` konnte ein Leaf nur gegen seinen
 **direkten** Aussteller prüfen (keine Kette, kein `pathLen` — belegt in `tls-chain-characterization.test.ts`
 #295). Neu **`verifyPeerCertChain(trustAnchorPems, chainPems)`** (`tls.ts`): baut die volle Kette (leaf-first)
@@ -205,7 +214,7 @@ Trust-Caller (`isRetainableCanonicalCert`/`selectTrustDistributionCa`/Token-Onbo
 das Umstellen auf die Chain-Primitive ist ein Folge-Slice (erst mit echter 2-Tier-Hierarchie / TL-14b). Suite
 **1768 grün**, tsc(strict) 0, neue-Datei-Lint 0. Kein Deploy/Secret/Cross-Host.
 
-### feat(cert): CA/Intermediate-Expiry-Monitoring (ADR-045 Vorbedingung B) (2026-07-20 06:40)
+### feat(cert): CA/Intermediate-Expiry-Monitoring (ADR-045 Vorbedingung B) (2026-07-20 06:40, #297)
 Schließt die code-gegroundete Vorbedingung B: der Live-Ablauf-Monitor sah bisher **nur** das Node-Leaf
 (`getCertDaysLeft` → `tls/node.crt.pem`) — eine ablaufende **CA/ein Intermediate** lief lautlos ab
 (Ausstellungs-Tod). Neu: **`getCaCertDaysLeft(dataDir)`** (`tls.ts`, liest `tls/ca.crt.pem`; gemeinsamer
@@ -218,7 +227,7 @@ unverändert grün) + **zweiter CA-Monitor** in `index.ts` (subject `'CA'`, glei
 grün**, tsc(strict) 0, neue-Datei-Lint 0. Reissue bleibt Start-gebunden (own-CA); token-onboarded Nodes / ein
 künftiges Intermediate brauchen weiter einen manuellen Pfad (dokumentiert). Kein Deploy/Secret/Cross-Host.
 
-### docs(reconcile): PR-Nummern-Nachtrag COMPLIANCE + CHANGES (#288–#295) + fehlender #290-Eintrag (2026-07-20 06:08)
+### docs(reconcile): PR-Nummern-Nachtrag COMPLIANCE + CHANGES (#288–#295) + fehlender #290-Eintrag (2026-07-20 06:08, #296)
 Reconcile-Wächter (2026-07-20 03:34) meldete Doku-Drift gegen `main`: die CHANGES-Einträge **und**
 COMPLIANCE-TABLE-Zeilen für die gemergten PRs **#288–#295** trugen **keine PR-Nummer** (nur Timestamp bzw.
 Spalte `(offen, base=main)` + Topic-Label), und **#290** (docs(ca) Consensus-Brief, Peer-Agent-PR) hatte
