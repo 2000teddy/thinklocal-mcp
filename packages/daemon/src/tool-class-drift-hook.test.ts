@@ -145,6 +145,38 @@ describe('buildGovernedToolListFetcher', () => {
     });
     await expect(fetchTools('unifi')).resolves.toEqual([]);
   });
+
+  it('CR-LOW: NICHT-leeres tools-Array ohne verwertbaren Namen (alle Einträge malformed) → wirft, KEIN []', async () => {
+    const fetchTools = buildGovernedToolListFetcher({
+      selfAgentId: 'self',
+      getCapabilities: () => [unifiCap()],
+      resolveEndpoint: () => 'https://10.10.10.80:9440',
+      httpForward: vi.fn<McpHttpForward>().mockResolvedValue({
+        status: 200,
+        body: {
+          jsonrpc: '2.0',
+          id: 1,
+          result: { tools: [{}, { name: 123 }, null, { noName: 1 }] },
+        },
+      }),
+      requireServerIdentity: false,
+    });
+    await expect(fetchTools('unifi')).rejects.toThrow(/ohne verwertbaren Namen/);
+  });
+
+  it('CR-LOW: tools-Array mit MINDESTENS einem gültigen Namen (Rest malformed) → resolved die gültigen', async () => {
+    const fetchTools = buildGovernedToolListFetcher({
+      selfAgentId: 'self',
+      getCapabilities: () => [unifiCap()],
+      resolveEndpoint: () => 'https://10.10.10.80:9440',
+      httpForward: vi.fn<McpHttpForward>().mockResolvedValue({
+        status: 200,
+        body: { jsonrpc: '2.0', id: 1, result: { tools: [{ name: 'list_sites' }, {}, null] } },
+      }),
+      requireServerIdentity: false,
+    });
+    await expect(fetchTools('unifi')).resolves.toEqual(['list_sites']);
+  });
 });
 
 describe('runGovernedToolClassDriftChecks', () => {
@@ -247,6 +279,22 @@ describe('runGovernedToolClassDriftChecks', () => {
       httpForward: vi.fn<McpHttpForward>().mockResolvedValue({
         status: 200,
         body: { jsonrpc: '2.0', id: 1, result: {} },
+      }),
+      requireServerIdentity: false,
+    });
+    await runGovernedToolClassDriftChecks({ servers: ['unifi'], fetchTools, audit });
+    expect(audit).not.toHaveBeenCalled();
+  });
+
+  it('CR-LOW end-to-end: echter Fetcher + 200 mit all-malformed tools → KEIN false-positive „alles stale"', async () => {
+    const audit = vi.fn();
+    const fetchTools = buildGovernedToolListFetcher({
+      selfAgentId: 'self',
+      getCapabilities: () => [unifiCap()],
+      resolveEndpoint: () => 'https://10.10.10.80:9440',
+      httpForward: vi.fn<McpHttpForward>().mockResolvedValue({
+        status: 200,
+        body: { jsonrpc: '2.0', id: 1, result: { tools: [{}, { name: 42 }] } },
       }),
       requireServerIdentity: false,
     });

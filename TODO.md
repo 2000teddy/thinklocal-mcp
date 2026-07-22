@@ -80,6 +80,11 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
       false-positive „alles stale" bei 200-ohne-tools) gefixt** (`hasToolsArray`-Guard + Regressionstests),
       kein HIGH. +22 Tests, Suite **1919 grün**. **Live-E2E gegen echten unifi-Peer** = eigenes Live-Fenster
       (kein Peer im CI); Logik seam-getestet.
+    - [x] **CR-LOW-Härtung** (2026-07-22, Post-#315-Review): der Fetcher wirft jetzt auch bei einem
+      **nicht-leeren** `tools`-Array **ohne** verwertbaren Namen (alle Einträge malformed) — statt `[]`
+      zurückzugeben, was fälschlich ALLE kuratierten Tools als stale gemeldet hätte (dieselbe Klasse wie M1,
+      aber die Sibling-Lücke). Ein legitim **leeres** `[]` bleibt gültiges leeres Inventar. +3 Regressionstests
+      (Fetcher all-malformed→Wurf, partiell-malformed→gültige Namen, E2E kein false-positive), Suite **1922 grün**.
     - [ ] ⛔ **Gate-Flip BLOCKED (Christian-Gate):** sensitive → allow-with-redaction braucht kuratierte
       Safe-Field-Allowlist; die 10 sensitiven unifi-Tools haben **kein `outputSchema`** → Feldnamen nur per
       Tool-Aufruf (= Secret-Exposition). Unblock: (c) Doku-/Quell-Transkription der Feldnamen (UniFi-API +

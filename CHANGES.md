@@ -8,6 +8,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### fix(mcp): TL-08 Slice 2c Drift-Hook — Härtung gegen all-malformed tools-Array (CR-LOW) (2026-07-22 09:45)
+**Additive Fail-safe-Härtung** — schließt die LOW-Sibling-Lücke aus dem externen #315-Review. Der M1-Guard
+(`hasToolsArray`) fängt ein 200 **ohne** `result.tools`-Array; ein 200 mit **nicht-leerem** Array, dessen
+Einträge **alle** malformed sind (kein gültiger `name`), lieferte aber `[]` → `computeToolClassDrift` meldete
+fälschlich **alle** kuratierten Tools als stale (ein spurioses `TOOL_CLASS_DRIFT`-Audit). Fix:
+`buildGovernedToolListFetcher` wirft jetzt auch bei „nicht-leeres Array → 0 verwertbare Namen" (→ Seam →
+null → skip); legitim leeres `[]` bleibt gültig, ≥1 gültiger Name liefert die gültigen. Read-only, kein
+Gate-Flip. +3 Tests, Suite **1922 grün**. `changes/2026-07-22_drift-hook-allmalformed-guard.md`.
+
 ### feat(mcp): TL-08 Slice 2c — Live-Tool-Class-Drift-Check-Hook (ADR-042) (2026-07-22 08:30)
 **Additive Verdrahtung** (read-only, **kein Gate-Flip**) — verdrahtet den vorhandenen, ungenutzten
 Drift-Check-Seam `checkToolClassDrift` ehrlich in den Daemon. Neu `tool-class-drift-hook.ts`
