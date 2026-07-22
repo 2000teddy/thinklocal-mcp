@@ -67,7 +67,10 @@ describe('MeldekanalRegistry — Fail-safe Deny-Default', () => {
 describe('MeldekanalRegistry — Kanal-Auswahl', () => {
   it('erster gesunder Kanal gewinnt (approved) und trägt die channelId', async () => {
     const reg = new MeldekanalRegistry(
-      [healthy('a', { outcome: 'approved', channelId: 'a' }), healthy('b', { outcome: 'rejected', channelId: 'b' })],
+      [
+        healthy('a', { outcome: 'approved', channelId: 'a' }),
+        healthy('b', { outcome: 'rejected', channelId: 'b' }),
+      ],
       FAST,
     );
     const d = await reg.requestApproval(REQ);
@@ -78,7 +81,10 @@ describe('MeldekanalRegistry — Kanal-Auswahl', () => {
 
   it('unhealthy Kanal wird übersprungen, der nächste gesunde genutzt', async () => {
     const reg = new MeldekanalRegistry(
-      [unhealthyButWouldApprove('dead'), healthy('live', { outcome: 'rejected', channelId: 'live' })],
+      [
+        unhealthyButWouldApprove('dead'),
+        healthy('live', { outcome: 'rejected', channelId: 'live' }),
+      ],
       FAST,
     );
     const d = await reg.requestApproval(REQ);
@@ -88,7 +94,10 @@ describe('MeldekanalRegistry — Kanal-Auswahl', () => {
 
   it('erster gesunder Kanal ist TERMINAL: rejected fällt NICHT auf einen approvenden zweiten Kanal durch', async () => {
     const reg = new MeldekanalRegistry(
-      [healthy('first', { outcome: 'rejected', channelId: 'first' }), healthy('second', { outcome: 'approved', channelId: 'second' })],
+      [
+        healthy('first', { outcome: 'rejected', channelId: 'first' }),
+        healthy('second', { outcome: 'approved', channelId: 'second' }),
+      ],
       FAST,
     );
     const d = await reg.requestApproval(REQ);
@@ -166,7 +175,7 @@ describe('MeldekanalRegistry — Fail-open-Fallen', () => {
     const bad: Meldekanal = {
       id: 'bad2',
       isHealthy: async () => true,
-      requestApproval: async () => ({ outcome: 'yes-please' } as unknown as ApprovalDecision),
+      requestApproval: async () => ({ outcome: 'yes-please' }) as unknown as ApprovalDecision,
     };
     const reg = new MeldekanalRegistry([bad], FAST);
     const d = await reg.requestApproval(REQ);
@@ -326,7 +335,10 @@ describe('MeldekanalRegistry — Fail-open-Fallen', () => {
             setTimeout(() => reject(new Error('late boom')), 40);
           }),
       };
-      const reg = new MeldekanalRegistry([lateReject], { healthTimeoutMs: 30, approvalTimeoutMs: 10 });
+      const reg = new MeldekanalRegistry([lateReject], {
+        healthTimeoutMs: 30,
+        approvalTimeoutMs: 10,
+      });
       const d = await reg.requestApproval(REQ);
       expect(d.outcome).toBe('timeout');
       await new Promise((r) => setTimeout(r, 60));
@@ -343,5 +355,138 @@ describe('isApproved — Allowlist', () => {
     for (const outcome of ['rejected', 'denied-no-channel', 'timeout', 'error'] as const) {
       expect(isApproved({ outcome })).toBe(false);
     }
+  });
+});
+
+// --- TL-10 D2-Prep: requestApprovalOn(channelId, req) — gezielte Kanal-Bindung, fail-closed ---
+
+/** Gesunder Kanal, der aufzeichnet, ob requestApproval tatsächlich aufgerufen wurde. */
+function healthySpy(id: string, decision: ApprovalDecision): Meldekanal & { asked: () => boolean } {
+  let wasAsked = false;
+  return {
+    id,
+    isHealthy: async () => true,
+    requestApproval: async () => {
+      wasAsked = true;
+      return decision;
+    },
+    asked: () => wasAsked,
+  };
+}
+
+describe('MeldekanalRegistry.requestApprovalOn — gezielte Kanal-Bindung (TL-10 D2-Prep)', () => {
+  it('fragt GENAU den adressierten Kanal (nicht „erster gesunder") und gibt dessen Entscheidung', async () => {
+    const a = healthySpy('a', { outcome: 'approved', channelId: 'a' });
+    const b = healthySpy('b', { outcome: 'rejected', channelId: 'b' });
+    const reg = new MeldekanalRegistry([a, b], FAST);
+    // b adressieren, obwohl a (erster) gesund wäre → beweist Bindung statt Reihenfolge.
+    const d = await reg.requestApprovalOn('b', REQ);
+    expect(d.outcome).toBe('rejected');
+    expect(d.channelId).toBe('b');
+    expect(a.asked()).toBe(false); // der nicht-adressierte gesunde Kanal wird NICHT gefragt
+    expect(b.asked()).toBe(true);
+  });
+
+  it('approved des adressierten Kanals → isApproved true', async () => {
+    const reg = new MeldekanalRegistry(
+      [healthy('ch', { outcome: 'approved', channelId: 'ch' })],
+      FAST,
+    );
+    const d = await reg.requestApprovalOn('ch', REQ);
+    expect(isApproved(d)).toBe(true);
+  });
+
+  it('UNBEKANNTE channelId → denied-no-channel (niemand gefragt), note nennt die id', async () => {
+    const spy = healthySpy('real', { outcome: 'approved', channelId: 'real' });
+    const reg = new MeldekanalRegistry([spy], FAST);
+    const d = await reg.requestApprovalOn('does-not-exist', REQ);
+    expect(d.outcome).toBe('denied-no-channel');
+    expect(d.note).toMatch(/does-not-exist/);
+    expect(spy.asked()).toBe(false);
+  });
+
+  it('adressierter Kanal UNHEALTHY → denied-no-channel (kein Fallback), Kanal NICHT gefragt', async () => {
+    let asked = false;
+    const ch: Meldekanal = {
+      id: 'ch',
+      isHealthy: async () => false,
+      requestApproval: async () => {
+        asked = true;
+        return { outcome: 'approved', channelId: 'ch' };
+      },
+    };
+    const reg = new MeldekanalRegistry(
+      [ch, healthy('other', { outcome: 'approved', channelId: 'other' })],
+      FAST,
+    );
+    const d = await reg.requestApprovalOn('ch', REQ);
+    expect(d.outcome).toBe('denied-no-channel');
+    expect(d.channelId).toBe('ch');
+    expect(asked).toBe(false); // unhealthy → nie gefragt, KEIN Fallback auf 'other'
+  });
+
+  it('Health-Timeout (isHealthy hängt) → denied-no-channel', async () => {
+    const ch: Meldekanal = {
+      id: 'hang',
+      isHealthy: () => new Promise<boolean>(() => {}), // hängt → Health-Timeout
+      requestApproval: async () => ({ outcome: 'approved', channelId: 'hang' }),
+    };
+    const reg = new MeldekanalRegistry([ch], FAST);
+    const d = await reg.requestApprovalOn('hang', REQ);
+    expect(d.outcome).toBe('denied-no-channel');
+    expect(d.note).toMatch(/health timeout/);
+  });
+
+  it('Approval-Timeout (gesund, requestApproval hängt) → timeout (terminal)', async () => {
+    const ch: Meldekanal = {
+      id: 'slow',
+      isHealthy: async () => true,
+      requestApproval: () => new Promise<ApprovalDecision>(() => {}), // entscheidet nie
+    };
+    const reg = new MeldekanalRegistry([ch], FAST);
+    const d = await reg.requestApprovalOn('slow', REQ);
+    expect(d.outcome).toBe('timeout');
+    expect(d.channelId).toBe('slow');
+  });
+
+  it('Kanal-Wurf → error (nie approved), note trägt die Meldung', async () => {
+    const ch: Meldekanal = {
+      id: 'boom',
+      isHealthy: async () => true,
+      requestApproval: async () => {
+        throw new Error('channel exploded');
+      },
+    };
+    const reg = new MeldekanalRegistry([ch], FAST);
+    const d = await reg.requestApprovalOn('boom', REQ);
+    expect(d.outcome).toBe('error');
+    expect(d.note).toMatch(/channel exploded/);
+  });
+
+  it('unbekanntes Kanal-Shape → error (nie approved)', async () => {
+    const ch = {
+      id: 'weird',
+      isHealthy: async () => true,
+      requestApproval: async () => ({ outcome: 'maybe' }) as unknown as ApprovalDecision,
+    } as Meldekanal;
+    const reg = new MeldekanalRegistry([ch], FAST);
+    const d = await reg.requestApprovalOn('weird', REQ);
+    expect(d.outcome).toBe('error');
+    expect(isApproved(d)).toBe(false);
+  });
+
+  it('leere Registry (DenyAllChannel): adressierter deny-all → denied; unbekannte id → denied', async () => {
+    const reg = new MeldekanalRegistry([], FAST); // → [DenyAllChannel]
+    expect((await reg.requestApprovalOn('deny-all', REQ)).outcome).toBe('denied-no-channel');
+    expect((await reg.requestApprovalOn('x', REQ)).outcome).toBe('denied-no-channel');
+  });
+
+  it('requestApproval() bleibt unverändert (erster gesunder Kanal terminal, unabhängig von requestApprovalOn)', async () => {
+    const a = healthy('a', { outcome: 'approved', channelId: 'a' });
+    const b = healthy('b', { outcome: 'rejected', channelId: 'b' });
+    const reg = new MeldekanalRegistry([a, b], FAST);
+    // requestApproval nimmt weiterhin den ERSTEN gesunden (a→approved), egal was requestApprovalOn täte.
+    expect((await reg.requestApproval(REQ)).channelId).toBe('a');
+    expect((await reg.requestApprovalOn('b', REQ)).channelId).toBe('b');
   });
 });

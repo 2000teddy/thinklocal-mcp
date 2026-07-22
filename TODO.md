@@ -128,9 +128,19 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
   - [x] **SECURITY.md-Anteil (D3-Guardrail)** (2026-07-20): neue Sektion „Freigabe-Matrix (TL-10)" —
     „`decider: human:<id>` ist v1 REIN DEKLARATIV, NICHT durchgesetzt", Fail-closed/Default-Deny-Guardrails,
     4 Aktivierungs-Vorbedingungen, owner-gated-Teile. Doc-only, kein Runtime-Change.
+  - [x] **D2-Prep (Kanal-Bindungs-Primitive)** (2026-07-22): `MeldekanalRegistry.requestApprovalOn(channelId, req)`
+    — fragt **gezielt** den adressierten Kanal (statt „erster gesunder"), die Primitive, die Slice B zum
+    Auflösen „Werkzeug-Klasse → Kanal" braucht. **Fail-closed & verhaltensgleich zu `requestApproval`, nur
+    ohne Fallback:** unbekannte `channelId`/unhealthy/Health-Timeout/-Fehler ⇒ `denied-no-channel`;
+    Approval-Timeout ⇒ `timeout`; Wurf/unbekanntes Shape ⇒ `error`; nur ein gesund-adressierter Kanal, der
+    aktiv zustimmt ⇒ `approved` (`isApproved`-Allowlist unverändert). Reuse der bestehenden
+    `withTimeout`/`normalizeDecision`-Helfer. **`requestApproval` unverändert; KEIN Matrix-Wiring, KEIN
+    Env-Flag-Flip, KEIN Ingress, 0 Aufrufer** (rein additiv, kein Runtime-Change). +10 Tests, Suite **1932
+    grün**; CR (Claude-Subagent) **GREEN, keine Findings**. Belegt in SECURITY.md „Freigabe-Matrix (TL-10)"
+    als Aktivierungs-Vorbedingung (Registry-Bindung).
   - [ ] **Slice B** (Verdrahtung, **D2/D3-gated**): Resolver konsultiert die Matrix vor `registry.requestApproval`
-    (Env-Flag wie TL-09b); braucht D2 (Registry-`requestApprovalOn(channelId)`) + **D3 Christian-Sign-off**
-    (SECURITY.md-Note liegt jetzt vor). **Owner-gated:** Aktivierungs-Flag-Flip.
+    (Env-Flag wie TL-09b); braucht D2 (**Registry-`requestApprovalOn(channelId)` liegt jetzt vor**) + **D3
+    Christian-Sign-off** (SECURITY.md-Note liegt jetzt vor). **Owner-gated:** Aktivierungs-Flag-Flip.
 
 ### P1 — Identität, Autonomie, Robustheit
 > **Discovery + Reihenfolge (CO 2026-07-15, opus+sonnet einstimmig):** **TL-12 VOR TL-11.** TL-12 Slice A
