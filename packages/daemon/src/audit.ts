@@ -56,7 +56,11 @@ export type AuditEventType =
   | 'MCP_FORWARD_GATE'
   // ADR-038 (TL-12): signierter Postfach-Auftrag empfangen (verifiziert) bzw. Verify fehlgeschlagen.
   | 'ORDER_RX'
-  | 'ORDER_VERIFY_FAILED';
+  | 'ORDER_VERIFY_FAILED'
+  // ADR-042 (TL-08 Slice 2c): die gepflegte Server-Tool-Klassen-Map ist gegenüber dem LIVE
+  // `tools/list` eines governed Servers gedriftet (stale/unclassified) → Kurations-Signal, KEIN
+  // Gate-Flip. Rein additiv/read-only (der Drift-Check-Hook ruft nie ein Tool auf, liest keine Werte).
+  | 'TOOL_CLASS_DRIFT';
 
 /**
  * ADR-007 Phase A: Entity types for structured audit querying.

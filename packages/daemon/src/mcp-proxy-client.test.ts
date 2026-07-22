@@ -7,6 +7,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
+  extractToolNames,
+  hasToolsArray,
   buildToolsListRpc,
   buildToolsCallRpc,
   parseMcpResponseBody,
@@ -60,9 +62,27 @@ describe('extractSharedMcpServers', () => {
   it('filtert category=mcp + mcp:-Praefix, strippt Praefix, mappt Felder', () => {
     const caps = {
       capabilities: [
-        { skill_id: 'mcp:unifi', category: 'mcp', agent_id: 'spiffe://thinklocal/node/HUB', health: 'healthy', description: 'UniFi' },
-        { skill_id: 'mcp:pal', category: 'mcp', agent_id: 'spiffe://thinklocal/node/HUB', health: 'healthy', description: 'PAL' },
-        { skill_id: 'system.monitor', category: 'system', agent_id: 'x', health: 'healthy', description: 'skill' }, // kein mcp
+        {
+          skill_id: 'mcp:unifi',
+          category: 'mcp',
+          agent_id: 'spiffe://thinklocal/node/HUB',
+          health: 'healthy',
+          description: 'UniFi',
+        },
+        {
+          skill_id: 'mcp:pal',
+          category: 'mcp',
+          agent_id: 'spiffe://thinklocal/node/HUB',
+          health: 'healthy',
+          description: 'PAL',
+        },
+        {
+          skill_id: 'system.monitor',
+          category: 'system',
+          agent_id: 'x',
+          health: 'healthy',
+          description: 'skill',
+        }, // kein mcp
       ],
     };
     const out = extractSharedMcpServers(caps);
@@ -76,7 +96,9 @@ describe('extractSharedMcpServers', () => {
     expect(extractSharedMcpServers(null)).toEqual([]);
     expect(extractSharedMcpServers({})).toEqual([]);
     expect(extractSharedMcpServers({ capabilities: 'nope' })).toEqual([]);
-    const garbage = { capabilities: [null, 42, { category: 'mcp' }, { skill_id: 'mcp:x', category: 'mcp' }] };
+    const garbage = {
+      capabilities: [null, 42, { category: 'mcp' }, { skill_id: 'mcp:x', category: 'mcp' }],
+    };
     const out = extractSharedMcpServers(garbage);
     expect(out).toHaveLength(1);
     expect(out[0]?.server).toBe('x');
@@ -84,13 +106,19 @@ describe('extractSharedMcpServers', () => {
   });
 
   it('category=mcp aber skill_id OHNE mcp:-Praefix → ausgeschlossen (Praefix-Filter)', () => {
-    const caps = { capabilities: [{ skill_id: 'unifi', category: 'mcp', agent_id: 'x', health: 'healthy', description: 'd' }] };
+    const caps = {
+      capabilities: [
+        { skill_id: 'unifi', category: 'mcp', agent_id: 'x', health: 'healthy', description: 'd' },
+      ],
+    };
     expect(extractSharedMcpServers(caps)).toEqual([]);
   });
 });
 
 describe('callMcpProxy', () => {
-  const capture = (res: RawDaemonResponse): { paths: string[]; bodies: unknown[]; req: McpProxyRequester } => {
+  const capture = (
+    res: RawDaemonResponse,
+  ): { paths: string[]; bodies: unknown[]; req: McpProxyRequester } => {
     const paths: string[] = [];
     const bodies: unknown[] = [];
     const req: McpProxyRequester = async (path, body) => {
@@ -112,7 +140,10 @@ describe('callMcpProxy', () => {
   });
 
   it('non-2xx wird durchgereicht (501 local-exec deferred, Body geparst)', async () => {
-    const c = capture({ status: 501, body: '{"error":"local-exec deferred (Q1: remote-forward-only)"}' });
+    const c = capture({
+      status: 501,
+      body: '{"error":"local-exec deferred (Q1: remote-forward-only)"}',
+    });
     const out = await callMcpProxy('unifi', buildToolsCallRpc('list_clients'), c.req);
     expect(out.status).toBe(501);
     expect((out.body as { error?: string }).error).toMatch(/local-exec deferred/);
@@ -135,5 +166,62 @@ describe('callMcpProxy', () => {
     const out = await callMcpProxy('unifi', buildToolsListRpc(), c.req);
     expect(out.status).toBe(503);
     expect((out.body as { error?: string }).error).toBe('mcp unavailable');
+  });
+});
+
+describe('extractToolNames — tools/list-Ergebnis → Namen (secret-sicher, fail-safe)', () => {
+  const body = (tools: unknown) => ({ jsonrpc: '2.0', id: 1, result: { tools } });
+
+  it('extrahiert die name-Felder in Reihenfolge', () => {
+    expect(extractToolNames(body([{ name: 'list_sites' }, { name: 'get_device' }]))).toEqual([
+      'list_sites',
+      'get_device',
+    ]);
+  });
+
+  it('ignoriert Nicht-Werte (nur Namen/Schemata sind da) — inputSchema/description bleiben unberührt', () => {
+    expect(
+      extractToolNames(body([{ name: 'list_sites', description: 'x', inputSchema: { a: 1 } }])),
+    ).toEqual(['list_sites']);
+  });
+
+  it('dedupliziert (stabile Erst-Reihenfolge)', () => {
+    expect(extractToolNames(body([{ name: 'a' }, { name: 'a' }, { name: 'b' }]))).toEqual([
+      'a',
+      'b',
+    ]);
+  });
+
+  it('fail-safe: fehlendes result/tools, non-array, non-object-Einträge, non-string/leere name → []/skip', () => {
+    expect(extractToolNames(undefined)).toEqual([]);
+    expect(extractToolNames(null)).toEqual([]);
+    expect(extractToolNames({})).toEqual([]);
+    expect(extractToolNames(body('not-an-array'))).toEqual([]);
+    expect(
+      extractToolNames(body([null, 42, 'x', { noName: 1 }, { name: 123 }, { name: '' }])),
+    ).toEqual([]);
+    expect(extractToolNames('boom')).toEqual([]);
+  });
+
+  it('gemischt gültig/ungültig → nur gültige Namen', () => {
+    expect(extractToolNames(body([{ name: 'ok' }, { name: 123 }, null, { name: 'ok2' }]))).toEqual([
+      'ok',
+      'ok2',
+    ]);
+  });
+});
+
+describe('hasToolsArray — leeres Inventar vs. unbrauchbare 200 (CR-MEDIUM M1)', () => {
+  it('echtes (auch leeres) result.tools-Array → true', () => {
+    expect(hasToolsArray({ result: { tools: [] } })).toBe(true);
+    expect(hasToolsArray({ result: { tools: [{ name: 'x' }] } })).toBe(true);
+  });
+  it('kein result.tools-Array (leeres result / error@200 / malformed / non-object) → false', () => {
+    expect(hasToolsArray({ result: {} })).toBe(false);
+    expect(hasToolsArray({ error: { code: -32000 } })).toBe(false);
+    expect(hasToolsArray({ result: { tools: 'nope' } })).toBe(false);
+    expect(hasToolsArray(undefined)).toBe(false);
+    expect(hasToolsArray(null)).toBe(false);
+    expect(hasToolsArray('text')).toBe(false);
   });
 });

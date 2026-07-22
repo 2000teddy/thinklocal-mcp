@@ -25,6 +25,10 @@ import { buildSharedMcpCapabilities, registerSharedMcps, guardSharedMcpAnnounce 
 import { registerMcpIngressApi } from './mcp-ingress-api.js';
 import { MeldekanalRegistry } from './meldekanal.js';
 import { createMcpForwardExecutor, createUndiciMcpForward } from './mcp-forward-executor.js';
+import {
+  buildGovernedToolListFetcher,
+  runGovernedToolClassDriftChecks,
+} from './tool-class-drift-hook.js';
 import { createMcporterLocalExec } from './mcp-mcporter-exec.js';
 import { registerDashboardApi } from './dashboard-api.js';
 import { registerInboxApi } from './inbox-api.js';
@@ -1212,6 +1216,41 @@ async function main(): Promise<void> {
     log,
   });
 
+  // 8c3c. TL-08 Slice 2c (ADR-042): Live-Tool-Class-Drift-Check-Hook (ehrliche Verdrahtung des
+  // `checkToolClassDrift`-Seams). Prüft periodisch die gepflegte Klassen-Map governed Server (heute
+  // `unifi`) gegen ihr LIVE `tools/list` — über die BEREITS vorhandene ausgehende mTLS-Forward-Primitive
+  // (`mcpForwardHttp.forward` → Peer-`/api/mcp/<server>`). **Secret-sicher** (`tools/list` liefert nur
+  // Namen/Schemata, nie Werte; **kein** `tools/call`) und emittiert bei Drift ein `TOOL_CLASS_DRIFT`-Audit
+  // (Kurations-Signal). **KEIN Gate-Flip** (sensitive→allow-with-redaction bleibt Christian-gated).
+  // Vollständig fail-safe: kein Provider/Endpoint/Fetch-Fehler → übersprungen (checkToolClassDrift → null),
+  // nie ein Crash. Siehe tool-class-drift-hook.ts / TODO.md TL-08 Slice 2c.
+  const TOOL_CLASS_DRIFT_INITIAL_DELAY_MS = 60_000; // erst wenn das Mesh oben ist
+  const TOOL_CLASS_DRIFT_INTERVAL_MS = 3_600_000; // stündlich; Kurations-Signal, kein Hot-Path
+  const toolClassDriftFetcher = buildGovernedToolListFetcher({
+    selfAgentId: selfIdentityUri,
+    getCapabilities: () => registry.getAllCapabilities(),
+    resolveEndpoint: (agentId) => mesh.getPeer(agentId)?.endpoint,
+    httpForward: mcpForwardHttp.forward,
+    requireServerIdentity: outboundConnectPolicy.spiffeServerIdentity,
+  });
+  const runToolClassDriftRound = (): void => {
+    // runGovernedToolClassDriftChecks fängt pro Server; .catch ist belt-and-suspenders (nie ein throw hoch).
+    void runGovernedToolClassDriftChecks({
+      fetchTools: toolClassDriftFetcher,
+      audit: (event, server, details) => audit.append(event, server, details),
+      log,
+    }).catch((err) =>
+      log.warn(
+        { err: err instanceof Error ? err.message : String(err) },
+        '[tool-class] Drift-Check-Runde fehlgeschlagen',
+      ),
+    );
+  };
+  const toolClassDriftInitialTimer = setTimeout(runToolClassDriftRound, TOOL_CLASS_DRIFT_INITIAL_DELAY_MS);
+  toolClassDriftInitialTimer.unref();
+  const toolClassDriftTimer = setInterval(runToolClassDriftRound, TOOL_CLASS_DRIFT_INTERVAL_MS);
+  toolClassDriftTimer.unref();
+
   // 8c4. Skill Discovery + Capability Activation (ioBroker-Moment, PR #110)
   // Auto-discovers skills from peers, installs as neutral manifests,
   // activates capabilities, triggers Claude Code adapter.
@@ -1651,6 +1690,8 @@ async function main(): Promise<void> {
     clearInterval(resourceRefreshTimer); // T2.4
     if (mdnsRequeryTimer) clearInterval(mdnsRequeryTimer); // ADR-035 A4
     if (peerCacheFlushTimer) clearInterval(peerCacheFlushTimer); // ADR-035 A1
+    clearTimeout(toolClassDriftInitialTimer); // ADR-042 (TL-08 Slice 2c) Drift-Check-Hook
+    clearInterval(toolClassDriftTimer); // ADR-042 (TL-08 Slice 2c) Drift-Check-Hook
     // ADR-035 A1: letzter Locator-Snapshot vor dem Beenden, damit die seit dem letzten
     // periodischen Flush gelernten Peers den Restart überleben (best-effort, blockiert nicht).
     if (config.discovery.peer_cache_enabled) await flushPeerCache();

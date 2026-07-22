@@ -8,6 +8,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(mcp): TL-08 Slice 2c — Live-Tool-Class-Drift-Check-Hook (ADR-042) (2026-07-22 08:30)
+**Additive Verdrahtung** (read-only, **kein Gate-Flip**) — verdrahtet den vorhandenen, ungenutzten
+Drift-Check-Seam `checkToolClassDrift` ehrlich in den Daemon. Neu `tool-class-drift-hook.ts`
+(`buildGovernedToolListFetcher` + `runGovernedToolClassDriftChecks`): holt die **live `tools/list`** governed
+Server (heute `unifi`) über die **vorhandene** ausgehende mTLS-Forward-Primitive (`mcpForwardHttp.forward` →
+Peer-`/api/mcp/<server>`), **secret-sicher** (nur `tools/list`, kein `tools/call`, keine Werte), und
+emittiert bei Drift ein neues **`TOOL_CLASS_DRIFT`-Audit** (Kurations-Signal). `mcp-proxy-client.ts` +
+`extractToolNames`/`hasToolsArray`; `audit.ts` + Event-Typ. In `index.ts` fail-safe als
+`setTimeout(60s)`+`setInterval(1h)` (`.unref()`, im Shutdown geräumt); jeder Fehlerpfad → übersprungen, nie
+ein Crash/false-positive. **CR (Claude-Subagent): 1 MEDIUM (M1: 200-ohne-`result.tools` → false-positive
+„alles stale") an der Wurzel gefixt** (`hasToolsArray`-Guard + Regressionstests), kein HIGH. +22 Tests,
+Suite **1919 grün**. Gate-Flip (sensitive→redaction) bleibt Christian-gated (außer Scope). Live-E2E gegen
+echten unifi-Peer = eigenes Fenster (kein Peer im CI). `changes/2026-07-22_tool-class-drift-hook.md`.
+
 ### feat(wire): ADR-046 ungegateter Consumer-Kern `supportsFeature` (fail-closed) (2026-07-22 06:20)
 **Additiver Groundwork-Slice** (Code+Tests) — der kleinste ehrliche **ungegatete** Baustein des ADR-046-Pfads
 (Wire-Feature/Version-Exchange, TL-12-Slice-C-Enabler). ADR-046 lässt Platzierung (Card-`protocol`-Block vs.
