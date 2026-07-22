@@ -55,7 +55,12 @@ export function buildToolsListRpc(): JsonRpcRequest {
 
 /** JSON-RPC `tools/call`-Request (`arguments` defaulten auf `{}`). */
 export function buildToolsCallRpc(name: string, args?: Record<string, unknown>): JsonRpcRequest {
-  return { jsonrpc: '2.0', id: nextRpcId(), method: 'tools/call', params: { name, arguments: args ?? {} } };
+  return {
+    jsonrpc: '2.0',
+    id: nextRpcId(),
+    method: 'tools/call',
+    params: { name, arguments: args ?? {} },
+  };
 }
 
 /** Parst den Body-Text; Non-JSON (z.B. Fehlertext) wird verbatim durchgereicht. */
@@ -66,6 +71,39 @@ export function parseMcpResponseBody(bodyText: string): unknown {
   } catch {
     return bodyText;
   }
+}
+
+/**
+ * Extrahiert die Tool-Namen aus einem geparsten `tools/list`-JSON-RPC-Ergebnis
+ * (`{ result: { tools: [{ name }, …] } }`). **Secret-sicher** (`tools/list` trägt nur Namen +
+ * Schemata, nie Werte) und **total/fail-safe**: fehlendes/malformed `result`/`tools`, non-object-
+ * Einträge, non-string/leere `name` → übersprungen; kein throw. Dedupliziert (stabile Erst-Reihenfolge).
+ * Für den ADR-042-Drift-Check (`checkToolClassDrift`), der eine `readonly string[]`-Live-Liste erwartet.
+ */
+export function extractToolNames(body: unknown): string[] {
+  const tools = (body as { result?: { tools?: unknown } } | null)?.result?.tools;
+  if (!Array.isArray(tools)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const t of tools) {
+    if (typeof t !== 'object' || t === null) continue;
+    const name = (t as { name?: unknown }).name;
+    if (typeof name !== 'string' || name === '' || seen.has(name)) continue;
+    seen.add(name);
+    out.push(name);
+  }
+  return out;
+}
+
+/**
+ * True **nur**, wenn `result.tools` ein echtes Array ist (auch ein leeres). Unterscheidet ein legitim
+ * **leeres Inventar** (`result.tools: []`) von einer **unbrauchbaren** 200-Antwort ohne Tool-Array
+ * (`result: {}`, JSON-RPC-`error` bei HTTP 200, doppelt-gewrappter Body, Server mid-init). Ein
+ * Drift-Check darf Letzteres NICHT als „Inventar = leer" lesen (sonst wären fälschlich **alle**
+ * kuratierten Tools stale). Fail-safe: der Aufrufer wirft dann, statt `[]` durchzureichen (CR-MEDIUM M1).
+ */
+export function hasToolsArray(body: unknown): boolean {
+  return Array.isArray((body as { result?: { tools?: unknown } } | null)?.result?.tools);
 }
 
 /**

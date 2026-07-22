@@ -69,6 +69,17 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
   - [~] **TL-08 Slice 2c** — teils geliefert, Kern BLOCKED:
     - [x] **Live-Drift-Check** (ADR-042): `checkToolClassDrift`-Seam gegen live `tools/list` (secret-sicher,
       fail-safe), +6 Tests. Verdrahtungs-Hook (index.ts/Mesh) = Folge.
+    - [x] **Verdrahtungs-Hook** (2026-07-22): der Seam ist jetzt **ehrlich verdrahtet** — neues
+      `tool-class-drift-hook.ts` (`buildGovernedToolListFetcher` + `runGovernedToolClassDriftChecks`) holt
+      die live `tools/list` governed Server (heute `unifi`) über die **vorhandene** ausgehende mTLS-Forward-
+      Primitive (`mcpForwardHttp.forward` → Peer-`/api/mcp/<server>`), extrahiert secret-sicher die Tool-Namen
+      (`extractToolNames`, kein `tools/call`) und emittiert bei Drift ein neues **`TOOL_CLASS_DRIFT`-Audit**
+      (Kurations-Signal, **kein** Gate-Flip). In `index.ts` als fail-safe `setTimeout(60s)`+`setInterval(1h)`
+      (`.unref()`, im Shutdown geräumt) verdrahtet; jeder Fehlerpfad (kein Provider/Endpoint/Non-200/
+      200-ohne-`result.tools`) → übersprungen, nie ein false-positive. **CR (Claude-Subagent): 1 MEDIUM (M1
+      false-positive „alles stale" bei 200-ohne-tools) gefixt** (`hasToolsArray`-Guard + Regressionstests),
+      kein HIGH. +22 Tests, Suite **1919 grün**. **Live-E2E gegen echten unifi-Peer** = eigenes Live-Fenster
+      (kein Peer im CI); Logik seam-getestet.
     - [ ] ⛔ **Gate-Flip BLOCKED (Christian-Gate):** sensitive → allow-with-redaction braucht kuratierte
       Safe-Field-Allowlist; die 10 sensitiven unifi-Tools haben **kein `outputSchema`** → Feldnamen nur per
       Tool-Aufruf (= Secret-Exposition). Unblock: (c) Doku-/Quell-Transkription der Feldnamen (UniFi-API +
