@@ -161,7 +161,11 @@ function normalizeDecision(raw: unknown, channelId: string): ApprovalDecision {
   }
   const outcome = (raw as { outcome?: unknown }).outcome;
   if (typeof outcome !== 'string' || !VALID_OUTCOMES.has(outcome)) {
-    return { outcome: 'error', channelId, note: `channel returned unknown outcome: ${String(outcome)}` };
+    return {
+      outcome: 'error',
+      channelId,
+      note: `channel returned unknown outcome: ${String(outcome)}`,
+    };
   }
   const note = (raw as { note?: unknown }).note;
   return {
@@ -210,6 +214,45 @@ export class MeldekanalRegistry {
       return normalizeDecision(res.value, channel.id);
     }
     return { outcome: 'denied-no-channel' };
+  }
+
+  /**
+   * TL-10 D2-Prep (Kanal-Bindung): fragt **gezielt** den Kanal mit `channelId` — die Primitive, die eine
+   * spätere Freigabe-Matrix (Slice B) braucht, um „Werkzeug-Klasse → Kanal" aufzulösen, statt „erster
+   * gesunder Kanal". **Bindet KEINE Matrix, kippt KEIN Env-Flag, verdrahtet KEIN Ingress** — `requestApproval`
+   * bleibt unverändert; diese Methode ist heute ohne Aufrufer (rein additiv, kein Runtime-Change).
+   *
+   * **Fail-closed** an EINER Stelle, verhaltensgleich zu {@link requestApproval} — nur ohne Fallback
+   * (ein gezielter Kanal, kein „nächster"):
+   *  - **Unbekannte `channelId`** (kein Kanal mit dieser id) ⇒ `denied-no-channel` (niemand wurde gefragt).
+   *  - Kanal **unhealthy / Health-Fehler / Health-Timeout** ⇒ `denied-no-channel` (kein erreichbarer Kanal —
+   *    kein Fallback auf einen anderen; identisch zur Wirkung in `requestApproval`, wo ein solcher Kanal
+   *    übersprungen wird und, als einziger, zu `denied-no-channel` führt).
+   *  - Kanal gesund, aber **Approval-Timeout** ⇒ `timeout`; **Wurf/Fehler** ⇒ `error`; sonst die
+   *    (normalisierte) Kanal-Entscheidung. Unbekanntes Shape ⇒ `error`, nie `approved`.
+   * Wirft nicht. `isApproved()` bleibt der EINZIGE Auswertungspfad — jeder Nicht-`approved`-Ausgang verweigert.
+   */
+  async requestApprovalOn(channelId: string, req: ApprovalRequest): Promise<ApprovalDecision> {
+    const channel = this.channels.find((c) => c.id === channelId);
+    if (!channel) {
+      return { outcome: 'denied-no-channel', note: `unknown channel: ${channelId}` };
+    }
+    const health = await withTimeout((signal) => channel.isHealthy(signal), this.healthTimeoutMs);
+    // Unhealthy / Health-Fehler / Health-Timeout ⇒ gezielter Kanal nicht erreichbar, KEIN Fallback ⇒ denied.
+    if (!health.ok || health.value !== true) {
+      const note = health.ok ? 'channel unhealthy' : `health ${health.reason}`;
+      return { outcome: 'denied-no-channel', channelId: channel.id, note };
+    }
+    const res = await withTimeout(
+      (signal) => channel.requestApproval(req, signal),
+      this.approvalTimeoutMs,
+    );
+    if (!res.ok) {
+      return res.reason === 'timeout'
+        ? { outcome: 'timeout', channelId: channel.id }
+        : { outcome: 'error', channelId: channel.id, note: errNote(res.error) };
+    }
+    return normalizeDecision(res.value, channel.id);
   }
 }
 

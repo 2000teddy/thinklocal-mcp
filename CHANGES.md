@@ -8,6 +8,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(gate): TL-10 D2-Prep — `MeldekanalRegistry.requestApprovalOn(channelId, req)` (2026-07-22 10:45)
+**Additive, ungegatete Security-Primitive** — der kleinste D2-Vorbereitungs-Slice für die Freigabe-Matrix
+(TL-10 Slice B). Neue Methode `requestApprovalOn(channelId, req)` fragt **gezielt** den adressierten Kanal
+(statt „erster gesunder") — die Bindung, mit der eine spätere Matrix „Werkzeug-Klasse → Kanal" auflöst.
+**Fail-closed & verhaltensgleich zu `requestApproval`, nur ohne Fallback:** unbekannte
+`channelId`/unhealthy/Health-Timeout/-Fehler ⇒ `denied-no-channel`; Approval-Timeout ⇒ `timeout`;
+Wurf/unbekanntes Shape ⇒ `error`; nur ein gesund-adressierter, aktiv zustimmender Kanal ⇒ `approved`
+(`isApproved`-Allowlist unverändert, Reuse der `withTimeout`/`normalizeDecision`-Helfer). **`requestApproval`
+unverändert; KEIN Matrix-Wiring, KEIN Env-Flag, KEIN Ingress, 0 Aufrufer** (kein Runtime-Change). +10 Tests,
+Suite **1932 grün**; CR (Claude-Subagent) **GREEN, keine Findings**. Ingress-Wiring/Matrix/Env-Flag/
+D3-Sign-off bleiben Slice-B-gated. `changes/2026-07-22_meldekanal-request-approval-on.md`.
+
 ### fix(mcp): TL-08 Slice 2c Drift-Hook — Härtung gegen all-malformed tools-Array (CR-LOW) (2026-07-22 09:45)
 **Additive Fail-safe-Härtung** — schließt die LOW-Sibling-Lücke aus dem externen #315-Review. Der M1-Guard
 (`hasToolsArray`) fängt ein 200 **ohne** `result.tools`-Array; ein 200 mit **nicht-leerem** Array, dessen
