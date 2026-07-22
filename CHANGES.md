@@ -8,6 +8,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(wire): ADR-046 ungegateter Consumer-Kern `supportsFeature` (fail-closed) (2026-07-22 06:20)
+**Additiver Groundwork-Slice** (Code+Tests) — der kleinste ehrliche **ungegatete** Baustein des ADR-046-Pfads
+(Wire-Feature/Version-Exchange, TL-12-Slice-C-Enabler). ADR-046 lässt Platzierung (Card-`protocol`-Block vs.
+`capabilities.services`) **und** Vokabular/Semver bewusst CO-offen (Cross-Vendor-`pal:consensus` pal-PATH-
+blockiert). Neu `packages/daemon/src/wire-feature.ts`: `supportsFeature(advertisedFeatures, feature)` — nimmt
+die annoncierte Feature-**Liste** (nicht die Card) + den **Namen** als Parameter → **platzierungs- UND
+vokabular-agnostisch**, seedet kein Flag, kein Runtime-Change. Kodifiziert die non-negotiable §2-Invariante
+**fail-closed** (absent/unknown/leer/malformed ⇒ `false`, nie „absent ⇒ assume yes") als reinen, getesteten
+Primitiv, den die CO-Folge-Slice mit `card.<platzierung>?.features` aufruft. +10 Tests, Suite **1897 grün**;
+CR (Claude-Subagent) **GREEN, keine Findings**. Weiterhin CO-gated: `protocol`-Block/Platzierung, Producer-
+Befüllung, Vokabular/Semver, `version-compat`-Verdrahtung, ORDER-Handler/Sender-Flip (= Slice C proper).
+`changes/2026-07-22_wire-feature-consumer-core.md`, ADR-046 §Umsetzungsstand.
+
 ### docs(reconcile): PR-Nummern-Nachtrag COMPLIANCE + CHANGES + TODO-Cursor (#297–#312) (2026-07-22 06:05)
 **Doc-only** Bookkeeping-Reconcile (Hermes-Housekeeping nach den 2026-07-20/21-Merges). Seit #296 (deckte
 #288–#295 ab) waren **#297–#312** gemergt, aber unnummeriert: 16 COMPLIANCE-Zeilen mit `(offen, base=main)`,

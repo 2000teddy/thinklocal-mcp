@@ -152,6 +152,12 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     hält die volle Card, `mesh.ts:20,189,258`); es fehlt nur die annoncierte Feld-Seite + `version-compat`-
     Verdrahtung (heute tot). Seed-Flag `order-envelope-v2`. **Impl-Slice ist CO-gated** (Vokabular/Semver-
     Governance) und rein additiv/rückwärtskompatibel; **kein** ORDER-Handler/Sender-Flip hier (= Slice C proper).
+    - [x] **Ungegateter Consumer-Kern** (2026-07-22): `wire-feature.ts` `supportsFeature(advertisedFeatures,
+      feature)` — die fail-closed §2-Invariante (absent/unknown/leer/malformed ⇒ `false`) als reiner,
+      platzierungs- UND vokabular-agnostischer Primitiv (nimmt die Feature-**Liste**, nicht die Card → nimmt
+      **keine** CO-offene Frage vorweg, seedet kein Flag, kein Runtime-Change). +10 Tests, Suite **1897 grün**,
+      CR (Claude-Subagent) **GREEN, keine Findings**. **Weiterhin CO-gated:** Card-`protocol`-Platzierung +
+      Vokabular/Semver + Producer-Befüllung (ADR-046 §1/§3, `[[pal-review-backend-agy-missing]]`).
 - [~] **[v5.1] TL-11 (≈4 h)** Heartbeat-Weckruf (Entsch. 16): Daemon weckt Agenten; geweckter Agent prüft
   Mesh-Postfach. ↔ baut auf ADR-004.
   - [x] **TL-11 Slice A** (ADR-043): edge-driven Wake-Kontrakt — `wake-contract.ts` (fail-closed Resolver,
