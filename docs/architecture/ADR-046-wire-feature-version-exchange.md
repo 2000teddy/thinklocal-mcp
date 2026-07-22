@@ -99,7 +99,21 @@ der Sender behält die kompatible Trägerform (heute: den ORDER-Body-Marker). **
 - **−/offen (CO):** Vokabular-/Semver-Governance; ob `protocol.features` der richtige Ort ist vs. Wiederverwendung
   von `capabilities.services`. Vorschlag: eigener `protocol`-Block, weil Wire-Semantik ≠ App-Capability.
 
+## Umsetzungsstand
+- **2026-07-22 — ungegateter Consumer-Kern gelandet:** `packages/daemon/src/wire-feature.ts`
+  (`supportsFeature(advertisedFeatures, feature)`) kodifiziert die non-negotiable §2-Invariante
+  (**fail-closed**: absent/unknown/leer/malformed ⇒ `false`, nie „absent ⇒ assume yes") als reinen,
+  getesteten Primitiv. Bewusst **platzierungs- UND vokabular-agnostisch** — nimmt die annoncierte
+  Feature-**Liste** (nicht die `AgentCard`) und den Feature-**Namen** als Parameter → nimmt **keine** der
+  beiden CO-offenen Fragen (Card-Platzierung; Vokabular/Semver) vorweg, seedet kein Flag, ändert kein
+  Runtime-Verhalten (kein Aufrufer). Die CO-gegatete Folge-Slice ruft diesen Kern mit
+  `card.<platzierung>?.features`, sobald Platzierung + Vokabular per CO entschieden sind.
+- **Weiterhin CO-gated (unverändert):** der `protocol`-Block auf der Card (Platzierung, §1), das
+  Feature-Vokabular + `protocol_version`-Semver (§3), die Producer-Befüllung + `version-compat`-Verdrahtung.
+  Cross-Vendor-`pal:consensus` derzeit pal-PATH-blockiert (`[[pal-review-backend-agy-missing]]`).
+
 ## Beleg-Referenzen (Code, HEAD)
+`wire-feature.ts` (ungegateter fail-closed Consumer-Kern, ADR §2) ·
 `agent-card.ts:22-111` (AgentCard, kein protocol/features) · `version-compat.ts` (tot außerhalb Tests) ·
 `mesh.ts:20,189-192,258` (per-Peer Card + Getter) · `index.ts:1491-1502,1553` (Fetch+Identitäts-Check+Store,
 `as AgentCard`-Cast) · `pinned-card-fetch.ts:35` (pinned Fetch) · `index.ts:932-934` (default-Drop) ·
