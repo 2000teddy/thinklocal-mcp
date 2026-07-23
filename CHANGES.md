@@ -8,7 +8,29 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### docs(arch): ADR-046 Rev. 2 — Implementierungs-Anker geerdet, fail-closed-Grenzen, Seed-Flag (2026-07-23 15:30)
+### feat(tl11): Reconciliation-Sweep verdrahtet — Default AUS (2026-07-23 16:10)
+**Additive Daemon-Verdrahtung hinter Env-Flag mit Default AUS** (Regime wie TL-09b) ⇒ ohne Flag **kein
+Verhaltens-Delta**. **Einordnung:** der TL-11-MVP im engeren Sinn ist bereits gemergt (#271/#277/#282/#283/
+#320/#322); dieser Slice schließt die **verbliebene echte Lücke**. **Die Lücke:** `agent:wake` ist
+best-effort/lossy — war der Supervisor einer Instanz beim Eintreffen der Nachricht gerade weg (Neustart,
+Reconnect, Crash), ist das Wake **verloren** und die Post liegt still im Postfach. Neu `sweep-wiring.ts`
+(`runReconciliationSweep` + `registerReconciliationSweep`), in `index.ts` **+20/-0** hinter
+`TLMCP_WAKE_SWEEP_ENABLED=1` verdrahtet und im Shutdown abgemeldet. Die vier in ADR-047 §3 offenen Punkte
+sind **innerhalb der dort aufgeführten Optionen** entschieden: **ergänzt** statt verschiebt (die
+Konsumenten-Cold-Start-Pflicht bleibt) · Auslöser **`agentRegistry.on('register')`**, **zielgerichtet auf die
+registrierende Instanz** (der `agy`-CR fand hier ein HIGH: die erste Fassung fegte bei jedem `register` die
+ganze Registry — synchroner Listener × synchrone SQLite-Abfrage = M×N bei Massen-Reconnect; jetzt eine
+Abfrage pro Registrierung, was zugleich semantisch präziser ist) · **eigener `WakeCoalescer`**,
+damit der Sweep nicht vom Inbox-Verkehr geschluckt wird und genau im Reconnect-Fenster verpufft ·
+**Flag, Default AUS**. Nur `register` löst aus — `unregister`/`stale` hieße, eine weggefallene Instanz zu
+wecken. **Bewusst offen:** die Legacy-Politik (`includeLegacy` bleibt beim bestehenden Default, statt still
+verschoben zu werden). Fail-safe gegen werfende Registry/Bus/Zähler, fail-closed ohne SPIFFE. +13 Tests
+inkl. Integration gegen die echte `AgentRegistry` und dem Nachweis, dass das Wake **inhaltsfrei** bleibt
+(die Anzahl ungelesener Nachrichten reist nicht mit), Suite **2045 grün** (143 Files); `agy`-CR: 1 HIGH behoben, Rest GREEN. Konsumentenseitig
+ändert sich nichts (neues §7.3 im Consumer-Contract). Slice B und der Flag-Flip bleiben gated.
+`changes/2026-07-23_tl11-sweep-wiring.md`.
+
+### docs(arch): ADR-046 Rev. 2 — Implementierungs-Anker geerdet, fail-closed-Grenzen, Seed-Flag (2026-07-23 15:30, #325)
 **Doc-only** (kein Code, kein Beschluss, kein `protocol`-Block, kein ORDER-Flip). Erdet den TL-12-Prereq-Pfad
 so, dass die CO-gegatete Folge-Slice nachschlagen statt suchen muss. **Konkreter Befund: drei `index.ts`-Anker
 der Erstfassung (#308) waren verschoben** — Card-Fetch + Identitäts-Check `1491-1502` → **`1530-1541`**,

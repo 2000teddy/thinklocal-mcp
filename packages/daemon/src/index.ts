@@ -35,6 +35,7 @@ import { registerInboxApi } from './inbox-api.js';
 import { AgentRegistry } from './agent-registry.js';
 import { registerAgentApi } from './agent-api.js';
 import { WakeCoalescer, registerWakeEmitter, type WakeEventBus } from './wake-contract.js';
+import { registerReconciliationSweep } from './sweep-wiring.js';
 import { SkillDiscovery, type AnnouncedSkill } from './skill-discovery.js';
 import { CapabilityActivationStore } from './capability-activation.js';
 import { PairingStore } from './pairing.js';
@@ -1115,6 +1116,23 @@ async function main(): Promise<void> {
     log,
   });
 
+  // TL-11 Reconciliation-Sweep (Default AUS, Flag-Regime wie TL-09b). Wakes sind best-effort/lossy:
+  // war der Supervisor einer Instanz beim Eintreffen der Nachricht gerade weg, ist das Wake verloren
+  // und die Post liegt still im Postfach. Der Sweep weckt bei der (Neu-)Registrierung einer Instanz
+  // nach, wenn sie ungelesene Nachrichten hat. Eigener Coalescer (nicht `wakeCoalescer`), damit der
+  // Sweep nicht vom laufenden Inbox-Verkehr geschluckt wird. Ohne Flag: kein Verhaltens-Delta.
+  let stopWakeSweep: (() => void) | null = null;
+  if (process.env['TLMCP_WAKE_SWEEP_ENABLED'] === '1') {
+    stopWakeSweep = registerReconciliationSweep({
+      registry: agentRegistry,
+      eventBus: eventBus as unknown as WakeEventBus,
+      unreadFor: (instanceId) => agentInbox.unreadCount({ forInstance: instanceId }),
+      now: () => Date.now(),
+      log,
+    });
+    log.info({}, '[wake-sweep] Reconciliation-Sweep aktiv (TLMCP_WAKE_SWEEP_ENABLED=1)');
+  }
+
   // T2.4: periodisch die Resource-Attribute des eigenen Knotens (free_ram, cpu_load,
   // agent_count) in die non-replizierte Registry-Side-Map schreiben. Owner-authoritativ,
   // try/catch-gekapselt (ein Mess-Fehler darf den Daemon nie crashen). unref + clear im Shutdown.
@@ -1683,6 +1701,8 @@ async function main(): Promise<void> {
 
   // 12. Graceful Shutdown
   const shutdown = async (signal: string): Promise<void> => {
+    stopWakeSweep?.();
+    stopWakeSweep = null;
     log.info({ signal }, 'Shutdown eingeleitet...');
     clearInterval(storageMaintenanceTimer); // ADR-030 (T1.3)
     clearInterval(certExpiryTimer); // T2.1
