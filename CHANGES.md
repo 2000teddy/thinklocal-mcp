@@ -8,7 +8,26 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### docs(reconcile): PR-Nummern-Nachtrag für #320 (2026-07-23 13:10)
+### docs(arch): ADR-047 — TL-11 Wake-Nachlauf, Scoping der drei „Optional/danach"-Punkte (2026-07-23 13:25)
+**Doc-only** Scoping/Discovery (**Proposed**, entscheidet nichts). Gesucht war der kleinste ungegatete
+Post-#320-Slice zu den Punkten, die `TODO.md` nach TL-11 Slice B als „Optional/danach" führt —
+**WS-Instanz-Bindung**, **Opt-in-Broadcast-Wake**, **Reconciliation-Sweep**. **Befund: alle drei sind
+entscheidungsgebunden**, nicht aus Mangel an Mechanik, sondern weil jeder eine gemergte, bewusst
+konservative Invariante ändert; der ehrliche Slice ist deshalb die Note selbst statt eines Code-Slices, der
+eine offene Entscheidung vorwegnimmt. Nicht-Offensichtliches, das die Note aufdeckt: `agentFilter` hat
+**Doppelfunktion** (gerichtetes Routing **und** `from`/`to`-Filter nicht-gerichteter Events) — eine naive
+Identitäts-Bindung wäre auch eine unbeabsichtigte Feature-Rücknahme für Beobachter-Konsumenten; die
+**Client-Cert-Identität existiert im WS-Handler gar nicht** (kein `getPeerCertificate`, `ClientState` kennt
+nur `isLoopback`), Instanz-Bindung ist also neue Verdrahtung; ein **Broadcast-Wake ist strukturell nicht
+zustellbar** (kein `instance_id`/`spiffe_uri` zum Matchen) und berührt den in #277 geschlossenen Leak D1 —
+bei fehlendem Anwendungsfall bleibt er zu Recht liegen; der **Sweep** ist mechanisch billig
+(`unreadCount({forInstance})` + Index + `agentRegistry.list()`, keine neue Speicherarbeit), aber vertraglich
+teuer — Kernfrage ist die **Coalescer-Interaktion** (geschluckt ⇒ verpufft im Reconnect-Fenster; umgangen ⇒
+§5-Zusage „≤1 Wake pro Fenster" nicht mehr wörtlich wahr). Empfehlung: Sweep zuerst entscheiden,
+Instanz-Bindung bewusst budgetieren, Broadcast liegen lassen. Alle Zeilenangaben gegen `a1ae1c2` verifiziert.
+Slice B bleibt extern/host-gated, TL-12 B/C owner/CO-gated. `changes/2026-07-23_adr-047-tl11-followups-scoping.md`.
+
+### docs(reconcile): PR-Nummern-Nachtrag für #320 (2026-07-23 13:10, #321)
 **Doc-only** Post-Merge-Reconcile — der nach dem Merge von **#320** (mergeCommit `f47edea`,
 `mergedAt=2026-07-23T11:07:16Z`) fällige Nummer-Nachtrag: COMPLIANCE-Erst-Spalte `(offen, base=main)` →
 `#320` + `(base=main, gemergt)` (9→10 Spalten wie #288–#319), CHANGES-Überschrift um `, #320)` ergänzt,

@@ -270,7 +270,19 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     fixen Consumer-Contract (s.o.) **und jetzt das Runbook** baubar. **Echter Blocker:** der letzte Hop
     (Supervisor → CLI) ist out-of-repo + Deploy/Host-gated (vgl. `[[dod-two-peer-mcp-proof]]`,
     `[[week1-remote-restart-rollout]]`). Optional/danach: WS-Instanz-Bindung, Opt-in-Broadcast-Wake,
-    Reconciliation-Sweep.
+    Reconciliation-Sweep — **gegroundet in `docs/architecture/ADR-047-tl11-wake-followups-scoping.md`
+    (2026-07-23): alle drei sind entscheidungsgebunden**, keiner ist heute ein ungegateter Code-Slice.
+    Kurz: **WS-Instanz-Bindung** braucht 4 Entscheidungen **und** neue Verdrahtung (der WS-Handler kennt
+    die Client-Cert-Identität heute gar nicht) — plus der Befund, dass `agentFilter` **Doppelfunktion**
+    hat (gerichtetes Routing **und** `from`/`to`-Filter nicht-gerichteter Events), eine naive Bindung also
+    Beobachter-Konsumenten bräche. **Opt-in-Broadcast** hat **keinen benannten Anwendungsfall** und würde
+    strukturell den in #277 geschlossenen Leak D1 berühren (ein Broadcast-Wake hat kein Ziel, auf das
+    `matchesSubscription` matchen kann) → bleibt zu Recht liegen. **Reconciliation-Sweep** ist der
+    aussichtsreichste (Mechanik liegt bereit: `AgentInbox.unreadCount({forInstance})` + Index +
+    `agentRegistry.list()`, **keine** neue Speicherarbeit), Kernfrage ist die **Coalescer-Interaktion**
+    (Sweep-Wake geschluckt ⇒ verpufft im Reconnect-Fenster; Coalescer umgangen ⇒ §5-Zusage „≤1 Wake pro
+    Fenster" ist nicht mehr wörtlich wahr). Empfehlung: §3 zuerst entscheiden, §1 bewusst budgetieren,
+    §2 liegen lassen.
   - [x] 🟠 **TL-11 Sicherheits-Härtung: Frame-Pfad-Loopback-Loch GESCHLOSSEN** (entdeckt+gefixt 2026-07-16) —
     der `4003`-Loopback-Gate prüfte nur `query.agent` beim Connect; der Frame-Pfad `{type:'subscribe',agent:…}`
     setzte `agentFilter` **ohne** Loopback-Check → Nicht-Loopback-mTLS-Peer konnte per Frame fremde `agent:wake`
