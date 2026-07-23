@@ -17,14 +17,16 @@ Reconnect, Crash), ist das Wake **verloren** und die Post liegt still im Postfac
 (`runReconciliationSweep` + `registerReconciliationSweep`), in `index.ts` **+20/-0** hinter
 `TLMCP_WAKE_SWEEP_ENABLED=1` verdrahtet und im Shutdown abgemeldet. Die vier in ADR-047 §3 offenen Punkte
 sind **innerhalb der dort aufgeführten Optionen** entschieden: **ergänzt** statt verschiebt (die
-Konsumenten-Cold-Start-Pflicht bleibt) · Auslöser **`agentRegistry.on('register')`**, weil der Hook bereits
-existiert und kein Eingriff in die sicherheitsgehärtete WS-Datei nötig ist · **eigener `WakeCoalescer`**,
+Konsumenten-Cold-Start-Pflicht bleibt) · Auslöser **`agentRegistry.on('register')`**, **zielgerichtet auf die
+registrierende Instanz** (der `agy`-CR fand hier ein HIGH: die erste Fassung fegte bei jedem `register` die
+ganze Registry — synchroner Listener × synchrone SQLite-Abfrage = M×N bei Massen-Reconnect; jetzt eine
+Abfrage pro Registrierung, was zugleich semantisch präziser ist) · **eigener `WakeCoalescer`**,
 damit der Sweep nicht vom Inbox-Verkehr geschluckt wird und genau im Reconnect-Fenster verpufft ·
 **Flag, Default AUS**. Nur `register` löst aus — `unregister`/`stale` hieße, eine weggefallene Instanz zu
 wecken. **Bewusst offen:** die Legacy-Politik (`includeLegacy` bleibt beim bestehenden Default, statt still
 verschoben zu werden). Fail-safe gegen werfende Registry/Bus/Zähler, fail-closed ohne SPIFFE. +13 Tests
 inkl. Integration gegen die echte `AgentRegistry` und dem Nachweis, dass das Wake **inhaltsfrei** bleibt
-(die Anzahl ungelesener Nachrichten reist nicht mit), Suite **2040 grün** (143 Files). Konsumentenseitig
+(die Anzahl ungelesener Nachrichten reist nicht mit), Suite **2045 grün** (143 Files); `agy`-CR: 1 HIGH behoben, Rest GREEN. Konsumentenseitig
 ändert sich nichts (neues §7.3 im Consumer-Contract). Slice B und der Flag-Flip bleiben gated.
 `changes/2026-07-23_tl11-sweep-wiring.md`.
 

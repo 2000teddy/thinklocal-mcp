@@ -28,7 +28,7 @@ keine davon neu erfunden:
 | Punkt | Entscheidung | Warum |
 |---|---|---|
 | verschiebt oder ergänzt | **ergänzt** | die Konsumenten-Cold-Start-Pflicht bleibt; der Daemon sieht nicht jeden Supervisor-Neustart |
-| Auslöser | **`agentRegistry.on('register')`** | Hook **existiert bereits**, feuert genau wenn eine Instanz (neu/nach Neustart) da ist; kein neuer Timer, **kein** Eingriff in die sicherheitsgehärtete WS-Datei (der WS-Connect-Hook wäre laut §3 die *teuerste* Variante, weil es ihn nicht gibt) |
+| Auslöser | **`agentRegistry.on('register')`**, **zielgerichtet auf die registrierende Instanz** | Hook **existiert bereits**; kein neuer Timer, **kein** Eingriff in die sicherheitsgehärtete WS-Datei. Zielgerichtet statt flächendeckend — s. CR unten |
 | Rate-Semantik | **eigener `WakeCoalescer`** (§3 Option 1) | rate-begrenzt **und** nicht vom Inbox-Verkehr geschluckt — sonst verpuffte der Sweep genau im Fenster, das er beheben soll |
 | Opt-in | **Flag, Default AUS** | ohne Flag wird die Verdrahtung gar nicht aufgerufen |
 
@@ -44,7 +44,7 @@ werfender Bus ⇒ die übrigen Instanzen bekommen ihr Wake trotzdem · werfender
 entfällt (#322) · der Listener läuft **synchron** im Registry-Pfad, deshalb dort zusätzlich gekapselt.
 **Fail-closed:** ohne routbare SPIFFE kein Wake.
 
-## Tests (+13; Suite **2040 grün**, 143 Files)
+## Tests (+18; Suite **2045 grün**, 143 Files)
 Instanz mit Post ⇒ genau ein gerichtetes Wake mit SPIFFE · niemand hat Post ⇒ kein Wake · ohne SPIFFE
 kein Wake · **Wake ist inhaltsfrei** (die Anzahl ungelesener Nachrichten reist **nicht** mit — das wäre
 ein Metadaten-Leak) · zwei Sweeps im Fenster ⇒ ein Wake · nach Fensterablauf wieder · **Sweep-Coalescer
@@ -69,9 +69,10 @@ TODO-Eintrag nachgezogen, 1:1 in-place.
 ## Compliance
 - **CO/CG:** entfallen — alle Entscheidungen liegen **innerhalb** der in ADR-047 §3 dokumentierten
   Optionen; keine neue Architektur-Frage. `clink`/`gemini` nicht im PATH.
-- **TS ✅:** +13 Tests, Suite **2040 grün** (143 Files), `tsc --noEmit` (strict) 0, neue Dateien
+- **TS ✅:** +18 Tests, Suite **2045 grün** (143 Files), `tsc --noEmit` (strict) 0, neue Dateien
   eslint 0/0, prettier clean. `index.ts` **nicht** ganz-reformatiert (+20/-0).
-- **CR:** externes Review am PR mit **`agy`** (direkt aus `~/.local/bin` — s. #325).
+- **CR ✅ — `agy` 1.1.5: 1 HIGH an der Wurzel behoben, Rest GREEN.** **HIGH (Performance-Hazard):** der Hook ignorierte die registrierende Instanz und fegte bei **jedem** `register` die **ganze** Registry — der Listener läuft **synchron** im `register()`-Pfad und `unreadFor` ist eine synchrone SQLite-Abfrage, also **M × N** Abfragen bei M gleichzeitigen Reconnects (O(N²)) ausgerechnet beim Massen-Neustart. Behoben durch `sweepInstance()`: **genau eine** Abfrage pro Registrierung — zugleich **semantisch präziser**, weil das Ereignis „dieser Supervisor ist wieder da“ sagt, nicht „alle sind da“; der flächendeckende `runReconciliationSweep` bleibt exportiert, aber **nicht** im Hot Path. +5 Regressionstests (Zähler wird **genau einmal** gefragt; nur die registrierende Instanz wird geweckt; unbekannte Instanz-ID wirft nicht). **GREEN bestätigt:** kein falsches Wake-Ziel (SPIFFE fest aus `agentRegistry.list()`, fail-closed ohne SPIFFE), **kein Metadaten-Leak** (`unreadCount` bleibt im Daemon), „Default AUS“ **lückenlos** (Verdrahtung exklusiv im Flag-`if`, Shutdown-Abmeldung erreicht), regulärer Emitter-Pfad ungestört (Zusatz-Wakes deckt die **Idempotent**-Zeile ab), Wurf-Sicherheit auf allen Pfaden, beide Doku-Aussagen (Consumer-Contract §7.3, ADR-047 §3) korrekt.
+  Rest siehe PR-Kommentar.
 - **PC:** Secret-Scan clean.
 - **DO ✅:** dieser Eintrag, `ADR-047` §3/§4, `TL-11-wake-consumer-contract.md` §7.3, `TODO.md`,
   `CHANGES.md`, `COMPLIANCE-TABLE.md`.

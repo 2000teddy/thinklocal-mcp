@@ -9,6 +9,7 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   registerReconciliationSweep,
   runReconciliationSweep,
+  sweepInstance,
   type SweepDeps,
 } from './sweep-wiring.js';
 import { WakeCoalescer } from './wake-contract.js';
@@ -34,7 +35,7 @@ function busSpy(): { bus: SweepDeps['eventBus']; emitted: Array<Record<string, u
 /** Minimale Registry-Attrappe mit steuerbarem Listener. */
 function fakeRegistry(live: Array<{ instanceId: string; spiffeUri: string }>): {
   registry: SweepDeps['registry'];
-  fire: (reason: 'register' | 'unregister' | 'stale') => void;
+  fire: (reason: 'register' | 'unregister' | 'stale', instanceId?: string) => void;
   unsubscribed: () => boolean;
 } {
   let listener:
@@ -51,7 +52,7 @@ function fakeRegistry(live: Array<{ instanceId: string; spiffeUri: string }>): {
       },
       list: () => live,
     },
-    fire: (reason) => listener?.(reason, { instanceId: 'x' }),
+    fire: (reason, instanceId = 'a') => listener?.(reason, { instanceId }),
     unsubscribed: () => off,
   };
 }
@@ -282,5 +283,87 @@ describe('registerReconciliationSweep — Auslöser', () => {
     });
 
     expect(emitted).toEqual([{ instance_id: 'a', spiffe_uri: A.spiffeUri, reason: 'inbox' }]);
+  });
+});
+
+describe('sweepInstance / Hook — zielgerichtet statt flaechendeckend (CR-Fund agy, HIGH)', () => {
+  it('fragt den Zaehler GENAU EINMAL — nicht einmal pro registrierter Instanz', () => {
+    const { bus } = busSpy();
+    const asked: string[] = [];
+    const fake = fakeRegistry([
+      A,
+      B,
+      { instanceId: 'c', spiffeUri: 'spiffe://thinklocal/node/CCC' },
+    ]);
+
+    registerReconciliationSweep(
+      deps({
+        registry: fake.registry,
+        eventBus: bus,
+        unreadFor: (id) => {
+          asked.push(id);
+          return 1;
+        },
+      }),
+    );
+
+    fake.fire('register', 'b');
+
+    // Vorher wurde die ganze Registry gefegt (N Abfragen je Registrierung ⇒ M×N bei Massen-Reconnect).
+    expect(asked).toEqual(['b']);
+  });
+
+  it('weckt genau die registrierende Instanz, nicht ihre Nachbarn', () => {
+    const { bus, emitted } = busSpy();
+    const fake = fakeRegistry([A, B]);
+
+    registerReconciliationSweep(
+      deps({ registry: fake.registry, eventBus: bus, unreadFor: () => 1 }),
+    );
+    fake.fire('register', 'b');
+
+    expect(emitted).toEqual([{ instance_id: 'b', spiffe_uri: B.spiffeUri, reason: 'inbox' }]);
+  });
+
+  it('unbekannte Instanz-ID im Ereignis ⇒ kein Wake, kein Wurf', () => {
+    const { bus, emitted } = busSpy();
+    const fake = fakeRegistry([A]);
+
+    registerReconciliationSweep(
+      deps({ registry: fake.registry, eventBus: bus, unreadFor: () => 1 }),
+    );
+
+    expect(() => fake.fire('register', 'gibt-es-nicht')).not.toThrow();
+    expect(emitted).toEqual([]);
+  });
+
+  it('sweepInstance: ohne Post kein Wake, ohne SPIFFE kein Wake', () => {
+    const { bus, emitted } = busSpy();
+    const noSpiffe = { instanceId: 'c', spiffeUri: '' };
+    const d = deps({ registry: fakeRegistry([A, noSpiffe]).registry, eventBus: bus });
+
+    sweepInstance({ ...d, unreadFor: () => 0 }, new WakeCoalescer(), 'a', 'test');
+    sweepInstance({ ...d, unreadFor: () => 5 }, new WakeCoalescer(), 'c', 'test');
+
+    expect(emitted).toEqual([]);
+  });
+
+  it('sweepInstance: werfende Registry ⇒ uebersprungen, kein Wurf', () => {
+    const { bus } = busSpy();
+    const registry = {
+      on: (): (() => void) => () => {},
+      list: (): never => {
+        throw new Error('registry kaputt');
+      },
+    };
+
+    const run = sweepInstance(
+      deps({ registry, eventBus: bus, log: { info: vi.fn(), warn: vi.fn() } }),
+      new WakeCoalescer(),
+      'a',
+      'test',
+    );
+
+    expect(run).toEqual({ candidates: 0, woken: [] });
   });
 });

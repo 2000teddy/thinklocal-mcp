@@ -86,7 +86,16 @@ export function runReconciliationSweep(
   }
 
   // `computeSweepTargets` ist selbst total (werfender Zähler ⇒ Instanz entfällt) — #322.
-  const targets = computeSweepTargets(live, deps.unreadFor);
+  return emitFor(deps, coalescer, computeSweepTargets(live, deps.unreadFor), trigger);
+}
+
+/** Emittiert die Wakes für bereits bestimmte Ziele. Eine Stelle für Voll-Lauf und Ein-Instanz-Lauf. */
+function emitFor(
+  deps: SweepDeps,
+  coalescer: WakeCoalescer,
+  targets: ReadonlyArray<{ instanceId: string; spiffeUri: string }>,
+  trigger: string,
+): SweepRun {
   const woken: string[] = [];
 
   for (const target of targets) {
@@ -118,18 +127,45 @@ export function runReconciliationSweep(
 }
 
 /**
+ * Behandelt **genau eine** Instanz: hat sie ungelesene Post und ist sie routbar, bekommt sie ein Wake.
+ * Genau **eine** `unreadFor`-Abfrage — der Pfad des Registry-Hooks. Wirft nie.
+ */
+export function sweepInstance(
+  deps: SweepDeps,
+  coalescer: WakeCoalescer,
+  instanceId: string,
+  trigger: string,
+): SweepRun {
+  let entry: LiveInstance | undefined;
+  try {
+    entry = deps.registry.list().find((e) => e?.instanceId === instanceId);
+  } catch (error) {
+    deps.log?.warn(
+      { trigger, instance_id: instanceId, err: String(error) },
+      '[wake-sweep] Registry nicht lesbar — Instanz übersprungen',
+    );
+    return { candidates: 0, woken: [] };
+  }
+  if (entry === undefined) return { candidates: 0, woken: [] };
+
+  // Dieselbe fail-closed-Auswahl wie beim Voll-Lauf, nur auf einem Ein-Element-Input (#322).
+  return emitFor(deps, coalescer, computeSweepTargets([entry], deps.unreadFor), trigger);
+}
+
+/**
  * Verdrahtet den Sweep auf `registry.on('register')`. Gibt eine Abmelde-Funktion zurück (Shutdown).
  *
  * **Nur `register` löst aus** — `unregister`/`stale` bedeuten, dass die Instanz gerade **weg** ist; sie
  * zu wecken wäre sinnlos und im `stale`-Fall sogar ein Wake an einen toten Konsumenten.
+ * **Nur die registrierende Instanz** wird behandelt (s. Modul-Doc: Präzision + O(N²)-Vermeidung).
  */
 export function registerReconciliationSweep(deps: SweepDeps): () => void {
   const coalescer = new WakeCoalescer(deps.coalesceMs ?? DEFAULT_WAKE_COALESCE_MS);
 
-  return deps.registry.on((reason) => {
+  return deps.registry.on((reason, entry) => {
     if (reason !== 'register') return;
     try {
-      runReconciliationSweep(deps, coalescer, 'agent-register');
+      sweepInstance(deps, coalescer, entry.instanceId, 'agent-register');
     } catch (error) {
       // Listener laufen synchron im Registry-Pfad — hier darf NICHTS nach oben durchschlagen.
       deps.log?.warn({ err: String(error) }, '[wake-sweep] Sweep fehlgeschlagen (ignoriert)');
