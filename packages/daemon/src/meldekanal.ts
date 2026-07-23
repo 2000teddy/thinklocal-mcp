@@ -154,8 +154,11 @@ function errNote(error: unknown): string {
 /**
  * Normalisiert den (nicht vertrauenswürdig getypten) Kanal-Rückgabewert. Unbekanntes
  * Shape (kein Objekt, fehlendes/unbekanntes `outcome`) ⇒ `error` — nie versehentlich `approved`.
+ *
+ * Exportiert, damit vorgelagerte Komposition (TL-10 `approval-router.ts`) **dieselbe** Fail-closed-
+ * Mechanik an EINER Stelle benutzt statt sie nachzubauen. Reiner, additiver Export — kein Runtime-Change.
  */
-function normalizeDecision(raw: unknown, channelId: string): ApprovalDecision {
+export function normalizeDecision(raw: unknown, channelId: string): ApprovalDecision {
   if (typeof raw !== 'object' || raw === null) {
     return { outcome: 'error', channelId, note: 'channel returned non-object decision' };
   }

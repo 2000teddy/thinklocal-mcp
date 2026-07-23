@@ -86,3 +86,50 @@ Ein Matrix-Eintrag = Prädikat + Ziel:
 Diese Note **entscheidet nichts Neues** über die CO-Auflagen hinaus — sie groundet den Seam, macht den
 v1-Vorschlag explizit und listet §5 als Gate für den ersten Code. Kein Deploy/Secret/Runtime-Change. Die
 künftige ADR (nach ADR-043) hält die in §5 getroffenen Entscheidungen fest, bevor Slice A startet.
+
+---
+
+## 7. Umsetzungsstand (Nachtrag)
+
+§5 ist seit dem **§5-CO vom 2026-07-20** (read-only `pal:consensus`, opus 8/10 + sonnet 8/10 einstimmig)
+entschieden: **D1** eigene Datei `config/freigabe-matrix.toml`; **D2** `channelId`-Referenz + Registry-
+`requestApprovalOn`; **D3** `human:<id>` v1 **deklarativ** (nur parse-validiert, Owner-Sign-off vor Slice B);
+**D4** gegen die injizierte `resolveMcp`-`knownServers`-Liste; **D5** leer/kein Match ⇒ 403 Default-Deny.
+
+Gemergt und **unverdrahtet** (je 0 Aufrufer, kein Runtime-Change):
+
+| Baustein | Datei | PR |
+|---|---|---|
+| Parser / Resolver / Guard (Slice A) | `freigabe-matrix.ts` (`parseFreigabeMatrix`, `resolveEntry`, `isRoutable`) | #300 |
+| Kanal-Bindung (D2-Prep) | `meldekanal.ts` `MeldekanalRegistry.requestApprovalOn(channelId, req)` | #317 |
+| **Komposition (dieser Slice)** | **`approval-router.ts` `requestApprovalViaMatrix(matrix, approver, ctx, req)`** | **(dieser PR)** |
+
+### 7.1 Der Kompositions-Vertrag (`approval-router.ts`)
+
+Der Router verbindet die beiden Hälften — mehr nicht. Er ist damit exakt die **Aktivierungs-Vorbedingung 2**
+aus SECURITY.md „Freigabe-Matrix (TL-10)" („die Kanalauswahl wird auf den Matrix-Kanal beschränkt"):
+
+- **Nicht routable** (kein Match, leere Matrix, nicht wohlgeformtes Ziel — D5) ⇒ `denied-no-channel`, und es
+  wird **niemals ein Kanal gefragt**. Routbarkeit entscheidet allein `isRoutable(resolveEntry(...))`; der
+  Router prüft **keine** Teilbedingung selbst.
+- **Routable** ⇒ **ausschließlich** `requestApprovalOn(target.channel, …)`. Es gibt **keinen** Fallback auf
+  `requestApproval()` („erster gesunder Kanal") — genau diese Auswahl soll die Matrix ja ersetzen. Der Router
+  nimmt dafür nur die schmale `ChannelBoundApprover`-Sicht entgegen, in der die Fallback-Methode **gar nicht
+  existiert**: fail-closed per Typ, nicht per Disziplin.
+- **Total:** Wurf oder unbekanntes Decision-Shape des Approvers ⇒ `error` (über das **exportierte**
+  `normalizeDecision` der Registry — dieselbe Mechanik an EINER Stelle, kein Nachbau). Der Router wirft nie,
+  und `isApproved()` bleibt der einzige Auswertungspfad.
+- **`decider` bleibt deklarativ** (D3): das aufgelöste Ziel inkl. `decider` wird nur für Audit/Anzeige
+  durchgereicht, **nicht** durchgesetzt. Insbesondere macht `consensus:quorum=N` einen Eintrag **nicht**
+  mehrstimmig; ein Consensus-*Decider* wird hier weder erzwungen noch abgelehnt (im Ingress bleibt der
+  `consensus`-*Tier* ein hartes 403). Ein Test schreibt dieses Verhalten fest, damit eine spätere
+  Verschärfung eine **bewusste CO-Entscheidung** bleibt statt unbemerkt hineinzurutschen.
+
+### 7.2 Was danach für Slice B noch fehlt (unverändert gated)
+
+1. **TOML-Loader** für `config/freigabe-matrix.toml` (D1) — I/O, plus die kuratierte, reviewte Matrix-Datei
+   selbst (ihr Inhalt ist Sicherheitspolicy).
+2. **Verdrahtung** am `resolveApproval`-Seam (`mcp-ingress.ts`) inkl. **Env-Flag-Regime** wie TL-09b
+   (Default AUS, lauter Startup-Warn bei „Flag an, Matrix leer/fehlt").
+3. **D3-Owner-Sign-off (Christian)** — bewusste Bestätigung, dass `human:<id>` v1 nicht durchgesetzt wird.
+4. **Aktivierung** (Flag-Flip in einer laufenden/Live-Instanz) — bleibt owner-gated.

@@ -138,9 +138,27 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     Env-Flag-Flip, KEIN Ingress, 0 Aufrufer** (rein additiv, kein Runtime-Change). +10 Tests, Suite **1932
     grün**; CR (Claude-Subagent) **GREEN, keine Findings**. Belegt in SECURITY.md „Freigabe-Matrix (TL-10)"
     als Aktivierungs-Vorbedingung (Registry-Bindung).
-  - [ ] **Slice B** (Verdrahtung, **D2/D3-gated**): Resolver konsultiert die Matrix vor `registry.requestApproval`
-    (Env-Flag wie TL-09b); braucht D2 (**Registry-`requestApprovalOn(channelId)` liegt jetzt vor**) + **D3
-    Christian-Sign-off** (SECURITY.md-Note liegt jetzt vor). **Owner-gated:** Aktivierungs-Flag-Flip.
+  - [x] **Kompositions-Primitive (Slice-B-Prep)** (2026-07-23): `approval-router.ts`
+    `requestApprovalViaMatrix(matrix, approver, ctx, req)` — das fehlende Bindeglied zwischen den beiden
+    gemergten, aber unverbundenen Hälften (Slice A `resolveEntry`/`isRoutable` #300 ⟷ D2-Prep
+    `requestApprovalOn` #317). Damit ist SECURITY.md-**Aktivierungs-Vorbedingung 2** („Kanalauswahl auf den
+    Matrix-Kanal beschränkt") erfüllt. **Fail-closed:** nicht routable (kein Match/leere Matrix/nicht
+    wohlgeformtes Ziel, D5) ⇒ `denied-no-channel` **ohne** dass ein Kanal gefragt wird; routable ⇒
+    **ausschließlich** `requestApprovalOn(target.channel)`, **kein** Fallback auf „erster gesunder Kanal" —
+    erzwungen **per Typ** über die schmale `ChannelBoundApprover`-Sicht, in der `requestApproval()` gar nicht
+    existiert. Wurf/unbekanntes Shape ⇒ `error` über das **exportierte** `normalizeDecision` (dieselbe
+    Mechanik an EINER Stelle, kein Nachbau); wirft nie; `isApproved` bleibt einziger Auswertungspfad.
+    **`decider` bleibt deklarativ (D3):** nur für Audit durchgereicht, nicht durchgesetzt — auch
+    `consensus:quorum=N` wird weder erzwungen noch abgelehnt (per Test festgeschrieben, damit eine
+    Verschärfung eine bewusste CO-Entscheidung bleibt). **KEIN TOML-Loader, KEIN Ingress-Wiring, KEIN
+    Env-Flag, 0 Aufrufer** (kein Runtime-Change). +18 Tests, Suite **1950 grün** (140 Files).
+    Doku: `TL-10-freigabe-matrix-scoping.md` §7.
+  - [ ] **Slice B** (Verdrahtung, **D1-Loader/D3-gated**): Resolver konsultiert die Matrix vor
+    `registry.requestApproval` (Env-Flag wie TL-09b); D2 **liegt vor** (`requestApprovalOn`) und die
+    **Komposition liegt jetzt ebenfalls vor** (`requestApprovalViaMatrix`) — offen bleiben: **TOML-Loader
+    für `config/freigabe-matrix.toml` + kuratierte Matrix-Datei** (D1, Policy-Inhalt), **Ingress-Verdrahtung
+    + Env-Flag-Regime** und **D3 Christian-Sign-off** (SECURITY.md-Note liegt vor).
+    **Owner-gated:** Aktivierungs-Flag-Flip.
 
 ### P1 — Identität, Autonomie, Robustheit
 > **Discovery + Reihenfolge (CO 2026-07-15, opus+sonnet einstimmig):** **TL-12 VOR TL-11.** TL-12 Slice A
