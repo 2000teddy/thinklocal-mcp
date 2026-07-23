@@ -3,7 +3,9 @@
 **Status:** Proposed (Scoping — doc-first, **kein Code** in diesem ADR; Implementierung CO-gated Folge-Slice)
 **Datum:** 2026-07-21 · **Rev. 2:** 2026-07-23 — Implementierungs-Anker gegen `e994e65` verifiziert
 (drei `index.ts`-Anker der Erstfassung waren verschoben), fail-closed-Grenzen, Seed-Flag-Semantik und die
-CO-Grenze als eigene Sektionen §5–§8. Weiterhin **kein Code**, weiterhin **kein** Beschluss.
+CO-Grenze als eigene Sektionen §5–§8; nach externem Review (agy) §6 **platzierungs-/vokabular-agnostisch** neu
+gefasst, eine **vierte** Card-Parse-Stelle ergänzt und der Fetch-Anker präzisiert. Weiterhin **kein Code**,
+weiterhin **kein** Beschluss.
 **Kontext-Task:** Folgt direkt aus dem TL-12-Slice-C-Park (`TL-12-slice-c-scoping.md`, PR #307). Der Park nannte
 als „ehrlichen nächsten Baustein" **nicht** Slice C selbst, sondern den fehlenden Mechanismus, mit dem ein
 Sender „Peer ≥ Feature X" überhaupt entscheiden kann. Dieses ADR pinnt dessen Design gegen den realen Code.
@@ -141,35 +143,55 @@ Sektion ist der geprüfte Stand — sie ersetzt Suchen durch Nachschlagen, wenn 
 
 | Beschreibung | #308 sagte | **tatsächlich (HEAD)** |
 |---|---|---|
-| Fetch + Identitäts-Check + Store (Discovery-Pfad) | `index.ts:1491-1502` | **`index.ts:1530-1541`** — `as AgentCard`-Cast `:1530`, sha256-Fingerprint-Vergleich + SPIFFE-Match `:1532-1533`, `updateAgentCard` `:1541` |
+| Fetch + Identitäts-Check + Store (Discovery-Pfad) | `index.ts:1491-1502` | **`index.ts:1524-1541`** — `fetch` der Card `:1524-1528`, `as AgentCard`-Cast `:1530`, sha256-Fingerprint-Vergleich + SPIFFE-Match `:1532-1533`, `updateAgentCard` `:1541`. (CR-Präzisierung: der Fetch beginnt bei `:1524`; `:1530-1541` deckt nur Cast + Check + Store.) |
 | zweiter Card-Consume-Pfad | `index.ts:1553` | **`index.ts:1592`** (Cast) / **`:1603`** (`updateAgentCard`) |
 | `default`-Drop im Empfangs-Dispatch (Slice-C-Vorbehalt **V1**) | `index.ts:932-934` | **`index.ts:936-938`** (`default: log.debug('Unbekannter Nachrichtentyp'); return null;`) |
 
-Es gibt außerdem einen **dritten** Card-Pfad (`index.ts:720`, Cast; Fetch bei `:631`/`:731`) — wer den
-`protocol`-Block konsumiert, muss prüfen, ob alle Pfade denselben Identitäts-Check durchlaufen, bevor die
-Card als Feature-Quelle gilt.
+Es gibt außerdem einen **dritten** Card-Pfad (`index.ts:720`, Cast; Fetch bei `:631`/`:731`) und — aus dem
+externen Review ergänzt — eine **vierte** Card-Parse-Stelle: `pinned-card-fetch.ts:63`
+(`JSON.parse(text) as { spiffeUri?, publicKey? }`). Diese vierte ist **kein** Feature-Konsument: sie parst
+die Card bewusst nur auf die zwei Identitätsfelder und gibt die volle Card **nicht** zurück (sie ist die
+Vorprüfung, die den Identitäts-Pin herstellt). Sie gehört trotzdem in diese Liste, weil ein Folge-Slice, der
+„die Card lesen" will, sonst annehmen könnte, hier stünde die vollständige Card zur Verfügung — sie tut es
+nicht, und ein `protocol`-Feld wäre hier **stillschweigend weg**.
+
+Wer die Feature-Liste konsumiert, muss also für **alle vier** Stellen prüfen: läuft der Identitäts-Check,
+und steht die **volle** Card zur Verfügung? Nur dann darf eine Card als Feature-Quelle gelten.
 
 ## 6. Fail-closed-Grenzen (nicht verhandelbar, unabhängig vom CO)
 
-Diese Zusagen hängen **nicht** an der offenen Platzierungs-/Vokabular-Frage und gelten für jede Variante:
+Diese Zusagen gelten **für jede Variante** der offenen Platzierungs-/Vokabular-Frage. Die Tabelle ist
+deshalb bewusst **agnostisch** formuliert: „**annoncierte Feature-Liste**" meint das Feld, an dem der CO sie
+später verortet (eigener Block, `capabilities.services` oder etwas Drittes) — **welches** Feld das ist, wird
+hier **nicht** entschieden. (CR-Korrektur: die erste Fassung dieser Sektion nannte konkret einen
+`protocol`-Block, ein Feld `features` und `protocol_version` und nahm damit genau die beiden CO-Fragen
+vorweg, deren Unabhängigkeit sie behauptete.)
 
 | Situation | Ergebnis | Warum |
 |---|---|---|
-| Peer ohne `protocol`-Block (alte Version) | **`false`** | „absent ⇒ assume yes" wäre ein stiller Drop beim Empfänger |
-| Block da, `features` fehlt / kein Array / leer | **`false`** | malformed ist kein Freibrief |
+| Peer annonciert **gar keine** Feature-Liste (alte Version) | **`false`** | „absent ⇒ assume yes" wäre ein stiller Drop beim Empfänger |
+| Liste vorhanden, aber kein Array / leer / malformed | **`false`** | malformed ist kein Freibrief |
 | Feature nicht in der Liste | **`false`** | exakter String-Match, keine Präfix-/Fuzzy-Logik |
 | Card gar nicht abrufbar / Peer unbekannt | **`false`** | kein Signal ist kein positives Signal |
-| Card vorhanden, aber Identitäts-Check nicht bestanden | **`false`** (Card wird verworfen) | `index.ts:1532-1538` lehnt bereits ab — ein Feature darf nie aus einer nicht zurechenbaren Card stammen |
+| Card da, aber Identitäts-Check nicht bestanden | **`false`** (Card wird verworfen) | `index.ts:1532-1538` lehnt bereits ab — ein Feature darf nie aus einer nicht zurechenbaren Card stammen |
+| Card da, aber der Pfad liefert **nicht die volle Card** | **`false`** | s. §5.3, vierte Parse-Stelle: eine Teil-Card hat keine Feature-Liste, „fehlt" heißt dort nicht „unterstützt nicht", sondern „nicht gelesen" — beides muss `false` ergeben |
 
-Kodifiziert ist das bereits in `wire-feature.ts` `supportsFeature` (#314): der **einzige** `true`-Pfad ist
-„echtes Array enthält exakt diesen String"; die Funktion wirft nie. Ein Producer-Slice **darf diese
-Semantik nicht aufweichen** — insbesondere nicht „Feature-Liste fehlt ⇒ von `protocol_version` ableiten".
+Kodifiziert ist das bereits in `wire-feature.ts` `supportsFeature` (#314) — und zwar ebenfalls
+**platzierungs- und vokabular-agnostisch**: die Funktion nimmt die Feature-**Liste** und den **Namen** als
+Parameter, nicht die Card. Der **einzige** `true`-Pfad ist „echtes Array enthält exakt diesen String"; die
+Funktion wirft nie. Ein Producer-Slice **darf diese Semantik nicht aufweichen** — insbesondere darf eine
+fehlende Feature-Liste **nicht** aus einer Versionsangabe abgeleitet werden (welche Versionsfelder es geben
+wird, ist selbst CO-offen).
 
 **Feature-Advertisement ist kein Trust-Grant.** Die Card sagt ausschließlich „ich kann Form X parsen".
 Pairing, Approval-Gates und die Slice-B-Allowlist bleiben unberührt und werden **nicht** durch ein
 annonciertes Feature ersetzt oder abgeschwächt.
 
 ## 7. Seed-Flag `order-envelope-v2` — was es bedeutet und was nicht
+
+> **Der Name `order-envelope-v2` ist ein Vorschlag, kein Beschluss** — das Vokabular ist Teil des offenen
+> CO (§8). Was unten steht, ist die **Bedeutung**, die der Seed tragen soll; der endgültige String kann
+> abweichen.
 
 - **Bedeutung (Empfänger-Semantik):** „dieser Node nimmt eine **top-level** `MessageType='ORDER'`-Envelope
   entgegen und verarbeitet sie" — **nicht** „dieser Node sendet ORDER so".
@@ -199,6 +221,6 @@ der CO ist damit an einen Owner-/Infra-Schritt gebunden, nicht an weitere Repo-A
 `wire-feature.ts` (ungegateter fail-closed Consumer-Kern, ADR §2, #314) ·
 `agent-card.ts:22-111` (AgentCard, kein protocol/features) · `agent-card.ts:480` (`buildCard`, Producer) ·
 `version-compat.ts:13,16,108` (tot außerhalb Tests) · `mesh.ts:20,189,258` (per-Peer Card + Getter) ·
-`index.ts:1530-1541` und `:1592,1603` (Fetch+Identitäts-Check+Store, `as AgentCard`-Cast) ·
-`index.ts:720` (dritter Card-Pfad) · `pinned-card-fetch.ts:35` (pinned Fetch) ·
+`index.ts:1524-1541` und `:1592,1603` (Fetch+Identitäts-Check+Store, `as AgentCard`-Cast) ·
+`index.ts:720` (dritter Card-Pfad) · `pinned-card-fetch.ts:35` (pinned Fetch), `:63` (vierte Card-Parse-Stelle, nur Identitätsfelder) ·
 `index.ts:936-938` (default-Drop, V1) · `TL-12-slice-c-scoping.md` (V1–V3).

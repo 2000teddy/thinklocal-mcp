@@ -24,7 +24,7 @@ Approval-Gates und die Slice-B-Allowlist bleiben unberührt), **§7** Seed-Flag 
 Empfänger-Semantik („ich kann X entgegennehmen", nicht „ich sende X"), und ein Node darf es **erst** setzen,
 wenn sein Dispatch top-level ORDER wirklich behandelt — sonst wäre das Flag eine Lüge, die beim Sender genau
 den stillen Drop auslöst, den V1 beschreibt; **§8** was CO-gated bleibt (Platzierung, Vokabular/Semver,
-Producer-Befüllung, Empfänger-Handler, Sender-Flip). `changes/2026-07-23_adr046-impl-anchors.md`.
+Producer-Befüllung, Empfänger-Handler, Sender-Flip). **CR durch ein echtes externes `agy`-Review** (die Binaries liegen unter `~/.local/bin`, sind nur nicht im `PATH` — die bisherige Notiz „nicht verfügbar" war insofern falsch; `codex` scheitert weiter an einem abgelaufenen Token): **2 HIGH + 1 MEDIUM, alle behoben** — §6 war **nicht** CO-unabhängig (die Zeilen nannten `protocol`-Block/`features`/`protocol_version` und nahmen damit Platzierung **und** Vokabular vorweg) → jetzt agnostisch als „annoncierte Feature-Liste"; eine **vierte** Card-Parse-Stelle (`pinned-card-fetch.ts:63`) fehlte → nachgetragen samt der Folge-Regel „Pfad liefert nicht die volle Card ⇒ `false`"; der Anker `1530-1541` war als „Fetch+…" etikettiert, der `fetch` beginnt aber bei `:1524` → auf `1524-1541` präzisiert. `changes/2026-07-23_adr046-impl-anchors.md`.
 
 ### feat(tl12): B1-Prep — Reserve-vor-Dispatch/Commit-Vertrag als reine Zustandsmaschine (2026-07-23 14:50, #324)
 **Additive, ungegatete reine Primitive** (**0 Aufrufer**, kein Runtime-Change) + die von

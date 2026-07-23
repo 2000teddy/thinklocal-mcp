@@ -58,7 +58,25 @@ Identitäts-Check durchlaufen, bevor eine Card als Feature-Quelle gilt.
 - **CO:** n/a — dieses Update **trifft keine** der offenen Entscheidungen; es verifiziert Anker und hält
   Grenzen fest, die ohnehin gelten. Der CO-pflichtige Beschluss bleibt unberührt offen.
 - **CG/TS:** entfallen — kein Code/Test-Diff. Suite unverändert **2027 grün** (142 Files).
-- **CR:** externes Review am PR (`agy`/`codex` nicht im PATH → adversariales Claude-Subagent).
+- **CR ✅ — echtes externes Review mit `agy` 1.1.5.** **Korrektur einer stehenden Annahme:** `agy` und `codex`
+  sind **verfügbar**, nur nicht im `PATH` — als Binaries unter `~/.local/bin` direkt aufrufbar. Die in
+  früheren Einträgen geführte Notiz „`agy`/`codex` nicht im PATH" war wörtlich richtig, als
+  *Verfügbarkeits*-Aussage aber falsch. `codex` scheitert weiterhin an einem abgelaufenen Token
+  (`codex login` = interaktiver Owner-Schritt); `agy --print` lief durch.
+  **Befund: 2 HIGH + 1 MEDIUM, alle behoben.**
+  - **HIGH-1 — §6 war nicht CO-unabhängig, obwohl sie es behauptete.** Die Tabellenzeilen nannten konkret
+    einen `protocol`-Block, ein Feld `features` und `protocol_version` — und nahmen damit **genau die beiden
+    CO-Fragen vorweg** (Platzierung; Vokabular), deren Unabhängigkeit die Sektion behauptete. Neu gefasst:
+    die Tabelle spricht von der „**annoncierten Feature-Liste**" (wo immer der CO sie verortet), und die
+    Ableitungs-Warnung nennt keine konkreten Versionsfelder mehr.
+  - **HIGH-2 — eine vierte Card-Parse-Stelle war übersehen** (`pinned-card-fetch.ts:63`). Nachgetragen, mit
+    der Nuance, die der Reviewer nicht hatte: sie parst die Card bewusst **nur** auf `{spiffeUri, publicKey}`
+    und gibt die volle Card **nicht** zurück — also kein Feature-Konsument, aber genau deshalb eine Falle für
+    einen Folge-Slice, der „die Card lesen" will. Daraus folgt eine **neue §6-Zeile**: liefert ein Pfad nicht
+    die volle Card ⇒ **`false`** („fehlt" heißt dort „nicht gelesen", nicht „unterstützt nicht").
+  - **MEDIUM — Anker-Etikett zu weit:** `1530-1541` war als „Fetch + Identitäts-Check + Store" beschriftet,
+    deckt aber nur Cast + Check + Store; der `fetch` beginnt bei `:1524` → auf **`1524-1541`** präzisiert.
+  - Zusätzlich klargestellt: der Seed-Name `order-envelope-v2` ist ein **Vorschlag, kein Beschluss**.
 - **PC:** Secret-Scan clean (nur Doku).
 - **DO ✅:** dieser Eintrag, `ADR-046-wire-feature-version-exchange.md` (Rev.-2-Kopf + §5–§8 + aktualisierte
   Beleg-Referenzen), `TODO.md`, `CHANGES.md`, `COMPLIANCE-TABLE.md`.
