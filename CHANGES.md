@@ -8,7 +8,35 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### fix(tl12): `canonicalOrderKeyId` — format-stabiler Keyid über DER-SPKI (2026-07-23 13:50)
+### feat(tl12): B1-Prep — Reserve-vor-Dispatch/Commit-Vertrag als reine Zustandsmaschine (2026-07-23 14:50)
+**Additive, ungegatete reine Primitive** (**0 Aufrufer**, kein Runtime-Change) + die von
+`TL-12-slice-b-execution-scoping.md` §4 **ausdrücklich beauftragte** Spezifikation: „Reserve/Commit-Protokoll
+**jetzt** gemeinsam mit B3s Dispatch-Kontrakt spezifizieren — sonst wird B1 blind gegen B3 gebaut und muss neu
+geschrieben werden." Kein Vorziehen von B1, sondern dessen benannte Vorbedingung. **Es entsteht keine
+Persistenz** (keine Tabelle, kein `UNIQUE`-Index, keine Transaktion), **kein** Execute-Pfad, **kein**
+Dispatch, **keine** TTL-Prüfung/Denylist/Rate-Fence — und **keine** der vier §9-Entscheidungen wird berührt
+(D-OWNER, D-EPOCH, ausführbare Startmenge, Revocation-Autorität). Neu `order-ledger-protocol.ts`:
+`nextLedgerState(current, event)` plus die Guards `mayDispatch`/`isFinal`, rein und total. **Die
+Zustandsmenge ist erzwungen, nicht gewählt:** aus „Reserve **vor** Dispatch" + „at-most-once" folgt
+`reserved` → `committed`|`failed`, beide **terminal**; ein zweiter `reserve` auf eine bekannte Nonce ist der
+semantische Zwilling des `UNIQUE`-Constraints und wird abgelehnt — **auch auf `failed`**, denn ein gemeldeter
+Fehlschlag kann ein Timeout sein, dessen Nebenwirkung schon eingetreten ist (Retry wäre at-**least**-once,
+genau das schließt §4 aus). Crash-nach-Claim bleibt `reserved` und wird nie ausgeführt. `mayDispatch` ist der
+**einzige** Auswertungspfad (analog `isApproved`/`isRoutable`) und nur beim erfolgreichen `reserve` wahr — der
+Dispatch hängt damit an genau **einem** Übergang. Doku: neues §4.1 mit Übergangstabelle **und** beiden Seiten
+(was B1 persistieren muss — inkl. `signer_keyid` = kanonischer DER-SPKI-Keyid aus #323, sonst wäre die
+`UNIQUE`-Spalte durch PEM-Umformatieren umgehbar — und was B3 einhalten muss, insbesondere: `mayDispatch ===
+false` ist **kein Fehler**, sondern der Normalfall, und darf nicht in einen Retry umgedeutet werden).
++27 Tests inkl. vollständiger 12-Kombinationen-Matrix (exakt **eine** gibt einen Dispatch frei), Suite
+**2027 grün** (142 Files). **CR (Claude-Subagent, BFS bis Tiefe 7 + 27×29 feindliche Eingaben): kein HIGH,
+3 MEDIUM an der Wurzel behoben** — darunter ein **echter At-most-once-Bypass**: der `malformed`-Zweig setzte
+`state: null`, also genau das Sentinel für „claimbar", womit ein regelkonformer Aufrufer eine beanspruchte Nonce
+wieder claimbar waschen konnte (Feld heißt jetzt `observed`, rein diagnostisch, nie ein Ersatzwert); dazu
+„`mayDispatch` ist notwendig, nicht hinreichend" (zustandslos ⇒ die Race entscheidet der Claim-`INSERT`) und die
+Warnung, `messages.signer_keyid` **nicht** zu kopieren, weil dort heute der malleable Wert steht. B1-Persistenz, B2a/B2b, B3 und §9 bleiben gated.
+`changes/2026-07-23_tl12-b1-ledger-protocol.md`, `TL-12-slice-b-execution-scoping.md` §4.1.
+
+### fix(tl12): `canonicalOrderKeyId` — format-stabiler Keyid über DER-SPKI (2026-07-23 13:50, #323)
 **Additive, ungegatete reine Primitive** (**0 Aufrufer**, kein Runtime-Change). **Ausdrücklich nicht
 Slice B/B0:** keine der vier §9-Christian-Entscheidungen wird berührt (Owner-Opt-in, Epoch-Grenze,
 ausführbare Startmenge, Revocation-Autorität), es entsteht kein Profil/Config/Schema/Ledger/Denylist und

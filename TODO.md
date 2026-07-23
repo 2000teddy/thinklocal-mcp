@@ -183,7 +183,7 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     (is_order typsystemisch unfälschbar, issuer===sender Relay-Schutz), `verifyStoredOrder` fail-closed,
     Ingest-Wiring + `ORDER_RX`/`ORDER_VERIFY_FAILED`-Audit, **Read-Surface: `GET /api/inbox` re-verifiziert
     live + surfaced `is_order`/`order`-Block** + Tri-State-Marker (`classifyInboundOrder`-Seam: malformed → INVALID+Audit, Reviewer #266). +37 Tests.
-  - [x] **B0-Vorarbeit: kanonischer Keyid** (2026-07-23): `signed-order.ts` `canonicalOrderKeyId` —
+  - [x] **B0-Vorarbeit: kanonischer Keyid** (2026-07-23, #323): `signed-order.ts` `canonicalOrderKeyId` —
     sha256 über die **DER-SPKI-Bytes** statt über den PEM-**Text**. Schließt die im Scoping §3 benannte
     **Format-Malleabilität** von `orderKeyId` (dasselbe Schlüsselmaterial mit CRLF/Leerzeilen ⇒ **anderer**
     Keyid, DER byte-identisch — als Defekt-Beleg getestet), **bevor** der Keyid Ledger-Uniqueness (B1) oder
@@ -193,6 +193,17 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     **`orderKeyId` unverändert** (stempelt gespeicherte Zeilen → Wechsel = Datenmigration, gehört in B0),
     **0 Aufrufer**. +8 Tests, Suite **2000 grün**. **Berührt KEINE der vier §9-Entscheidungen** — Slice B
     bleibt vollständig gated.
+  - [x] **B1-Vorarbeit: Reserve/Commit-Protokoll spezifiziert + reine Zustandsmaschine** (2026-07-23):
+    `order-ledger-protocol.ts` `nextLedgerState` + Guards `mayDispatch`/`isFinal`. Erfüllt den Auftrag aus
+    Scoping §4, das Protokoll **jetzt gemeinsam mit B3s Dispatch-Kontrakt** festzuhalten (sonst wird B1
+    blind gegen B3 gebaut). Zustandsmenge **erzwungen** aus at-most-once: `reserved` -> `committed`|`failed`,
+    beide **terminal**; zweiter `reserve` auf eine bekannte Nonce = semantischer Zwilling des
+    `UNIQUE`-Constraints und abgelehnt, **auch auf `failed`** (Retry waere at-least-once, da ein gemeldeter
+    Fehlschlag ein Timeout mit bereits eingetretener Nebenwirkung sein kann). Crash-nach-Claim bleibt
+    undispatched. `mayDispatch` = einziger Auswertungspfad, nur beim erfolgreichen `reserve` wahr.
+    **KEINE Persistenz, KEIN Execute-Pfad, KEIN Dispatch, 0 Aufrufer**; keine der vier §9-Entscheidungen
+    beruehrt. +27 Tests (inkl. vollstaendiger 12-Kombinationen-Matrix), Suite **2027 gruen**. CR: kein HIGH, 3 MEDIUM behoben (u.a. `malformed`-Zweig setzte `state: null` = Sentinel fuer „claimbar" -> Feld jetzt `observed`, rein diagnostisch).
+    Doku: Scoping §4.1 (Uebergangstabelle + B1-Persistenz- und B3-Dispatch-Pflichten).
   - [~] **TL-12 Slice B**: **Ausführung** eines gelesenen Auftrags. **Scoping-Doku (CO 2026-07-16, opus+sonnet)
     fertig:** `docs/architecture/TL-12-slice-b-execution-scoping.md` — Votum **B1 nicht starten**, bis Owner-Opt-in
     + Epoch-Grenze entschieden. Korrigierte Zerlegung **B0→B1→B2a→B2b→B3**: B0 Executable-Profil (`ttl_ms>0`,
