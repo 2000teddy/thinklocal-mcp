@@ -189,7 +189,29 @@ wann und mit welcher Rate-Semantik** der Daemon sweept.
    `to_agent_instance IS NULL` (`includeLegacy` default `false`, `agent-inbox.ts:481-489`) — ausgerechnet
    die Klasse, die am ehesten liegenbleibt. Ob ein Sweep sie sehen soll, ist eine Vertragsfrage.
 
-### Was hier **gebaut** wurde (Korrektur der ersten Fassung)
+### Umsetzungsstand (Nachtrag 2026-07-23) — die Verdrahtung ist gebaut
+
+Der reine Kern lag mit #322 vor; die **Verdrahtung** liegt jetzt als `sweep-wiring.ts` vor
+(`registerReconciliationSweep` / `runReconciliationSweep`). Die vier offenen Punkte wurden **innerhalb der
+oben aufgeführten Optionen** entschieden — keine davon ist neu erfunden:
+
+| Offener Punkt | Entscheidung | Warum diese Option |
+|---|---|---|
+| 1. verschiebt oder **ergänzt** | **ergänzt** — die Konsumenten-Pflicht (Cold-Start-Sweep, Spec §5) bleibt unverändert bestehen | Gürtel *und* Hosenträger; der Daemon sieht nicht jeden Supervisor-Neustart |
+| 2. Auslöser | **`agentRegistry.on('register')`** | Der Hook **existiert bereits**; er feuert genau dann, wenn eine Instanz (neu oder nach Neustart) da ist — also wenn ihr Supervisor gerade wieder verbunden ist. Kein neuer Timer, **kein** Eingriff in die sicherheitsgehärtete WS-Datei (der WS-Connect-Hook wäre laut §3 die teuerste Variante, weil es ihn nicht gibt) |
+| 3. Rate-Semantik | **eigener `WakeCoalescer`** für den Sweep-Pfad (Option 1 aus §3) | Der Sweep ist rate-begrenzt **und** wird nicht vom laufenden Inbox-Verkehr geschluckt — sonst verpuffte er genau im Reconnect-Fenster, das er beheben soll. §5 liest sich damit als „≤ 1 Wake pro Instanz pro Fenster **je Quelle**" |
+| 4. Opt-in | **Env-Flag `TLMCP_WAKE_SWEEP_ENABLED`, Default AUS** (Regime wie TL-09b) | Ohne Flag wird die Verdrahtung gar nicht erst aufgerufen ⇒ **kein** Verhaltens-Delta |
+| 5. Legacy-Zeilen | **unverändert `includeLegacy: false`** (der `unreadCount`-Default) | Eine Änderung hier wäre eine Vertragsfrage über `to_agent_instance IS NULL`-Zeilen; der Sweep erbt bewusst den bestehenden Default, statt ihn still zu verschieben. **Bleibt offen** und ist im Modul-Doc benannt |
+
+**Nur `register` löst aus** — `unregister`/`stale` bedeuten, dass die Instanz gerade weg ist; sie zu wecken
+wäre sinnlos und im `stale`-Fall ein Wake an einen toten Konsumenten.
+
+**Fail-safe:** werfende Registry ⇒ Sweep übersprungen; werfender Bus ⇒ die übrigen Instanzen bekommen ihr
+Wake trotzdem; werfender Zähler ⇒ diese Instanz entfällt (#322). Der Listener läuft **synchron** im
+Registry-Pfad, deshalb darf dort nichts nach oben durchschlagen — doppelt abgesichert.
+**Owner-gated bleibt** allein der Flag-Flip in einer laufenden Instanz.
+
+### Was zuvor **gebaut** wurde (Korrektur der ersten Fassung)
 Die erste Fassung dieser Note behauptete, schon die **Signatur** von `computeSweepTargets` wäre eine
 verdeckte Vertragsentscheidung, und stufte den Punkt als nicht baubar ein. **Das war falsch** — und das
 externe Review hat es zu Recht als HIGH beanstandet: die vorgeschlagene Signatur enthält **keinen**
@@ -219,7 +241,7 @@ einer weiterhin gateten Entscheidung.
 
 | Punkt | Offen | Reiner Kern | Priorität (Vorschlag) |
 |---|---|---|---|
-| **Reconciliation-Sweep** | Verdrahtung: Trigger, Rate-Semantik, Flag, Legacy-Politik | ✅ **gebaut** — `sweep-targets.ts` `computeSweepTargets`, 0 Aufrufer | **hoch** — adressiert die real erlebte Reconnect-Lücke |
+| **Reconciliation-Sweep** | ✅ **erledigt** — Kern (#322) **und** Verdrahtung (`sweep-wiring.ts`); offen nur noch die Legacy-Politik und der owner-gatete Flag-Flip | `computeSweepTargets` + `registerReconciliationSweep`, Default AUS | **erledigt** |
 | WS-Instanz-Bindung | 4 Entscheidungen; Cert-Identität ist ~3 Zeilen Wiederverwendung, **aber** die Host-Identität trifft die Bedrohung nicht (Befund c) | `allowsAgentFilter(requested, allowedIdentities, {directedOnly})` — parametrisiert die offenen Punkte, statt sie vorwegzunehmen; **baubar**, sobald die Bedrohungs-/Credential-Frage geklärt ist | mittel |
 | Opt-in-Broadcast-Wake | **Amplifikations-Schranke** (CO-B) ungeklärt; **kein benannter Anwendungsfall** | — (die Form folgt aus 1) | **niedrig** — ohne Bedarf bleibt „kein Broadcast" die bessere Invariante |
 

@@ -296,6 +296,13 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     Liveness-Filter entfernt ⇒ je der passende Test rot). Test-only, `wake-contract.ts` **unangetastet**;
     Suite **1979 grün** (140 Files). Doku: Consumer-Contract §7.2 (+ die stale `it.todo`-Deckungsgrenze in
     §7.1 auf den #283-Stand korrigiert). Entfernt den Slice-B-Blocker NICHT — de-riskt ihn weiter.
+  - [x] **Reconciliation-Sweep verdrahtet** (2026-07-23): `sweep-wiring.ts` — schliesst die
+    Reconnect-Luecke des best-effort-Wake. Ausloeser `agentRegistry.on('register')` (Hook existiert
+    bereits, kein WS-Eingriff), **eigener** `WakeCoalescer` (nicht vom Inbox-Verkehr geschluckt),
+    **Default AUS** via `TLMCP_WAKE_SWEEP_ENABLED` ⇒ ohne Flag kein Verhaltens-Delta. Nur `register`
+    loest aus. Fail-safe gegen werfende Registry/Bus/Zaehler, fail-closed ohne SPIFFE. +13 Tests
+    (inkl. Integration gegen die echte `AgentRegistry`), Suite **2040 gruen**. Doku: ADR-047 §3/§4,
+    Consumer-Contract §7.3. **Owner-gated bleibt nur der Flag-Flip** in einer laufenden Instanz.
   - [ ] **TL-11 Slice B** (extern-blocked): Out-of-Repo Agent-Home-Supervisor konsumiert `agent:wake` →
     weckt CLI (`pokeCli`); **Zwei-Peer-Live-Proof** (CLI-Reaktion ohne dazwischenliegenden Poll). Gegen den
     fixen Consumer-Contract (s.o.) **und jetzt das Runbook** baubar. **Echter Blocker:** der letzte Hop

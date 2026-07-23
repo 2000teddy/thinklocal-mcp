@@ -167,6 +167,20 @@ den **realen Loopback-Socket** so, wie der Supervisor ihn trifft (connect → su
 mTLS-Pflicht (In-Memory-CA + Client-Leaf, cert-los/`ws://` → TLS-Reset) und der Nicht-Loopback-`4003`-Reject
 (Bindung an eine echte Nicht-Loopback-IPv4; `it.skipIf` **nur** auf reinen Loopback-Hosts, statt falsch grün).
 
+### 7.3 Reconciliation-Sweep (optional, Default AUS)
+
+Seit 2026-07-23 gibt es eine **zweite** Wake-Quelle: bei `TLMCP_WAKE_SWEEP_ENABLED=1` weckt der Daemon
+eine Instanz **nachträglich**, wenn sie sich (neu) registriert und ungelesene Post hat
+(`sweep-wiring.ts`). Das schließt die Reconnect-Lücke, die §5 („best-effort/lossy") beschreibt.
+
+**Für den Konsumenten ändert sich nichts:**
+- Das Wake hat **dieselbe** Form (`agent:wake`, zero-content, `reason: 'inbox'`) und dieselbe gerichtete
+  Zustellung — ein Sweep-Wake ist von einem Inbox-Wake nicht unterscheidbar und muss es nicht sein.
+- Es kann **zusätzlich** zum regulären Wake eintreffen; die **Idempotent**-Zusage („zwei Wakes == ein
+  Wake") deckt das ab. Der Sweep hat einen **eigenen** Coalescer, die Rate-Zusage gilt also je Quelle.
+- **Die Cold-Start-Sweep-Pflicht des Konsumenten bleibt bestehen** — der Daemon-Sweep *ergänzt* sie, er
+  ersetzt sie nicht (er sieht z.B. keinen Supervisor-Neustart ohne Re-Registrierung der Instanz).
+
 ### 7.2 Ende-zu-Ende: der echte Emitter auf dem echten Socket
 
 Die Tabellen oben injizieren `agent:wake` **direkt auf den Bus** — sie bewachen also die WS-Routing-Schicht,
