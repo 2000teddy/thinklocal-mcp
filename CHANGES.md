@@ -17,10 +17,17 @@ mit-reconcilet. Konkret: **5** COMPLIANCE-Erst-Spalten `(offen, base=main)` → 
 `#NNN` + `(base=main, gemergt)` (9→10 Spalten wie #288–#312, Zuordnung über den eindeutigen
 Timestamp-Anker); **5** CHANGES-Überschriften um `, #NNN)` ergänzt (#313–#317); **4** gemergte
 TODO-Einträge annotiert (`Verdrahtungs-Hook` #315, `CR-LOW-Härtung` #316, `Ungegateter Consumer-Kern`
-#314, `D2-Prep` #317) → höchste TODO-PR-Ref **#312 → #317**. **TODO-Wahrheit gegen den Merge-Stand
-geprüft, keine Korrektur nötig:** TL-08 Slice 2c bleibt `[~]` (Gate-Flip weiter ⛔ Christian-gated),
-TL-10 Slice B weiter offen (D3-Sign-off), ADR-046 Platzierung/Vokabular weiter CO-gated. Jede Zuordnung
-`gh`-verifiziert (alle fünf `MERGED`). Kein Code/Test/State/Deploy/Secret.
+#314, `D2-Prep` #317) → höchste TODO-**Eintrags-Annotation** **#312 → #317**. **Aus dem CR (MEDIUM):**
+dieselbe Staleness eine **Spalte weiter** — 18 Zeilen, deren Erst-Spalte die Nummer schon trug, deren
+**PR-Spalte** aber `(offen, base=main)` sagte (#271/#272/#273/#277–#287 + #262/#229/#234/#235), für den
+Wächter unsichtbar, weil die Nummer ja vorkommt; alle 18 einzeln `gh`-verifiziert `MERGED` und
+mit-reconcilet. **Bewusst offen und explizit benannt:** 28 Zeilen der Vor-#271-Ära tragen
+`(offen, base=main)` **ohne jede PR-Nummer** (Erst-Spalte = Version/Label) — Auflösung Version→PR ist
+Archäologie und gehört in einen eigenen PR statt als Raten in einen Drift-Fix. **TODO-Wahrheit gegen den
+Merge-Stand geprüft, keine Korrektur nötig:** TL-08 Slice 2c bleibt `[~]` (Gate-Flip weiter ⛔
+Christian-gated), TL-10 Slice B weiter offen (D3-Sign-off), ADR-046 Platzierung/Vokabular weiter
+CO-gated. Jede Zuordnung `gh`-verifiziert (alle `MERGED`). CR (Claude-Subagent): **kein HIGH**, 1 MEDIUM
+an der Wurzel gefixt, 3 LOW adressiert. Kein Code/Test/State/Deploy/Secret.
 `changes/2026-07-23_reconcile-pr-numbers-313-317.md`.
 
 ### feat(gate): TL-10 D2-Prep — `MeldekanalRegistry.requestApprovalOn(channelId, req)` (2026-07-22 10:45, #317)
