@@ -177,6 +177,13 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
 > TL-11s Wake lesen muss. Scoping-Doku: `docs/architecture/TL-11-12-wake-postbox-discovery.md`.
 - [~] **[v5.1] TL-12 (≈4 h)** Ausgewiesene Mesh-Zustellung an Agenten (signierter Auftrag → Postfach →
   Abarbeitung; Ersatz für tmux-Zuruf, Kap. 11.3).
+  - [x] **Zustellpfad end-to-end dokumentiert** (2026-07-23): `docs/architecture/TL-12-delivery-path.md`
+    — die durchgehende Sicht, die zwischen den vier slice-zentrierten Dokumenten fehlte. S1 signieren /
+    S2 Transport / S3 Ingest / S4 Postfach / S5 Read-Surface sind **gebaut**; **S6 Abarbeitung ist NICHT
+    gebaut** und owner-gated. TL-08/09/10 sind je Station verortet (nicht weggelassen) samt Konsequenz:
+    ein ausgefuehrter Auftrag liefe ZUSAETZLICH durch TL-09b/TL-10 und TL-08 — der Auftrag ist ein
+    Antrag, kein Freibrief. V1/V2/V3 als Pfad-Ende belegt; naechster ehrlicher Baustein bleibt ADR-046.
+    Alle zehn Code-Anker gegen `c4b5261` verifiziert. Doc-only, keine Entscheidung.
   - [x] **TL-12 Slice A** (ADR-038): signierter, re-verifizierbarer Auftrag im Postfach. `signed-order.ts`
     (Order = signierter `type='ORDER'`-Envelope im Body-Marker), Inbox-Schema v3 (verbatim `signed_bytes` +
     immutable `signer_pubkey` + `order_nonce`/keyid/verdict/`trust_status`), `store()` nur `OrderContext|null`
@@ -296,7 +303,7 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     Liveness-Filter entfernt ⇒ je der passende Test rot). Test-only, `wake-contract.ts` **unangetastet**;
     Suite **1979 grün** (140 Files). Doku: Consumer-Contract §7.2 (+ die stale `it.todo`-Deckungsgrenze in
     §7.1 auf den #283-Stand korrigiert). Entfernt den Slice-B-Blocker NICHT — de-riskt ihn weiter.
-  - [x] **Reconciliation-Sweep verdrahtet** (2026-07-23): `sweep-wiring.ts` — schliesst die
+  - [x] **Reconciliation-Sweep verdrahtet** (2026-07-23, #326): `sweep-wiring.ts` — schliesst die
     Reconnect-Luecke des best-effort-Wake. Ausloeser `agentRegistry.on('register')`, **zielgerichtet auf die
     registrierende Instanz** (Hook existiert bereits, kein WS-Eingriff; der agy-CR fand hier ein HIGH:
     flaechendeckendes Fegen waere M*N synchrone DB-Abfragen bei Massen-Reconnect), **eigener** `WakeCoalescer` (nicht vom Inbox-Verkehr geschluckt),

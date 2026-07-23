@@ -8,7 +8,25 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### feat(tl11): Reconciliation-Sweep verdrahtet — Default AUS (2026-07-23 16:10)
+### docs(arch): TL-12 Zustellpfad end-to-end — signierter Auftrag → Postfach → Abarbeitung (2026-07-23 16:45)
+**Doc-only Referenz** (kein Code, keine Entscheidung, kein Gate verschoben). Die TL-12-Doku war über vier
+Dateien verteilt und jeweils **slice-zentriert**; es fehlte die **durchgehende** Sicht. Neu
+`TL-12-delivery-path.md` mit Station-für-Station-Ist-Stand und Ankern: **S1** signieren (Body-Marker statt
+eigenem `MessageType` — das *ist* Vorbehalt V1) · **S2** Transport (bestehender Mesh-Pfad, TL-12 fügt keinen
+hinzu) · **S3** Ingest (Verify gegen den **Transport**-Pubkey + `issuer === envelope.sender` ⇒ Relay-Schutz;
+**Tri-State**, also nie ein stiller Downgrade zu Plain, sondern `INVALID` + `ORDER_VERIFY_FAILED`-Audit) ·
+**S4** Postfach (`store()` nimmt nur `OrderContext | null` ⇒ `is_order` **typsystemisch unfälschbar**;
+`signed_bytes` verbatim + `signer_pubkey` immutable ⇒ später **re-verifizierbar**) · **S5** Read-Surface
+(re-verifiziert **live** je Zeile, fail-closed und wirft nie) · **S6 Abarbeitung: ⛔ nicht gebaut** — kein
+Executor, kein Ledger, keine Denylist („Signatur ≠ Ausführungs-Erlaubnis"). **TL-08/09/10 werden
+ausdrücklich verortet statt weggelassen:** eine eigene Tabelle sagt, an welcher Station jedes Gate greift,
+plus die Konsequenz — selbst bei entschiedenem Slice B liefe ein ausgeführter Auftrag **zusätzlich** durch
+TL-09b/TL-10 und TL-08; der Auftrag ist ein *Antrag*, kein Freibrief. Ende des Pfades mit V1/V2/V3 belegt,
+inklusive der Feststellung, dass der ehrliche nächste Baustein **ADR-046** ist und nicht Slice C. Alle zehn
+Code-Anker einzeln gegen `c4b5261` verifiziert. Suite unverändert **2045 grün**.
+`changes/2026-07-23_tl12-delivery-path.md`.
+
+### feat(tl11): Reconciliation-Sweep verdrahtet — Default AUS (2026-07-23 16:10, #326)
 **Additive Daemon-Verdrahtung hinter Env-Flag mit Default AUS** (Regime wie TL-09b) ⇒ ohne Flag **kein
 Verhaltens-Delta**. **Einordnung:** der TL-11-MVP im engeren Sinn ist bereits gemergt (#271/#277/#282/#283/
 #320/#322); dieser Slice schließt die **verbliebene echte Lücke**. **Die Lücke:** `agent:wake` ist
