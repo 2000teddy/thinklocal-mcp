@@ -18,7 +18,7 @@
  *  - Marker-Extraktion ist strikt (Objekt mit String-Feld, base64, ≤ MAX_ORDER_BYTES) und wirft nie.
  */
 import { Buffer } from 'node:buffer';
-import { createHash } from 'node:crypto';
+import { createHash, createPublicKey } from 'node:crypto';
 import {
   MessageType,
   createEnvelope,
@@ -76,12 +76,54 @@ export function wrapOrderInBody(orderBytes: Uint8Array): Record<string, string> 
 }
 
 /**
- * Fingerprint des Verify-Keys (sha256hex der PEM-Textdarstellung — identisch zu `identity.ts`'
- * internem `computeFingerprint`). **PEM-encoding-abhängig** (nicht DER-SPKI) — Revocation-Join-Key
- * für Slice B/C, NICHT die kryptografische Verifikation (die läuft über die verbatim Bytes).
+ * Fingerprint des Verify-Keys (sha256hex der PEM-**Textdarstellung** — identisch zu `identity.ts`'
+ * internem `computeFingerprint`). Revocation-Join-Key für Slice B/C, NICHT die kryptografische
+ * Verifikation (die läuft über die verbatim Bytes).
+ *
+ * ⚠️ **Format-malleabel — für Ledger-/Denylist-Schlüssel ungeeignet.** Dasselbe Schlüsselmaterial
+ * liefert bei anderem Zeilenumbruch/Whitespace/Trailing-Newline einen **anderen** Keyid. Solange der
+ * Keyid nur Anzeige/Audit ist, ist das folgenlos; als **Uniqueness-Schlüssel** eines Idempotenz-Ledgers
+ * (B1) oder als **Join-Key** einer Revocation-Denylist (B2b) wäre es ein Umgehungspfad. Für diese Rolle
+ * ist {@link canonicalOrderKeyId} gedacht (TL-12 Slice-B-Scoping §3 „Kanonischer Keyid = DER-SPKI").
+ * Diese Funktion bleibt **unverändert** — sie stempelt bereits gespeicherte Zeilen, ein Wechsel wäre
+ * eine Datenmigration und gehört in den gateten B0-Slice.
  */
 export function orderKeyId(publicKeyPem: string): string {
   return createHash('sha256').update(publicKeyPem).digest('hex');
+}
+
+/**
+ * **Kanonischer** Keyid: sha256hex über die **DER-SPKI-Bytes** des öffentlichen Schlüssels statt über
+ * seinen PEM-Text. Damit ist der Keyid eine Eigenschaft des **Schlüsselmaterials**, nicht seiner
+ * Serialisierung: verschiedene, aber gleichwertige PEM-Kodierungen desselben Schlüssels (CRLF vs. LF,
+ * andere Zeilenlänge, zusätzliche Leerzeilen) ergeben **denselben** Keyid.
+ *
+ * **Warum das vor B1/B2b stehen muss** (Slice-B-Scoping §3): würde ein format-malleabler Keyid die
+ * `UNIQUE(signer_keyid, order_nonce)`-Spalte des Ledgers oder den Denylist-Join-Key bilden, könnte ein
+ * Relay denselben Auftrag durch bloßes **Umformatieren** des mitgelieferten PEM ein zweites Mal
+ * ausführbar machen (neue Ledger-Zeile) bzw. eine Sperre umgehen (andere Denylist-Zeile) — ohne die
+ * Signatur zu berühren, die über die verbatim Bytes läuft.
+ *
+ * **Fail-closed:** nicht parsebar ⇒ `null` (**kein** Ersatz-Keyid und kein Fallback auf den PEM-Hash —
+ * ein geratener Keyid wäre genau die Kollision/Umgehung, die diese Funktion verhindern soll). Wirft nie.
+ *
+ * **Privates Schlüsselmaterial wird ausdrücklich abgelehnt.** `createPublicKey()` leitet aus einem
+ * privaten PEM klaglos den zugehörigen öffentlichen Schlüssel ab — ein Aufrufer, der versehentlich den
+ * Signier- statt den Verify-Schlüssel übergibt, bekäme also einen *gültig aussehenden* Keyid, und
+ * Geheimmaterial liefe durch diese Funktion. Beides wird hier zu `null`.
+ *
+ * **0 Aufrufer** — die Verwendung als Ledger-/Denylist-Schlüssel gehört in B1/B2b und bleibt gated.
+ */
+export function canonicalOrderKeyId(publicKeyPem: string): string | null {
+  if (typeof publicKeyPem !== 'string' || publicKeyPem.trim() === '') return null;
+  // Siehe Doc-Kommentar: privates Material darf hier nicht durchlaufen, auch nicht „hilfsweise".
+  if (publicKeyPem.includes('PRIVATE KEY')) return null;
+  try {
+    const der = createPublicKey(publicKeyPem).export({ type: 'spki', format: 'der' });
+    return createHash('sha256').update(der).digest('hex');
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -147,7 +189,8 @@ export function classifyInboundOrder(
 ): InboundOrderDecision {
   const marker = extractOrderMarker(body);
   if (marker.kind === 'absent') return { kind: 'plain' };
-  if (marker.kind === 'invalid') return { kind: 'invalid', reason: `malformed-marker: ${marker.reason}` };
+  if (marker.kind === 'invalid')
+    return { kind: 'invalid', reason: `malformed-marker: ${marker.reason}` };
   const vr = verifyOrderBytes(marker.bytes, expectedIssuer, publicKeyPem);
   if (vr.verdict === 'VALID' && typeof vr.orderId === 'string' && vr.orderId !== '') {
     return { kind: 'order', bytes: marker.bytes, orderId: vr.orderId };
@@ -173,7 +216,8 @@ export function verifyOrderBytes(
     const signed = deserializeSignedMessage(bytes);
     const env = decodeAndVerify(signed, publicKeyPem);
     if (!env) return { verdict: 'INVALID', reason: 'signature invalid or expired' };
-    if (env.type !== MessageType.ORDER) return { verdict: 'INVALID', reason: 'not an ORDER envelope' };
+    if (env.type !== MessageType.ORDER)
+      return { verdict: 'INVALID', reason: 'not an ORDER envelope' };
     if (typeof env.sender !== 'string' || env.sender !== expectedIssuer) {
       return { verdict: 'INVALID', reason: 'issuer does not match transport sender' };
     }

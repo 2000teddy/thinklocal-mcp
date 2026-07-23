@@ -183,6 +183,16 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     (is_order typsystemisch unfälschbar, issuer===sender Relay-Schutz), `verifyStoredOrder` fail-closed,
     Ingest-Wiring + `ORDER_RX`/`ORDER_VERIFY_FAILED`-Audit, **Read-Surface: `GET /api/inbox` re-verifiziert
     live + surfaced `is_order`/`order`-Block** + Tri-State-Marker (`classifyInboundOrder`-Seam: malformed → INVALID+Audit, Reviewer #266). +37 Tests.
+  - [x] **B0-Vorarbeit: kanonischer Keyid** (2026-07-23): `signed-order.ts` `canonicalOrderKeyId` —
+    sha256 über die **DER-SPKI-Bytes** statt über den PEM-**Text**. Schließt die im Scoping §3 benannte
+    **Format-Malleabilität** von `orderKeyId` (dasselbe Schlüsselmaterial mit CRLF/Leerzeilen ⇒ **anderer**
+    Keyid, DER byte-identisch — als Defekt-Beleg getestet), **bevor** der Keyid Ledger-Uniqueness (B1) oder
+    Revocation-Join-Key (B2b) wird; sonst genügte bloßes Umformatieren des mitgelieferten PEM, um eine neue
+    Ledger-Zeile zu erzeugen bzw. eine Sperre zu umgehen — ohne die Signatur zu berühren. Fail-closed ⇒
+    `null` (kein Ersatz-Keyid, kein PEM-Fallback), lehnt **privates** Schlüsselmaterial ab, wirft nie.
+    **`orderKeyId` unverändert** (stempelt gespeicherte Zeilen → Wechsel = Datenmigration, gehört in B0),
+    **0 Aufrufer**. +8 Tests, Suite **2000 grün**. **Berührt KEINE der vier §9-Entscheidungen** — Slice B
+    bleibt vollständig gated.
   - [~] **TL-12 Slice B**: **Ausführung** eines gelesenen Auftrags. **Scoping-Doku (CO 2026-07-16, opus+sonnet)
     fertig:** `docs/architecture/TL-12-slice-b-execution-scoping.md` — Votum **B1 nicht starten**, bis Owner-Opt-in
     + Epoch-Grenze entschieden. Korrigierte Zerlegung **B0→B1→B2a→B2b→B3**: B0 Executable-Profil (`ttl_ms>0`,
@@ -271,7 +281,7 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     (Supervisor → CLI) ist out-of-repo + Deploy/Host-gated (vgl. `[[dod-two-peer-mcp-proof]]`,
     `[[week1-remote-restart-rollout]]`). Optional/danach: WS-Instanz-Bindung, Opt-in-Broadcast-Wake,
     Reconciliation-Sweep — **gegroundet in `docs/architecture/ADR-047-tl11-wake-followups-scoping.md`
-    (2026-07-23, Rev. 2): die **Verdrahtung** ist bei allen dreien entscheidungsgebunden; der **reine Kern**
+    (2026-07-23, #322, Rev. 2): die **Verdrahtung** ist bei allen dreien entscheidungsgebunden; der **reine Kern**
     des Sweeps ist es **nicht** und liegt als `sweep-targets.ts` `computeSweepTargets` vor (rein,
     fail-closed, 0 Aufrufer, +13 Tests). Die erste Fassung der Note hatte ihn falsch als blockiert
     eingestuft — vom externen Review als HIGH beanstandet und zurückgezogen.

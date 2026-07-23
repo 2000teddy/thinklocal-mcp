@@ -8,7 +8,29 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### feat(tl11): Reconciliation-Sweep-Kern `computeSweepTargets` + ADR-047-Scoping (2026-07-23 13:25)
+### fix(tl12): `canonicalOrderKeyId` — format-stabiler Keyid über DER-SPKI (2026-07-23 13:50)
+**Additive, ungegatete reine Primitive** (**0 Aufrufer**, kein Runtime-Change). **Ausdrücklich nicht
+Slice B/B0:** keine der vier §9-Christian-Entscheidungen wird berührt (Owner-Opt-in, Epoch-Grenze,
+ausführbare Startmenge, Revocation-Autorität), es entsteht kein Profil/Config/Schema/Ledger/Denylist und
+kein Execute-Pfad. **Der reproduzierte Defekt:** `orderKeyId` hasht die PEM-**Textdarstellung**, ist also
+format-malleabel — dasselbe Schlüsselmaterial mit CRLF + Leerzeilen ergibt einen **anderen** Keyid, obwohl
+die DER-SPKI-Bytes byte-identisch sind. Heute folgenlos (nur Anzeige/Audit, `index.ts:875`), aber sobald
+der Keyid die `UNIQUE(signer_keyid, order_nonce)`-Spalte des Idempotenz-Ledgers (B1) **oder** den
+Revocation-Join-Key (B2b) bildet, ist er ein **Umgehungspfad**: bloßes Umformatieren des mitgelieferten PEM
+erzeugt eine neue Ledger-Zeile bzw. umgeht eine Sperre — **ohne** die Signatur zu berühren. Genau deshalb
+verlangt das Slice-B-Scoping §3 die Kanonisierung, **bevor** der Keyid diese Rolle bekommt. Neu
+`canonicalOrderKeyId(publicKeyPem)`: sha256 über die **DER-SPKI-Bytes**, stabil gegen gleichwertige
+PEM-Kodierungen, algorithmus-agnostisch (P-256 + Ed25519), **fail-closed** ⇒ `null` ohne Ersatz-Keyid und
+ohne PEM-Fallback, wirft nie — und lehnt **privates Schlüsselmaterial ausdrücklich ab** (`createPublicKey`
+leitet daraus sonst klaglos den öffentlichen Schlüssel ab: ein vertauschter Signier-Schlüssel bekäme einen
+gültig aussehenden Keyid, und Geheimmaterial liefe durch die Funktion). **`orderKeyId` bleibt unverändert**
+— es stempelt bereits gespeicherte Zeilen, ein Wechsel wäre eine Datenmigration und gehört in den gateten
+B0-Slice; sein Doc-Kommentar benennt die Malleabilität jetzt explizit. +8 Tests inkl. Defekt-Beleg und
+Regressionsanker gegen einen stillen Semantikwechsel, Suite **2000 grün** (141 Files). Slice B (§9) und
+Slice C (V1–V3) bleiben gated. `changes/2026-07-23_tl12-canonical-order-keyid.md`,
+`TL-12-slice-b-execution-scoping.md` §3.
+
+### feat(tl11): Reconciliation-Sweep-Kern `computeSweepTargets` + ADR-047-Scoping (2026-07-23 13:25, #322)
 **Additive, ungegatete reine Primitive** (`sweep-targets.ts`, **0 Aufrufer**, kein Runtime-Change) plus die
 Scoping-Note ADR-047 zu den drei Punkten, die `TODO.md` nach TL-11 Slice B als „Optional/danach" führt.
 **Ehrliche Vorgeschichte:** die erste Fassung lieferte **nur** die Note und begründete das damit, alle drei

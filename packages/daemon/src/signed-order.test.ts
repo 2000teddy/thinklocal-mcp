@@ -15,6 +15,7 @@ import {
   classifyInboundOrder,
   wrapOrderInBody,
   orderKeyId,
+  canonicalOrderKeyId,
   ORDER_MARKER,
   MAX_ORDER_BYTES,
 } from './signed-order.js';
@@ -68,7 +69,10 @@ describe('signed-order — sign/verify roundtrip', () => {
   it('falscher Envelope-Typ (AGENT_MESSAGE, korrekt signiert) → INVALID', () => {
     const { priv, pub } = keypair();
     const notOrder = createEnvelope(MessageType.AGENT_MESSAGE, ISSUER, {
-      message_id: 'm', to: ISSUER, body: 'hi', sent_at: new Date().toISOString(),
+      message_id: 'm',
+      to: ISSUER,
+      body: 'hi',
+      sent_at: new Date().toISOString(),
     });
     const bytes = serializeSignedMessage(encodeAndSign(notOrder, priv));
     const r = verifyOrderBytes(bytes, ISSUER, pub);
@@ -173,7 +177,11 @@ describe('signed-order — classifyInboundOrder (Ingest-Seam, CR-Codex #266)', (
   it('Relay: gültige Bytes, aber falscher expectedIssuer → invalid', () => {
     const { priv, pub } = keypair();
     const bytes = signOrder(buildOrderEnvelope(ISSUER, 'n', { action: 'x' }), priv);
-    const d = classifyInboundOrder(wrapOrderInBody(bytes), 'spiffe://thinklocal/node/12D3KooWX', pub);
+    const d = classifyInboundOrder(
+      wrapOrderInBody(bytes),
+      'spiffe://thinklocal/node/12D3KooWX',
+      pub,
+    );
     expect(d.kind).toBe('invalid');
   });
 });
@@ -185,5 +193,81 @@ describe('signed-order — orderKeyId', () => {
     expect(orderKeyId(a.pub)).toBe(orderKeyId(a.pub));
     expect(orderKeyId(a.pub)).not.toBe(orderKeyId(b.pub));
     expect(orderKeyId(a.pub)).toMatch(/^[0-9a-f]{64}$/);
+  });
+});
+
+describe('signed-order — canonicalOrderKeyId (DER-SPKI statt PEM-Text, Slice-B-Scoping §3)', () => {
+  /** Dasselbe Schlüsselmaterial, gleichwertig anders serialisiert (CRLF + zusätzliche Leerzeilen). */
+  function reflow(pem: string): string {
+    return pem.replace(/\n/g, '\r\n') + '\n\n';
+  }
+
+  it('DEFEKT-BELEG: der PEM-Hash ändert sich beim bloßen Umformatieren desselben Schlüssels', () => {
+    const { pub } = keypair();
+
+    // Genau die Malleabilität, die einen Ledger-/Denylist-Schlüssel umgehbar machen würde.
+    expect(orderKeyId(reflow(pub))).not.toBe(orderKeyId(pub));
+  });
+
+  it('der kanonische Keyid ist gegen dieselbe Umformatierung stabil', () => {
+    const { pub } = keypair();
+
+    const a = canonicalOrderKeyId(pub);
+    expect(a).toMatch(/^[0-9a-f]{64}$/);
+    expect(canonicalOrderKeyId(reflow(pub))).toBe(a);
+  });
+
+  it('unterscheidet weiterhin verschiedene Schlüssel', () => {
+    const a = canonicalOrderKeyId(keypair().pub);
+    const b = canonicalOrderKeyId(keypair().pub);
+
+    expect(a).not.toBe(b);
+  });
+
+  it('ist algorithmus-agnostisch (P-256 und Ed25519 liefern je einen stabilen Keyid)', () => {
+    const ed = generateKeyPairSync('ed25519', {
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    });
+    const pub = ed.publicKey as string;
+
+    expect(canonicalOrderKeyId(pub)).toMatch(/^[0-9a-f]{64}$/);
+    expect(canonicalOrderKeyId(reflow(pub))).toBe(canonicalOrderKeyId(pub));
+  });
+
+  it('fail-closed: unbrauchbare Eingabe ⇒ null (kein Ersatz-Keyid, kein PEM-Fallback)', () => {
+    const bogus = [
+      '',
+      '   ',
+      'kein pem',
+      '-----BEGIN PUBLIC KEY-----\nnicht base64\n-----END PUBLIC KEY-----',
+      null,
+      undefined,
+      42,
+      {},
+    ];
+
+    for (const value of bogus) {
+      expect(canonicalOrderKeyId(value as unknown as string)).toBeNull();
+    }
+  });
+
+  it('fail-closed: ein PRIVATER Schlüssel liefert keinen Keyid', () => {
+    // Sonst könnte versehentlich über Privatschlüsselmaterial gekeyt werden.
+    const { priv } = keypair();
+
+    expect(canonicalOrderKeyId(priv)).toBeNull();
+  });
+
+  it('wirft nie — auch nicht bei absurden Eingaben', () => {
+    expect(() => canonicalOrderKeyId('-----BEGIN PUBLIC KEY-----'.repeat(500))).not.toThrow();
+  });
+
+  it('lässt orderKeyId unverändert (kein stiller Semantikwechsel gespeicherter Zeilen)', () => {
+    const { pub } = keypair();
+
+    // Der PEM-Hash bleibt exakt der, den index.ts:875 heute stempelt.
+    expect(orderKeyId(pub)).toMatch(/^[0-9a-f]{64}$/);
+    expect(orderKeyId(pub)).not.toBe(canonicalOrderKeyId(pub));
   });
 });
