@@ -69,7 +69,7 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
   - [~] **TL-08 Slice 2c** — teils geliefert, Kern BLOCKED:
     - [x] **Live-Drift-Check** (ADR-042): `checkToolClassDrift`-Seam gegen live `tools/list` (secret-sicher,
       fail-safe), +6 Tests. Verdrahtungs-Hook (index.ts/Mesh) = Folge.
-    - [x] **Verdrahtungs-Hook** (2026-07-22): der Seam ist jetzt **ehrlich verdrahtet** — neues
+    - [x] **Verdrahtungs-Hook** (2026-07-22, #315): der Seam ist jetzt **ehrlich verdrahtet** — neues
       `tool-class-drift-hook.ts` (`buildGovernedToolListFetcher` + `runGovernedToolClassDriftChecks`) holt
       die live `tools/list` governed Server (heute `unifi`) über die **vorhandene** ausgehende mTLS-Forward-
       Primitive (`mcpForwardHttp.forward` → Peer-`/api/mcp/<server>`), extrahiert secret-sicher die Tool-Namen
@@ -80,7 +80,7 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
       false-positive „alles stale" bei 200-ohne-tools) gefixt** (`hasToolsArray`-Guard + Regressionstests),
       kein HIGH. +22 Tests, Suite **1919 grün**. **Live-E2E gegen echten unifi-Peer** = eigenes Live-Fenster
       (kein Peer im CI); Logik seam-getestet.
-    - [x] **CR-LOW-Härtung** (2026-07-22, Post-#315-Review): der Fetcher wirft jetzt auch bei einem
+    - [x] **CR-LOW-Härtung** (2026-07-22, #316, Post-#315-Review): der Fetcher wirft jetzt auch bei einem
       **nicht-leeren** `tools`-Array **ohne** verwertbaren Namen (alle Einträge malformed) — statt `[]`
       zurückzugeben, was fälschlich ALLE kuratierten Tools als stale gemeldet hätte (dieselbe Klasse wie M1,
       aber die Sibling-Lücke). Ein legitim **leeres** `[]` bleibt gültiges leeres Inventar. +3 Regressionstests
@@ -128,7 +128,7 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
   - [x] **SECURITY.md-Anteil (D3-Guardrail)** (2026-07-20): neue Sektion „Freigabe-Matrix (TL-10)" —
     „`decider: human:<id>` ist v1 REIN DEKLARATIV, NICHT durchgesetzt", Fail-closed/Default-Deny-Guardrails,
     4 Aktivierungs-Vorbedingungen, owner-gated-Teile. Doc-only, kein Runtime-Change.
-  - [x] **D2-Prep (Kanal-Bindungs-Primitive)** (2026-07-22): `MeldekanalRegistry.requestApprovalOn(channelId, req)`
+  - [x] **D2-Prep (Kanal-Bindungs-Primitive)** (2026-07-22, #317): `MeldekanalRegistry.requestApprovalOn(channelId, req)`
     — fragt **gezielt** den adressierten Kanal (statt „erster gesunder"), die Primitive, die Slice B zum
     Auflösen „Werkzeug-Klasse → Kanal" braucht. **Fail-closed & verhaltensgleich zu `requestApproval`, nur
     ohne Fallback:** unbekannte `channelId`/unhealthy/Health-Timeout/-Fehler ⇒ `denied-no-channel`;
@@ -178,7 +178,7 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     hält die volle Card, `mesh.ts:20,189,258`); es fehlt nur die annoncierte Feld-Seite + `version-compat`-
     Verdrahtung (heute tot). Seed-Flag `order-envelope-v2`. **Impl-Slice ist CO-gated** (Vokabular/Semver-
     Governance) und rein additiv/rückwärtskompatibel; **kein** ORDER-Handler/Sender-Flip hier (= Slice C proper).
-    - [x] **Ungegateter Consumer-Kern** (2026-07-22): `wire-feature.ts` `supportsFeature(advertisedFeatures,
+    - [x] **Ungegateter Consumer-Kern** (2026-07-22, #314): `wire-feature.ts` `supportsFeature(advertisedFeatures,
       feature)` — die fail-closed §2-Invariante (absent/unknown/leer/malformed ⇒ `false`) als reiner,
       platzierungs- UND vokabular-agnostischer Primitiv (nimmt die Feature-**Liste**, nicht die Card → nimmt
       **keine** CO-offene Frage vorweg, seedet kein Flag, kein Runtime-Change). +10 Tests, Suite **1897 grün**,
