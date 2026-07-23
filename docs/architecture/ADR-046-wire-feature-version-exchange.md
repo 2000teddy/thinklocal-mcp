@@ -1,7 +1,9 @@
 # ADR-046 — Wire-Level Feature/Version-Exchange über die Agent-Card
 
 **Status:** Proposed (Scoping — doc-first, **kein Code** in diesem ADR; Implementierung CO-gated Folge-Slice)
-**Datum:** 2026-07-21
+**Datum:** 2026-07-21 · **Rev. 2:** 2026-07-23 — Implementierungs-Anker gegen `e994e65` verifiziert
+(drei `index.ts`-Anker der Erstfassung waren verschoben), fail-closed-Grenzen, Seed-Flag-Semantik und die
+CO-Grenze als eigene Sektionen §5–§8. Weiterhin **kein Code**, weiterhin **kein** Beschluss.
 **Kontext-Task:** Folgt direkt aus dem TL-12-Slice-C-Park (`TL-12-slice-c-scoping.md`, PR #307). Der Park nannte
 als „ehrlichen nächsten Baustein" **nicht** Slice C selbst, sondern den fehlenden Mechanismus, mit dem ein
 Sender „Peer ≥ Feature X" überhaupt entscheiden kann. Dieses ADR pinnt dessen Design gegen den realen Code.
@@ -112,9 +114,91 @@ der Sender behält die kompatible Trägerform (heute: den ORDER-Body-Marker). **
   Feature-Vokabular + `protocol_version`-Semver (§3), die Producer-Befüllung + `version-compat`-Verdrahtung.
   Cross-Vendor-`pal:consensus` derzeit pal-PATH-blockiert (`[[pal-review-backend-agy-missing]]`).
 
-## Beleg-Referenzen (Code, HEAD)
-`wire-feature.ts` (ungegateter fail-closed Consumer-Kern, ADR §2) ·
-`agent-card.ts:22-111` (AgentCard, kein protocol/features) · `version-compat.ts` (tot außerhalb Tests) ·
-`mesh.ts:20,189-192,258` (per-Peer Card + Getter) · `index.ts:1491-1502,1553` (Fetch+Identitäts-Check+Store,
-`as AgentCard`-Cast) · `pinned-card-fetch.ts:35` (pinned Fetch) · `index.ts:932-934` (default-Drop) ·
-`TL-12-slice-c-scoping.md` (V1–V3).
+## 5. Implementierungs-Anker (verifiziert gegen `e994e65`, 2026-07-23)
+
+Die Anker der Erstfassung (#308) stammen von einem älteren HEAD und sind teilweise **verschoben**. Diese
+Sektion ist der geprüfte Stand — sie ersetzt Suchen durch Nachschlagen, wenn die CO-Entscheidung fällt.
+
+### 5.1 Producer-Seite (das fehlende Stück)
+
+| Was | Anker | Zustand |
+|---|---|---|
+| `AgentCard`-Interface (hier käme der `protocol`-Block hin) | `agent-card.ts:22-111` | unverändert korrekt; **kein** `protocol`/`features` |
+| **Producer**, der die Card baut | `agent-card.ts:480` `private async buildCard()` | in der Erstfassung nur namentlich, jetzt gepinnt |
+| Quelle der Werte | `version-compat.ts` `PROTOCOL_VERSION` (`:13`), `MIN_COMPATIBLE_VERSION` (`:16`), `FEATURE_MATRIX` (`:108`) | vollständig implementiert, **außerhalb von Tests kein Aufrufer** |
+
+### 5.2 Consumer-Seite (existiert bereits)
+
+| Was | Anker | Zustand |
+|---|---|---|
+| Card pro Peer gehalten | `mesh.ts:20` (`agentCard: AgentCard \| null`) | korrekt |
+| Card wird gesetzt | `mesh.ts:189` `updateAgentCard` | korrekt |
+| Getter für den Sender | `mesh.ts:258` `getPeer` | korrekt |
+| Pinned Fetch | `pinned-card-fetch.ts:35` `fetchAgentCardPinned` | korrekt |
+| fail-closed Kern | `wire-feature.ts` `supportsFeature` (#314) | **gelandet**, 0 Aufrufer |
+
+### 5.3 Korrigierte Anker (Drift gegenüber #308)
+
+| Beschreibung | #308 sagte | **tatsächlich (HEAD)** |
+|---|---|---|
+| Fetch + Identitäts-Check + Store (Discovery-Pfad) | `index.ts:1491-1502` | **`index.ts:1530-1541`** — `as AgentCard`-Cast `:1530`, sha256-Fingerprint-Vergleich + SPIFFE-Match `:1532-1533`, `updateAgentCard` `:1541` |
+| zweiter Card-Consume-Pfad | `index.ts:1553` | **`index.ts:1592`** (Cast) / **`:1603`** (`updateAgentCard`) |
+| `default`-Drop im Empfangs-Dispatch (Slice-C-Vorbehalt **V1**) | `index.ts:932-934` | **`index.ts:936-938`** (`default: log.debug('Unbekannter Nachrichtentyp'); return null;`) |
+
+Es gibt außerdem einen **dritten** Card-Pfad (`index.ts:720`, Cast; Fetch bei `:631`/`:731`) — wer den
+`protocol`-Block konsumiert, muss prüfen, ob alle Pfade denselben Identitäts-Check durchlaufen, bevor die
+Card als Feature-Quelle gilt.
+
+## 6. Fail-closed-Grenzen (nicht verhandelbar, unabhängig vom CO)
+
+Diese Zusagen hängen **nicht** an der offenen Platzierungs-/Vokabular-Frage und gelten für jede Variante:
+
+| Situation | Ergebnis | Warum |
+|---|---|---|
+| Peer ohne `protocol`-Block (alte Version) | **`false`** | „absent ⇒ assume yes" wäre ein stiller Drop beim Empfänger |
+| Block da, `features` fehlt / kein Array / leer | **`false`** | malformed ist kein Freibrief |
+| Feature nicht in der Liste | **`false`** | exakter String-Match, keine Präfix-/Fuzzy-Logik |
+| Card gar nicht abrufbar / Peer unbekannt | **`false`** | kein Signal ist kein positives Signal |
+| Card vorhanden, aber Identitäts-Check nicht bestanden | **`false`** (Card wird verworfen) | `index.ts:1532-1538` lehnt bereits ab — ein Feature darf nie aus einer nicht zurechenbaren Card stammen |
+
+Kodifiziert ist das bereits in `wire-feature.ts` `supportsFeature` (#314): der **einzige** `true`-Pfad ist
+„echtes Array enthält exakt diesen String"; die Funktion wirft nie. Ein Producer-Slice **darf diese
+Semantik nicht aufweichen** — insbesondere nicht „Feature-Liste fehlt ⇒ von `protocol_version` ableiten".
+
+**Feature-Advertisement ist kein Trust-Grant.** Die Card sagt ausschließlich „ich kann Form X parsen".
+Pairing, Approval-Gates und die Slice-B-Allowlist bleiben unberührt und werden **nicht** durch ein
+annonciertes Feature ersetzt oder abgeschwächt.
+
+## 7. Seed-Flag `order-envelope-v2` — was es bedeutet und was nicht
+
+- **Bedeutung (Empfänger-Semantik):** „dieser Node nimmt eine **top-level** `MessageType='ORDER'`-Envelope
+  entgegen und verarbeitet sie" — **nicht** „dieser Node sendet ORDER so".
+- **Wann ein Node es setzen darf:** erst wenn sein Empfangs-Dispatch top-level ORDER wirklich behandelt,
+  also **nach** dem Slice-C-Empfänger-Handler (V3). Vorher wäre das Flag eine Lüge, die beim Sender genau
+  den stillen Drop auslöst (`index.ts:936-938`), den V1 beschreibt.
+- **Wofür es NICHT steht:** keine Aussage über Ausführung (TL-12 Slice B), keine über Signatur-Vertrauen,
+  keine über TTL/Denylist. Ein Peer mit dem Flag ist kein autorisierter Auftraggeber.
+- **Reihenfolge (receiver-first, unverändert):** Producer+Consumer fleet-weit → Empfänger-Handler
+  fleet-weit → **dann erst** Sender-Flip, und nur bei `true` für den adressierten Peer.
+
+## 8. Was CO-gated bleibt (Stand HEAD)
+
+| Punkt | Status | Warum gated |
+|---|---|---|
+| **Platzierung** des Feature-Felds (`protocol`-Block vs. `capabilities.services`) | **CO offen** | Wire-Semantik ≠ App-Capability; die Wahl bindet das Card-Schema |
+| **Vokabular + `protocol_version`-Semver-Politik** (Namen, additiv/nie-entfernt) | **CO offen** | Einbahnstraße: Rücknahme wäre breaking |
+| Producer-Befüllung + `version-compat`-Verdrahtung | folgt aus beidem | kann erst gebaut werden, wenn Platzierung und Namen feststehen |
+| Empfänger-Handler für top-level ORDER, Inbox-Mapping | eigene ADR (V3) | Slice C proper |
+| Sender-Flip | Slice C proper (V1) | braucht Handler + Flag fleet-weit |
+
+**Ungegatet und bereits erledigt:** der fail-closed Consumer-Kern (`wire-feature.ts`, #314) und diese
+Erdung. **Cross-Vendor-`pal:consensus` bleibt pal-PATH-blockiert** (`[[pal-review-backend-agy-missing]]`) —
+der CO ist damit an einen Owner-/Infra-Schritt gebunden, nicht an weitere Repo-Arbeit.
+
+## Beleg-Referenzen (Code, verifiziert gegen `e994e65`)
+`wire-feature.ts` (ungegateter fail-closed Consumer-Kern, ADR §2, #314) ·
+`agent-card.ts:22-111` (AgentCard, kein protocol/features) · `agent-card.ts:480` (`buildCard`, Producer) ·
+`version-compat.ts:13,16,108` (tot außerhalb Tests) · `mesh.ts:20,189,258` (per-Peer Card + Getter) ·
+`index.ts:1530-1541` und `:1592,1603` (Fetch+Identitäts-Check+Store, `as AgentCard`-Cast) ·
+`index.ts:720` (dritter Card-Pfad) · `pinned-card-fetch.ts:35` (pinned Fetch) ·
+`index.ts:936-938` (default-Drop, V1) · `TL-12-slice-c-scoping.md` (V1–V3).
