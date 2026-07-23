@@ -64,9 +64,9 @@ Dieser Pfad durchläuft den Loopback-Gate (`websocket.ts`, §2) und ist der **em
 //     dient primär dem Ändern der Event-Typ-Liste (`events`).
 ```
 
-- `agent` matcht gegen **`spiffe_uri` ODER `instance_id`** des Payloads (`websocket.ts:66`). Beide sind
+- `agent` matcht gegen **`spiffe_uri` ODER `instance_id`** des Payloads (`websocket.ts:89-90`). Beide sind
   zulässige Filterwerte; die SPIFFE-URI ist die stabile Wahl.
-- Ohne `agent`-Filter → **kein** `agent:wake` (deny-by-default, `websocket.ts:64`). Ein reiner
+- Ohne `agent`-Filter → **kein** `agent:wake` (deny-by-default, `websocket.ts:88`). Ein reiner
   `subscribe=agent:wake` ohne `agent=` empfängt nie etwas.
 - Der Event-Typ-Filter greift **zuerst**: wer nur `inbox:new` abonniert, bekommt **kein** `agent:wake`
   (`websocket.test.ts:112`). Darum **explizit** `agent:wake` abonnieren.

@@ -271,18 +271,22 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     (Supervisor → CLI) ist out-of-repo + Deploy/Host-gated (vgl. `[[dod-two-peer-mcp-proof]]`,
     `[[week1-remote-restart-rollout]]`). Optional/danach: WS-Instanz-Bindung, Opt-in-Broadcast-Wake,
     Reconciliation-Sweep — **gegroundet in `docs/architecture/ADR-047-tl11-wake-followups-scoping.md`
-    (2026-07-23): alle drei sind entscheidungsgebunden**, keiner ist heute ein ungegateter Code-Slice.
+    (2026-07-23, Rev. 2): die **Verdrahtung** ist bei allen dreien entscheidungsgebunden; der **reine Kern**
+    des Sweeps ist es **nicht** und liegt als `sweep-targets.ts` `computeSweepTargets` vor (rein,
+    fail-closed, 0 Aufrufer, +13 Tests). Die erste Fassung der Note hatte ihn falsch als blockiert
+    eingestuft — vom externen Review als HIGH beanstandet und zurückgezogen.
     Kurz: **WS-Instanz-Bindung** braucht 4 Entscheidungen **und** neue Verdrahtung (der WS-Handler kennt
     die Client-Cert-Identität heute gar nicht) — plus der Befund, dass `agentFilter` **Doppelfunktion**
     hat (gerichtetes Routing **und** `from`/`to`-Filter nicht-gerichteter Events), eine naive Bindung also
     Beobachter-Konsumenten bräche. **Opt-in-Broadcast** hat **keinen benannten Anwendungsfall** und würde
-    strukturell den in #277 geschlossenen Leak D1 berühren (ein Broadcast-Wake hat kein Ziel, auf das
-    `matchesSubscription` matchen kann) → bleibt zu Recht liegen. **Reconciliation-Sweep** ist der
-    aussichtsreichste (Mechanik liegt bereit: `AgentInbox.unreadCount({forInstance})` + Index +
-    `agentRegistry.list()`, **keine** neue Speicherarbeit), Kernfrage ist die **Coalescer-Interaktion**
-    (Sweep-Wake geschluckt ⇒ verpufft im Reconnect-Fenster; Coalescer umgangen ⇒ §5-Zusage „≤1 Wake pro
-    Fenster" ist nicht mehr wörtlich wahr). Empfehlung: §3 zuerst entscheiden, §1 bewusst budgetieren,
-    §2 liegen lassen.
+    strukturell den in #277 geschlossenen Leak D1 berühren — **korrigiert (CR):** in der beschlossenen
+    ADR-043-CO-B-Lesart wären das N **gerichtete**, heute routbare Wakes (D1 bleibt zu); der echte Blocker
+    ist die **1→N-Amplifikation**. Bleibt ohne Anwendungsfall liegen. **Reconciliation-Sweep:** Kern
+    **gebaut**; offen sind nur noch **Trigger** (`agentRegistry.on(...)` existiert bereits, ein
+    WS-(Re-)Connect-Hook **nicht**), **Rate-Semantik** (auflösbar über einen eigenen `WakeCoalescer` bzw.
+    einen eigenen `WakeReason` — kein Entweder-oder), **Env-Flag** und **Legacy-Politik**
+    (`includeLegacy` default false). Empfehlung: Sweep-Verdrahtung zuerst entscheiden, §1 budgetieren
+    (Vorfrage: per-Instanz-Credential, weil das Host-Cert eine Bindung tautologisch machte), §2 liegen lassen.
   - [x] 🟠 **TL-11 Sicherheits-Härtung: Frame-Pfad-Loopback-Loch GESCHLOSSEN** (entdeckt+gefixt 2026-07-16) —
     der `4003`-Loopback-Gate prüfte nur `query.agent` beim Connect; der Frame-Pfad `{type:'subscribe',agent:…}`
     setzte `agentFilter` **ohne** Loopback-Check → Nicht-Loopback-mTLS-Peer konnte per Frame fremde `agent:wake`
