@@ -73,6 +73,54 @@ Die ursprüngliche B1→B2→B3-Idee war richtig in der *Form*, aber B2 bündelt
 - **`replayGuard` NICHT wiederverwenden** — In-Memory-`Map`, hartkodiertes 120s-Cleanup unabhängig von
   `ttlMs` (`replay.ts:40-47`), für lange TTLs unsound und nicht durabel.
 
+### 4.1 Reserve/Commit-Protokoll — spezifiziert (Nachtrag 2026-07-23)
+
+§4 verlangt, dieses Protokoll **gemeinsam mit B3s Dispatch-Kontrakt** festzuhalten, „auch wenn Code
+sequentiell landet". Hiermit erledigt. Die reine Zustandsmaschine liegt als
+`packages/daemon/src/order-ledger-protocol.ts` vor (**0 Aufrufer**, kein I/O, keine Persistenz).
+
+**Die Zustandsmenge ist erzwungen, nicht gewählt.** Aus „Reserve **vor** Dispatch" + „at-most-once"
+folgt: ein Claim muss vor der Wirkung sichtbar sein (`reserved`), nach der Wirkung gibt es genau zwei
+Ausgänge (`committed`/`failed`), und **beide sind terminal**.
+
+| Zustand vorher | Ereignis | Ergebnis | Dispatch frei? |
+|---|---|---|---|
+| — (Zeile fehlt) | `reserve` | `reserved` | **ja — der einzige Fall** |
+| `reserved` | `commit` | `committed` | nein |
+| `reserved` | `fail` | `failed` | nein |
+| `reserved` | `reserve` | abgelehnt `duplicate-claim` | nein |
+| `committed` / `failed` | `reserve` | abgelehnt `duplicate-claim` | nein |
+| — | `commit` / `fail` | abgelehnt `not-reserved` | nein |
+| `committed` / `failed` | `commit` / `fail` | abgelehnt `already-final` | nein |
+| unbekannter Zustand/Event | — | abgelehnt `malformed` | nein |
+
+**Warum `failed` terminal ist (und kein Retry folgt):** ein gemeldeter Fehlschlag kann ein **Timeout**
+sein, dessen Nebenwirkung bereits eingetreten ist. Ein Retry machte aus at-most-once ein at-least-once —
+genau das schließt §4 aus. **Crash-nach-Claim** bleibt `reserved` und wird nie ausgeführt; das ist die
+Semantik, kein zu behebender Zustand.
+
+**Was B1 (Persistenz) daraus umsetzen muss:**
+1. `UNIQUE (signer_keyid, order_nonce)` ist die **technische** Entsprechung von `duplicate-claim` — die
+   Zustandsprüfung ersetzt sie **nicht**, sie doppelt sie fachlich (Race zweier Prozesse fängt der Index).
+2. Der `INSERT` des Claims und die Freigabe des Dispatchs liegen in **einer** better-sqlite3-Transaktion,
+   die **vor** dem Dispatch committet — sonst ist der Claim beim Crash nicht sichtbar.
+3. `signer_keyid` **muss** der kanonische DER-SPKI-Keyid sein (`canonicalOrderKeyId`, #323) — mit dem
+   format-malleablen `orderKeyId` wäre die `UNIQUE`-Spalte durch bloßes PEM-Umformatieren umgehbar.
+4. Die `messages`-Zeile ist **nicht** die Idempotenz-Einheit (ihr `idx_messages_order` ist bewusst
+   **nicht** UNIQUE); `replayGuard` ist ungeeignet (In-Memory-`Map`, hartkodiertes 120-s-Cleanup
+   unabhängig von `ttlMs`, `replay.ts`).
+
+**Was B3 (Dispatch) daraus einhalten muss:**
+1. Dispatch **nur** wenn `mayDispatch(transition)` — der einzige erlaubte Auswertungspfad (analog
+   `isApproved`/`isRoutable`). Nie selbst auf Teilbedingungen prüfen.
+2. Nach dem Dispatch **genau ein** `commit` **oder** `fail` — kein „später nochmal versuchen".
+3. Ein `mayDispatch === false` ist **kein Fehler**, sondern der Normalfall bei Duplikaten und nach
+   Crash-Wiederanlauf; er darf **nicht** in einen Retry umgedeutet werden.
+
+**Weiterhin gated (unberührt):** ob überhaupt ausgeführt werden darf (D-OWNER), ab wann (D-EPOCH),
+welche Order-Typen, Revocation-Autorität — siehe §9. Dieses Protokoll trifft **keine** dieser
+Entscheidungen; es legt nur fest, dass eine erlaubte Ausführung **höchstens einmal** stattfindet.
+
 ## 5. B2a — TTL-strenger Execute-Resolver (ADR-038-Restfrage lösen)
 > **D-TTL:** **Ingest** honoriert TTL (bei Ankunft abgelaufen → nicht akzeptiert). **Display-Read** ist
 > provenienz-only / TTL-lenient (zeigt „war ein gültiger Auftrag"). **Execute-Read** ist **TTL-streng
