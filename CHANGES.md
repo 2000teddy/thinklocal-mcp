@@ -8,7 +8,34 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### docs(reconcile): PR-Nummern-Nachtrag für #320 (2026-07-23 13:10)
+### feat(tl11): Reconciliation-Sweep-Kern `computeSweepTargets` + ADR-047-Scoping (2026-07-23 13:25)
+**Additive, ungegatete reine Primitive** (`sweep-targets.ts`, **0 Aufrufer**, kein Runtime-Change) plus die
+Scoping-Note ADR-047 zu den drei Punkten, die `TODO.md` nach TL-11 Slice B als „Optional/danach" führt.
+**Ehrliche Vorgeschichte:** die erste Fassung lieferte **nur** die Note und begründete das damit, alle drei
+Punkte seien entscheidungsgebunden. Das externe Review hat das als **HIGH** widerlegt — die von der Note
+selbst vorgeschlagene Signatur enthält **keinen** Coalescer, **keine** Uhr, **keinen** Trigger und **kein**
+Flag, ist also gerade **nicht** blockiert. Der Slice ist daher gebaut und die Blocker-Behauptung in
+ADR-047 §3/§5 ausdrücklich zurückgezogen. `computeSweepTargets(live, unreadFor)` beantwortet genau eine
+Frage — *welche live registrierte, routbare Instanz hat ungelesene Post?* — rein, deterministisch (stabil
+sortiert, keine Uhr/kein Zufall) und **fail-closed wie der Emitter** (ohne routbare `spiffeUri` kein Ziel;
+unbrauchbarer oder **werfender** Zähler ⇒ kein Ziel; wirft nie). „Ob"/„wann" gesweept wird, die
+Coalescer-Wahl, ein Env-Flag und die Legacy-Politik bleiben **Aufrufer-Fragen** und damit gated.
+**Zweiter HIGH:** §2s Begründung widersprach dem Beschluss, den sie schützen sollte — „Broadcast ist
+strukturell nicht zustellbar" gilt nicht für den in **ADR-043 CO-B** beschlossenen Emitter-seitigen
+Broadcast (N gerichtete Wakes sind heute routbar, D1 bleibt zu); der reale Blocker ist die dort benannte
+**1→N-Amplifikation**, die in der ersten Fassung fehlte. Weitere CR-Korrekturen: Cert-Identität ist ~3
+Zeilen Wiederverwendung (`extractCanonicalSender`) statt „neue Verdrahtung"; der behauptete
+Beobachter-Konsument existiert im Repo **nicht**; das vom Runbook vorgeschriebene **Host**-Cert macht eine
+cert-abgeleitete Instanz-Bindung **tautologisch** (echter Schutz bräuchte ein per-Instanz-Credential); der
+bevorzugte Sweep-Trigger „WS-(Re-)Connect" hat **keinen** Hook, während `agentRegistry.on(...)` bereits
+existiert; und die Coalescer-Frage ist ein **falsches Entweder-oder** (eigener Coalescer bzw. eigener
+`WakeReason` lösen sie auf, und die Spec nennt mehrfaches Wecken selbst „harmlos"). +13 Tests, Suite
+**1992 grün** (141 Files); CR (Claude-Subagent): 2 HIGH + 5 MEDIUM an der Wurzel behoben. Nebenbei die
+Alt-Drift in `TL-11-wake-consumer-contract.md` gefixt (`websocket.ts:66`→`:89-90`, `:64`→`:88`).
+TL-11 Slice B bleibt extern/host-gated, TL-12 B/C owner/CO-gated.
+`changes/2026-07-23_adr-047-tl11-followups-scoping.md`.
+
+### docs(reconcile): PR-Nummern-Nachtrag für #320 (2026-07-23 13:10, #321)
 **Doc-only** Post-Merge-Reconcile — der nach dem Merge von **#320** (mergeCommit `f47edea`,
 `mergedAt=2026-07-23T11:07:16Z`) fällige Nummer-Nachtrag: COMPLIANCE-Erst-Spalte `(offen, base=main)` →
 `#320` + `(base=main, gemergt)` (9→10 Spalten wie #288–#319), CHANGES-Überschrift um `, #320)` ergänzt,
