@@ -294,9 +294,162 @@ describe('requestApprovalViaMatrix — `decider` bleibt deklarativ (v1, SECURITY
     const res = await requestApprovalViaMatrix(matrix, approver, CTX, REQ);
 
     // Festgeschrieben, damit eine spätere Verschärfung eine bewusste CO-Entscheidung bleibt
-    // und nicht unbemerkt hier hineinrutscht.
+    // und nicht unbemerkt hier hineinrutscht. ⚠️ KEINE Billigung von „1-aus-N": die Schutzwirkung
+    // liegt beim harten `consensus`-Tier-403 im Ingress, AUSSERHALB dieses Moduls (siehe Modul-Doc).
     expect(calls).toEqual(['telegram']);
     expect(isApproved(res.decision)).toBe(true);
     expect(res.target?.decider).toEqual({ kind: 'consensus', quorum: 3 });
+  });
+});
+
+describe('requestApprovalViaMatrix — ctx/req müssen dasselbe Tripel tragen (Confused Deputy)', () => {
+  const MATRIX_TWO = matrixOf([
+    { tier: 'gate', server: 'unifi', tool: 'get_status', channel: 'auto', decider: 'human:bot' },
+    { tier: 'gate', server: 'unifi', tool: '*', channel: 'telegram', decider: 'human:christian' },
+  ]);
+
+  it('Kanalwahl nach harmlosem Werkzeug, Vorlage des scharfen ⇒ denied, niemand gefragt', async () => {
+    const { approver, calls } = approverOf(async (id) => ({ outcome: 'approved', channelId: id }));
+
+    const res = await requestApprovalViaMatrix(
+      MATRIX_TWO,
+      approver,
+      { tier: 'gate', server: 'unifi', tool: 'get_status' }, // wählt den bequemen Kanal 'auto'
+      { ...REQ, tool: 'delete_site' }, // … vorgelegt würde aber das scharfe Werkzeug
+    );
+
+    expect(res.decision.outcome).toBe('denied-no-channel');
+    expect(res.decision.note).toContain('mismatch');
+    expect(res.target).toBeNull();
+    expect(calls).toEqual([]);
+  });
+
+  it('abweichender server bzw. tier ⇒ ebenfalls denied, niemand gefragt', async () => {
+    for (const ctx of [
+      { tier: 'gate', server: 'pal', tool: 'block_client' } as ResolveContext,
+      { tier: 'consensus', server: 'unifi', tool: 'block_client' } as ResolveContext,
+    ]) {
+      const { approver, calls } = approverOf(async (id) => ({
+        outcome: 'approved',
+        channelId: id,
+      }));
+      const res = await requestApprovalViaMatrix(matrixOf([ENTRY_TELEGRAM]), approver, ctx, REQ);
+
+      expect(res.decision.outcome).toBe('denied-no-channel');
+      expect(calls).toEqual([]);
+    }
+  });
+});
+
+describe('requestApprovalViaMatrix — Totalität der AUFLÖSUNG: ein Wurf wird zu Default-Deny', () => {
+  // Die Auflösung ist auf eine `parseFreigabeMatrix`-validierte Matrix ausgelegt. Ein künftiger,
+  // laxerer Loader (oder ein geforgtes Objekt) darf nicht als Exception nach oben durchschlagen —
+  // sonst wäre der Fehlerpfad ein 500 statt eines belegbaren Denies.
+  const BROKEN: unknown[] = [
+    null,
+    undefined,
+    42,
+    { entries: 42 }, // nicht iterierbar
+    { entries: [{ tier: 'gate', server: 'unifi', tool: 'block_client', channel: 'telegram' }] }, // decider fehlt
+    {
+      entries: [
+        {
+          tier: 'gate',
+          server: 'unifi',
+          tool: 'block_client',
+          decider: { kind: 'human', id: 'x' },
+          get channel(): string {
+            throw new Error('getter boom');
+          },
+        },
+      ],
+    },
+  ];
+
+  it.each(BROKEN.map((m, i) => [i, m] as const))(
+    'geforgte Matrix #%i ⇒ denied-no-channel statt Wurf, niemand gefragt',
+    async (_i, broken) => {
+      const { approver, calls } = approverOf(async () => ({ outcome: 'approved' }));
+
+      const res = await requestApprovalViaMatrix(broken as FreigabeMatrix, approver, CTX, REQ);
+
+      expect(res.decision.outcome).toBe('denied-no-channel');
+      expect(isApproved(res.decision)).toBe(false);
+      expect(res.target).toBeNull();
+      expect(calls).toEqual([]);
+    },
+  );
+});
+
+describe('requestApprovalViaMatrix — Prototypenkette erzeugt niemals eine Freigabe', () => {
+  it('Decision NUR über die Prototypenkette (`Object.create`) ⇒ error, nie approved', async () => {
+    const { approver } = approverOf(async () => Object.create({ outcome: 'approved' }));
+    const res = await requestApprovalViaMatrix(matrixOf([ENTRY_TELEGRAM]), approver, CTX, REQ);
+
+    expect(res.decision.outcome).toBe('error');
+    expect(isApproved(res.decision)).toBe(false);
+  });
+
+  it('verseuchtes Object.prototype macht `{}` NICHT zu einer Freigabe', async () => {
+    const proto = Object.prototype as unknown as { outcome?: unknown };
+    proto.outcome = 'approved';
+    try {
+      const registry = new MeldekanalRegistry([
+        {
+          id: 'telegram',
+          isHealthy: async (): Promise<boolean> => true,
+          requestApproval: async (): Promise<ApprovalDecision> => ({}) as ApprovalDecision,
+        },
+      ]);
+
+      const res = await requestApprovalViaMatrix(matrixOf([ENTRY_TELEGRAM]), registry, CTX, REQ);
+
+      expect(res.decision.outcome).toBe('error');
+      expect(isApproved(res.decision)).toBe(false);
+    } finally {
+      delete proto.outcome;
+    }
+  });
+
+  it('Array mit eigener outcome-Eigenschaft ⇒ error (Arrays sind keine Decision)', async () => {
+    const { approver } = approverOf(async () => Object.assign([], { outcome: 'approved' }));
+    const res = await requestApprovalViaMatrix(matrixOf([ENTRY_TELEGRAM]), approver, CTX, REQ);
+
+    expect(res.decision.outcome).toBe('error');
+    expect(isApproved(res.decision)).toBe(false);
+  });
+
+  it('werfender outcome-Getter ⇒ error (normalizeDecision wirft nicht)', async () => {
+    const { approver } = approverOf(async () => ({
+      get outcome(): string {
+        throw new Error('outcome boom');
+      },
+    }));
+    const res = await requestApprovalViaMatrix(matrixOf([ENTRY_TELEGRAM]), approver, CTX, REQ);
+
+    expect(res.decision.outcome).toBe('error');
+    expect(isApproved(res.decision)).toBe(false);
+  });
+});
+
+describe('requestApprovalViaMatrix — Forensik: abweichende Kanal-Selbstauskunft geht nicht verloren', () => {
+  it('behauptet der Approver einen anderen Kanal, landet das in der note', async () => {
+    const { approver } = approverOf(async () => ({
+      outcome: 'approved',
+      channelId: 'some-other-channel',
+    }));
+
+    const res = await requestApprovalViaMatrix(matrixOf([ENTRY_TELEGRAM]), approver, CTX, REQ);
+
+    expect(res.decision.channelId).toBe('telegram'); // der ADRESSIERTE Matrix-Kanal
+    expect(res.decision.note).toContain('some-other-channel');
+  });
+
+  it('gleicher Kanal ⇒ keine Rausch-note', async () => {
+    const { approver } = approverOf(async () => ({ outcome: 'approved', channelId: 'telegram' }));
+    const res = await requestApprovalViaMatrix(matrixOf([ENTRY_TELEGRAM]), approver, CTX, REQ);
+
+    expect(res.decision.channelId).toBe('telegram');
+    expect(res.decision.note).toBeUndefined();
   });
 });

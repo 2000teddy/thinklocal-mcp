@@ -109,16 +109,28 @@ Gemergt und **unverdrahtet** (je 0 Aufrufer, kein Runtime-Change):
 Der Router verbindet die beiden Hälften — mehr nicht. Er ist damit exakt die **Aktivierungs-Vorbedingung 2**
 aus SECURITY.md „Freigabe-Matrix (TL-10)" („die Kanalauswahl wird auf den Matrix-Kanal beschränkt"):
 
+- **`ctx`/`req`-Bindung:** beide müssen dasselbe `(tier, server, tool)`-Tripel tragen, sonst
+  `denied-no-channel` ohne Kanal-Frage. Der Kanal wird über `ctx` gewählt, freigegeben wird `req` — zwei
+  unabhängige Quellen für dasselbe Tripel wären ein **Confused-Deputy-Vektor** (Kanalwahl nach dem harmlosen
+  Werkzeug, Vorlage des scharfen). Unter D3-Nicht-Durchsetzung **ist die Kanalwahl die einzige Kontrolle, die
+  die Matrix liefert** — die Übereinstimmung wird deshalb erzwungen, nicht nur dokumentiert.
 - **Nicht routable** (kein Match, leere Matrix, nicht wohlgeformtes Ziel — D5) ⇒ `denied-no-channel`, und es
   wird **niemals ein Kanal gefragt**. Routbarkeit entscheidet allein `isRoutable(resolveEntry(...))`; der
-  Router prüft **keine** Teilbedingung selbst.
+  Router prüft **keine** Teilbedingung selbst. Auch ein **Wurf der Auflösung** (an `parseFreigabeMatrix`
+  vorbei konstruierte Struktur, z.B. durch einen künftigen laxeren Loader) wird gefangen und endet im
+  Default-Deny — er schlägt nicht als Exception nach oben durch.
 - **Routable** ⇒ **ausschließlich** `requestApprovalOn(target.channel, …)`. Es gibt **keinen** Fallback auf
   `requestApproval()` („erster gesunder Kanal") — genau diese Auswahl soll die Matrix ja ersetzen. Der Router
   nimmt dafür nur die schmale `ChannelBoundApprover`-Sicht entgegen, in der die Fallback-Methode **gar nicht
   existiert**: fail-closed per Typ, nicht per Disziplin.
 - **Total:** Wurf oder unbekanntes Decision-Shape des Approvers ⇒ `error` (über das **exportierte**
   `normalizeDecision` der Registry — dieselbe Mechanik an EINER Stelle, kein Nachbau). Der Router wirft nie,
-  und `isApproved()` bleibt der einzige Auswertungspfad.
+  und `isApproved()` bleibt der einzige Auswertungspfad. `normalizeDecision` wertet dabei **nur eigene
+  Eigenschaften** (`Object.hasOwn`) und lehnt Arrays ab: ein `outcome` über die **Prototypenkette**
+  (`Object.create({outcome:'approved'})`, verseuchtes `Object.prototype`) darf nie zu `approved` führen.
+- **Forensik:** der gestempelte `channelId` ist immer der **adressierte** Matrix-Kanal. Behauptet ein
+  Approver einen abweichenden Kanal, geht diese Selbstauskunft nicht verloren, sondern in die `note` —
+  sonst tarnte die Stempelung eine Fremd-Entscheidung als Matrix-Kanal-Entscheidung.
 - **`decider` bleibt deklarativ** (D3): das aufgelöste Ziel inkl. `decider` wird nur für Audit/Anzeige
   durchgereicht, **nicht** durchgesetzt. Insbesondere macht `consensus:quorum=N` einen Eintrag **nicht**
   mehrstimmig; ein Consensus-*Decider* wird hier weder erzwungen noch abgelehnt (im Ingress bleibt der
@@ -133,3 +145,13 @@ aus SECURITY.md „Freigabe-Matrix (TL-10)" („die Kanalauswahl wird auf den Ma
    (Default AUS, lauter Startup-Warn bei „Flag an, Matrix leer/fehlt").
 3. **D3-Owner-Sign-off (Christian)** — bewusste Bestätigung, dass `human:<id>` v1 nicht durchgesetzt wird.
 4. **Aktivierung** (Flag-Flip in einer laufenden/Live-Instanz) — bleibt owner-gated.
+5. ⚠️ **Der Router darf mit `ctx.tier === 'consensus'` NIE erreicht werden.** Weil `decider` in v1 nicht
+   durchgesetzt wird, ruht die gesamte Schutzwirkung für `consensus:quorum=N` auf dem harten
+   `consensus`-**Tier**-403 im Ingress — einer Komponente **außerhalb** des Routers. Verdrahtet Slice B
+   `resolveApproval` vor oder anstelle dieses 403, genügt **eine** Zustimmung für `quorum=3`. Slice B muss
+   das explizit sicherstellen und testen (oder D3-Enforcement per CO nachziehen).
+6. **Aus dem #319-CR mitgenommen, im D1-Loader zu erledigen** (beide vorbestehend aus #300, fail-closed in
+   der Wirkung, daher nicht im Prep-Slice gefixt): ein **whitespace-only** Kanalname parst und routet
+   (`length === 0` statt `trim()`) — eine Policy-Zeile, die konfiguriert *aussieht* und stumm ewig
+   verweigert; und `resolveEntry` gibt `decider` **per Referenz** zurück (`readonly` ist nur
+   Compile-Zeit) — ein mutierender Audit-Konsument veränderte die geparste Policy für alle Folge-Auflösungen.

@@ -490,3 +490,94 @@ describe('MeldekanalRegistry.requestApprovalOn — gezielte Kanal-Bindung (TL-10
     expect((await reg.requestApprovalOn('b', REQ)).channelId).toBe('b');
   });
 });
+
+describe('normalizeDecision — nur EIGENE Eigenschaften zählen (CR #319)', () => {
+  /** Kanal, der ein beliebiges (auch feindliches) Rohergebnis zurückgibt. */
+  function raw(id: string, value: unknown): Meldekanal {
+    return {
+      id,
+      isHealthy: async () => true,
+      requestApproval: async () => value as ApprovalDecision,
+    };
+  }
+
+  it('`outcome` NUR über die Prototypenkette (Object.create) ⇒ error, nie approved', async () => {
+    const reg = new MeldekanalRegistry([raw('a', Object.create({ outcome: 'approved' }))], FAST);
+
+    for (const d of [await reg.requestApproval(REQ), await reg.requestApprovalOn('a', REQ)]) {
+      expect(d.outcome).toBe('error');
+      expect(isApproved(d)).toBe(false);
+    }
+  });
+
+  it('verseuchtes Object.prototype macht `{}` NICHT zu einer Freigabe', async () => {
+    // Prototype-Pollution irgendwo im Prozess darf den Fail-closed-Filter nicht umdrehen.
+    const proto = Object.prototype as unknown as { outcome?: unknown };
+    proto.outcome = 'approved';
+    try {
+      const reg = new MeldekanalRegistry([raw('a', {})], FAST);
+
+      for (const d of [await reg.requestApproval(REQ), await reg.requestApprovalOn('a', REQ)]) {
+        expect(d.outcome).toBe('error');
+        expect(isApproved(d)).toBe(false);
+      }
+    } finally {
+      delete proto.outcome;
+    }
+  });
+
+  it('Array mit eigener outcome-Eigenschaft ⇒ error (ein Array ist keine Decision)', async () => {
+    const reg = new MeldekanalRegistry(
+      [raw('a', Object.assign([], { outcome: 'approved' }))],
+      FAST,
+    );
+
+    const d = await reg.requestApprovalOn('a', REQ);
+    expect(d.outcome).toBe('error');
+    expect(isApproved(d)).toBe(false);
+  });
+
+  it('werfender outcome-Getter ⇒ error statt Wurf (Registry „wirft nicht" hält)', async () => {
+    const hostile = {
+      get outcome(): string {
+        throw new Error('outcome boom');
+      },
+    };
+    const reg = new MeldekanalRegistry([raw('a', hostile)], FAST);
+
+    await expect(reg.requestApproval(REQ)).resolves.toMatchObject({ outcome: 'error' });
+    await expect(reg.requestApprovalOn('a', REQ)).resolves.toMatchObject({ outcome: 'error' });
+  });
+
+  it('werfendes toString auf einem unbekannten outcome ⇒ error statt Wurf', async () => {
+    const hostile = {
+      outcome: {
+        toString(): string {
+          throw new Error('toString boom');
+        },
+      },
+    };
+    const reg = new MeldekanalRegistry([raw('a', hostile)], FAST);
+
+    await expect(reg.requestApprovalOn('a', REQ)).resolves.toMatchObject({ outcome: 'error' });
+  });
+
+  it('`note` nur über die Prototypenkette wird nicht übernommen', async () => {
+    const reg = new MeldekanalRegistry(
+      [raw('a', Object.assign(Object.create({ note: 'geerbt' }), { outcome: 'rejected' }))],
+      FAST,
+    );
+
+    const d = await reg.requestApprovalOn('a', REQ);
+    expect(d.outcome).toBe('rejected');
+    expect(d.note).toBeUndefined();
+  });
+
+  it('eigene, wohlgeformte Decision bleibt unverändert gültig', async () => {
+    const reg = new MeldekanalRegistry([raw('a', { outcome: 'approved', note: 'ok' })], FAST);
+
+    const d = await reg.requestApprovalOn('a', REQ);
+    expect(isApproved(d)).toBe(true);
+    expect(d).toEqual({ outcome: 'approved', channelId: 'a', note: 'ok' });
+  });
+});
