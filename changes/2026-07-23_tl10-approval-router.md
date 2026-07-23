@@ -3,7 +3,9 @@
 **Typ:** additive, **ungegatete** Kompositions-Primitive (Code + Tests). Der letzte agentenseitig freie
 TL-10-Slice: das fehlende **Bindeglied** zwischen zwei bereits gemergten, aber unverbundenen Hälften —
 **ohne** TOML-Loader, **ohne** Ingress-Verdrahtung, **ohne** Env-Flag, **ohne** D3-Sign-off, **ohne**
-Christian-gatete Aktivierung. Der Router selbst hat **0 Aufrufer** (kein Runtime-Change).
+Christian-gatete Aktivierung. Der Router selbst hat **0 direkte Aufrufer**; **ein Runtime-Change ist
+trotzdem enthalten** — `meldekanal.ts` bringt einen **fail-closed** Verhaltenswechsel auf dem **bestehenden
+Registry-Pfad** (nächster Absatz). „0 Aufrufer" gilt also für den Router, **nicht** für den PR als Ganzes.
 
 **Nicht mehr rein additiv (Stand nach dem CR):** die aus dem Review folgende Härtung von
 `normalizeDecision` (`meldekanal.ts`) **ändert Laufzeitverhalten bestehender Aufrufer** —
