@@ -47,6 +47,14 @@ Die ursprüngliche B1→B2→B3-Idee war richtig in der *Form*, aber B2 bündelt
 - **Kanonischer Keyid = DER-SPKI**, nicht sha256(PEM-Text): `orderKeyId` ist format-malleabel
   (Whitespace/Wrapping → anderer Keyid → andere Ledger-/Denylist-Zeile). Kanonisieren **bevor** der Keyid
   Ledger-Uniqueness **und** Revocation-Join-Key wird.
+  **Umsetzungsstand (2026-07-23):** die **reine Primitive** liegt vor — `signed-order.ts`
+  `canonicalOrderKeyId(publicKeyPem)` (sha256 über die DER-SPKI-Bytes, fail-closed ⇒ `null`, lehnt privates
+  Material ab, **0 Aufrufer**). Der Defekt ist als Regressionstest festgeschrieben: dasselbe
+  Schlüsselmaterial mit CRLF + Leerzeilen ergibt bei `orderKeyId` einen **anderen**, bei
+  `canonicalOrderKeyId` **denselben** Keyid. `orderKeyId` bleibt **unverändert** (es stempelt bereits
+  gespeicherte Zeilen — ein Wechsel ist eine Datenmigration und gehört in den gateten B0-Slice).
+  Damit ist **dieser eine** B0-Baustein vorbereitet; die übrigen B0-Teile (Owner-Opt-in-Config, Schema,
+  `order_type`-Provenienz, **Epoch-Grenze**) bleiben an §9 gegated.
 - **Execution-Epoch-Grenze (D-EPOCH, Christian-Entscheidung):** Slice A speichert `signed_bytes` bereits
   flottenweit ohne Execute-Gate. Ohne Grenze würde **jeder** vor B3 eingegangene (oder in Transit
   abgefangene) nicht-ablaufende Auftrag beim B3-Flip **rückwirkend ausführbar** (harvest-now-execute-later) —
