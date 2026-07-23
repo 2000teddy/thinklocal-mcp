@@ -252,6 +252,19 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     vorhandenes Client-Cert (kein Secret), Subscribe-Form, `.data`-Payload-Reaktion, Cold-Start-Sweep-Pflicht,
     **Zwei-Peer-Proof-Prozedur** + Verifikations-Checkliste + No-op-Rückfall. **De-riskt** Slice B, entfernt
     den Blocker NICHT (letzter Hop out-of-repo, Host-/Fenster-gated). Doc-only, kein Deploy/Secret.
+  - [x] **TL-11 Emitter-Ende-zu-Ende-Conformance** (2026-07-23): die bisherigen Draht-Tests injizierten
+    `agent:wake` **direkt auf den Bus** — sie bewachten die WS-Routing-Schicht, nicht die Kette davor;
+    `registerWakeEmitter` (Auflösung + Coalescing + Fail-closed-SPIFFE) war nur gegen reine Funktionen
+    getestet. Ein Regress **genau zwischen** beiden Schichten wäre überall grün geblieben, während der
+    Supervisor (Slice B) falsch/gar nicht geweckt würde. Neu: 8 Tests fahren die **volle Kette**
+    `inbox:new` → Emitter → `agent:wake` → realer Loopback-Socket (Uhr + Live-Liste injiziert,
+    deterministisch, kein `sleep`): genau 1 inhaltsfreies Wake · **coalesced** (2 rasche Nachrichten → 1
+    Frame) · Fenster läuft ab → weckt wieder · ohne SPIFFE 0 Frames · Ziel nicht live 0 Frames · kein
+    Broadcast (auch beim ungefilterten Client) · leeres `to_agent_instance` = unadressiert · directed
+    trifft nur den passenden Client. **Mutations-verifiziert** (Coalescer umgangen / SPIFFE-Guard entfernt /
+    Liveness-Filter entfernt ⇒ je der passende Test rot). Test-only, `wake-contract.ts` **unangetastet**;
+    Suite **1979 grün** (140 Files). Doku: Consumer-Contract §7.2 (+ die stale `it.todo`-Deckungsgrenze in
+    §7.1 auf den #283-Stand korrigiert). Entfernt den Slice-B-Blocker NICHT — de-riskt ihn weiter.
   - [ ] **TL-11 Slice B** (extern-blocked): Out-of-Repo Agent-Home-Supervisor konsumiert `agent:wake` →
     weckt CLI (`pokeCli`); **Zwei-Peer-Live-Proof** (CLI-Reaktion ohne dazwischenliegenden Poll). Gegen den
     fixen Consumer-Contract (s.o.) **und jetzt das Runbook** baubar. **Echter Blocker:** der letzte Hop
