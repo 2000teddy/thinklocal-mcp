@@ -8,7 +8,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### test(tl11): Emitter-Ende-zu-Ende-Conformance — `inbox:new` → echter Socket (2026-07-23 12:45)
+### docs(reconcile): PR-Nummern-Nachtrag für #320 (2026-07-23 13:10)
+**Doc-only** Post-Merge-Reconcile — der nach dem Merge von **#320** (mergeCommit `f47edea`,
+`mergedAt=2026-07-23T11:07:16Z`) fällige Nummer-Nachtrag: COMPLIANCE-Erst-Spalte `(offen, base=main)` →
+`#320` + `(base=main, gemergt)` (9→10 Spalten wie #288–#319), CHANGES-Überschrift um `, #320)` ergänzt,
+TODO-Eintrag `TL-11 Emitter-Ende-zu-Ende-Conformance` annotiert. Timestamp-Anker vor der Ersetzung
+eindeutig, Zuordnung `gh`-verifiziert; reine 1:1-in-place-Annotation (3 Stück), kein Inhalts-, Struktur-
+oder Verdikt-Diff. Danach **0** stale Erst-Spalten mit PR-Bezug; der aus #318 bekannte Vor-#271-Rest
+(Zeilen ohne jede PR-Nummer) bleibt bewusst und benannt offen. Kein Code/Test/State/Deploy/Secret.
+`changes/2026-07-23_reconcile-pr-320.md`.
+
+### test(tl11): Emitter-Ende-zu-Ende-Conformance — `inbox:new` → echter Socket (2026-07-23 12:45, #320)
 **Test-only**, additiv (`wake-contract.ts`/`websocket.ts`/`index.ts` **unangetastet**). Schließt die Naht
 zwischen den beiden bewachten Schichten des Wake-Kontrakts: der **Emitter** (`registerWakeEmitter` —
 Auflösung, Coalescing, Fail-closed-SPIFFE) war nur gegen reine Funktionen getestet, und **alle** bisherigen
