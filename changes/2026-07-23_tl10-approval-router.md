@@ -3,7 +3,14 @@
 **Typ:** additive, **ungegatete** Kompositions-Primitive (Code + Tests). Der letzte agentenseitig freie
 TL-10-Slice: das fehlende **Bindeglied** zwischen zwei bereits gemergten, aber unverbundenen Hälften —
 **ohne** TOML-Loader, **ohne** Ingress-Verdrahtung, **ohne** Env-Flag, **ohne** D3-Sign-off, **ohne**
-Christian-gatete Aktivierung. 0 Aufrufer ⇒ kein Runtime-Change.
+Christian-gatete Aktivierung. Der Router selbst hat **0 Aufrufer** (kein Runtime-Change).
+
+**Nicht mehr rein additiv (Stand nach dem CR):** die aus dem Review folgende Härtung von
+`normalizeDecision` (`meldekanal.ts`) **ändert Laufzeitverhalten bestehender Aufrufer** —
+`requestApproval`/`requestApprovalOn` liefern für Decisions, deren `outcome` nur über die
+**Prototypenkette** kommt, für Arrays und für werfende Getter jetzt `error` statt (im schlimmsten Fall)
+`approved` bzw. statt einer Exception. Die Änderung ist strikt **fail-closed**: kein Eingang, der bisher
+`approved` ergab und es weiterhin verdient, verliert die Freigabe. Details unter „Was".
 
 ## Beleg (warum genau dieser Slice)
 Beide Hälften liegen auf `main` und sind rein/unverdrahtet:
@@ -117,7 +124,8 @@ Aktivierung (Flag-Flip, owner-gated).
   außerhalb jedes `try` → durch die Härtung mit erledigt) und die Test-Zählung im Doku-Text korrigiert.
   **Bestätigt GREEN geblieben:** kein Fail-open-Pfad zu `approved` ohne aktiv zustimmenden Matrix-Kanal
   (Thenables, boxed Strings, Symbole, rejected Promises, `Object.create(null)`, …), kein Fallback-Leak,
-  kein Guard-Bypass, 0 Aufrufer, Export verhaltensneutral, Doku-Zahlen real.
+  kein Guard-Bypass, 0 Aufrufer des Routers, Doku-Zahlen real. (Der **Export** selbst war
+  verhaltensneutral — die anschließende **Härtung** derselben Funktion ist es bewusst **nicht**, s.o.)
   **Nicht gefixt, bewusst benannt:** whitespace-only Kanalname parst (`length === 0` statt `trim()`) und
   `target.decider` aliast die geparste Policy — beide **vorbestehend aus #300**, fail-closed in der Wirkung,
   gehören in den D1-Loader-Slice.
