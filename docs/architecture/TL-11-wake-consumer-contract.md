@@ -163,10 +163,35 @@ den **realen Loopback-Socket** so, wie der Supervisor ihn trifft (connect → su
 | §8.1 Frame-Pfad von Loopback: `agent` per Frame gesetzt → Wake zugestellt | ″ |
 | §2 Loopback-Positivpfad: agent-gefilterter Connect von 127.0.0.1 nicht geschlossen | ″ |
 
-**Deckungsgrenze (als `it.todo` markiert, eigener schwererer Slice):** §2 mTLS-Pflicht (cert-lose/`ws://` →
-TLS-Reset) braucht cardServer-TLS + Client-Cert-Fixtures; der Nicht-Loopback-`4003`-Reject braucht eine
-Bindung an ein Nicht-Loopback-Interface (auf einem 127.0.0.1-Harness ist `req.ip` ohne `trustProxy` immer
-Loopback). Diese bleiben unit-bewacht (`rejectsAgentFilter`/`isLoopbackIp`), bis die Fixtures stehen.
+**Nachtrag (#283):** die beiden hier zuvor als `it.todo` geführten Fälle sind **echte Tests** — §2
+mTLS-Pflicht (In-Memory-CA + Client-Leaf, cert-los/`ws://` → TLS-Reset) und der Nicht-Loopback-`4003`-Reject
+(Bindung an eine echte Nicht-Loopback-IPv4; `it.skipIf` **nur** auf reinen Loopback-Hosts, statt falsch grün).
+
+### 7.2 Ende-zu-Ende: der echte Emitter auf dem echten Socket
+
+Die Tabellen oben injizieren `agent:wake` **direkt auf den Bus** — sie bewachen also die WS-Routing-Schicht,
+nicht die Kette davor. `registerWakeEmitter` (Auflösung + Coalescing + Fail-closed-SPIFFE) war bis dahin
+**ausschließlich** gegen reine Funktionen getestet. Ein Regress **genau zwischen** beiden Schichten (Emitter
+umgeht den Coalescer, weckt eine nicht-live Instanz, verliert die SPIFFE-Regel) wäre in **allen** bisherigen
+Tests grün geblieben — während der Supervisor, der genau auf diese §5-Zusagen baut, falsch oder gar nicht
+geweckt würde. Dieser Block fährt deshalb die **volle Kette**: `inbox:new` → Emitter → `agent:wake` → realer
+Loopback-Socket. Uhr und Live-Liste sind injiziert (deterministisch, kein `sleep`, kein Fake-Timer).
+
+| Ende-zu-Ende-Garantie (§) | Beleg |
+|---|---|
+| §4/§5 adressiert + live + SPIFFE → genau **1** Wake, inhaltsfrei (`message_id` reist **nicht** mit) | `tl11-wake-wire.conformance.test.ts` |
+| §5 **coalesced**: zwei rasche `inbox:new` im Fenster → genau **1** Frame | ″ |
+| §5 coalesced ist ein **Fenster**, keine Dauer-Unterdrückung: nach Ablauf weckt die nächste Nachricht wieder | ″ |
+| §3/§5 fail-closed: live Instanz **ohne** SPIFFE → **0** Frames (nicht routbar) | ″ |
+| §5 fail-closed: Ziel **nicht live** → **0** Frames | ″ |
+| §5 **kein Broadcast**: unadressiert → 0 Frames, auch beim **ungefilterten** Client | ″ |
+| §5 leeres `to_agent_instance` zählt als unadressiert → 0 Frames | ″ |
+| §3 directed: das **emittierte** Wake erreicht nur den passenden Client, nicht den Nachbarn | ″ |
+
+**Mutations-verifiziert** (die Tests beißen wirklich): Coalescer im Emitter umgangen → der Coalescing-Test
+wird rot; SPIFFE-Fail-closed-Guard entfernt → der „ohne SPIFFE"-Test wird rot; Liveness-Filter in
+`resolveWakeTargets` **und** der WARN-Guard entfernt → der „nicht live"-Test wird rot. (Der WARN-Guard
+allein zu entfernen genügt nicht — die Liveness ist doppelt bewacht; der Test pinnt das **Verhalten**.)
 
 ## 8. Was bleibt extern-blocked (präzise, mit Beleg)
 

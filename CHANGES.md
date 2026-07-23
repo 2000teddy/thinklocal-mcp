@@ -8,7 +8,27 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### feat(gate): TL-10 Slice-B-Prep — `requestApprovalViaMatrix` (Matrix → Kanal → Freigabe) (2026-07-23 06:45)
+### test(tl11): Emitter-Ende-zu-Ende-Conformance — `inbox:new` → echter Socket (2026-07-23 12:45)
+**Test-only**, additiv (`wake-contract.ts`/`websocket.ts`/`index.ts` **unangetastet**). Schließt die Naht
+zwischen den beiden bewachten Schichten des Wake-Kontrakts: der **Emitter** (`registerWakeEmitter` —
+Auflösung, Coalescing, Fail-closed-SPIFFE) war nur gegen reine Funktionen getestet, und **alle** bisherigen
+Draht-Tests (#282/#283) injizieren `agent:wake` **direkt auf den Bus**. Ein Regress genau dazwischen (Emitter
+umgeht den Coalescer, weckt eine nicht-live Instanz, verliert die SPIFFE-Regel) wäre überall grün geblieben —
+während der Supervisor aus TL-11 Slice B, der auf diese §5-Zusagen baut, zu oft/zu selten/gar nicht geweckt
+würde. Neu fahren **8 Tests** die volle Kette `inbox:new` → Emitter → `agent:wake` → realer Loopback-`/ws`:
+genau 1 **inhaltsfreies** Wake (die `message_id` reist nicht mit) · **coalesced** (2 rasche Nachrichten → 1
+Frame) · das Fenster **läuft ab** (danach weckt die nächste Nachricht wieder) · ohne SPIFFE 0 Frames · Ziel
+nicht live 0 Frames · **kein Broadcast** (auch der ungefilterte Client bekommt nichts) · leeres
+`to_agent_instance` = unadressiert · directed trifft nur den passenden Client. Uhr und Live-Liste injiziert
+⇒ deterministisch (kein `sleep`, keine Fake-Timer). **Mutations-verifiziert:** Coalescer umgangen /
+SPIFFE-Guard entfernt / Liveness-Filter entfernt ⇒ je der passende Test rot (dass der WARN-Guard allein
+nicht genügt, ist als doppelte Bewachung ehrlich vermerkt). Nebenbei eine echte Doku-Drift korrigiert:
+Consumer-Contract §7.1 führte die mTLS-Pflicht und den Nicht-Loopback-`4003`-Reject weiter als `it.todo`,
+obwohl **#283** beide längst zu echten Tests gemacht hat. Suite **1979 grün** (140 Files). TL-11 Slice B
+bleibt extern/Host-gated. `changes/2026-07-23_tl11-emitter-wire-conformance.md`,
+`TL-11-wake-consumer-contract.md` §7.2.
+
+### feat(gate): TL-10 Slice-B-Prep — `requestApprovalViaMatrix` (Matrix → Kanal → Freigabe) (2026-07-23 06:45, #319)
 **Additive, ungegatete Kompositions-Primitive** — der letzte agentenseitig freie TL-10-Slice: das fehlende
 **Bindeglied** zwischen zwei gemergten, aber unverbundenen Hälften — `freigabe-matrix.ts`
 `resolveEntry`/`isRoutable` (Slice A, #300) ⟷ `MeldekanalRegistry.requestApprovalOn` (D2-Prep, #317).

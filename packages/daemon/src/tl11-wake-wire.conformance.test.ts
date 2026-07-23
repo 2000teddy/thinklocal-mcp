@@ -42,6 +42,12 @@ import forge from 'node-forge';
 import { WebSocket as WsClient, Agent } from 'undici';
 import { MeshEventBus } from './events.js';
 import { registerWebSocket } from './websocket.js';
+import {
+  registerWakeEmitter,
+  WakeCoalescer,
+  DEFAULT_WAKE_COALESCE_MS,
+  type WakeEventBus,
+} from './wake-contract.js';
 
 // ── Harness: echter Fastify-Server + registerWebSocket, lauschend auf 127.0.0.1:<ephemeral> (Loopback). ──
 // Plain HTTP genügt für die Loopback-Routing-Fälle: der Loopback-Gate (§2) prüft `req.ip`, nicht TLS. Die
@@ -82,12 +88,18 @@ function openClient(port: number, query: string): Promise<WebSocket> {
   openSockets.push(ws);
   return new Promise((resolve, reject) => {
     ws.addEventListener('open', () => resolve(ws), { once: true });
-    ws.addEventListener('error', () => reject(new Error('WS-Client-Fehler beim Connect')), { once: true });
+    ws.addEventListener('error', () => reject(new Error('WS-Client-Fehler beim Connect')), {
+      once: true,
+    });
   });
 }
 
 /** Nächste Nachricht eines bestimmten `type` (verwirft davorliegende, z.B. `system:connected`). */
-function waitForType(ws: WebSocket, type: string, timeoutMs = 1000): Promise<Record<string, unknown>> {
+function waitForType(
+  ws: WebSocket,
+  type: string,
+  timeoutMs = 1000,
+): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       ws.removeEventListener('message', onMsg);
@@ -111,7 +123,10 @@ function waitForType(ws: WebSocket, type: string, timeoutMs = 1000): Promise<Rec
  * die JEMALS an diesen Socket gegangen wären, VOR der Antwort eingetroffen → deterministischer Negativ-Test
  * (kein willkürliches sleep). `agentSetsFilter=false` hält den Frame filter-frei (ändert nur die Event-Liste).
  */
-function collectUntilBarrier(ws: WebSocket, barrierEvents: string[]): Promise<Record<string, unknown>[]> {
+function collectUntilBarrier(
+  ws: WebSocket,
+  barrierEvents: string[],
+): Promise<Record<string, unknown>[]> {
   const seen: Record<string, unknown>[] = [];
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -143,7 +158,11 @@ const q = (s: string): string => encodeURIComponent(s);
 // agent-card.ts:229-230) real auf → der /ws-Pfad ist unter diesen Flags nur über mTLS erreichbar (cert-los/
 // `ws://` → TLS-Reset). Er repliziert die Flags (statt agent-card.ts zu importieren) → siehe ABGRENZUNG CR-M2.
 let certSerial = 0x10;
-function makeTestCa(): { caCertPem: string; caCert: forge.pki.Certificate; caKey: forge.pki.PrivateKey } {
+function makeTestCa(): {
+  caCertPem: string;
+  caCert: forge.pki.Certificate;
+  caKey: forge.pki.PrivateKey;
+} {
   const keys = forge.pki.rsa.generateKeyPair(2048);
   const cert = forge.pki.createCertificate();
   cert.publicKey = keys.publicKey;
@@ -153,7 +172,10 @@ function makeTestCa(): { caCertPem: string; caCert: forge.pki.Certificate; caKey
   const attrs = [{ name: 'commonName', value: 'tl11 wire test ca' }];
   cert.setSubject(attrs);
   cert.setIssuer(attrs);
-  cert.setExtensions([{ name: 'basicConstraints', cA: true }, { name: 'keyUsage', keyCertSign: true }]);
+  cert.setExtensions([
+    { name: 'basicConstraints', cA: true },
+    { name: 'keyUsage', keyCertSign: true },
+  ]);
   cert.sign(keys.privateKey, forge.md.sha256.create());
   return { caCertPem: forge.pki.certificateToPem(cert), caCert: cert, caKey: keys.privateKey };
 }
@@ -189,7 +211,10 @@ function issueLeaf(
   }
   cert.setExtensions(extensions);
   cert.sign(caKey, forge.md.sha256.create());
-  return { certPem: forge.pki.certificateToPem(cert), keyPem: forge.pki.privateKeyToPem(keys.privateKey) };
+  return {
+    certPem: forge.pki.certificateToPem(cert),
+    keyPem: forge.pki.privateKeyToPem(keys.privateKey),
+  };
 }
 
 interface MtlsHarness extends WireHarness {
@@ -247,13 +272,31 @@ function openWssClient(port: number, path: string, connect: Agent.Options['conne
 function connectOutcome(ws: WsClient, timeoutMs = 2500): Promise<'open' | 'error' | 'timeout'> {
   return new Promise((resolve) => {
     const timer = setTimeout(() => resolve('timeout'), timeoutMs);
-    ws.addEventListener('open', () => { clearTimeout(timer); resolve('open'); }, { once: true });
-    ws.addEventListener('error', () => { clearTimeout(timer); resolve('error'); }, { once: true });
+    ws.addEventListener(
+      'open',
+      () => {
+        clearTimeout(timer);
+        resolve('open');
+      },
+      { once: true },
+    );
+    ws.addEventListener(
+      'error',
+      () => {
+        clearTimeout(timer);
+        resolve('error');
+      },
+      { once: true },
+    );
   });
 }
 
 /** Nächste Nachricht eines bestimmten `type` von einem undici-Client (analog waitForType). */
-function waitForClientType(ws: WsClient, type: string, timeoutMs = 1500): Promise<Record<string, unknown>> {
+function waitForClientType(
+  ws: WsClient,
+  type: string,
+  timeoutMs = 1500,
+): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       ws.removeEventListener('message', onMsg);
@@ -294,7 +337,7 @@ function findNonLoopbackIpv4(): string | null {
   for (const addrs of Object.values(networkInterfaces())) {
     for (const a of addrs ?? []) {
       // Link-Local (169.254.x, APIPA) ausschließen — nicht zuverlässig verbindbar (CR-L3, Flake-Vermeidung).
-    if (a.family === 'IPv4' && !a.internal && !a.address.startsWith('169.254.')) return a.address;
+      if (a.family === 'IPv4' && !a.internal && !a.address.startsWith('169.254.')) return a.address;
     }
   }
   return null;
@@ -307,8 +350,16 @@ async function startNonLoopbackHarness(ip: string): Promise<WireHarness> {
   await registerWebSocket(app, bus);
   await app.listen({ port: 0, host: ip });
   const addr = app.server.address();
-  if (addr == null || typeof addr === 'string') throw new Error('kein TCP-Port vom Nicht-Loopback-Harness');
-  const harness: WireHarness = { bus, port: addr.port, app, close: async () => { await app.close(); } };
+  if (addr == null || typeof addr === 'string')
+    throw new Error('kein TCP-Port vom Nicht-Loopback-Harness');
+  const harness: WireHarness = {
+    bus,
+    port: addr.port,
+    app,
+    close: async () => {
+      await app.close();
+    },
+  };
   openHarnesses.push(harness);
   return harness;
 }
@@ -385,7 +436,10 @@ describe('TL-11 Wake-Wire-Conformance (echter /ws-Socket, Loopback)', () => {
 
   it('§3/§5 directed drop: falscher agent-Filter → kein Wake (nicht das Ziel)', async () => {
     const h = await startWakeWireHarness();
-    const ws = await openClient(h.port, `?subscribe=agent:wake&agent=${q('spiffe://thinklocal/node/SOMEONE-ELSE')}`);
+    const ws = await openClient(
+      h.port,
+      `?subscribe=agent:wake&agent=${q('spiffe://thinklocal/node/SOMEONE-ELSE')}`,
+    );
     await waitForType(ws, 'system:connected');
     h.bus.emit('agent:wake', { instance_id: INSTANCE, spiffe_uri: SPIFFE, reason: 'inbox' });
     const seen = await collectUntilBarrier(ws, ['heartbeat']);
@@ -461,4 +515,171 @@ describe('TL-11 Wake-Wire-Conformance (echter /ws-Socket, Loopback)', () => {
       expect(await waitForCloseCode(ws)).toBe(4003);
     },
   );
+});
+
+// ── Ende-zu-Ende: der ECHTE Emitter auf dem echten Socket (`inbox:new` → `agent:wake`) ──────────────
+//
+// LÜCKE, DIE DIESER BLOCK SCHLIESST
+// ---------------------------------
+// Alle Tests oben injizieren `agent:wake` DIREKT auf den Bus — sie bewachen also die WS-Routing-Schicht,
+// nicht die Kette davor. `registerWakeEmitter` (Auflösung + Coalescing + Fail-closed-SPIFFE) ist
+// ausschließlich gegen reine Funktionen getestet (`wake-contract.test.ts`). Damit bliebe ein Regress
+// GENAU zwischen beiden Schichten ungefangen: würde der Emitter den Coalescer umgehen, ein Wake an eine
+// nicht-live Instanz emittieren oder die SPIFFE-Fail-closed-Regel verlieren, wären alle Pure-Function-
+// UND alle bisherigen Draht-Tests weiterhin grün — während der Supervisor (Slice B), der genau auf diese
+// §5-Zusagen baut, falsch geweckt (oder gar nicht geweckt) würde. Hier läuft deshalb die VOLLE Kette:
+// `inbox:new` auf den Bus → Emitter → `agent:wake` → realer Loopback-Socket.
+// Uhr und Live-Liste sind injiziert (deterministisch, kein `sleep`, kein Fake-Timer nötig).
+
+interface EmitterOpts {
+  live: readonly string[];
+  spiffe?: (instanceId: string) => string | null;
+  coalesceMs?: number;
+  now?: () => number;
+}
+
+/** Verdrahtet den echten Emitter auf den Harness-Bus — dieselbe Form wie `index.ts` produktiv. */
+function attachWakeEmitter(h: WireHarness, opts: EmitterOpts): void {
+  registerWakeEmitter({
+    eventBus: h.bus as unknown as WakeEventBus,
+    listInstances: () => opts.live,
+    resolveSpiffe: opts.spiffe ?? ((id): string | null => (id === INSTANCE ? SPIFFE : null)),
+    coalescer: new WakeCoalescer(opts.coalesceMs ?? DEFAULT_WAKE_COALESCE_MS),
+    now: opts.now ?? ((): number => Date.now()),
+  });
+}
+
+/** Eine eingehende Mesh-Nachricht, wie der Inbox-Pfad sie meldet. */
+function inboxNew(h: WireHarness, toAgentInstance: string | null): void {
+  h.bus.emit('inbox:new', {
+    message_id: 'm-1',
+    from: 'spiffe://thinklocal/node/12D3KooSender',
+    ...(toAgentInstance === null ? {} : { to_agent_instance: toAgentInstance }),
+  });
+}
+
+describe('TL-11 Wake-Wire-Conformance — echter Emitter Ende-zu-Ende (inbox:new → agent:wake)', () => {
+  it('§4/§5: adressiert + live + SPIFFE → genau 1 inhaltsfreies Wake auf dem Draht', async () => {
+    const h = await startWakeWireHarness();
+    attachWakeEmitter(h, { live: [INSTANCE] });
+    const ws = await openClient(h.port, `?subscribe=agent:wake&agent=${q(SPIFFE)}`);
+    await waitForType(ws, 'system:connected');
+
+    const got = waitForType(ws, 'agent:wake');
+    inboxNew(h, INSTANCE);
+    const frame = await got;
+
+    const data = frame['data'] as Record<string, unknown>;
+    expect(data['instance_id']).toBe(INSTANCE);
+    expect(data['spiffe_uri']).toBe(SPIFFE);
+    expect(data['reason']).toBe('inbox');
+    // Inhaltsfrei: die Nachricht selbst darf NICHT mitreisen (Zero-Content-Zusage §4).
+    expect(Object.keys(data).sort()).toEqual(['instance_id', 'reason', 'spiffe_uri']);
+    expect(JSON.stringify(frame)).not.toContain('m-1');
+  });
+
+  it('§5 coalesced: zwei rasche inbox:new → genau EIN Wake auf dem Draht', async () => {
+    const h = await startWakeWireHarness();
+    // Uhr steht → beide Nachrichten liegen sicher im selben Coalesce-Fenster.
+    attachWakeEmitter(h, { live: [INSTANCE], now: () => 1_000 });
+    const ws = await openClient(h.port, `?subscribe=agent:wake&agent=${q(SPIFFE)}`);
+    await waitForType(ws, 'system:connected');
+
+    inboxNew(h, INSTANCE);
+    inboxNew(h, INSTANCE);
+
+    // Same-Socket-Barrier: beide Wakes wären VOR der subscribe-Antwort eingetroffen → deterministisch.
+    const seen = await collectUntilBarrier(ws, ['agent:wake']);
+    expect(seen.filter((m) => m['type'] === 'agent:wake')).toHaveLength(1);
+  });
+
+  it('§5 coalesced: nach Ablauf des Fensters weckt die nächste Nachricht wieder', async () => {
+    const h = await startWakeWireHarness();
+    let nowMs = 1_000;
+    attachWakeEmitter(h, { live: [INSTANCE], coalesceMs: 100, now: () => nowMs });
+    const ws = await openClient(h.port, `?subscribe=agent:wake&agent=${q(SPIFFE)}`);
+    await waitForType(ws, 'system:connected');
+
+    inboxNew(h, INSTANCE);
+    nowMs += 500; // Fenster (100 ms) abgelaufen
+    inboxNew(h, INSTANCE);
+
+    const seen = await collectUntilBarrier(ws, ['agent:wake']);
+    // Belegt, dass Coalescing ein FENSTER ist und keine dauerhafte Unterdrückung.
+    expect(seen.filter((m) => m['type'] === 'agent:wake')).toHaveLength(2);
+  });
+
+  it('§3/§5 fail-closed: live Instanz OHNE SPIFFE → kein Wake auf dem Draht (nicht routbar)', async () => {
+    const h = await startWakeWireHarness();
+    attachWakeEmitter(h, { live: [INSTANCE], spiffe: () => null });
+    // Der Client filtert auf die instance_id — er WÜRDE ein Wake bekommen, wenn eines emittiert würde.
+    const ws = await openClient(h.port, `?subscribe=agent:wake&agent=${q(INSTANCE)}`);
+    await waitForType(ws, 'system:connected');
+
+    inboxNew(h, INSTANCE);
+
+    const seen = await collectUntilBarrier(ws, ['agent:wake']);
+    expect(seen.filter((m) => m['type'] === 'agent:wake')).toHaveLength(0);
+  });
+
+  it('§5 fail-closed: Ziel nicht live → kein Wake auf dem Draht', async () => {
+    const h = await startWakeWireHarness();
+    attachWakeEmitter(h, { live: [] }); // niemand registriert
+    const ws = await openClient(h.port, `?subscribe=agent:wake&agent=${q(SPIFFE)}`);
+    await waitForType(ws, 'system:connected');
+
+    inboxNew(h, INSTANCE);
+
+    const seen = await collectUntilBarrier(ws, ['agent:wake']);
+    expect(seen.filter((m) => m['type'] === 'agent:wake')).toHaveLength(0);
+  });
+
+  it('§5 kein Broadcast: unadressierte Nachricht weckt weder gefilterte noch ungefilterte Clients', async () => {
+    const h = await startWakeWireHarness();
+    attachWakeEmitter(h, { live: [INSTANCE] });
+    // Nacheinander verbinden UND jeweils sofort auf `system:connected` warten: der Begrüßungs-Frame
+    // kommt unmittelbar nach `open`, ein später angehängter Listener würde ihn verpassen.
+    const filtered = await openClient(h.port, `?subscribe=agent:wake&agent=${q(SPIFFE)}`);
+    await waitForType(filtered, 'system:connected');
+    const unfiltered = await openClient(h.port, `?subscribe=agent:wake`);
+    await waitForType(unfiltered, 'system:connected');
+
+    inboxNew(h, null); // daemon-level, kein `to_agent_instance`
+
+    for (const ws of [filtered, unfiltered]) {
+      const seen = await collectUntilBarrier(ws, ['agent:wake']);
+      expect(seen.filter((m) => m['type'] === 'agent:wake')).toHaveLength(0);
+    }
+  });
+
+  it('§5 leeres to_agent_instance zählt als unadressiert → kein Wake', async () => {
+    const h = await startWakeWireHarness();
+    attachWakeEmitter(h, { live: [INSTANCE] });
+    const ws = await openClient(h.port, `?subscribe=agent:wake&agent=${q(SPIFFE)}`);
+    await waitForType(ws, 'system:connected');
+
+    h.bus.emit('inbox:new', { message_id: 'm-2', to_agent_instance: '' });
+
+    const seen = await collectUntilBarrier(ws, ['agent:wake']);
+    expect(seen.filter((m) => m['type'] === 'agent:wake')).toHaveLength(0);
+  });
+
+  it('§3 directed: das emittierte Wake erreicht NUR den passenden Client, nicht den Nachbarn', async () => {
+    const h = await startWakeWireHarness();
+    attachWakeEmitter(h, { live: [INSTANCE] });
+    const target = await openClient(h.port, `?subscribe=agent:wake&agent=${q(SPIFFE)}`);
+    await waitForType(target, 'system:connected');
+    const neighbour = await openClient(
+      h.port,
+      `?subscribe=agent:wake&agent=${q('spiffe://thinklocal/node/SOMEONE-ELSE')}`,
+    );
+    await waitForType(neighbour, 'system:connected');
+
+    const got = waitForType(target, 'agent:wake');
+    inboxNew(h, INSTANCE);
+    expect((await got)['type']).toBe('agent:wake');
+
+    const seen = await collectUntilBarrier(neighbour, ['agent:wake']);
+    expect(seen.filter((m) => m['type'] === 'agent:wake')).toHaveLength(0);
+  });
 });
