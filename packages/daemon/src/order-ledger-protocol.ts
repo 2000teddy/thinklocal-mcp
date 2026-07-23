@@ -39,11 +39,18 @@ export type LedgerEvent = 'reserve' | 'commit' | 'fail';
  * - `ok: true` ⇒ der Übergang ist erlaubt; `next` ist der Folgezustand.
  *   `mayDispatch` ist **nur** beim erfolgreichen `reserve` `true` — der Dispatch ist damit an genau
  *   **einen** Übergang gebunden und kann strukturell nicht zweimal freigegeben werden.
- * - `ok: false` ⇒ abgelehnt; `reason` benennt den Grund, `state` bleibt unverändert.
+ * - `ok: false` ⇒ abgelehnt. `reason` benennt den Grund; `observed` ist **reine Diagnose** und **nur**
+ *   gesetzt, wenn der übergebene Zustand gültig war.
+ *
+ * ⚠️ **`observed` ist KEIN Resume-Token.** Der Aufrufer behält bei einer Ablehnung seinen **eigenen**
+ * Zustand — er darf ihn nicht aus dem Ergebnis „zurücklesen". Das Feld heißt bewusst nicht `state`:
+ * ein `state`-Feld lädt zu `s = t.ok ? t.next : t.state` ein, und bei einem unbekannten Zustand käme
+ * dabei `null` heraus — ausgerechnet das Sentinel für „Zeile existiert nicht ⇒ `reserve` erlaubt".
+ * Genau so ließe sich eine bereits beanspruchte Nonce wieder claimbar waschen (CR-Fund zu #324).
  */
 export type LedgerTransition =
   | { readonly ok: true; readonly next: LedgerState; readonly mayDispatch: boolean }
-  | { readonly ok: false; readonly reason: LedgerRejection; readonly state: LedgerState | null };
+  | { readonly ok: false; readonly reason: LedgerRejection; readonly observed?: LedgerState };
 
 /** Warum ein Übergang abgelehnt wurde (diskriminiert, damit Aufrufer nicht auf Strings raten). */
 export type LedgerRejection =
@@ -55,6 +62,11 @@ export type LedgerRejection =
 const STATES: ReadonlySet<string> = new Set<LedgerState>(['reserved', 'committed', 'failed']);
 const EVENTS: ReadonlySet<string> = new Set<LedgerEvent>(['reserve', 'commit', 'fail']);
 
+/** Ergebnisse sind eingefroren — `readonly` allein ist nur Compile-Zeit. */
+function frozen(t: LedgerTransition): LedgerTransition {
+  return Object.freeze(t);
+}
+
 /** Terminal ⇒ keine weitere Entscheidung mehr möglich. */
 export function isFinal(state: LedgerState | null): boolean {
   return state === 'committed' || state === 'failed';
@@ -63,9 +75,22 @@ export function isFinal(state: LedgerState | null): boolean {
 /**
  * Der **einzige** erlaubte Auswertungspfad für „darf jetzt dispatcht werden?" — analog zu `isApproved`
  * (TL-09) und `isRoutable` (TL-10). Aufrufer prüfen **nie** selbst Teilbedingungen.
+ *
+ * ⚠️ **Notwendig, nicht hinreichend** (CR-Fund zu #324): dieses Modul ist **zustandslos**. Zwei Prozesse
+ * mit demselben veralteten Lesestand bekommen **beide** `true`. Die Race entscheidet erst der durable
+ * Claim — `UNIQUE (signer_keyid, order_nonce)`. Hinreichend für einen Dispatch ist deshalb
+ * **`mayDispatch(t)` UND ein erfolgreich committeter Claim-`INSERT`**; die Autorität ist die Datenbank,
+ * dieses Ergebnis ist die Vorprüfung.
+ *
+ * Prüft zusätzlich den Folgezustand, damit ein hand-gebautes `{ok:true, mayDispatch:true}` ohne gültiges
+ * `next` nicht durchrutscht (der Guard soll eine Schranke sein, keine Konvention).
  */
 export function mayDispatch(transition: LedgerTransition): boolean {
-  return transition.ok === true && transition.mayDispatch === true;
+  return (
+    transition.ok === true &&
+    transition.mayDispatch === true &&
+    STATES.has(transition.next as string)
+  );
 }
 
 /**
@@ -76,23 +101,35 @@ export function mayDispatch(transition: LedgerTransition): boolean {
  * @param event   `reserve` (vor Dispatch) bzw. `commit`/`fail` (nach Dispatch).
  */
 export function nextLedgerState(current: LedgerState | null, event: LedgerEvent): LedgerTransition {
-  if (!EVENTS.has(event as string))
-    return { ok: false, reason: 'malformed', state: current ?? null };
-  if (current !== null && !STATES.has(current as string)) {
-    return { ok: false, reason: 'malformed', state: null };
+  // Beide malformed-Zweige verhalten sich GLEICH: `observed` nur bei gültigem Zustand, nie ein
+  // Ersatzwert. Kein Zweig darf einen ungültigen Wert weiterreichen (er wäre nicht `LedgerState`)
+  // und keiner darf ihn zu `null` einebnen (das hieße „claimbar").
+  const known = current !== null && STATES.has(current as string);
+  if (current !== null && !known) return frozen({ ok: false, reason: 'malformed' });
+  if (!EVENTS.has(event as string)) {
+    return frozen(
+      known
+        ? { ok: false, reason: 'malformed', observed: current }
+        : { ok: false, reason: 'malformed' },
+    );
   }
 
   if (event === 'reserve') {
     // Der Claim ist nur auf einer NICHT existierenden Zeile erlaubt — die semantische Entsprechung
     // zu `UNIQUE (signer_keyid, order_nonce)`. Jede bekannte Nonce (auch eine `failed`!) wird
     // abgelehnt: erneutes Beanspruchen wäre at-least-once.
-    if (current !== null) return { ok: false, reason: 'duplicate-claim', state: current };
-    return { ok: true, next: 'reserved', mayDispatch: true };
+    if (current !== null)
+      return frozen({ ok: false, reason: 'duplicate-claim', observed: current });
+    return frozen({ ok: true, next: 'reserved', mayDispatch: true });
   }
 
   // commit/fail: nur direkt nach einem Claim, und nur einmal.
-  if (current === null) return { ok: false, reason: 'not-reserved', state: null };
-  if (isFinal(current)) return { ok: false, reason: 'already-final', state: current };
+  if (current === null) return frozen({ ok: false, reason: 'not-reserved' });
+  if (isFinal(current)) return frozen({ ok: false, reason: 'already-final', observed: current });
 
-  return { ok: true, next: event === 'commit' ? 'committed' : 'failed', mayDispatch: false };
+  return frozen({
+    ok: true,
+    next: event === 'commit' ? 'committed' : 'failed',
+    mayDispatch: false,
+  });
 }

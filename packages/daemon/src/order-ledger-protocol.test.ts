@@ -43,7 +43,7 @@ describe('nextLedgerState — at-most-once: zweimal dispatchen ist unmöglich', 
   it('zweiter reserve auf eine reservierte Nonce ⇒ duplicate-claim (UNIQUE-Zwilling)', () => {
     const t = nextLedgerState('reserved', 'reserve');
 
-    expect(t).toEqual({ ok: false, reason: 'duplicate-claim', state: 'reserved' });
+    expect(t).toEqual({ ok: false, reason: 'duplicate-claim', observed: 'reserved' });
     expect(mayDispatch(t)).toBe(false);
   });
 
@@ -51,7 +51,7 @@ describe('nextLedgerState — at-most-once: zweimal dispatchen ist unmöglich', 
     expect(nextLedgerState('committed', 'reserve')).toEqual({
       ok: false,
       reason: 'duplicate-claim',
-      state: 'committed',
+      observed: 'committed',
     });
   });
 
@@ -60,7 +60,7 @@ describe('nextLedgerState — at-most-once: zweimal dispatchen ist unmöglich', 
     // Genau deshalb schließt Scoping §4 den Retry aus.
     const t = nextLedgerState('failed', 'reserve');
 
-    expect(t).toEqual({ ok: false, reason: 'duplicate-claim', state: 'failed' });
+    expect(t).toEqual({ ok: false, reason: 'duplicate-claim', observed: 'failed' });
     expect(mayDispatch(t)).toBe(false);
   });
 
@@ -91,26 +91,18 @@ describe('nextLedgerState — at-most-once: zweimal dispatchen ist unmöglich', 
 
 describe('nextLedgerState — commit/fail ohne gültigen Claim werden abgelehnt', () => {
   it('commit auf eine unbekannte Nonce ⇒ not-reserved', () => {
-    expect(nextLedgerState(null, 'commit')).toEqual({
-      ok: false,
-      reason: 'not-reserved',
-      state: null,
-    });
+    expect(nextLedgerState(null, 'commit')).toEqual({ ok: false, reason: 'not-reserved' });
   });
 
   it('fail auf eine unbekannte Nonce ⇒ not-reserved', () => {
-    expect(nextLedgerState(null, 'fail')).toEqual({
-      ok: false,
-      reason: 'not-reserved',
-      state: null,
-    });
+    expect(nextLedgerState(null, 'fail')).toEqual({ ok: false, reason: 'not-reserved' });
   });
 
   it('doppeltes commit ⇒ already-final (keine zweite Entscheidung)', () => {
     expect(nextLedgerState('committed', 'commit')).toEqual({
       ok: false,
       reason: 'already-final',
-      state: 'committed',
+      observed: 'committed',
     });
   });
 
@@ -172,5 +164,65 @@ describe('mayDispatch / isFinal — der einzige Auswertungspfad', () => {
     expect(isFinal('reserved')).toBe(false);
     expect(isFinal('committed')).toBe(true);
     expect(isFinal('failed')).toBe(true);
+  });
+});
+
+describe('nextLedgerState — Ablehnungen sind KEIN Resume-Token (CR-Fund zu #324)', () => {
+  const REJECTING: Array<[LedgerState | null, unknown]> = [
+    ['COMMITTED', 'reserve'], // Casing-Drift
+    ['in-flight', 'reserve'], // dritter Zustand aus einem neueren Build
+    ['pending', 'commit'],
+    ['reserved', 'execute'], // unbekanntes Event auf gültigem Zustand
+    ['in-flight', 'execute'], // unbekannt × unbekannt
+    [null, 'execute'],
+  ];
+
+  it.each(REJECTING)(
+    '(%s, %s): trägt niemals einen als „claimbar" lesbaren Zustand',
+    (state, ev) => {
+      const t = nextLedgerState(state as LedgerState, ev as LedgerEvent);
+
+      expect(t.ok).toBe(false);
+      // Kein `state`-Feld — und `observed` (falls gesetzt) ist NIE null/undefined, sondern ein
+      // gültiger Zustand. Damit kann `t` nicht zu „Zeile existiert nicht" umgedeutet werden.
+      expect(t).not.toHaveProperty('state');
+      if ('observed' in t) expect(['reserved', 'committed', 'failed']).toContain(t.observed);
+    },
+  );
+
+  it('REGRESSION: ein unbekannter Zustand wäscht eine beanspruchte Nonce NICHT claimbar', () => {
+    // Genau der vom Review demonstrierte Pfad: ein Aufrufer, der bei Ablehnung den Zustand aus dem
+    // Ergebnis „zurückliest", bekam früher `null` — das Sentinel für „reserve erlaubt".
+    const rejected = nextLedgerState('COMMITTED' as unknown as LedgerState, 'reserve');
+    expect(rejected.ok).toBe(false);
+
+    const carried = 'observed' in rejected ? (rejected.observed ?? null) : undefined;
+    // Es gibt schlicht kein Feld, aus dem ein `null` zurückgelesen werden könnte.
+    expect(carried).toBeUndefined();
+    expect(mayDispatch(rejected)).toBe(false);
+  });
+
+  it('ein ungültiger Zustandswert wird nicht durchgereicht (kein Leak in `observed`)', () => {
+    const t = nextLedgerState('RESERVED' as unknown as LedgerState, 'execute' as LedgerEvent);
+
+    expect(t).toEqual({ ok: false, reason: 'malformed' });
+  });
+});
+
+describe('mayDispatch — Schranke, nicht Konvention', () => {
+  it('ein hand-gebautes Ergebnis ohne gültiges `next` bekommt keinen Dispatch', () => {
+    const forged = { ok: true, mayDispatch: true } as unknown as ReturnType<typeof nextLedgerState>;
+
+    expect(mayDispatch(forged)).toBe(false);
+  });
+
+  it('Ergebnisse sind eingefroren — nachträgliches Aufbohren schlägt fehl', () => {
+    const t = nextLedgerState('reserved', 'commit');
+    expect(Object.isFrozen(t)).toBe(true);
+
+    expect(() => {
+      (t as unknown as { mayDispatch: boolean }).mayDispatch = true;
+    }).toThrow();
+    expect(mayDispatch(t)).toBe(false);
   });
 });

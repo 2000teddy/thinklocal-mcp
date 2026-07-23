@@ -27,8 +27,13 @@ Dispatch hängt damit an genau **einem** Übergang. Doku: neues §4.1 mit Überg
 (was B1 persistieren muss — inkl. `signer_keyid` = kanonischer DER-SPKI-Keyid aus #323, sonst wäre die
 `UNIQUE`-Spalte durch PEM-Umformatieren umgehbar — und was B3 einhalten muss, insbesondere: `mayDispatch ===
 false` ist **kein Fehler**, sondern der Normalfall, und darf nicht in einen Retry umgedeutet werden).
-+17 Tests inkl. vollständiger 12-Kombinationen-Matrix (exakt **eine** gibt einen Dispatch frei), Suite
-**2017 grün** (142 Files). B1-Persistenz, B2a/B2b, B3 und §9 bleiben gated.
++27 Tests inkl. vollständiger 12-Kombinationen-Matrix (exakt **eine** gibt einen Dispatch frei), Suite
+**2027 grün** (142 Files). **CR (Claude-Subagent, BFS bis Tiefe 7 + 27×29 feindliche Eingaben): kein HIGH,
+3 MEDIUM an der Wurzel behoben** — darunter ein **echter At-most-once-Bypass**: der `malformed`-Zweig setzte
+`state: null`, also genau das Sentinel für „claimbar", womit ein regelkonformer Aufrufer eine beanspruchte Nonce
+wieder claimbar waschen konnte (Feld heißt jetzt `observed`, rein diagnostisch, nie ein Ersatzwert); dazu
+„`mayDispatch` ist notwendig, nicht hinreichend" (zustandslos ⇒ die Race entscheidet der Claim-`INSERT`) und die
+Warnung, `messages.signer_keyid` **nicht** zu kopieren, weil dort heute der malleable Wert steht. B1-Persistenz, B2a/B2b, B3 und §9 bleiben gated.
 `changes/2026-07-23_tl12-b1-ledger-protocol.md`, `TL-12-slice-b-execution-scoping.md` §4.1.
 
 ### fix(tl12): `canonicalOrderKeyId` — format-stabiler Keyid über DER-SPKI (2026-07-23 13:50, #323)

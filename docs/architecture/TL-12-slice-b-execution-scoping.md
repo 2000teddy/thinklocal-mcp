@@ -95,9 +95,20 @@ Ausgänge (`committed`/`failed`), und **beide sind terminal**.
 | unbekannter Zustand/Event | — | abgelehnt `malformed` | nein |
 
 **Warum `failed` terminal ist (und kein Retry folgt):** ein gemeldeter Fehlschlag kann ein **Timeout**
-sein, dessen Nebenwirkung bereits eingetreten ist. Ein Retry machte aus at-most-once ein at-least-once —
-genau das schließt §4 aus. **Crash-nach-Claim** bleibt `reserved` und wird nie ausgeführt; das ist die
-Semantik, kein zu behebender Zustand.
+sein, dessen Nebenwirkung bereits eingetreten ist; ein Retry darauf wäre at-**least**-once. **Crash-nach-
+Claim** bleibt `reserved` und wird nie ausgeführt — dazu sagt §4 wörtlich „das ist die Semantik, niemand
+‚fixt‘ das zu at-least-once".
+
+**Ehrliche Einordnung (CR-Korrektur):** at-most-once **ist** oberhalb dieses Slices gepinnt (§4 sowie §8
+Invariante 3). Die *Kollaps auf genau einen* `failed`-Zustand folgt daraus aber **nicht zwingend** — er
+ist eine **bewusst konservative Wahl**, keine Notwendigkeit. Zwei Alternativen erhielten at-most-once
+ebenfalls: (a) ein **pre-effect**-Ausgang, der „Dispatch wurde nie ausgelöst" (Executor verweigert,
+TTL-Re-Check, Denylist-Treffer **vor** dem Aufruf) von „Ausgang unbekannt" trennt; (b) ein dritter,
+**in-doubt**-Ausgang (die klassische 2PC-Antwort). Beide bleiben dispatch-terminal, würden aber
+festhalten, ob die Wirkung **erwiesen ausgeblieben** oder **unbestimmt** ist. Der Preis der hier
+gewählten Variante: Forensik und Betrieb können „nie versucht" nicht von „möglicherweise gelaufen"
+unterscheiden, und ein erwiesen nie ausgelöster Auftrag bleibt dauerhaft tot. Wer das ändern will,
+entscheidet es bewusst — dieser Prep-Slice legt es nicht fest, er dokumentiert die getroffene Wahl.
 
 **Was B1 (Persistenz) daraus umsetzen muss:**
 1. `UNIQUE (signer_keyid, order_nonce)` ist die **technische** Entsprechung von `duplicate-claim` — die
@@ -106,6 +117,13 @@ Semantik, kein zu behebender Zustand.
    die **vor** dem Dispatch committet — sonst ist der Claim beim Crash nicht sichtbar.
 3. `signer_keyid` **muss** der kanonische DER-SPKI-Keyid sein (`canonicalOrderKeyId`, #323) — mit dem
    format-malleablen `orderKeyId` wäre die `UNIQUE`-Spalte durch bloßes PEM-Umformatieren umgehbar.
+   ⚠️ **Nicht die vorhandene Spalte kopieren (CR-Fund):** `messages.signer_keyid` wird heute aus
+   `orderKeyId(senderPublicKey)` befüllt (`index.ts:875`) — also **genau mit dem malleablen Wert**. Ein
+   `INSERT … SELECT signer_keyid FROM messages` oder ein Join auf diese Spalte erfüllt den Buchstaben
+   dieser Regel und stellt die #323-Umgehung trotzdem wieder her. Der Ledger-Schlüssel ist aus dem
+   gespeicherten `signer_pubkey` **neu zu berechnen**.
+   `canonicalOrderKeyId` liefert `string | null`; **`null` ⇒ kein Keyid ⇒ kein Claim ⇒ kein Dispatch**
+   (fail-closed, kein Rückfall auf `orderKeyId`).
 4. Die `messages`-Zeile ist **nicht** die Idempotenz-Einheit (ihr `idx_messages_order` ist bewusst
    **nicht** UNIQUE); `replayGuard` ist ungeeignet (In-Memory-`Map`, hartkodiertes 120-s-Cleanup
    unabhängig von `ttlMs`, `replay.ts`).
@@ -113,9 +131,26 @@ Semantik, kein zu behebender Zustand.
 **Was B3 (Dispatch) daraus einhalten muss:**
 1. Dispatch **nur** wenn `mayDispatch(transition)` — der einzige erlaubte Auswertungspfad (analog
    `isApproved`/`isRoutable`). Nie selbst auf Teilbedingungen prüfen.
+   ⚠️ **Notwendig, nicht hinreichend (CR-Fund):** das Modul ist **zustandslos** — zwei Prozesse mit
+   demselben veralteten Lesestand bekommen **beide** `true`. Hinreichend ist erst
+   **`mayDispatch(t)` UND ein erfolgreich committeter Claim-`INSERT`** (die `UNIQUE`-Verletzung des
+   Verlierers ist der eigentliche Schiedsrichter). Reihenfolge: prüfen → **claimen** → erst dann
+   dispatchen. Die Datenbank ist die Autorität, das Transitions-Ergebnis die Vorprüfung.
 2. Nach dem Dispatch **genau ein** `commit` **oder** `fail` — kein „später nochmal versuchen".
 3. Ein `mayDispatch === false` ist **kein Fehler**, sondern der Normalfall bei Duplikaten und nach
-   Crash-Wiederanlauf; er darf **nicht** in einen Retry umgedeutet werden.
+   Crash-Wiederanlauf; er darf **nicht** in einen Retry auf **derselben** Nonce umgedeutet werden.
+   Ebenso wenig darf der Aufrufer bei einer Ablehnung „seinen" Zustand aus dem Ergebnis zurücklesen —
+   `LedgerTransition` trägt deshalb bewusst kein `state`-, sondern nur ein diagnostisches
+   `observed`-Feld (CR-Fund: ein `state`-Feld hätte bei unbekanntem Zustand `null` geliefert, also
+   ausgerechnet das Sentinel für „claimbar").
+4. **Der legitime Wiederanlauf ist eine NEUE Nonce**, nicht ein zweiter Versuch auf der alten: ein neu
+   ausgestellter, frisch signierter Auftrag hat eine eigene `order_nonce`, trifft auf eine leere Zeile
+   und ist damit regulär claimbar. Punkt 3 verbietet den Retry, **nicht** die Neuausstellung — das ist
+   der einzige vorgesehene Weg aus einem toten `failed`.
+5. **Verwaiste `reserved`-Zeilen müssen sichtbar sein.** Ein Crash zwischen Claim und Ausgang bedeutet:
+   ein vom Owner signierter Auftrag läuft **nie** und meldet das von sich aus nicht. „Kein zu behebender
+   Zustand" heißt **nicht** „nicht anzeigen". B1/B3 brauchen dafür ein Audit-Ereignis bzw. eine
+   Read-Surface — ein stiller, dauerhafter No-op ist der schlechteste Betriebsausgang.
 
 **Weiterhin gated (unberührt):** ob überhaupt ausgeführt werden darf (D-OWNER), ab wann (D-EPOCH),
 welche Order-Typen, Revocation-Autorität — siehe §9. Dieses Protokoll trifft **keine** dieser

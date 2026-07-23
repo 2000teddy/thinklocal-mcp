@@ -202,7 +202,7 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     Fehlschlag ein Timeout mit bereits eingetretener Nebenwirkung sein kann). Crash-nach-Claim bleibt
     undispatched. `mayDispatch` = einziger Auswertungspfad, nur beim erfolgreichen `reserve` wahr.
     **KEINE Persistenz, KEIN Execute-Pfad, KEIN Dispatch, 0 Aufrufer**; keine der vier §9-Entscheidungen
-    beruehrt. +17 Tests (inkl. vollstaendiger 12-Kombinationen-Matrix), Suite **2017 gruen**.
+    beruehrt. +27 Tests (inkl. vollstaendiger 12-Kombinationen-Matrix), Suite **2027 gruen**. CR: kein HIGH, 3 MEDIUM behoben (u.a. `malformed`-Zweig setzte `state: null` = Sentinel fuer „claimbar" -> Feld jetzt `observed`, rein diagnostisch).
     Doku: Scoping §4.1 (Uebergangstabelle + B1-Persistenz- und B3-Dispatch-Pflichten).
   - [~] **TL-12 Slice B**: **Ausführung** eines gelesenen Auftrags. **Scoping-Doku (CO 2026-07-16, opus+sonnet)
     fertig:** `docs/architecture/TL-12-slice-b-execution-scoping.md` — Votum **B1 nicht starten**, bis Owner-Opt-in
