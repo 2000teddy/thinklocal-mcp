@@ -138,9 +138,38 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     Env-Flag-Flip, KEIN Ingress, 0 Aufrufer** (rein additiv, kein Runtime-Change). +10 Tests, Suite **1932
     grün**; CR (Claude-Subagent) **GREEN, keine Findings**. Belegt in SECURITY.md „Freigabe-Matrix (TL-10)"
     als Aktivierungs-Vorbedingung (Registry-Bindung).
-  - [ ] **Slice B** (Verdrahtung, **D2/D3-gated**): Resolver konsultiert die Matrix vor `registry.requestApproval`
-    (Env-Flag wie TL-09b); braucht D2 (**Registry-`requestApprovalOn(channelId)` liegt jetzt vor**) + **D3
-    Christian-Sign-off** (SECURITY.md-Note liegt jetzt vor). **Owner-gated:** Aktivierungs-Flag-Flip.
+  - [x] **Kompositions-Primitive (Slice-B-Prep)** (2026-07-23): `approval-router.ts`
+    `requestApprovalViaMatrix(matrix, approver, ctx, req)` — das fehlende Bindeglied zwischen den beiden
+    gemergten, aber unverbundenen Hälften (Slice A `resolveEntry`/`isRoutable` #300 ⟷ D2-Prep
+    `requestApprovalOn` #317). Damit ist SECURITY.md-**Aktivierungs-Vorbedingung 2** („Kanalauswahl auf den
+    Matrix-Kanal beschränkt") erfüllt. **Fail-closed:** nicht routable (kein Match/leere Matrix/nicht
+    wohlgeformtes Ziel, D5) ⇒ `denied-no-channel` **ohne** dass ein Kanal gefragt wird; routable ⇒
+    **ausschließlich** `requestApprovalOn(target.channel)`, **kein** Fallback auf „erster gesunder Kanal" —
+    erzwungen **per Typ** über die schmale `ChannelBoundApprover`-Sicht, in der `requestApproval()` gar nicht
+    existiert. Wurf/unbekanntes Shape ⇒ `error` über das **exportierte** `normalizeDecision` (dieselbe
+    Mechanik an EINER Stelle, kein Nachbau); wirft nie; `isApproved` bleibt einziger Auswertungspfad.
+    Zusätzlich müssen `ctx` und `req` **dasselbe `(tier, server, tool)`-Tripel** tragen (sonst denied) —
+    sonst wäre „Kanalwahl nach dem harmlosen Werkzeug, Vorlage des scharfen" ein Confused Deputy.
+    **`decider` bleibt deklarativ (D3):** nur für Audit durchgereicht, nicht durchgesetzt — auch
+    `consensus:quorum=N` wird weder erzwungen noch abgelehnt (per Test festgeschrieben, damit eine
+    Verschärfung eine bewusste CO-Entscheidung bleibt). **KEIN TOML-Loader, KEIN Ingress-Wiring, KEIN
+    Env-Flag, 0 Aufrufer** (kein Runtime-Change). **CR (Claude-Subagent, Security-Fokus, 26 Proben):
+    kein HIGH, 4 MEDIUM an der Wurzel gefixt** — u.a. `normalizeDecision` las `outcome` über die
+    **Prototypenkette** und akzeptierte Arrays (ein Kanal-`{}` konnte `approved` werden) → `Object.hasOwn`
+    + Array-Reject + Totalität gegen werfende Getter. +39 Tests, Suite **1971 grün** (140 Files).
+    Doku: `TL-10-freigabe-matrix-scoping.md` §7.
+  - [ ] **Slice B** (Verdrahtung, **D1-Loader/D3-gated**): Resolver konsultiert die Matrix vor
+    `registry.requestApproval` (Env-Flag wie TL-09b); D2 **liegt vor** (`requestApprovalOn`) und die
+    **Komposition liegt jetzt ebenfalls vor** (`requestApprovalViaMatrix`) — offen bleiben: **TOML-Loader
+    für `config/freigabe-matrix.toml` + kuratierte Matrix-Datei** (D1, Policy-Inhalt), **Ingress-Verdrahtung
+    + Env-Flag-Regime** und **D3 Christian-Sign-off** (SECURITY.md-Note liegt vor).
+    **Owner-gated:** Aktivierungs-Flag-Flip.
+    ⚠️ **Pflichtpunkt aus dem #319-CR:** der Router darf mit `ctx.tier === 'consensus'` **nie erreicht**
+    werden — weil `decider` v1 nicht durchgesetzt wird, ruht der Schutz für `quorum=N` allein auf dem harten
+    `consensus`-Tier-403 im Ingress. Wird `resolveApproval` davor/anstelle verdrahtet, genügt **eine**
+    Zustimmung für `quorum=3`. Sicherstellen + testen (oder D3-Enforcement per CO nachziehen).
+    Dazu zwei im D1-Loader zu erledigende #300-Altlasten: whitespace-only Kanalname parst (`trim()` fehlt)
+    und `resolveEntry` gibt `decider` per Referenz zurück. Siehe `TL-10-freigabe-matrix-scoping.md` §7.2.
 
 ### P1 — Identität, Autonomie, Robustheit
 > **Discovery + Reihenfolge (CO 2026-07-15, opus+sonnet einstimmig):** **TL-12 VOR TL-11.** TL-12 Slice A

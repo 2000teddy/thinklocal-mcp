@@ -154,20 +154,44 @@ function errNote(error: unknown): string {
 /**
  * Normalisiert den (nicht vertrauenswürdig getypten) Kanal-Rückgabewert. Unbekanntes
  * Shape (kein Objekt, fehlendes/unbekanntes `outcome`) ⇒ `error` — nie versehentlich `approved`.
+ *
+ * Exportiert, damit vorgelagerte Komposition (TL-10 `approval-router.ts`) **dieselbe** Fail-closed-
+ * Mechanik an EINER Stelle benutzt statt sie nachzubauen.
+ *
+ * **Nur EIGENE Eigenschaften zählen** (`Object.hasOwn`), und Arrays gelten nicht als Decision:
+ * `outcome` über die Prototypenkette (z.B. `Object.create({ outcome: 'approved' })` oder ein via
+ * Prototype-Pollution gesetztes `Object.prototype.outcome`) darf **niemals** zu `approved` führen —
+ * sonst wäre ausgerechnet der Fail-closed-Filter fail-open.
+ *
+ * **Total:** auch ein werfender Getter auf `outcome`/`note` ⇒ `error`. Die Funktion wirft nie, damit die
+ * Zusicherung „wirft nicht" ihrer Aufrufer (Registry-Methoden, Router) tatsächlich hält.
  */
-function normalizeDecision(raw: unknown, channelId: string): ApprovalDecision {
-  if (typeof raw !== 'object' || raw === null) {
+export function normalizeDecision(raw: unknown, channelId: string): ApprovalDecision {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
     return { outcome: 'error', channelId, note: 'channel returned non-object decision' };
   }
-  const outcome = (raw as { outcome?: unknown }).outcome;
-  if (typeof outcome !== 'string' || !VALID_OUTCOMES.has(outcome)) {
-    return {
-      outcome: 'error',
-      channelId,
-      note: `channel returned unknown outcome: ${String(outcome)}`,
-    };
+  let outcome: unknown;
+  let note: unknown;
+  try {
+    if (!Object.hasOwn(raw, 'outcome')) {
+      return { outcome: 'error', channelId, note: 'channel returned decision without own outcome' };
+    }
+    outcome = (raw as { outcome?: unknown }).outcome;
+    note = Object.hasOwn(raw, 'note') ? (raw as { note?: unknown }).note : undefined;
+  } catch (error) {
+    return { outcome: 'error', channelId, note: `channel decision threw: ${errNote(error)}` };
   }
-  const note = (raw as { note?: unknown }).note;
+  if (typeof outcome !== 'string' || !VALID_OUTCOMES.has(outcome)) {
+    // `String(x)` kann selbst werfen (feindliches `toString`) — der Diagnosetext darf die
+    // Totalität nicht kippen.
+    let label: string;
+    try {
+      label = String(outcome);
+    } catch {
+      label = `<${typeof outcome}>`;
+    }
+    return { outcome: 'error', channelId, note: `channel returned unknown outcome: ${label}` };
+  }
   return {
     outcome: outcome as ApprovalOutcome,
     channelId,

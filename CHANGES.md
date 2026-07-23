@@ -8,7 +8,33 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### docs(reconcile): PR-Nummern-Nachtrag COMPLIANCE + CHANGES + TODO (#313–#317) (2026-07-23 06:15)
+### feat(gate): TL-10 Slice-B-Prep — `requestApprovalViaMatrix` (Matrix → Kanal → Freigabe) (2026-07-23 06:45)
+**Additive, ungegatete Kompositions-Primitive** — der letzte agentenseitig freie TL-10-Slice: das fehlende
+**Bindeglied** zwischen zwei gemergten, aber unverbundenen Hälften — `freigabe-matrix.ts`
+`resolveEntry`/`isRoutable` (Slice A, #300) ⟷ `MeldekanalRegistry.requestApprovalOn` (D2-Prep, #317).
+Damit ist **Aktivierungs-Vorbedingung 2** aus SECURITY.md „Freigabe-Matrix (TL-10)" erfüllt („die
+Kanalauswahl wird auf den **Matrix-Kanal** beschränkt"). Neu `approval-router.ts`:
+`requestApprovalViaMatrix(matrix, approver, ctx, req)` → `{ decision, target }`. **Fail-closed:** nicht
+routable (kein Match / leere Matrix / nicht wohlgeformtes Ziel, D5) ⇒ `denied-no-channel`, und es wird
+**niemals ein Kanal gefragt**; routable ⇒ **ausschließlich** `requestApprovalOn(target.channel)`, **kein**
+Fallback auf „erster gesunder Kanal" — erzwungen **per Typ** über die schmale `ChannelBoundApprover`-Sicht,
+in der die Fallback-Methode gar nicht existiert. Zusätzlich müssen `ctx` und `req` **dasselbe
+`(tier, server, tool)`-Tripel** tragen (sonst denied) — sonst wäre die Kanalwahl nach dem harmlosen Werkzeug
+bei Vorlage des scharfen ein Confused-Deputy. Wurf der Auflösung oder unbekanntes Decision-Shape ⇒ `error`
+bzw. `denied-no-channel`; der Router wirft nie, `isApproved()` bleibt einziger Auswertungspfad.
+**`decider` bleibt deklarativ (D3):** nur für Audit durchgereicht, nicht durchgesetzt — auch
+`consensus:quorum=N` wird weder erzwungen noch abgelehnt, per Test festgeschrieben; ⚠️ die Schutzwirkung
+dafür ruht auf dem harten `consensus`-Tier-403 im **Ingress**, also außerhalb dieses Moduls (jetzt als
+Pflichtpunkt in §7.2). **Sicherheitsfix aus dem CR:** das jetzt exportierte `normalizeDecision` las `outcome`
+über die **Prototypenkette** und akzeptierte Arrays — ein Kanal-`{}` konnte damit `approved` werden;
+gehärtet auf `Object.hasOwn` + Array-Reject + Totalität gegen werfende Getter, wodurch auch die Zusicherung
+„wirft nicht" von `requestApproval`/`requestApprovalOn` erstmals wirklich hält. **KEIN TOML-Loader, KEIN
+Ingress-Wiring, KEIN Env-Flag, 0 Aufrufer** (kein Runtime-Change). +39 Tests, Suite **1971 grün** (140
+Files); CR (Claude-Subagent, Security-Fokus, 26 Proben): kein HIGH, **4 MEDIUM an der Wurzel gefixt**.
+D1-Loader/Matrix-Datei, Verdrahtung, Env-Flag, D3-Sign-off und Aktivierung bleiben gated.
+`changes/2026-07-23_tl10-approval-router.md`, `TL-10-freigabe-matrix-scoping.md` §7.
+
+### docs(reconcile): PR-Nummern-Nachtrag COMPLIANCE + CHANGES + TODO (#313–#317) (2026-07-23 06:15, #318)
 **Doc-only** Bookkeeping-Reconcile — schließt den Drift aus dem Reconcile-Wächter-Bericht
 `2026-07-23-0333` („Neue Merges seit #312: 5 (bis #317)"; #317/#316/#314/#313 fehlten in der
 COMPLIANCE-TABLE, CHANGES.md ohne #317-Eintrag). **#315 war ebenfalls stale**, wurde vom Wächter aber
