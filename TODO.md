@@ -193,7 +193,7 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     **`orderKeyId` unverändert** (stempelt gespeicherte Zeilen → Wechsel = Datenmigration, gehört in B0),
     **0 Aufrufer**. +8 Tests, Suite **2000 grün**. **Berührt KEINE der vier §9-Entscheidungen** — Slice B
     bleibt vollständig gated.
-  - [x] **B1-Vorarbeit: Reserve/Commit-Protokoll spezifiziert + reine Zustandsmaschine** (2026-07-23):
+  - [x] **B1-Vorarbeit: Reserve/Commit-Protokoll spezifiziert + reine Zustandsmaschine** (2026-07-23, #324):
     `order-ledger-protocol.ts` `nextLedgerState` + Guards `mayDispatch`/`isFinal`. Erfüllt den Auftrag aus
     Scoping §4, das Protokoll **jetzt gemeinsam mit B3s Dispatch-Kontrakt** festzuhalten (sonst wird B1
     blind gegen B3 gebaut). Zustandsmenge **erzwungen** aus at-most-once: `reserved` -> `committed`|`failed`,
@@ -228,6 +228,16 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     hält die volle Card, `mesh.ts:20,189,258`); es fehlt nur die annoncierte Feld-Seite + `version-compat`-
     Verdrahtung (heute tot). Seed-Flag `order-envelope-v2`. **Impl-Slice ist CO-gated** (Vokabular/Semver-
     Governance) und rein additiv/rückwärtskompatibel; **kein** ORDER-Handler/Sender-Flip hier (= Slice C proper).
+    - [x] **Implementierungs-Anker geerdet (doc-first)** (2026-07-23): ADR-046 **Rev. 2** — alle Code-Anker
+      gegen `e994e65` verifiziert; **drei `index.ts`-Anker der Erstfassung waren verschoben** (Card-Fetch +
+      Identitaets-Check `1491-1502` -> **`1530-1541`**, zweiter Consume-Pfad `1553` -> **`1592`/`1603`**,
+      der V1-relevante `default`-Drop `932-934` -> **`936-938`**); Producer jetzt gepinnt
+      (`agent-card.ts:480` `buildCard`), ein **dritter** Card-Pfad (`index.ts:720`) benannt. Neue Sektionen:
+      **§5** Anker-Tabellen (Producer/Consumer/Drift), **§6** fail-closed-Grenzen (gelten unabhaengig vom CO;
+      inkl. „Feature-Advertisement ist **kein** Trust-Grant"), **§7** Seed-Flag `order-envelope-v2` —
+      Empfaenger-Semantik, und ein Node darf es erst setzen, wenn sein Dispatch top-level ORDER wirklich
+      behandelt (sonst waere das Flag eine Luege, die genau den V1-Drop ausloest), **§8** was CO-gated bleibt.
+      **Kein Code, kein Beschluss, kein `protocol`-Block, kein ORDER-Flip.**
     - [x] **Ungegateter Consumer-Kern** (2026-07-22, #314): `wire-feature.ts` `supportsFeature(advertisedFeatures,
       feature)` — die fail-closed §2-Invariante (absent/unknown/leer/malformed ⇒ `false`) als reiner,
       platzierungs- UND vokabular-agnostischer Primitiv (nimmt die Feature-**Liste**, nicht die Card → nimmt

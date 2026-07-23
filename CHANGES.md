@@ -8,7 +8,25 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### feat(tl12): B1-Prep — Reserve-vor-Dispatch/Commit-Vertrag als reine Zustandsmaschine (2026-07-23 14:50)
+### docs(arch): ADR-046 Rev. 2 — Implementierungs-Anker geerdet, fail-closed-Grenzen, Seed-Flag (2026-07-23 15:30)
+**Doc-only** (kein Code, kein Beschluss, kein `protocol`-Block, kein ORDER-Flip). Erdet den TL-12-Prereq-Pfad
+so, dass die CO-gegatete Folge-Slice nachschlagen statt suchen muss. **Konkreter Befund: drei `index.ts`-Anker
+der Erstfassung (#308) waren verschoben** — Card-Fetch + Identitäts-Check `1491-1502` → **`1530-1541`**,
+zweiter Consume-Pfad `1553` → **`1592`/`1603`**, und der für Slice-C-Vorbehalt **V1** entscheidende
+`default`-Drop `932-934` → **`936-938`**. Alle übrigen Anker gegen `e994e65` nachgeprüft und bestätigt
+(`agent-card.ts:22-111`, `mesh.ts:20/189/258`, `pinned-card-fetch.ts:35`); der **Producer** ist jetzt gepinnt
+(`agent-card.ts:480` `buildCard`) statt nur benannt, und ein bislang unerwähnter **dritter** Card-Pfad
+(`index.ts:720`) ist benannt — wer den `protocol`-Block konsumiert, muss prüfen, ob alle Pfade denselben
+Identitäts-Check durchlaufen. Neue Sektionen: **§5** Anker-Tabellen (Producer/Consumer/Drift), **§6**
+fail-closed-Grenzen, die **unabhängig vom CO** gelten (absent/malformed/leer/nicht-gelistet/nicht abrufbar/
+Identitäts-Check nicht bestanden ⇒ je `false`; „Feature-Advertisement ist **kein** Trust-Grant" — Pairing,
+Approval-Gates und die Slice-B-Allowlist bleiben unberührt), **§7** Seed-Flag `order-envelope-v2`:
+Empfänger-Semantik („ich kann X entgegennehmen", nicht „ich sende X"), und ein Node darf es **erst** setzen,
+wenn sein Dispatch top-level ORDER wirklich behandelt — sonst wäre das Flag eine Lüge, die beim Sender genau
+den stillen Drop auslöst, den V1 beschreibt; **§8** was CO-gated bleibt (Platzierung, Vokabular/Semver,
+Producer-Befüllung, Empfänger-Handler, Sender-Flip). **CR durch ein echtes externes `agy`-Review** (die Binaries liegen unter `~/.local/bin`, sind nur nicht im `PATH` — die bisherige Notiz „nicht verfügbar" war insofern falsch; `codex` scheitert weiter an einem abgelaufenen Token): **2 HIGH + 1 MEDIUM, alle behoben** — §6 war **nicht** CO-unabhängig (die Zeilen nannten `protocol`-Block/`features`/`protocol_version` und nahmen damit Platzierung **und** Vokabular vorweg) → jetzt agnostisch als „annoncierte Feature-Liste"; eine **vierte** Card-Parse-Stelle (`pinned-card-fetch.ts:63`) fehlte → nachgetragen samt der Folge-Regel „Pfad liefert nicht die volle Card ⇒ `false`"; der Anker `1530-1541` war als „Fetch+…" etikettiert, der `fetch` beginnt aber bei `:1524` → auf `1524-1541` präzisiert. `changes/2026-07-23_adr046-impl-anchors.md`.
+
+### feat(tl12): B1-Prep — Reserve-vor-Dispatch/Commit-Vertrag als reine Zustandsmaschine (2026-07-23 14:50, #324)
 **Additive, ungegatete reine Primitive** (**0 Aufrufer**, kein Runtime-Change) + die von
 `TL-12-slice-b-execution-scoping.md` §4 **ausdrücklich beauftragte** Spezifikation: „Reserve/Commit-Protokoll
 **jetzt** gemeinsam mit B3s Dispatch-Kontrakt spezifizieren — sonst wird B1 blind gegen B3 gebaut und muss neu
