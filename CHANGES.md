@@ -8,7 +8,29 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### feat(gate): TL-10 D2-Prep — `MeldekanalRegistry.requestApprovalOn(channelId, req)` (2026-07-22 10:45)
+### docs(reconcile): PR-Nummern-Nachtrag COMPLIANCE + CHANGES + TODO (#313–#317) (2026-07-23 06:15)
+**Doc-only** Bookkeeping-Reconcile — schließt den Drift aus dem Reconcile-Wächter-Bericht
+`2026-07-23-0333` („Neue Merges seit #312: 5 (bis #317)"; #317/#316/#314/#313 fehlten in der
+COMPLIANCE-TABLE, CHANGES.md ohne #317-Eintrag). **#315 war ebenfalls stale**, wurde vom Wächter aber
+nicht gemeldet, weil die Nummer im Fließtext der #316-Zeile vorkommt (Substring-Treffer) — hier
+mit-reconcilet. Konkret: **5** COMPLIANCE-Erst-Spalten `(offen, base=main)` → verifizierte Merge-Nummer
+`#NNN` + `(base=main, gemergt)` (9→10 Spalten wie #288–#312, Zuordnung über den eindeutigen
+Timestamp-Anker); **5** CHANGES-Überschriften um `, #NNN)` ergänzt (#313–#317); **4** gemergte
+TODO-Einträge annotiert (`Verdrahtungs-Hook` #315, `CR-LOW-Härtung` #316, `Ungegateter Consumer-Kern`
+#314, `D2-Prep` #317) → höchste TODO-**Eintrags-Annotation** **#312 → #317**. **Aus dem CR (MEDIUM):**
+dieselbe Staleness eine **Spalte weiter** — 18 Zeilen, deren Erst-Spalte die Nummer schon trug, deren
+**PR-Spalte** aber `(offen, base=main)` sagte (#271/#272/#273/#277–#287 + #262/#229/#234/#235), für den
+Wächter unsichtbar, weil die Nummer ja vorkommt; alle 18 einzeln `gh`-verifiziert `MERGED` und
+mit-reconcilet. **Bewusst offen und explizit benannt:** 28 Zeilen der Vor-#271-Ära tragen
+`(offen, base=main)` **ohne jede PR-Nummer** (Erst-Spalte = Version/Label) — Auflösung Version→PR ist
+Archäologie und gehört in einen eigenen PR statt als Raten in einen Drift-Fix. **TODO-Wahrheit gegen den
+Merge-Stand geprüft, keine Korrektur nötig:** TL-08 Slice 2c bleibt `[~]` (Gate-Flip weiter ⛔
+Christian-gated), TL-10 Slice B weiter offen (D3-Sign-off), ADR-046 Platzierung/Vokabular weiter
+CO-gated. Jede Zuordnung `gh`-verifiziert (alle `MERGED`). CR (Claude-Subagent): **kein HIGH**, 1 MEDIUM
+an der Wurzel gefixt, 3 LOW adressiert. Kein Code/Test/State/Deploy/Secret.
+`changes/2026-07-23_reconcile-pr-numbers-313-317.md`.
+
+### feat(gate): TL-10 D2-Prep — `MeldekanalRegistry.requestApprovalOn(channelId, req)` (2026-07-22 10:45, #317)
 **Additive, ungegatete Security-Primitive** — der kleinste D2-Vorbereitungs-Slice für die Freigabe-Matrix
 (TL-10 Slice B). Neue Methode `requestApprovalOn(channelId, req)` fragt **gezielt** den adressierten Kanal
 (statt „erster gesunder") — die Bindung, mit der eine spätere Matrix „Werkzeug-Klasse → Kanal" auflöst.
@@ -20,7 +42,7 @@ unverändert; KEIN Matrix-Wiring, KEIN Env-Flag, KEIN Ingress, 0 Aufrufer** (kei
 Suite **1932 grün**; CR (Claude-Subagent) **GREEN, keine Findings**. Ingress-Wiring/Matrix/Env-Flag/
 D3-Sign-off bleiben Slice-B-gated. `changes/2026-07-22_meldekanal-request-approval-on.md`.
 
-### fix(mcp): TL-08 Slice 2c Drift-Hook — Härtung gegen all-malformed tools-Array (CR-LOW) (2026-07-22 09:45)
+### fix(mcp): TL-08 Slice 2c Drift-Hook — Härtung gegen all-malformed tools-Array (CR-LOW) (2026-07-22 09:45, #316)
 **Additive Fail-safe-Härtung** — schließt die LOW-Sibling-Lücke aus dem externen #315-Review. Der M1-Guard
 (`hasToolsArray`) fängt ein 200 **ohne** `result.tools`-Array; ein 200 mit **nicht-leerem** Array, dessen
 Einträge **alle** malformed sind (kein gültiger `name`), lieferte aber `[]` → `computeToolClassDrift` meldete
@@ -29,7 +51,7 @@ fälschlich **alle** kuratierten Tools als stale (ein spurioses `TOOL_CLASS_DRIF
 null → skip); legitim leeres `[]` bleibt gültig, ≥1 gültiger Name liefert die gültigen. Read-only, kein
 Gate-Flip. +3 Tests, Suite **1922 grün**. `changes/2026-07-22_drift-hook-allmalformed-guard.md`.
 
-### feat(mcp): TL-08 Slice 2c — Live-Tool-Class-Drift-Check-Hook (ADR-042) (2026-07-22 08:30)
+### feat(mcp): TL-08 Slice 2c — Live-Tool-Class-Drift-Check-Hook (ADR-042) (2026-07-22 08:30, #315)
 **Additive Verdrahtung** (read-only, **kein Gate-Flip**) — verdrahtet den vorhandenen, ungenutzten
 Drift-Check-Seam `checkToolClassDrift` ehrlich in den Daemon. Neu `tool-class-drift-hook.ts`
 (`buildGovernedToolListFetcher` + `runGovernedToolClassDriftChecks`): holt die **live `tools/list`** governed
@@ -43,7 +65,7 @@ ein Crash/false-positive. **CR (Claude-Subagent): 1 MEDIUM (M1: 200-ohne-`result
 Suite **1919 grün**. Gate-Flip (sensitive→redaction) bleibt Christian-gated (außer Scope). Live-E2E gegen
 echten unifi-Peer = eigenes Fenster (kein Peer im CI). `changes/2026-07-22_tool-class-drift-hook.md`.
 
-### feat(wire): ADR-046 ungegateter Consumer-Kern `supportsFeature` (fail-closed) (2026-07-22 06:20)
+### feat(wire): ADR-046 ungegateter Consumer-Kern `supportsFeature` (fail-closed) (2026-07-22 06:20, #314)
 **Additiver Groundwork-Slice** (Code+Tests) — der kleinste ehrliche **ungegatete** Baustein des ADR-046-Pfads
 (Wire-Feature/Version-Exchange, TL-12-Slice-C-Enabler). ADR-046 lässt Platzierung (Card-`protocol`-Block vs.
 `capabilities.services`) **und** Vokabular/Semver bewusst CO-offen (Cross-Vendor-`pal:consensus` pal-PATH-
@@ -56,7 +78,7 @@ CR (Claude-Subagent) **GREEN, keine Findings**. Weiterhin CO-gated: `protocol`-B
 Befüllung, Vokabular/Semver, `version-compat`-Verdrahtung, ORDER-Handler/Sender-Flip (= Slice C proper).
 `changes/2026-07-22_wire-feature-consumer-core.md`, ADR-046 §Umsetzungsstand.
 
-### docs(reconcile): PR-Nummern-Nachtrag COMPLIANCE + CHANGES + TODO-Cursor (#297–#312) (2026-07-22 06:05)
+### docs(reconcile): PR-Nummern-Nachtrag COMPLIANCE + CHANGES + TODO-Cursor (#297–#312) (2026-07-22 06:05, #313)
 **Doc-only** Bookkeeping-Reconcile (Hermes-Housekeeping nach den 2026-07-20/21-Merges). Seit #296 (deckte
 #288–#295 ab) waren **#297–#312** gemergt, aber unnummeriert: 16 COMPLIANCE-Zeilen mit `(offen, base=main)`,
 16 CHANGES-Überschriften ohne `#NNN`, TODO-höchste-PR-Ref bei #299. Fix: COMPLIANCE-Erst-Spalten auf die
