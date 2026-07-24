@@ -311,6 +311,15 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     loest aus. Fail-safe gegen werfende Registry/Bus/Zaehler, fail-closed ohne SPIFFE. +18 Tests
     (inkl. Integration gegen die echte `AgentRegistry`), Suite **2045 gruen**. Doku: ADR-047 §3/§4,
     Consumer-Contract §7.3. **Owner-gated bleibt nur der Flag-Flip** in einer laufenden Instanz.
+  - [x] **TL-11 konsumentenseitiger Wake-Kern** (2026-07-24): `wake-consumer-reference.ts` —
+    `interpretWakeFrame` (rein, fail-safe, **0 Aufrufer**) + `coldStartSweepDecision`. Zieht den **einen
+    nicht-transportgebundenen** Teil des §6-Pseudocodes als getesteten Code heraus: poke ja/nein, Payload
+    **ausschließlich unter `.data`** (§4 Wire-Shape — pinnt konsumentenseitig die frühere `ev.reason`-statt-
+    `ev.data.reason`-Fehlklasse, #282), tolerant gegen unbekannte `reason`, §3-Event-Typ-Filter, Zero-Content
+    gewahrt. +20 Tests, **mutations-verifiziert** am Wire-Shape-Guard; Suite **2065 grün** (144 Files). Form
+    wie `sweep-targets.ts` (Kern unter weiterhin gatetem letzten Hop). Doku: Consumer-Contract §6.1.
+    **De-riskt** Slice B (Supervisor-Autor bekommt den reinen Teil kopierbar+getestet), entfernt den Blocker
+    NICHT. Transport (WS/mTLS) + `pokeCli`-Body bleiben out-of-repo. Test-only/additiv, kein Deploy/Secret.
   - [ ] **TL-11 Slice B** (extern-blocked): Out-of-Repo Agent-Home-Supervisor konsumiert `agent:wake` →
     weckt CLI (`pokeCli`); **Zwei-Peer-Live-Proof** (CLI-Reaktion ohne dazwischenliegenden Poll). Gegen den
     fixen Consumer-Contract (s.o.) **und jetzt das Runbook** baubar. **Echter Blocker:** der letzte Hop

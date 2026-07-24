@@ -133,6 +133,29 @@ function connect() {
 Der einzige nicht-triviale Teil — `pokeCli()` (wie genau wird der CLI-Prozess geweckt) — ist die
 **Out-of-Repo-Supervisor-Entscheidung** und der Gegenstand von TL-11 Slice B (§8).
 
+### 6.1 Repo-getesteter Kern der Frame-Interpretation (`wake-consumer-reference.ts`)
+
+Der Pseudocode oben zeigt zwei Teile: den **Transport** (WS-Client, mTLS, Reconnect — host-/deploy-gebunden,
+out-of-repo) und die **Frame-Interpretation** („ist das ein Wake? poke ja/nein? wie lese ich den Payload?").
+Der zweite Teil ist **rein** und braucht keinen Host — er liegt jetzt als getesteter Referenz-Kern im Repo:
+`packages/daemon/src/wake-consumer-reference.ts` (rein, fail-safe, **0 Aufrufer** — Referenz für den externen
+Konsumenten, keine Runtime-Verdrahtung; dieselbe „Kern-unter-Gate"-Form wie `sweep-targets.ts`).
+
+- `interpretWakeFrame(raw): WakeDecision` — nimmt einen Frame (JSON-String **oder** Objekt), liefert
+  `{poke:true, trigger:'wake', reason, instanceId?, spiffeUri?}` bei `agent:wake`, sonst `{poke:false, …}`.
+  **Wirft nie.** Liest den Payload **ausschließlich unter `.data`** (§4) — ein Top-Level-`reason` wird
+  bewusst ignoriert. Das pinnt konsumentenseitig genau die Fehlklasse, die die frühere §6-Pseudocode-Fassung
+  hatte (`ev.reason` statt `ev.data.reason`, s. Wire-Shape-Befund #282) und die bis dahin **nur** daemon-,
+  nicht konsumentenseitig getestet war.
+- `coldStartSweepDecision(): WakeDecision` — benennt die §5-**Cold-Start-Pflicht** als aufrufbaren Trigger
+  (`ws.on('open', … coldStartSweepDecision())`).
+
+**Grenze (unverändert):** der Kern liefert das **Ob** (poke ja/nein + normalisierter Grund), nicht das
+**Wie** (`pokeCli`-Body) und nicht den Transport. Slice B bleibt damit extern-blocked — dieser Kern
+**de-riskt** ihn (der Supervisor-Autor bekommt den einen nicht-transportgebundenen Teil als kopierbaren,
+getesteten Code statt als Pseudocode), er **entfernt** den Blocker nicht. Test-Verankerung:
+`wake-consumer-reference.test.ts` (20 Tests, mutations-verifiziert am Wire-Shape-Guard).
+
 ## 7. Test-Verankerung (jede Garantie ist im Repo bewacht)
 
 | Garantie (§) | Test |

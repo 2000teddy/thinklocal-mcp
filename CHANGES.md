@@ -8,6 +8,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(tl11): konsumentenseitiger Wake-Kern `interpretWakeFrame` (2026-07-25 06:05)
+**Code+Test** (reiner Kern, **0 Aufrufer**, kein Runtime-Delta, keine Entscheidung). Die daemon-seitige
+Wake-Erzeugung/-Zustellung ist end-to-end getestet; was der Out-of-Repo-Supervisor (TL-11 Slice B) aus einem
+Frame macht, stand aber **nur als Pseudocode** (Consumer-Contract §6). Der Pseudocode mischt **Transport**
+(WS/mTLS/Reconnect — host-gebunden) und **Frame-Interpretation** (rein, host-frei); der reine Teil war
+ungetestet — belegbar kein Kosmetik-Punkt, weil die frühere §6-Fassung `ev.reason` statt `ev.data.reason` las
+(Wire-Shape-Befund #282) und diese Fehlklasse konsumentenseitig keinen Test hatte. Neu
+`packages/daemon/src/wake-consumer-reference.ts`: `interpretWakeFrame(raw)` (Payload **nur unter `.data`**,
+tolerant gegen unbekannte `reason`, §3-Event-Typ-Filter, Zero-Content, wirft nie) + `coldStartSweepDecision()`
+(§5-Cold-Start-Pflicht als Trigger). Form wie `sweep-targets.ts` (Kern unter weiterhin gatetem letzten Hop).
++20 Tests, **mutations-verifiziert** am Wire-Shape-Guard; Suite **2065 grün** (144 Files). De-riskt Slice B
+(reiner Teil kopierbar+getestet), entfernt den Blocker NICHT — Transport + `pokeCli` bleiben out-of-repo.
+Doku: Consumer-Contract §6.1, `changes/2026-07-24_tl11-wake-consumer-reference-core.md`.
+
 ### docs(reconcile): PR-Nummern-Nachtrag für #328 + #329 (2026-07-24 18:16)
 **Doc-only** Post-Merge-Reconcile — dieselbe Selbst-Reconcile-Lücke wie bei #327: eine PR kennt ihre eigene
 Merge-Nummer beim Schreiben noch nicht, also blieb die COMPLIANCE-Erst-Spalte auf `(offen, base=main)`. #328
