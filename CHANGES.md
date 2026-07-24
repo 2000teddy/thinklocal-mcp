@@ -8,6 +8,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs(runbook): TL-11-Runbook nennt den optionalen Daemon-Sweep (2026-07-24 16:05)
+**Doc-only** (kein Flag-Flip, kein Deploy). Schließt die Lücke zwischen dem in #326 verdrahteten
+Reconciliation-Sweep (`TLMCP_WAKE_SWEEP_ENABLED`, Default AUS) und dem operativen
+`RUNBOOK-TL-11-wake-supervisor.md`: bisher war das Flag nur in den Architektur-Dokumenten (ADR-047 §3,
+Consumer-Contract §7.3) beschrieben, nicht dort, wo der Supervisor-Betreiber liest. Neue **§5.1** erklärt
+das Flag (Default AUS, Auslöser `register`, nur die registrierende Instanz, Wake-Form identisch zum
+regulären Wake) und stellt ausdrücklich klar, dass es die **Cold-Start-Sweep-Pflicht des Supervisors
+nicht ersetzt**, sondern ergänzt — plus, dass das Setzen ein bewusster Owner-Schritt ist. §7-Checkliste
+entsprechend ergänzt. Alle Aussagen gegen den gemergten Code verifiziert. Suite unverändert **2045 grün**.
+`changes/2026-07-24_tl11-runbook-sweep.md`.
+
 ### docs(reconcile): PR-Nummern-Nachtrag für #327 (2026-07-24 11:05)
 **Doc-only** Post-Merge-Reconcile — der Selbst-Reconcile, den #327 beim Schreiben nicht falten konnte (eine PR kennt ihre eigene Merge-Nummer noch nicht). #327 ist seit `mergedAt=2026-07-23T14:43:19Z` gemergt (`f5677e9`): COMPLIANCE-Erst-Spalte `(offen, base=main)` → `#327` + `(base=main, gemergt)`, CHANGES-Überschrift um `, #327)` ergänzt, TODO-Eintrag annotiert — 1:1 in-place, `gh`-verifiziert. Danach 0 stale Erst-Spalten mit PR-Bezug. Suite unverändert **2045 grün**. `changes/2026-07-24_reconcile-pr-327.md`.
 

@@ -62,6 +62,30 @@ wss://127.0.0.1:9440/ws?subscribe=agent:wake&agent=spiffe://thinklocal/node/<Pee
 **Merksatz:** Das Wake ist eine **Optimierung gegen Poll-Latenz**, kein Transport mit Zustellgarantie. Ein
 korrekter Supervisor ist auch **ohne** jedes Wake funktional (nur langsamer). → Referenz-Loop-Shape: Spec §6.
 
+### 5.1 Optionaler daemon-seitiger Reconciliation-Sweep (Default AUS)
+
+Seit #326 gibt es eine **zweite** Wake-Quelle im Daemon: bei gesetztem Env-Flag `TLMCP_WAKE_SWEEP_ENABLED=1`
+weckt der Daemon eine Instanz **nachträglich**, wenn sie sich (neu) registriert und dann ungelesene Post hat.
+Das adressiert genau die Reconnect-Lücke aus §5 — der Supervisor war beim Eintreffen der Nachricht kurz weg,
+das reguläre Wake ging verloren.
+
+| Aspekt | Verhalten |
+|---|---|
+| **Default** | **AUS.** Ohne `TLMCP_WAKE_SWEEP_ENABLED=1` wird die Verdrahtung gar nicht erst aufgerufen ⇒ kein Verhaltens-Delta gegenüber heute |
+| **Auslöser** | die **(Neu-)Registrierung** einer Agent-Instanz beim Daemon (`agentRegistry.on('register')`) — der Moment, in dem der Supervisor gerade wieder da ist |
+| **Zielgenauigkeit** | nur die **registrierende** Instanz wird geprüft/geweckt, nicht die ganze Flotte |
+| **Wake-Form** | **identisch** zum regulären Wake: `agent:wake`, Zero-Content, `reason:'inbox'`, dieselbe gerichtete Zustellung — ein Sweep-Wake ist von einem Inbox-Wake **nicht unterscheidbar** (und muss es nicht sein) |
+
+> ⚠️ **Ändert für den Supervisor NICHTS an seiner Pflicht.** Der Cold-Start-Sweep aus §5 (beim (Re-)Connect
+> immer einmal `GET /api/inbox` pollen) bleibt **verbindlich** — der Daemon-Sweep *ergänzt* ihn, er ersetzt
+> ihn nicht (der Daemon sieht z.B. keinen Supervisor-Neustart **ohne** Re-Registrierung der Instanz). Wer
+> §5 korrekt umsetzt, ist mit **und** ohne dieses Flag funktional.
+
+**Das Flag zu setzen ist ein bewusster Owner-Schritt** (Daemon-Neustart mit `TLMCP_WAKE_SWEEP_ENABLED=1`),
+kein Teil dieses Supervisor-Runbooks — es steht hier nur, damit ein Betreiber den zusätzlichen Wake-Auslöser
+kennt und **nicht** fälschlich für einen Bug hält. Design/Contract: `TL-11-wake-consumer-contract.md` §7.3,
+`ADR-047` §3.
+
 ## 6. Zwei-Peer-Live-Proof (die eigentliche DoD — Host-/Fenster-gated, hier nur die Prozedur)
 Ziel: **CLI reagiert auf ein reales Wake OHNE dazwischenliegenden Poll** (`[[dod-two-peer-mcp-proof]]`).
 1. Supervisor auf Host A verbunden (§1–§3), Cold-Start-Sweep gelaufen, **Poll deaktiviert/Intervall hoch**,
@@ -79,7 +103,8 @@ Ziel: **CLI reagiert auf ein reales Wake OHNE dazwischenliegenden Poll** (`[[dod
 - [ ] Loopback-Gate: `?agent=` von Nicht-Loopback → Close **`4003`** (Spec §2, `websocket.ts`).
 - [ ] Directed: ungefilterter Client bekommt **nie** `agent:wake` (Spec §3, `websocket.test.ts`).
 - [ ] Payload unter `.data`, Zero-Content, `reason:'inbox'` (Spec §4, Wire-Conformance-Test).
-- [ ] Cold-Start-Sweep implementiert (Reconnect-Lücke abgedeckt, Spec §5).
+- [ ] Cold-Start-Sweep implementiert (Reconnect-Lücke abgedeckt, Spec §5) — **unabhängig** vom optionalen
+  daemon-seitigen `TLMCP_WAKE_SWEEP_ENABLED` (§5.1), das ihn nur ergänzt.
 > Diese Garantien sind bereits **testgebunden** (Consumer-Contract §7/§7.1) — die Checkliste ist die
 > Operator-Sicht auf dieselben Invarianten, kein neuer Test.
 
