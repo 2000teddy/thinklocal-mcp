@@ -177,7 +177,7 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
 > TL-11s Wake lesen muss. Scoping-Doku: `docs/architecture/TL-11-12-wake-postbox-discovery.md`.
 - [~] **[v5.1] TL-12 (≈4 h)** Ausgewiesene Mesh-Zustellung an Agenten (signierter Auftrag → Postfach →
   Abarbeitung; Ersatz für tmux-Zuruf, Kap. 11.3).
-  - [x] **Zustellpfad end-to-end dokumentiert** (2026-07-23): `docs/architecture/TL-12-delivery-path.md`
+  - [x] **Zustellpfad end-to-end dokumentiert** (2026-07-23, #327): `docs/architecture/TL-12-delivery-path.md`
     — die durchgehende Sicht, die zwischen den vier slice-zentrierten Dokumenten fehlte. S1 signieren /
     S2 Transport / S3 Ingest / S4 Postfach / S5 Read-Surface sind **gebaut**; **S6 Abarbeitung ist NICHT
     gebaut** und owner-gated. TL-08/09/10 sind je Station verortet (nicht weggelassen) samt Konsequenz:
