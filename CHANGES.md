@@ -8,7 +8,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### docs(runbook): TL-11-Runbook nennt den optionalen Daemon-Sweep (2026-07-24 16:05)
+### docs(reconcile): PR-Nummern-Nachtrag für #328 + #329 (2026-07-24 18:16)
+**Doc-only** Post-Merge-Reconcile — dieselbe Selbst-Reconcile-Lücke wie bei #327: eine PR kennt ihre eigene
+Merge-Nummer beim Schreiben noch nicht, also blieb die COMPLIANCE-Erst-Spalte auf `(offen, base=main)`. #328
+(`PR-Nummern-Nachtrag für #327`, `mergedAt=2026-07-24T09:09:25Z`, `e06ce3c`) und #329 (`TL-11-Runbook
+optionaler Daemon-Sweep`, `mergedAt=2026-07-24T14:08:34Z`, `d61174f`) sind beide gemergt: COMPLIANCE-Erst-Spalte
+`(offen, base=main)` → `#328`/`#329` + `(base=main, gemergt)`, CHANGES-Überschriften um `, #328)`/`, #329)`
+ergänzt — 1:1 in-place, `gh`-verifiziert. **Hinweis:** der zuvor erbetene #327-Nachtrag war bereits durch
+#328 erledigt (COMPLIANCE-Zeile + CHANGES-Eintrag vorhanden) — hier nachgezogen wird die nächste Stufe
+(#328/#329). Suite unverändert **2045 grün** (kein `.ts`-Diff). `changes/2026-07-24_reconcile-pr-328-329.md`.
+
+### docs(runbook): TL-11-Runbook nennt den optionalen Daemon-Sweep (2026-07-24 16:05, #329)
 **Doc-only** (kein Flag-Flip, kein Deploy). Schließt die Lücke zwischen dem in #326 verdrahteten
 Reconciliation-Sweep (`TLMCP_WAKE_SWEEP_ENABLED`, Default AUS) und dem operativen
 `RUNBOOK-TL-11-wake-supervisor.md`: bisher war das Flag nur in den Architektur-Dokumenten (ADR-047 §3,
@@ -19,7 +29,7 @@ nicht ersetzt**, sondern ergänzt — plus, dass das Setzen ein bewusster Owner-
 entsprechend ergänzt. Alle Aussagen gegen den gemergten Code verifiziert. Suite unverändert **2045 grün**.
 `changes/2026-07-24_tl11-runbook-sweep.md`.
 
-### docs(reconcile): PR-Nummern-Nachtrag für #327 (2026-07-24 11:05)
+### docs(reconcile): PR-Nummern-Nachtrag für #327 (2026-07-24 11:05, #328)
 **Doc-only** Post-Merge-Reconcile — der Selbst-Reconcile, den #327 beim Schreiben nicht falten konnte (eine PR kennt ihre eigene Merge-Nummer noch nicht). #327 ist seit `mergedAt=2026-07-23T14:43:19Z` gemergt (`f5677e9`): COMPLIANCE-Erst-Spalte `(offen, base=main)` → `#327` + `(base=main, gemergt)`, CHANGES-Überschrift um `, #327)` ergänzt, TODO-Eintrag annotiert — 1:1 in-place, `gh`-verifiziert. Danach 0 stale Erst-Spalten mit PR-Bezug. Suite unverändert **2045 grün**. `changes/2026-07-24_reconcile-pr-327.md`.
 
 ### docs(arch): TL-12 Zustellpfad end-to-end — signierter Auftrag → Postfach → Abarbeitung (2026-07-23 16:45, #327)
