@@ -8,7 +8,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### docs(arch): TL-12 Zustellpfad end-to-end — signierter Auftrag → Postfach → Abarbeitung (2026-07-23 16:45)
+### docs(reconcile): PR-Nummern-Nachtrag für #327 (2026-07-24 11:05)
+**Doc-only** Post-Merge-Reconcile — der Selbst-Reconcile, den #327 beim Schreiben nicht falten konnte (eine PR kennt ihre eigene Merge-Nummer noch nicht). #327 ist seit `mergedAt=2026-07-23T14:43:19Z` gemergt (`f5677e9`): COMPLIANCE-Erst-Spalte `(offen, base=main)` → `#327` + `(base=main, gemergt)`, CHANGES-Überschrift um `, #327)` ergänzt, TODO-Eintrag annotiert — 1:1 in-place, `gh`-verifiziert. Danach 0 stale Erst-Spalten mit PR-Bezug. Suite unverändert **2045 grün**. `changes/2026-07-24_reconcile-pr-327.md`.
+
+### docs(arch): TL-12 Zustellpfad end-to-end — signierter Auftrag → Postfach → Abarbeitung (2026-07-23 16:45, #327)
 **Doc-only Referenz** (kein Code, keine Entscheidung, kein Gate verschoben). Die TL-12-Doku war über vier
 Dateien verteilt und jeweils **slice-zentriert**; es fehlte die **durchgehende** Sicht. Neu
 `TL-12-delivery-path.md` mit Station-für-Station-Ist-Stand und Ankern: **S1** signieren (Body-Marker statt
