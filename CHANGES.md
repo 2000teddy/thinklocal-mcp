@@ -8,7 +8,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### feat(tl11): konsumentenseitiger Wake-Kern `interpretWakeFrame` (2026-07-25 06:05)
+### docs(reconcile): PR-Nummern-Nachtrag für #330 + #331 (2026-07-25 06:21)
+**Doc-only** Post-Merge-Reconcile — dieselbe Selbst-Reconcile-Lücke wie zuvor: eine PR kennt ihre eigene
+Merge-Nummer beim Schreiben noch nicht, also blieb die COMPLIANCE-Erst-Spalte auf `(offen, base=main)`. Der
+ggf. vermutete #328-Nachtrag war **bereits durch #330 erledigt**; offen waren **#330** (`PR-Nummern-Nachtrag
+für #328 + #329`, `MERGED` `f58b8d1` `2026-07-24T16:33:17Z`) und **#331** (`feat(tl11) interpretWakeFrame`,
+`MERGED` `340b7c2` `2026-07-25T04:17:37Z`). COMPLIANCE-Erst-Spalten `(offen, base=main)` → `#330`/`#331` +
+`(base=main, gemergt)`, CHANGES-Überschriften um `, #330)`/`, #331)` ergänzt — 1:1 in-place, `gh`-verifiziert.
+Suite unverändert **2065 grün** (kein `.ts`-Diff). `changes/2026-07-25_reconcile-pr-330-331.md`.
+
+### feat(tl11): konsumentenseitiger Wake-Kern `interpretWakeFrame` (2026-07-25 06:05, #331)
 **Code+Test** (reiner Kern, **0 Aufrufer**, kein Runtime-Delta, keine Entscheidung). Die daemon-seitige
 Wake-Erzeugung/-Zustellung ist end-to-end getestet; was der Out-of-Repo-Supervisor (TL-11 Slice B) aus einem
 Frame macht, stand aber **nur als Pseudocode** (Consumer-Contract §6). Der Pseudocode mischt **Transport**
@@ -22,7 +31,7 @@ tolerant gegen unbekannte `reason`, §3-Event-Typ-Filter, Zero-Content, wirft ni
 (reiner Teil kopierbar+getestet), entfernt den Blocker NICHT — Transport + `pokeCli` bleiben out-of-repo.
 Doku: Consumer-Contract §6.1, `changes/2026-07-24_tl11-wake-consumer-reference-core.md`.
 
-### docs(reconcile): PR-Nummern-Nachtrag für #328 + #329 (2026-07-24 18:16)
+### docs(reconcile): PR-Nummern-Nachtrag für #328 + #329 (2026-07-24 18:16, #330)
 **Doc-only** Post-Merge-Reconcile — dieselbe Selbst-Reconcile-Lücke wie bei #327: eine PR kennt ihre eigene
 Merge-Nummer beim Schreiben noch nicht, also blieb die COMPLIANCE-Erst-Spalte auf `(offen, base=main)`. #328
 (`PR-Nummern-Nachtrag für #327`, `mergedAt=2026-07-24T09:09:25Z`, `e06ce3c`) und #329 (`TL-11-Runbook
