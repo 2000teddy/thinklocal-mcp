@@ -168,8 +168,9 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     werden — weil `decider` v1 nicht durchgesetzt wird, ruht der Schutz für `quorum=N` allein auf dem harten
     `consensus`-Tier-403 im Ingress. Wird `resolveApproval` davor/anstelle verdrahtet, genügt **eine**
     Zustimmung für `quorum=3`. Sicherstellen + testen (oder D3-Enforcement per CO nachziehen).
-    Dazu zwei im D1-Loader zu erledigende #300-Altlasten: whitespace-only Kanalname parst (`trim()` fehlt)
-    und `resolveEntry` gibt `decider` per Referenz zurück. Siehe `TL-10-freigabe-matrix-scoping.md` §7.2.
+    Die zwei #300-Altlasten (whitespace-only Kanalname parst; `resolveEntry` gibt `decider` per Referenz)
+    sind **✅ erledigt (2026-07-25)** — reine Parser-/Resolver-Korrektheit, kein D1-Loader nötig, 0
+    Runtime-Aufrufer, kein Gate-Vorgriff; +6 Regressionstests. Siehe `TL-10-freigabe-matrix-scoping.md` §7.2.
 
 ### P1 — Identität, Autonomie, Robustheit
 > **Discovery + Reihenfolge (CO 2026-07-15, opus+sonnet einstimmig):** **TL-12 VOR TL-11.** TL-12 Slice A

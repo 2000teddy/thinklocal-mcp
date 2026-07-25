@@ -73,6 +73,11 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
+/** Frische Kopie eines Entscheiders — damit `resolveEntry` nie eine Referenz auf den geladenen Matrix-Eintrag herausgibt. */
+function cloneDecider(d: Decider): Decider {
+  return d.kind === 'human' ? { kind: 'human', id: d.id } : { kind: 'consensus', quorum: d.quorum };
+}
+
 /** Parst `decider` streng gegen die v1-Grammatik. Wirft bei unbekannter/ungültiger Form. */
 function parseDecider(raw: unknown, where: string): Decider {
   if (typeof raw !== 'string' || raw.length === 0) {
@@ -139,8 +144,10 @@ export function parseFreigabeMatrix(raw: unknown, knownServers: readonly string[
     if (typeof tool !== 'string' || tool.length === 0) {
       throw new FreigabeMatrixError(`${where}: 'tool' muss ein nicht-leerer String oder '*' sein`);
     }
-    if (typeof channel !== 'string' || channel.length === 0) {
-      throw new FreigabeMatrixError(`${where}: 'channel' (channelId) fehlt`);
+    // Fail-closed: ein rein aus Whitespace bestehender Kanalname ist KEINE zustellbare channelId. `length`
+    // allein ließe `'   '` durch (#300/#319-CR-Altlast); `trim()` schließt das (`TL-10-…-scoping.md` §7.2).
+    if (typeof channel !== 'string' || channel.trim().length === 0) {
+      throw new FreigabeMatrixError(`${where}: 'channel' (channelId) fehlt oder ist leer/whitespace`);
     }
     const decider = parseDecider(e.decider, where);
 
@@ -169,7 +176,9 @@ export function resolveEntry(matrix: FreigabeMatrix, ctx: ResolveContext): Matri
     else if (e.tool === WILDCARD) wildcard = e;
   }
   const chosen = exact ?? wildcard;
-  return chosen ? { channel: chosen.channel, decider: chosen.decider } : null;
+  // `decider` als **frische Kopie** herausgeben, nie als Referenz auf den Matrix-Eintrag (#300/#319-CR-
+  // Altlast): sonst könnte ein Aufrufer über das aufgelöste Ziel die geladene Policy mutieren (Aliasing).
+  return chosen ? { channel: chosen.channel, decider: cloneDecider(chosen.decider) } : null;
 }
 
 /**
@@ -180,7 +189,8 @@ export function resolveEntry(matrix: FreigabeMatrix, ctx: ResolveContext): Matri
  */
 export function isRoutable(target: MatrixTarget | null): boolean {
   if (target === null) return false;
-  if (typeof target.channel !== 'string' || target.channel.length === 0) return false;
+  // Defense-in-depth zum Parse-Reject: ein whitespace-only Kanal ist nicht zustellbar (nicht nur `length`).
+  if (typeof target.channel !== 'string' || target.channel.trim().length === 0) return false;
   const d = target.decider;
   if (d.kind === 'human') return d.id.length > 0;
   if (d.kind === 'consensus') return Number.isInteger(d.quorum) && d.quorum >= 2;

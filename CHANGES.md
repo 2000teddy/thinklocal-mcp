@@ -8,6 +8,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### fix(tl10): zwei #300/#319-CR-Altlasten im Slice-A-Parser (whitespace-Kanal, decider-Aliasing) (2026-07-25 12:09)
+**Bug-Fix** (reine Parser-/Resolver-Korrektheit in `freigabe-matrix.ts`, TL-10 Slice A). **Kein Gate-Vorgriff:**
+`freigabe-matrix.ts` hat **0 Runtime-Aufrufer** ⇒ kein Verhaltens-Delta; die Fixes betreffen Parser-Korrektheit,
+nicht die gegateten D1-Loader-Inhalte/D3-Enforcement. `TL-10-…-scoping.md` §7.2 (Punkt 6) und `TODO.md`
+führten beide vorbestehenden (#300) Defekte als „im D1-Loader zu erledigen" — beide sind aber ungegatet
+fixbar: (1) whitespace-only Kanalname parste (`length===0` ließ `'   '` durch) ⇒ Parser wirft jetzt bei
+`trim().length===0` (+`isRoutable`-Defense-in-depth); (2) `resolveEntry` gab `decider` per Referenz heraus
+(Aliasing der geladenen Policy) ⇒ neue reine `cloneDecider`, `resolveEntry` gibt eine frische Kopie. +6
+Regressionstests, **mutations-verifiziert** (beide Reverts machen die passenden Tests rot); Suite **2080 grün**
+(146 Files). Slice B bleibt D1/D3-gated. `changes/2026-07-25_tl10-sliceA-parser-hardening.md`.
+
 ### docs(reconcile): PR-Nummern-Nachtrag für #332 + #333 + #334 + #335 (2026-07-25 08:16)
 **Doc-only** Post-Merge-Reconcile — dieselbe Selbst-Reconcile-Lücke wie zuvor: eine PR kennt ihre eigene
 Merge-Nummer beim Schreiben noch nicht. Seit #332 (das #330/#331 zog) sind vier weitere PRs gemergt, deren

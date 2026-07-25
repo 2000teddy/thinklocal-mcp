@@ -63,6 +63,9 @@ describe('parseFreigabeMatrix — Parse-Rejects (fail-closed)', () => {
   it('fehlender server (tool-ohne-server)', () => reject({ entries: [entry({ server: undefined })] }));
   it('non-kanonischer Server (D4)', () => reject({ entries: [entry({ server: 'rogue' })] }));
   it('leerer channel', () => reject({ entries: [entry({ channel: '' })] }));
+  // Regression (#300/#319-CR-Altlast, scoping §7.2): whitespace-only Kanalname darf NICHT durchparsen.
+  it.each(['   ', '\t', ' \n ', ' '])('whitespace-only channel %j ⇒ reject', (ws) =>
+    reject({ entries: [entry({ channel: ws })] }));
   it('leerer tool-String', () => reject({ entries: [entry({ tool: '' })] }));
   it('unbekannte decider-Grammatik', () => reject({ entries: [entry({ decider: 'root:x' })] }));
   it('human ohne id', () => reject({ entries: [entry({ decider: 'human:' })] }));
@@ -99,6 +102,23 @@ describe('resolveEntry — Spezifität', () => {
     const empty = parseFreigabeMatrix({ entries: [] }, KNOWN);
     expect(resolveEntry(empty, { tier: 'gate', server: 'unifi', tool: 'x' })).toBeNull();
   });
+
+  // Regression (#300/#319-CR-Altlast, scoping §7.2): resolveEntry gibt den `decider` als KOPIE zurück,
+  // nie als Referenz auf den Matrix-Eintrag — sonst könnte ein Aufrufer die geladene Policy mutieren.
+  it('gibt decider als frische Kopie zurück (kein Aliasing auf den Matrix-Eintrag)', () => {
+    const src = parseFreigabeMatrix({ entries: [entry({ decider: 'human:christian' })] }, KNOWN);
+    const target = resolveEntry(src, { tier: 'gate', server: 'unifi', tool: 'block_client' });
+    expect(target?.decider).toEqual({ kind: 'human', id: 'christian' });
+    // Über das aufgelöste Ziel mutieren …
+    (target?.decider as { id: string }).id = 'evil';
+    // … darf den Matrix-Eintrag NICHT verändern.
+    expect(src.entries[0]?.decider).toEqual({ kind: 'human', id: 'christian' });
+    // Und eine zweite Auflösung liefert weiterhin den unverfälschten Wert.
+    expect(resolveEntry(src, { tier: 'gate', server: 'unifi', tool: 'block_client' })?.decider).toEqual({
+      kind: 'human',
+      id: 'christian',
+    });
+  });
 });
 
 describe('isRoutable — der einzige Guard', () => {
@@ -109,6 +129,8 @@ describe('isRoutable — der einzige Guard', () => {
     expect(isRoutable({ channel: 'tg-q', decider: { kind: 'consensus', quorum: 2 } })).toBe(true));
   it('leerer channel ⇒ false', () =>
     expect(isRoutable({ channel: '', decider: { kind: 'human', id: 'x' } })).toBe(false));
+  it('whitespace-only channel ⇒ false (Defense-in-depth)', () =>
+    expect(isRoutable({ channel: '   ', decider: { kind: 'human', id: 'x' } })).toBe(false));
   it('human ohne id ⇒ false', () =>
     expect(isRoutable({ channel: 'c', decider: { kind: 'human', id: '' } })).toBe(false));
   it('consensus quorum<2 ⇒ false', () =>
