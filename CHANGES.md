@@ -8,7 +8,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### feat(tl10): reiner TOML-Text→Matrix-Loader `parseFreigabeMatrixToml` (D1-Prep, 0 Aufrufer) (2026-07-25 13:05)
+### docs(reconcile): PR-Nummern-Nachtrag für #336 + #337 + #338 (2026-07-25 14:03)
+**Doc-only** Post-Merge-Reconcile — dieselbe Selbst-Reconcile-Lücke wie zuvor: eine PR kennt ihre eigene
+Merge-Nummer beim Schreiben noch nicht. Seit #336 (zog #332–#335) sind drei weitere PRs gemergt, deren eigene
+Zeilen offen blieben: #336 (`668b700`), #337 (`16de282`), #338 (`99e4d3d`) — alle `gh`-verifiziert MERGED.
+COMPLIANCE-Erst-Spalten `(offen, base=main)` → `#NNN` + `(base=main, gemergt)`, CHANGES-Überschriften um
+`, #NNN)` ergänzt — 1:1 in-place. Suite unverändert **2087 grün** (kein `.ts`-Diff).
+`changes/2026-07-25_reconcile-pr-336-338.md`.
+
+### feat(tl10): reiner TOML-Text→Matrix-Loader `parseFreigabeMatrixToml` (D1-Prep, 0 Aufrufer) (2026-07-25 13:05, #338)
 **Code+Test** (reiner Kern, 0 Aufrufer, kein Runtime-Delta). **Gate-neutral:** nimmt keinen D1/D3-Entscheid
 vorweg — Form wie #317/#319. D1 (§5-CO) legt die Quelle `config/freigabe-matrix.toml` fest; hier ist der
 **mechanische Format-Schritt** gebaut: neu `freigabe-matrix-loader.ts` `parseFreigabeMatrixToml(tomlText,
@@ -17,7 +25,7 @@ knownServers)` parst **TOML-Text** (kein fs) via `@iarna/toml`, wrappt TOML-Synt
 D5). **Weiterhin gated:** fs-Read, die kuratierte Policy-Datei (owner), Ingress-Verdrahtung + Env-Flag,
 D3-Sign-off. +7 Tests, Suite **2087 grün** (147 Files). `changes/2026-07-25_tl10-d1-toml-loader.md`.
 
-### fix(tl10): zwei #300/#319-CR-Altlasten im Slice-A-Parser (whitespace-Kanal, decider-Aliasing) (2026-07-25 12:09)
+### fix(tl10): zwei #300/#319-CR-Altlasten im Slice-A-Parser (whitespace-Kanal, decider-Aliasing) (2026-07-25 12:09, #337)
 **Bug-Fix** (reine Parser-/Resolver-Korrektheit in `freigabe-matrix.ts`, TL-10 Slice A). **Kein Gate-Vorgriff:**
 `freigabe-matrix.ts` hat **0 Runtime-Aufrufer** ⇒ kein Verhaltens-Delta; die Fixes betreffen Parser-Korrektheit,
 nicht die gegateten D1-Loader-Inhalte/D3-Enforcement. `TL-10-…-scoping.md` §7.2 (Punkt 6) und `TODO.md`
@@ -28,7 +36,7 @@ fixbar: (1) whitespace-only Kanalname parste (`length===0` ließ `'   '` durch) 
 Regressionstests, **mutations-verifiziert** (beide Reverts machen die passenden Tests rot); Suite **2080 grün**
 (146 Files). Slice B bleibt D1/D3-gated. `changes/2026-07-25_tl10-sliceA-parser-hardening.md`.
 
-### docs(reconcile): PR-Nummern-Nachtrag für #332 + #333 + #334 + #335 (2026-07-25 08:16)
+### docs(reconcile): PR-Nummern-Nachtrag für #332 + #333 + #334 + #335 (2026-07-25 08:16, #336)
 **Doc-only** Post-Merge-Reconcile — dieselbe Selbst-Reconcile-Lücke wie zuvor: eine PR kennt ihre eigene
 Merge-Nummer beim Schreiben noch nicht. Seit #332 (das #330/#331 zog) sind vier weitere PRs gemergt, deren
 eigene Zeilen offen blieben: #332 (`24de23c`), #333 (`b93452b`), #334 (`069b1a9`), #335 (`c9f17b6`) — alle
