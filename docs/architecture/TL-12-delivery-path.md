@@ -64,6 +64,17 @@ liefert `is_order` + `verify_verdict` mit aus.
 sie gültig"). `verifyStoredOrder` ist **fail-closed und wirft nie** — eine bösartige Zeile legt die Liste
 nicht lahm (`inbox-api.ts:382`).
 
+**Test-Verankerung am HTTP-Rand (`tl12-order-read-surface.test.ts`, 3 Tests):** `verifyStoredOrder` selbst
+ist unit-getestet (`agent-inbox.test.ts`, inkl. Byte-Flip), aber der **Read-Surface-Endpunkt** war für
+Aufträge nur mittelbar bewacht. Diese Datei fährt `GET /api/inbox` über `fastify.inject()` und beweist die
+S5-Zusagen **end-to-end**: (a) gültiger Auftrag → `is_order=true` + `verify_verdict=VALID` + Provenienz; (b)
+**echte On-Disk-Manipulation** — eine **zweite** SQLite-Verbindung kippt ein Byte in `signed_bytes` (wie ein
+Angreifer mit Plattenzugriff), das Live-Re-Verify beim Lesen dreht `VALID → INVALID`, der Endpunkt bleibt
+`200`; (c) fail-closed-Loop: die manipulierte Zeile verschluckt die andere nicht (`count` bleibt vollständig).
+**Mutations-verifiziert:** gäbe der Handler die **gespeicherte** `verify_verdict`-Spalte zurück statt live zu
+re-verifizieren, würden (b)+(c) rot (`expected 'VALID' to be 'INVALID'`). **Abgrenzung:** S6 (Abarbeitung)
+ist NICHT Gegenstand — owner-gated, nicht gebaut.
+
 ### S6 — Abarbeitung / Ausführung · **⛔ NICHT gebaut**
 Ein gelesener Auftrag wird **nicht ausgeführt**. Es gibt keinen Executor, kein Ledger, keine Denylist,
 keinen Rate-Fence. Das ist **Slice B**, und es ist bewusst so: **Signatur ≠ Ausführungs-Erlaubnis**
