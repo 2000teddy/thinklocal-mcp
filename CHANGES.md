@@ -8,6 +8,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### test(tl11): Emit→Decision-Brücke (echter Emitter → Draht-Bytes → `interpretWakeFrame`) (2026-07-25 06:28)
+**Test-only** (keine Produktionsdatei berührt, keine Entscheidung). Es gab drei TL-11-Wake-Test-Ebenen —
+Emitter-Funktionen, Emitter über echten `/ws`-Socket, Kern gegen hand-gebaute Frames — aber keine verband
+die **beiden Enden**: entscheidet der Kern (#331) korrekt über den Frame, den der Daemon **tatsächlich
+emittiert und serialisiert**? Neu `tl11-wake-emit-to-decision.test.ts` fährt **socket-frei** die volle Kette
+`inbox:new` → echter `registerWakeEmitter` → echter `MeshEventBus` → **dieselbe Serialisierung wie der
+Draht** (`websocket.ts:266` `JSON.stringify(event)` aus dem `onAny`-Kanal) → `interpretWakeFrame`. Deckt:
+adressiert+live+SPIFFE → 1 Frame poket korrekt · `.data`-Hülle · Zero-Content durch die ganze Kette ·
+coalesced (2→1) · fail-closed → 0 Frames. +6 Tests, **mutations-verifiziert** (Kern liest Top-Level statt
+`.data` ⇒ Weld-Test rot); Suite **2071 grün** (145 Files). De-riskt Slice B weiter, entfernt den Blocker
+NICHT. Doku: Consumer-Contract §6.1, `changes/2026-07-25_tl11-wake-emit-to-decision-bridge.md`.
+
 ### docs(reconcile): PR-Nummern-Nachtrag für #330 + #331 (2026-07-25 06:21)
 **Doc-only** Post-Merge-Reconcile — dieselbe Selbst-Reconcile-Lücke wie zuvor: eine PR kennt ihre eigene
 Merge-Nummer beim Schreiben noch nicht, also blieb die COMPLIANCE-Erst-Spalte auf `(offen, base=main)`. Der

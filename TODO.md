@@ -320,6 +320,16 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     wie `sweep-targets.ts` (Kern unter weiterhin gatetem letzten Hop). Doku: Consumer-Contract §6.1.
     **De-riskt** Slice B (Supervisor-Autor bekommt den reinen Teil kopierbar+getestet), entfernt den Blocker
     NICHT. Transport (WS/mTLS) + `pokeCli`-Body bleiben out-of-repo. Test-only/additiv, kein Deploy/Secret.
+  - [x] **TL-11 Emit→Decision-Brücke** (2026-07-25): `tl11-wake-emit-to-decision.test.ts` — schließt die
+    Lücke zwischen den drei Test-Ebenen (Emitter-Funktionen · Emitter über echten Socket · Kern gegen
+    hand-gebaute Frames), die die **beiden Enden** nicht verbanden. Fährt **socket-frei** die volle Kette
+    `inbox:new` → echter `registerWakeEmitter` → echter `MeshEventBus` → **dieselbe Serialisierung wie der
+    Draht** (`websocket.ts:266` `JSON.stringify(event)` aus dem `onAny`-Kanal) → `interpretWakeFrame`.
+    Beweist, dass der Kern (#331) korrekt über den **tatsächlich emittierten** Frame entscheidet — ein Drift
+    genau dazwischen wäre sonst überall grün geblieben. +6 Tests, **mutations-verifiziert** (Kern liest
+    Top-Level statt `.data` ⇒ Weld-Test rot); Suite **2071 grün** (145 Files). Doku: Consumer-Contract §6.1.
+    **Test-only**, keine Produktionsdatei berührt, kein Deploy/Secret. De-riskt Slice B weiter; entfernt den
+    Blocker NICHT (Transport + `pokeCli` bleiben out-of-repo).
   - [ ] **TL-11 Slice B** (extern-blocked): Out-of-Repo Agent-Home-Supervisor konsumiert `agent:wake` →
     weckt CLI (`pokeCli`); **Zwei-Peer-Live-Proof** (CLI-Reaktion ohne dazwischenliegenden Poll). Gegen den
     fixen Consumer-Contract (s.o.) **und jetzt das Runbook** baubar. **Echter Blocker:** der letzte Hop
