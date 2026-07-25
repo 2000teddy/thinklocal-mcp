@@ -8,7 +8,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### test(tl12): S5 Read-Surface am HTTP-Rand gehärtet (`GET /api/inbox` re-verifiziert live) (2026-07-25 07:22)
+### docs(reconcile): PR-Nummern-Nachtrag für #332 + #333 + #334 + #335 (2026-07-25 08:16)
+**Doc-only** Post-Merge-Reconcile — dieselbe Selbst-Reconcile-Lücke wie zuvor: eine PR kennt ihre eigene
+Merge-Nummer beim Schreiben noch nicht. Seit #332 (das #330/#331 zog) sind vier weitere PRs gemergt, deren
+eigene Zeilen offen blieben: #332 (`24de23c`), #333 (`b93452b`), #334 (`069b1a9`), #335 (`c9f17b6`) — alle
+`gh`-verifiziert MERGED. COMPLIANCE-Erst-Spalten `(offen, base=main)` → `#NNN` + `(base=main, gemergt)`,
+CHANGES-Überschriften um `, #NNN)` ergänzt — 1:1 in-place. Suite unverändert **2074 grün** (kein `.ts`-Diff).
+`changes/2026-07-25_reconcile-pr-332-335.md`.
+
+### test(tl12): S5 Read-Surface am HTTP-Rand gehärtet (`GET /api/inbox` re-verifiziert live) (2026-07-25 07:22, #335)
 **Test-only** (keine Produktionsdatei berührt, keine Entscheidung; **S6 owner-gated bleibt unberührt**).
 `verifyStoredOrder` ist unit-getestet, aber der **Read-Surface-Endpunkt** `GET /api/inbox` (TL-12 Slice A, S5)
 war für Aufträge nur mittelbar bewacht — nicht das `order`-Surfacing und nicht die Zusage `inbox-api.ts:382`.
@@ -19,7 +27,7 @@ fail-closed-Loop (bösartige Zeile verschluckt die andere nicht). +3 Tests, **mu
 gäbe die gespeicherte Spalte statt live zu re-verifizieren ⇒ rot); Suite **2074 grün** (146 Files). Doku:
 `TL-12-delivery-path.md` §S5, `changes/2026-07-25_tl12-order-read-surface.md`.
 
-### docs(tl11): §6-Referenz-Konsument an die getesteten Primitive angebunden (2026-07-25 06:35)
+### docs(tl11): §6-Referenz-Konsument an die getesteten Primitive angebunden (2026-07-25 06:35, #334)
 **Doc-only** (keine Verhaltens-/Vertragsänderung). Der §6-Referenz-Konsument zeigte die Frame-Interpretation
 als hand-ausgeschriebenes `JSON.parse` + `ev.data?.reason` — genau die Stelle mit der früheren
 `ev.reason`-Fehlklasse (#282). Seit #331 gibt es dafür den getesteten Kern (`wake-consumer-reference.ts`), aber
@@ -28,7 +36,7 @@ umgestellt; der Supervisor vendored den getesteten Kern und schreibt nur noch Tr
 Slice-B-Teile). Damit ist die kopierbare Referenz correct-by-construction. Suite unverändert **2071 grün**.
 `changes/2026-07-25_tl11-ref-loop-primitives.md`.
 
-### test(tl11): Emit→Decision-Brücke (echter Emitter → Draht-Bytes → `interpretWakeFrame`) (2026-07-25 06:28)
+### test(tl11): Emit→Decision-Brücke (echter Emitter → Draht-Bytes → `interpretWakeFrame`) (2026-07-25 06:28, #333)
 **Test-only** (keine Produktionsdatei berührt, keine Entscheidung). Es gab drei TL-11-Wake-Test-Ebenen —
 Emitter-Funktionen, Emitter über echten `/ws`-Socket, Kern gegen hand-gebaute Frames — aber keine verband
 die **beiden Enden**: entscheidet der Kern (#331) korrekt über den Frame, den der Daemon **tatsächlich
@@ -40,7 +48,7 @@ coalesced (2→1) · fail-closed → 0 Frames. +6 Tests, **mutations-verifiziert
 `.data` ⇒ Weld-Test rot); Suite **2071 grün** (145 Files). De-riskt Slice B weiter, entfernt den Blocker
 NICHT. Doku: Consumer-Contract §6.1, `changes/2026-07-25_tl11-wake-emit-to-decision-bridge.md`.
 
-### docs(reconcile): PR-Nummern-Nachtrag für #330 + #331 (2026-07-25 06:21)
+### docs(reconcile): PR-Nummern-Nachtrag für #330 + #331 (2026-07-25 06:21, #332)
 **Doc-only** Post-Merge-Reconcile — dieselbe Selbst-Reconcile-Lücke wie zuvor: eine PR kennt ihre eigene
 Merge-Nummer beim Schreiben noch nicht, also blieb die COMPLIANCE-Erst-Spalte auf `(offen, base=main)`. Der
 ggf. vermutete #328-Nachtrag war **bereits durch #330 erledigt**; offen waren **#330** (`PR-Nummern-Nachtrag
