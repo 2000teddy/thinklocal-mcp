@@ -150,8 +150,12 @@ aus SECURITY.md „Freigabe-Matrix (TL-10)" („die Kanalauswahl wird auf den Ma
    `consensus`-**Tier**-403 im Ingress — einer Komponente **außerhalb** des Routers. Verdrahtet Slice B
    `resolveApproval` vor oder anstelle dieses 403, genügt **eine** Zustimmung für `quorum=3`. Slice B muss
    das explizit sicherstellen und testen (oder D3-Enforcement per CO nachziehen).
-6. **Aus dem #319-CR mitgenommen, im D1-Loader zu erledigen** (beide vorbestehend aus #300, fail-closed in
-   der Wirkung, daher nicht im Prep-Slice gefixt): ein **whitespace-only** Kanalname parst und routet
-   (`length === 0` statt `trim()`) — eine Policy-Zeile, die konfiguriert *aussieht* und stumm ewig
+6. **Aus dem #319-CR mitgenommen** (beide vorbestehend aus #300): ein **whitespace-only** Kanalname parst und
+   routet (`length === 0` statt `trim()`) — eine Policy-Zeile, die konfiguriert *aussieht* und stumm ewig
    verweigert; und `resolveEntry` gibt `decider` **per Referenz** zurück (`readonly` ist nur
    Compile-Zeit) — ein mutierender Audit-Konsument veränderte die geparste Policy für alle Folge-Auflösungen.
+   **✅ ERLEDIGT (2026-07-25):** beide gefixt — der Parser wirft jetzt bei whitespace-only `channel`
+   (`trim().length === 0`, plus `isRoutable`-Defense-in-depth), und `resolveEntry` gibt den `decider` als
+   **frische Kopie** (`cloneDecider`) heraus. Es war **kein** D1-Loader nötig (reine Parser-/Resolver-
+   Korrektheit, `freigabe-matrix.ts` hat weiterhin **0 Runtime-Aufrufer**, kein Verhaltens-Delta, nimmt keinen
+   D1/D3-Gate-Entscheid vorweg). +6 Regressionstests, mutations-verifiziert. Slice B bleibt D1/D3-gated.
