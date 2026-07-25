@@ -8,6 +8,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### test(tl12): S5 Read-Surface am HTTP-Rand gehärtet (`GET /api/inbox` re-verifiziert live) (2026-07-25 07:22)
+**Test-only** (keine Produktionsdatei berührt, keine Entscheidung; **S6 owner-gated bleibt unberührt**).
+`verifyStoredOrder` ist unit-getestet, aber der **Read-Surface-Endpunkt** `GET /api/inbox` (TL-12 Slice A, S5)
+war für Aufträge nur mittelbar bewacht — nicht das `order`-Surfacing und nicht die Zusage `inbox-api.ts:382`.
+Neu `tl12-order-read-surface.test.ts` fährt den Endpunkt via `fastify.inject()` und beweist S5 end-to-end:
+gültiger Auftrag → `is_order`+`verify_verdict=VALID`+Provenienz · **echte On-Disk-Manipulation** (zweite
+SQLite-Verbindung kippt ein `signed_bytes`-Byte) → Live-Re-Verify dreht `VALID→INVALID`, `200` bleibt ·
+fail-closed-Loop (bösartige Zeile verschluckt die andere nicht). +3 Tests, **mutations-verifiziert** (Handler
+gäbe die gespeicherte Spalte statt live zu re-verifizieren ⇒ rot); Suite **2074 grün** (146 Files). Doku:
+`TL-12-delivery-path.md` §S5, `changes/2026-07-25_tl12-order-read-surface.md`.
+
 ### docs(tl11): §6-Referenz-Konsument an die getesteten Primitive angebunden (2026-07-25 06:35)
 **Doc-only** (keine Verhaltens-/Vertragsänderung). Der §6-Referenz-Konsument zeigte die Frame-Interpretation
 als hand-ausgeschriebenes `JSON.parse` + `ev.data?.reason` — genau die Stelle mit der früheren

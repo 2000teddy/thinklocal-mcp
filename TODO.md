@@ -190,6 +190,14 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     (is_order typsystemisch unfälschbar, issuer===sender Relay-Schutz), `verifyStoredOrder` fail-closed,
     Ingest-Wiring + `ORDER_RX`/`ORDER_VERIFY_FAILED`-Audit, **Read-Surface: `GET /api/inbox` re-verifiziert
     live + surfaced `is_order`/`order`-Block** + Tri-State-Marker (`classifyInboundOrder`-Seam: malformed → INVALID+Audit, Reviewer #266). +37 Tests.
+  - [x] **S5 Read-Surface-Härtung am HTTP-Rand** (2026-07-25): `tl12-order-read-surface.test.ts` — schließt
+    die Deckungslücke am Endpunkt selbst: `verifyStoredOrder` war unit-getestet, der **`GET /api/inbox`**-Pfad
+    für Aufträge aber nur mittelbar. Fährt den Endpunkt via `fastify.inject()` und beweist die S5-Zusagen
+    end-to-end: gültiger Auftrag → `is_order`+`verify_verdict=VALID`+Provenienz · **echte On-Disk-Manipulation**
+    (zweite SQLite-Verbindung kippt ein `signed_bytes`-Byte) → Live-Re-Verify dreht `VALID→INVALID`, `200`
+    bleibt · fail-closed-Loop (bösartige Zeile verschluckt die andere nicht). **Mutations-verifiziert** (Handler
+    gäbe die gespeicherte Spalte statt live zu re-verifizieren ⇒ rot). +3 Tests, Suite **2074 grün** (146 Files).
+    **Test-only**, keine Produktionsdatei berührt. **Abgrenzung: S6 (Abarbeitung) NICHT berührt** — owner-gated.
   - [x] **B0-Vorarbeit: kanonischer Keyid** (2026-07-23, #323): `signed-order.ts` `canonicalOrderKeyId` —
     sha256 über die **DER-SPKI-Bytes** statt über den PEM-**Text**. Schließt die im Scoping §3 benannte
     **Format-Malleabilität** von `orderKeyId` (dasselbe Schlüsselmaterial mit CRLF/Leerzeilen ⇒ **anderer**
