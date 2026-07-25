@@ -160,9 +160,12 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     Doku: `TL-10-freigabe-matrix-scoping.md` §7.
   - [ ] **Slice B** (Verdrahtung, **D1-Loader/D3-gated**): Resolver konsultiert die Matrix vor
     `registry.requestApproval` (Env-Flag wie TL-09b); D2 **liegt vor** (`requestApprovalOn`) und die
-    **Komposition liegt jetzt ebenfalls vor** (`requestApprovalViaMatrix`) — offen bleiben: **TOML-Loader
-    für `config/freigabe-matrix.toml` + kuratierte Matrix-Datei** (D1, Policy-Inhalt), **Ingress-Verdrahtung
-    + Env-Flag-Regime** und **D3 Christian-Sign-off** (SECURITY.md-Note liegt vor).
+    **Komposition liegt jetzt ebenfalls vor** (`requestApprovalViaMatrix`) — offen bleiben: **kuratierte
+    Matrix-Datei** (D1, Policy-Inhalt, owner), **Ingress-Verdrahtung + Env-Flag-Regime** und **D3
+    Christian-Sign-off** (SECURITY.md-Note liegt vor). Der **reine TOML-Text→Matrix-Loader** ist als
+    Prep **✅ gebaut** (2026-07-25): `freigabe-matrix-loader.ts` `parseFreigabeMatrixToml(tomlText,
+    knownServers)` — kein fs, keine Verdrahtung, keine Enforcement, **0 Aufrufer** (der fs-Read + die
+    Policy-Datei bleiben der gegatete Teil); delegiert fail-closed an `parseFreigabeMatrix`, +7 Tests.
     **Owner-gated:** Aktivierungs-Flag-Flip.
     ⚠️ **Pflichtpunkt aus dem #319-CR:** der Router darf mit `ctx.tier === 'consensus'` **nie erreicht**
     werden — weil `decider` v1 nicht durchgesetzt wird, ruht der Schutz für `quorum=N` allein auf dem harten
