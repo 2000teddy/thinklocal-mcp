@@ -156,6 +156,17 @@ Konsumenten, keine Runtime-Verdrahtung; dieselbe „Kern-unter-Gate"-Form wie `s
 getesteten Code statt als Pseudocode), er **entfernt** den Blocker nicht. Test-Verankerung:
 `wake-consumer-reference.test.ts` (20 Tests, mutations-verifiziert am Wire-Shape-Guard).
 
+**Emit→Decision-Brücke (`tl11-wake-emit-to-decision.test.ts`, 6 Tests):** die drei Test-Ebenen (Emitter-
+Funktionen · Emitter über echten `/ws`-Socket · Kern gegen hand-gebaute Frames) verbanden die **beiden
+Enden** nicht. Diese Brücke fährt die volle Kette **socket-frei**: `inbox:new` → echter
+`registerWakeEmitter` → echter `MeshEventBus` (`{type,timestamp,data}`-Hülle) → **dieselbe Serialisierung
+wie der Draht** (`websocket.ts:266` `JSON.stringify(event)` aus dem `onAny`-Kanal) → `interpretWakeFrame`.
+Sie beweist: der Kern entscheidet korrekt über den Frame, den der Daemon **tatsächlich emittiert** — ein
+Drift genau dazwischen (Payload flach statt unter `.data`; Bus-Hülle geändert; Inhalt leckt) wäre in den
+anderen drei Ebenen grün geblieben. **Mutations-verifiziert** (Kern liest Top-Level statt `.data` ⇒ der
+Weld-Test rot). Deckt: adressiert+live+SPIFFE → 1 Frame poket korrekt · `.data`-Hülle · Zero-Content durch
+die ganze Kette · coalesced (2→1) · fail-closed ohne SPIFFE / Ziel nicht live → 0 Frames.
+
 ## 7. Test-Verankerung (jede Garantie ist im Repo bewacht)
 
 | Garantie (§) | Test |
