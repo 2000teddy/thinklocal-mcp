@@ -8,6 +8,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(tl10): reiner TOML-Text→Matrix-Loader `parseFreigabeMatrixToml` (D1-Prep, 0 Aufrufer) (2026-07-25 13:05)
+**Code+Test** (reiner Kern, 0 Aufrufer, kein Runtime-Delta). **Gate-neutral:** nimmt keinen D1/D3-Entscheid
+vorweg — Form wie #317/#319. D1 (§5-CO) legt die Quelle `config/freigabe-matrix.toml` fest; hier ist der
+**mechanische Format-Schritt** gebaut: neu `freigabe-matrix-loader.ts` `parseFreigabeMatrixToml(tomlText,
+knownServers)` parst **TOML-Text** (kein fs) via `@iarna/toml`, wrappt TOML-Syntaxfehler fail-closed in
+`FreigabeMatrixError` und delegiert die volle §2.2-Validierung an `parseFreigabeMatrix` (leer ⇒ leere Matrix,
+D5). **Weiterhin gated:** fs-Read, die kuratierte Policy-Datei (owner), Ingress-Verdrahtung + Env-Flag,
+D3-Sign-off. +7 Tests, Suite **2087 grün** (147 Files). `changes/2026-07-25_tl10-d1-toml-loader.md`.
+
 ### fix(tl10): zwei #300/#319-CR-Altlasten im Slice-A-Parser (whitespace-Kanal, decider-Aliasing) (2026-07-25 12:09)
 **Bug-Fix** (reine Parser-/Resolver-Korrektheit in `freigabe-matrix.ts`, TL-10 Slice A). **Kein Gate-Vorgriff:**
 `freigabe-matrix.ts` hat **0 Runtime-Aufrufer** ⇒ kein Verhaltens-Delta; die Fixes betreffen Parser-Korrektheit,

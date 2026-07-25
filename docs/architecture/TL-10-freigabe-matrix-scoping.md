@@ -139,8 +139,11 @@ aus SECURITY.md „Freigabe-Matrix (TL-10)" („die Kanalauswahl wird auf den Ma
 
 ### 7.2 Was danach für Slice B noch fehlt (unverändert gated)
 
-1. **TOML-Loader** für `config/freigabe-matrix.toml` (D1) — I/O, plus die kuratierte, reviewte Matrix-Datei
-   selbst (ihr Inhalt ist Sicherheitspolicy).
+1. **TOML-Loader** für `config/freigabe-matrix.toml` (D1). **Teilweise erledigt (2026-07-25):** der **reine
+   Text→Matrix-Schritt** ist als Prep gebaut — `freigabe-matrix-loader.ts` `parseFreigabeMatrixToml(tomlText,
+   knownServers)` (kein fs, 0 Aufrufer, fail-closed via `parseFreigabeMatrix`, +7 Tests). **Weiterhin gated:**
+   das **fs-Lesen** der Datei (Verdrahtung) und die **kuratierte, reviewte Matrix-Datei** selbst (ihr Inhalt
+   ist Sicherheitspolicy, owner).
 2. **Verdrahtung** am `resolveApproval`-Seam (`mcp-ingress.ts`) inkl. **Env-Flag-Regime** wie TL-09b
    (Default AUS, lauter Startup-Warn bei „Flag an, Matrix leer/fehlt").
 3. **D3-Owner-Sign-off (Christian)** — bewusste Bestätigung, dass `human:<id>` v1 nicht durchgesetzt wird.
