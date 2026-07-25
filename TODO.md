@@ -330,6 +330,12 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     Top-Level statt `.data` ⇒ Weld-Test rot); Suite **2071 grün** (145 Files). Doku: Consumer-Contract §6.1.
     **Test-only**, keine Produktionsdatei berührt, kein Deploy/Secret. De-riskt Slice B weiter; entfernt den
     Blocker NICHT (Transport + `pokeCli` bleiben out-of-repo).
+  - [x] **TL-11 §6-Referenz an getestete Primitive gebunden** (2026-07-25): der §6-Referenz-Konsument nutzt
+    jetzt `interpretWakeFrame`/`coldStartSweepDecision` (getestet, #331) statt hand-ausgeschriebenem
+    `ev.data?.reason`-Parsing — die kopierbare Referenz ist damit correct-by-construction (die frühere
+    `ev.reason`-Fehlklasse #282 kann nicht nachgebaut werden). Der Supervisor vendored den Kern und schreibt
+    nur noch Transport + `pokeCli` (die zwei Slice-B-Teile). **Doc-only**, keine Verhaltensänderung, Suite
+    unverändert **2071 grün**. Doku: Consumer-Contract §6.
   - [ ] **TL-11 Slice B** (extern-blocked): Out-of-Repo Agent-Home-Supervisor konsumiert `agent:wake` →
     weckt CLI (`pokeCli`); **Zwei-Peer-Live-Proof** (CLI-Reaktion ohne dazwischenliegenden Poll). Gegen den
     fixen Consumer-Contract (s.o.) **und jetzt das Runbook** baubar. **Echter Blocker:** der letzte Hop

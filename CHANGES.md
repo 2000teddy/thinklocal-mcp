@@ -8,6 +8,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs(tl11): §6-Referenz-Konsument an die getesteten Primitive angebunden (2026-07-25 06:35)
+**Doc-only** (keine Verhaltens-/Vertragsänderung). Der §6-Referenz-Konsument zeigte die Frame-Interpretation
+als hand-ausgeschriebenes `JSON.parse` + `ev.data?.reason` — genau die Stelle mit der früheren
+`ev.reason`-Fehlklasse (#282). Seit #331 gibt es dafür den getesteten Kern (`wake-consumer-reference.ts`), aber
+die kopierbare Referenz nutzte ihn nicht. §6-Pseudocode auf `interpretWakeFrame`/`coldStartSweepDecision`
+umgestellt; der Supervisor vendored den getesteten Kern und schreibt nur noch Transport + `pokeCli` (die zwei
+Slice-B-Teile). Damit ist die kopierbare Referenz correct-by-construction. Suite unverändert **2071 grün**.
+`changes/2026-07-25_tl11-ref-loop-primitives.md`.
+
 ### test(tl11): Emit→Decision-Brücke (echter Emitter → Draht-Bytes → `interpretWakeFrame`) (2026-07-25 06:28)
 **Test-only** (keine Produktionsdatei berührt, keine Entscheidung). Es gab drei TL-11-Wake-Test-Ebenen —
 Emitter-Funktionen, Emitter über echten `/ws`-Socket, Kern gegen hand-gebaute Frames — aber keine verband

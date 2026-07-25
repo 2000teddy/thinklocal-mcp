@@ -113,25 +113,38 @@ Ein korrekter Supervisor ist auch **ohne** jedes Wake funktional (nur langsamer)
 
 ## 6. Referenz-Konsument (MVP-Shape, Pseudocode)
 
+Die **Frame-Interpretation** (poke ja/nein, Payload lesen) ist bewusst **nicht** von Hand ausgeschrieben,
+sondern die repo-**getesteten** Primitive `interpretWakeFrame` / `coldStartSweepDecision` aus
+`wake-consumer-reference.ts` (§6.1). Der Supervisor vendored/kopiert dieses Modul und schreibt nur noch den
+**Transport** (WS/mTLS/Reconnect) und `pokeCli` — genau die zwei out-of-repo/gateten Teile. So kann die
+frühere §6-Fehlklasse (`ev.reason` statt `ev.data.reason`) gar nicht erst nachgebaut werden.
+
 ```ts
 // Out-of-Repo (Agent-Home-Supervisor). Repo-ready SHAPE, keine Zustellgarantie-Annahme.
+import { interpretWakeFrame, coldStartSweepDecision } from './wake-consumer-reference.js'; // getesteter Kern (§6.1)
+
 const SELF = 'spiffe://thinklocal/node/<PeerID>';            // eigene Instanz-SPIFFE
 const url  = `wss://127.0.0.1:9440/ws?subscribe=agent:wake&agent=${encodeURIComponent(SELF)}`;
 
 function connect() {
   const ws = new WebSocket(url, { cert, key, ca });          // mTLS-Pflicht (§2)
-  ws.on('open',  () => pokeCli('cold-start sweep'));         // §5: beim Connect IMMER einmal pollen
+  ws.on('open', () => {
+    const d = coldStartSweepDecision();                      // §5: beim Connect IMMER einmal pollen
+    if (d.poke) pokeCli(d.reason);
+  });
   ws.on('message', (raw) => {
-    const ev = JSON.parse(raw);
-    if (ev.type === 'agent:wake') pokeCli(ev.data?.reason);  // Zero-Content → nur Trigger (Payload unter .data, §4)
+    const d = interpretWakeFrame(raw);                       // liest .data (§4), tolerant, wirft nie, §3-Typfilter
+    if (d.poke) pokeCli(d.reason);                           // Zero-Content → nur Trigger; sonst ignorieren
   });
   ws.on('close', () => setTimeout(connect, backoff()));      // Reconnect; die Lücke deckt der Sweep
 }
 // pokeCli(): weckt den lokalen CLI-Agenten → dieser liest GET /api/inbox (verifiziert Orders live).
 ```
 
-Der einzige nicht-triviale Teil — `pokeCli()` (wie genau wird der CLI-Prozess geweckt) — ist die
-**Out-of-Repo-Supervisor-Entscheidung** und der Gegenstand von TL-11 Slice B (§8).
+Die zwei nicht-trivialen Teile — der **Transport** (WS/mTLS/Reconnect) und `pokeCli()` (wie genau wird der
+CLI-Prozess geweckt) — sind die **Out-of-Repo-Supervisor-Entscheidung** und der Gegenstand von TL-11 Slice B
+(§8). Die Interpretation dazwischen ist mit den o.g. Primitiven **repo-getestet** (§6.1) und
+mutations-verifiziert — der Supervisor-Autor erbt sie, statt sie neu (und ggf. neu falsch) zu schreiben.
 
 ### 6.1 Repo-getesteter Kern der Frame-Interpretation (`wake-consumer-reference.ts`)
 
