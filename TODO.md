@@ -163,7 +163,7 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     **Komposition liegt jetzt ebenfalls vor** (`requestApprovalViaMatrix`) — offen bleiben: **kuratierte
     Matrix-Datei** (D1, Policy-Inhalt, owner), **Ingress-Verdrahtung + Env-Flag-Regime** und **D3
     Christian-Sign-off** (SECURITY.md-Note liegt vor). Der **reine TOML-Text→Matrix-Loader** ist als
-    Prep **✅ gebaut** (2026-07-25): `freigabe-matrix-loader.ts` `parseFreigabeMatrixToml(tomlText,
+    Prep **✅ gebaut** (2026-07-25, #338): `freigabe-matrix-loader.ts` `parseFreigabeMatrixToml(tomlText,
     knownServers)` — kein fs, keine Verdrahtung, keine Enforcement, **0 Aufrufer** (der fs-Read + die
     Policy-Datei bleiben der gegatete Teil); delegiert fail-closed an `parseFreigabeMatrix`, +7 Tests.
     **Owner-gated:** Aktivierungs-Flag-Flip.
@@ -172,7 +172,7 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     `consensus`-Tier-403 im Ingress. Wird `resolveApproval` davor/anstelle verdrahtet, genügt **eine**
     Zustimmung für `quorum=3`. Sicherstellen + testen (oder D3-Enforcement per CO nachziehen).
     Die zwei #300-Altlasten (whitespace-only Kanalname parst; `resolveEntry` gibt `decider` per Referenz)
-    sind **✅ erledigt (2026-07-25)** — reine Parser-/Resolver-Korrektheit, kein D1-Loader nötig, 0
+    sind **✅ erledigt (2026-07-25, #337)** — reine Parser-/Resolver-Korrektheit, kein D1-Loader nötig, 0
     Runtime-Aufrufer, kein Gate-Vorgriff; +6 Regressionstests. Siehe `TL-10-freigabe-matrix-scoping.md` §7.2.
 
 ### P1 — Identität, Autonomie, Robustheit
@@ -194,7 +194,7 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     (is_order typsystemisch unfälschbar, issuer===sender Relay-Schutz), `verifyStoredOrder` fail-closed,
     Ingest-Wiring + `ORDER_RX`/`ORDER_VERIFY_FAILED`-Audit, **Read-Surface: `GET /api/inbox` re-verifiziert
     live + surfaced `is_order`/`order`-Block** + Tri-State-Marker (`classifyInboundOrder`-Seam: malformed → INVALID+Audit, Reviewer #266). +37 Tests.
-  - [x] **S5 Read-Surface-Härtung am HTTP-Rand** (2026-07-25): `tl12-order-read-surface.test.ts` — schließt
+  - [x] **S5 Read-Surface-Härtung am HTTP-Rand** (2026-07-25, #335): `tl12-order-read-surface.test.ts` — schließt
     die Deckungslücke am Endpunkt selbst: `verifyStoredOrder` war unit-getestet, der **`GET /api/inbox`**-Pfad
     für Aufträge aber nur mittelbar. Fährt den Endpunkt via `fastify.inject()` und beweist die S5-Zusagen
     end-to-end: gültiger Auftrag → `is_order`+`verify_verdict=VALID`+Provenienz · **echte On-Disk-Manipulation**
@@ -323,7 +323,7 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     loest aus. Fail-safe gegen werfende Registry/Bus/Zaehler, fail-closed ohne SPIFFE. +18 Tests
     (inkl. Integration gegen die echte `AgentRegistry`), Suite **2045 gruen**. Doku: ADR-047 §3/§4,
     Consumer-Contract §7.3. **Owner-gated bleibt nur der Flag-Flip** in einer laufenden Instanz.
-  - [x] **TL-11 konsumentenseitiger Wake-Kern** (2026-07-24): `wake-consumer-reference.ts` —
+  - [x] **TL-11 konsumentenseitiger Wake-Kern** (2026-07-24, #331): `wake-consumer-reference.ts` —
     `interpretWakeFrame` (rein, fail-safe, **0 Aufrufer**) + `coldStartSweepDecision`. Zieht den **einen
     nicht-transportgebundenen** Teil des §6-Pseudocodes als getesteten Code heraus: poke ja/nein, Payload
     **ausschließlich unter `.data`** (§4 Wire-Shape — pinnt konsumentenseitig die frühere `ev.reason`-statt-
@@ -332,7 +332,7 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     wie `sweep-targets.ts` (Kern unter weiterhin gatetem letzten Hop). Doku: Consumer-Contract §6.1.
     **De-riskt** Slice B (Supervisor-Autor bekommt den reinen Teil kopierbar+getestet), entfernt den Blocker
     NICHT. Transport (WS/mTLS) + `pokeCli`-Body bleiben out-of-repo. Test-only/additiv, kein Deploy/Secret.
-  - [x] **TL-11 Emit→Decision-Brücke** (2026-07-25): `tl11-wake-emit-to-decision.test.ts` — schließt die
+  - [x] **TL-11 Emit→Decision-Brücke** (2026-07-25, #333): `tl11-wake-emit-to-decision.test.ts` — schließt die
     Lücke zwischen den drei Test-Ebenen (Emitter-Funktionen · Emitter über echten Socket · Kern gegen
     hand-gebaute Frames), die die **beiden Enden** nicht verbanden. Fährt **socket-frei** die volle Kette
     `inbox:new` → echter `registerWakeEmitter` → echter `MeshEventBus` → **dieselbe Serialisierung wie der
@@ -342,7 +342,7 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     Top-Level statt `.data` ⇒ Weld-Test rot); Suite **2071 grün** (145 Files). Doku: Consumer-Contract §6.1.
     **Test-only**, keine Produktionsdatei berührt, kein Deploy/Secret. De-riskt Slice B weiter; entfernt den
     Blocker NICHT (Transport + `pokeCli` bleiben out-of-repo).
-  - [x] **TL-11 §6-Referenz an getestete Primitive gebunden** (2026-07-25): der §6-Referenz-Konsument nutzt
+  - [x] **TL-11 §6-Referenz an getestete Primitive gebunden** (2026-07-25, #334): der §6-Referenz-Konsument nutzt
     jetzt `interpretWakeFrame`/`coldStartSweepDecision` (getestet, #331) statt hand-ausgeschriebenem
     `ev.data?.reason`-Parsing — die kopierbare Referenz ist damit correct-by-construction (die frühere
     `ev.reason`-Fehlklasse #282 kann nicht nachgebaut werden). Der Supervisor vendored den Kern und schreibt

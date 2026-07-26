@@ -8,7 +8,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### docs(reconcile): PR-Nummern-Nachtrag für #336 + #337 + #338 (2026-07-25 14:03)
+### docs(reconcile): #339-Nachtrag + TODO-PR-Nummern-Aufholung (#331 → #339) (2026-07-26 07:16)
+**Doc-only** Post-Merge-Reconcile + Doku-Hygiene. Zwei Lücken nach der Serie #331–#339: (1) #339 (Reconcile
+für #336–#338) kannte seine eigene Nummer nicht ⇒ COMPLIANCE-Erst-Spalte + CHANGES-Überschrift nachgezogen
+(→ `#339`); (2) **`TODO.md` hing >5 PRs zurück** — die Slices #331–#338 standen mit Datum, aber ohne
+Merge-PR-Nummer; COMPLIANCE/CHANGES trugen sie bereits, TODO nicht (Doku-Kanon driftete gegeneinander).
+TODO-Einträge nachgezogen: #331 (Wake-Kern), #333 (Emit→Decision-Brücke), #334 (§6-Referenz), #335 (S5
+Read-Surface), #337 (Slice-A-Altlasten), #338 (D1-Loader). Danach spiegeln COMPLIANCE/CHANGES/TODO dieselben
+Nummern. Suite unverändert **2087 grün** (kein `.ts`-Diff). `changes/2026-07-26_reconcile-pr-339-todo-catchup.md`.
+
+### docs(reconcile): PR-Nummern-Nachtrag für #336 + #337 + #338 (2026-07-25 14:03, #339)
 **Doc-only** Post-Merge-Reconcile — dieselbe Selbst-Reconcile-Lücke wie zuvor: eine PR kennt ihre eigene
 Merge-Nummer beim Schreiben noch nicht. Seit #336 (zog #332–#335) sind drei weitere PRs gemergt, deren eigene
 Zeilen offen blieben: #336 (`668b700`), #337 (`16de282`), #338 (`99e4d3d`) — alle `gh`-verifiziert MERGED.
