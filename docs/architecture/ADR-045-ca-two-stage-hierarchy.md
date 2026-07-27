@@ -109,6 +109,14 @@ Aus `TL-14a-blocker-AB-grounding.md`; beide Modelle stuften sie als **blockieren
 - **Offen (Owner):** exakte D3-Intermediate-Laufzeit (1–3 J). **Offen (out of scope):** Revocation-Infra —
   heute keine (CRL/OCSP); sonnet-Vorschlag: gepinnte Fingerprint-Denylist statt vollem CRL/OCSP (eigener
   Beschluss, verschärft das D3-Laufzeit-Risiko solange sie fehlt).
+  - **Klassifikations-Hinweis (2026-07-27, code-gegroundet — entscheidet nichts):** der Consensus
+    (`TL-14a-consensus-result-D1-D6.md` §C) stufte **A–C alle drei blockierend** ein; diese ADR führt aber
+    nur **A/B** unter §74 „Zwingende Vorbedingungen (blockierend)" und behandelt **C hier als
+    out-of-scope/Fast-Follow**. Diese Herabstufung ist eine **bewusste, aber noch nicht owner-ratifizierte**
+    Abweichung vom Consensus-Wortlaut. Ob C ein TL-14b-**Blocker** oder ein Fast-Follow ist, ist damit der
+    **eine offene C-Punkt** (CO/Owner) — inkl. Ist-Zustand (`crl.ts` = bereits gebaute, aber 0-Aufrufer-
+    Fingerprint-Denylist) gegroundet in `TL-14a-blocker-C-grounding.md` §2. Der Hinweis macht die Abweichung
+    in der ADR **sichtbar statt still**; er trifft keine C-Entscheidung.
 
 ## Verworfene Alternativen
 - **Gekoppelter Domain-Flip** (D1-Gegenoption) — zwei Variablen/Fenster, schlechte Bisektierbarkeit.

@@ -491,6 +491,11 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
       einen **Widerspruch** auf: Consensus stuft A–C blockierend ein, ADR-045 §74 führt nur A/B. **Offen
       (CO/Owner):** Form (Denylist vs CRL/OCSP), `crl.ts` verdrahten vs Neubau, C-Blocking-Status vs ADR-045,
       Distribution/Pinning. Rein Grounding — nimmt die C-Entscheidung NICHT vorweg.
+      - [x] **ADR-045-Klassifikations-Hinweis** (2026-07-27): der in der C-Note aufgedeckte Widerspruch stand
+        bislang **nur** extern — ADR-045 selbst führte C stumm als „out of scope" (§100), obwohl der Consensus
+        A–C blockierend einstuft. Neu: ein **Klassifikations-Hinweis in ADR-045 §100** macht die (bewusste, aber
+        **nicht owner-ratifizierte**) Herabstufung sichtbar + verweist auf die C-Grounding-§2. **Doc-only, kein
+        Beschluss** — trifft keine C-Entscheidung, nimmt kein Gate vorweg; macht den Ist-Stand nur ehrlich.
   - [ ] **Runbook-Volltext + Zeremonie-Skripte** (nach Sign-off/ADR-045, Papier+Skripte, non-gated).
 - [ ] **[v5.1] TL-14b (≈4 h, ⛔ Termin)** CA-Umzug durchführen (mit Christian). ↔ vgl. Decision-7
   Trust-Domain-Flip (KW30).
