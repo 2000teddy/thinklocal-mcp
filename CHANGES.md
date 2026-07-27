@@ -20,6 +20,20 @@ App-Ebene laufen; macht ADR-045s „D2 kosmetisch/ungetestet" regressionsfest �
 komplett** (B fertig, #297). +4 Tests, Suite **2097 grün** (149 Files).
 `changes/2026-07-27_tl14a-A-transport-pathlen.md`.
 
+### docs(tl12): B1-Reihenfolge-Pflicht — Keyid-Backfill VOR der `UNIQUE`-Bedingung (2026-07-27 07:50)
+**Reine TODO-Notiz** (Befund aus dem #323-Review, kein Code/Test/Schema/Migration). Verankert in `TODO.md`
+(neuer Unterpunkt direkt nach der B1-Vorarbeit #324) eine harte Reihenfolge-Bedingung für TL-12 **B1**: die
+Spalte `signer_keyid` wird **heute schon** mit dem format-malleablen **PEM-Hash** aus `orderKeyId`
+(`index.ts:876`) befüllt, persistiert (`agent-inbox.ts:315/336`) und über `idx_messages_order`
+(`agent-inbox.ts:188/219`) indiziert. Legt B1 die `UNIQUE(signer_keyid, order_nonce)`-Bedingung auf den
+**kanonischen** DER-SPKI-Keyid, **ohne** die Altzeilen vorher zu backfillen, kollidiert ein wiedereingespielter
+Alt-Auftrag (Altzeile = PEM-Hash) nicht mit seiner neuen kanonischen Zeile → **Übergangsloch im Replay-Schutz**.
+Der Backfill ist ohne Neu-Sammeln möglich, weil `signer_pubkey` unveränderlich in derselben Zeile liegt
+(`agent-inbox.ts:73`, trust-on-first-verify) → kanonischer Keyid je Altzeile aus `signer_pubkey` nachrechenbar
+(`canonicalOrderKeyId`; `null` ⇒ Zeile als nicht-backfillbar markieren, kein PEM-Fallback). **Kein Schema-Eingriff,
+keine Migration** in diesem Eintrag — Umsetzung gehört in den gateten B0/B1-Slice; Slice B bleibt vollständig gated.
+`changes/2026-07-27_tl12-b1-backfill-before-unique.md`.
+
 ### docs+test(tl14a): Auflage C (Revocation) gegroundet + `crl.ts`-Charakterisierung (2026-07-27 06:47)
 **Grounding-Doc + Charakterisierungs-Test** (non-gated Vorbedingungs-Lane, keine Verdrahtung/Entscheidung).
 Auflage C („keine Revocation-Infra", Consensus **blockierend**) war die **einzige** der drei blockierenden
@@ -248,7 +262,7 @@ Slice B/B0:** keine der vier §9-Christian-Entscheidungen wird berührt (Owner-O
 ausführbare Startmenge, Revocation-Autorität), es entsteht kein Profil/Config/Schema/Ledger/Denylist und
 kein Execute-Pfad. **Der reproduzierte Defekt:** `orderKeyId` hasht die PEM-**Textdarstellung**, ist also
 format-malleabel — dasselbe Schlüsselmaterial mit CRLF + Leerzeilen ergibt einen **anderen** Keyid, obwohl
-die DER-SPKI-Bytes byte-identisch sind. Heute folgenlos (nur Anzeige/Audit, `index.ts:875`), aber sobald
+die DER-SPKI-Bytes byte-identisch sind. Heute folgenlos (nur Anzeige/Audit, `index.ts:876`), aber sobald
 der Keyid die `UNIQUE(signer_keyid, order_nonce)`-Spalte des Idempotenz-Ledgers (B1) **oder** den
 Revocation-Join-Key (B2b) bildet, ist er ein **Umgehungspfad**: bloßes Umformatieren des mitgelieferten PEM
 erzeugt eine neue Ledger-Zeile bzw. umgeht eine Sperre — **ohne** die Signatur zu berühren. Genau deshalb
