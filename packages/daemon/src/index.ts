@@ -5,8 +5,9 @@ import { Agent as UndiciAgent, fetch } from 'undici';
 import { loadConfig } from './config.js';
 import { createLogger } from './logger.js';
 import { loadOrCreateIdentity } from './identity.js';
-import { loadOrCreateTlsBundle, getCertDaysLeft, getCaCertDaysLeft, extractSpiffeUris, verifyPeerCert, selectTrustDistributionCa, type NodeCertBundle } from './tls.js';
+import { loadOrCreateTlsBundle, extractSpiffeUris, verifyPeerCert, selectTrustDistributionCa, type NodeCertBundle } from './tls.js';
 import { startCertExpiryMonitor } from './cert-expiry-monitor.js';
+import { buildCertExpiryMonitorSpecs } from './cert-monitor-wiring.js';
 import { readRamUsedPercent, readResourceMetrics } from './resource-metrics.js';
 import { existsSync as fsExistsSync } from 'node:fs';
 import { AuditLog } from './audit.js';
@@ -1665,38 +1666,16 @@ async function main(): Promise<void> {
   // beim Start) und alarmiert bei <30 d (warn) / ≤7 d (critical) via Log +
   // signiertem Audit-Event + EventBus. Reissue selbst passiert weiterhin erst
   // beim Neustart (RE-CHECK-Verdikt, PR #212).
-  const certExpiryTimer = startCertExpiryMonitor(
-    {
-      getDaysLeft: () => getCertDaysLeft(config.daemon.data_dir),
-      subject: 'Node',
-      thresholds: {
-        warnDays: config.cert.expiry_warn_days,
-        criticalDays: config.cert.expiry_critical_days,
-      },
-      log,
-      audit,
-      eventBus,
-    },
-    config.cert.expiry_check_interval_ms,
-  );
-
-  // ADR-045 Vorbedingung B (TL-14a): zweiter Monitor für die CA/das Intermediate
-  // (`tls/ca.crt.pem`). Der Node-Monitor oben sah die CA nie → eine ablaufende CA
-  // lief lautlos ab (Ausstellungs-Tod). Gleiche Schwellen/Intervall, subject 'CA'
-  // (accurate Log-/Audit-Attribution). Reissue bleibt Start-gebunden (own-CA).
-  const caCertExpiryTimer = startCertExpiryMonitor(
-    {
-      getDaysLeft: () => getCaCertDaysLeft(config.daemon.data_dir),
-      subject: 'CA',
-      thresholds: {
-        warnDays: config.cert.expiry_warn_days,
-        criticalDays: config.cert.expiry_critical_days,
-      },
-      log,
-      audit,
-      eventBus,
-    },
-    config.cert.expiry_check_interval_ms,
+  // ADR-045 Vorbedingung B (TL-14a): der Daemon überwacht BEIDE Cert-Quellen getrennt — Node-Leaf
+  // (`node.crt.pem`, subject 'Node') UND CA/Intermediate (`ca.crt.pem`, subject 'CA'; der Node-Monitor sah
+  // die CA nie → Ausstellungs-Tod lief lautlos). Die Quell-/Subject-Auswahl liegt in der reinen
+  // `buildCertExpiryMonitorSpecs` (regressionsfest getestet, `cert-monitor-wiring.test.ts`); hier nur noch
+  // Runtime-Deps + Start. Reissue bleibt Start-gebunden (own-CA).
+  const certExpiryTimers = buildCertExpiryMonitorSpecs(config.daemon.data_dir, {
+    warnDays: config.cert.expiry_warn_days,
+    criticalDays: config.cert.expiry_critical_days,
+  }).map((spec) =>
+    startCertExpiryMonitor({ ...spec, log, audit, eventBus }, config.cert.expiry_check_interval_ms),
   );
 
   // 12. Graceful Shutdown
@@ -1705,8 +1684,7 @@ async function main(): Promise<void> {
     stopWakeSweep = null;
     log.info({ signal }, 'Shutdown eingeleitet...');
     clearInterval(storageMaintenanceTimer); // ADR-030 (T1.3)
-    clearInterval(certExpiryTimer); // T2.1
-    clearInterval(caCertExpiryTimer); // ADR-045 Vorbedingung B (CA-Expiry-Monitor)
+    certExpiryTimers.forEach((t) => clearInterval(t)); // T2.1 (Node) + ADR-045 Vorbedingung B (CA/Intermediate)
     clearInterval(resourceRefreshTimer); // T2.4
     if (mdnsRequeryTimer) clearInterval(mdnsRequeryTimer); // ADR-035 A4
     if (peerCacheFlushTimer) clearInterval(peerCacheFlushTimer); // ADR-035 A1

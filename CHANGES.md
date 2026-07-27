@@ -8,6 +8,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### refactor+test(tl14a): Vorbedingung-B-Monitor-Verdrahtung regressionsfest (2026-07-27 07:51)
+**Behavior-preserving Refactor + Test** (kein Verhaltens-Delta; gate-frei/D3-unabhängig). **Kein Doppel zu
+#297:** die B-Funktionsteile (`getCaCertDaysLeft` + `subject`-Label) sind seit #297 gemergt; dies schließt die
+**ungetestete Verdrahtung** — die Monitor-Auswahl lag inline in `index.ts` (ein „beide lesen `node.crt.pem`"
+oder ein weggefallener CA-Monitor wäre unsichtbar). Neu reine `cert-monitor-wiring.ts`
+`buildCertExpiryMonitorSpecs` (Node/CA getrennte Quellen+subjects); `index.ts` mapt darüber
+(verhaltensbewahrend, Shutdown räumt beide). +4 Tests (`cert-monitor-wiring.test.ts`: 2 Specs subjects
+`[Node,CA]`, **getrennte Quellen bewiesen**, kein I/O beim Bauen), Suite **2101 grün** (150 Files) — der
+Refactor brach keine Test. ⇒ Vorbedingung B code-seitig **komplett + verdrahtungsfest**.
+`changes/2026-07-27_tl14a-B-monitor-wiring.md`.
+
 ### test(tl14a): Vorbedingung A — pathLen am Transport (echter mTLS-Handshake) (2026-07-27 07:19)
 **Test-only** (non-gated Vorbedingungs-Lane, D3-unabhängig; keine Produktionsänderung). ADR-045 §77 verlangte
 einen pathLen-Test **auf der Transport-Ebene** — App-Ebene war gedeckt (`verifyPeerCertChain`, #298/#299/#311),
