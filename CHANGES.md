@@ -8,6 +8,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs(reconcile): PR-Nummern-Nachtrag für #340 (2026-07-27 08:16)
+**Doc-only** Post-Merge-Reconcile (laut Reconcile-Bericht 2026-07-27 03:30). #340 (`docs(reconcile):
+#339-Nachtrag + TODO-PR-Nummern-Aufholung`, `MERGED` `53dfa2f` `2026-07-26T05:20:35Z`) kannte seine eigene
+Merge-Nummer beim Schreiben nicht ⇒ COMPLIANCE-Erst-Spalte `(offen, base=main)` → `#340` + `(base=main,
+gemergt)`, CHANGES-Überschrift → `…, #340)`. Reine Nachpflege, keine neue Erfindung. Suite unverändert
+**2101 grün** (kein `.ts`-Diff). `changes/2026-07-27_reconcile-pr-340.md`.
+
 ### refactor+test(tl14a): Vorbedingung-B-Monitor-Verdrahtung regressionsfest (2026-07-27 07:51)
 **Behavior-preserving Refactor + Test** (kein Verhaltens-Delta; gate-frei/D3-unabhängig). **Kein Doppel zu
 #297:** die B-Funktionsteile (`getCaCertDaysLeft` + `subject`-Label) sind seit #297 gemergt; dies schließt die
@@ -57,7 +64,7 @@ Ist-Verhalten (+6, keine Verdrahtung). Offen (CO/Owner): Denylist vs CRL/OCSP ·
 C-Blocking-Status vs ADR-045 · Distribution. Suite **2093 grün** (148 Files).
 `changes/2026-07-27_tl14a-blocker-C-grounding.md`.
 
-### docs(reconcile): #339-Nachtrag + TODO-PR-Nummern-Aufholung (#331 → #339) (2026-07-26 07:16)
+### docs(reconcile): #339-Nachtrag + TODO-PR-Nummern-Aufholung (#331 → #339) (2026-07-26 07:16, #340)
 **Doc-only** Post-Merge-Reconcile + Doku-Hygiene. Zwei Lücken nach der Serie #331–#339: (1) #339 (Reconcile
 für #336–#338) kannte seine eigene Nummer nicht ⇒ COMPLIANCE-Erst-Spalte + CHANGES-Überschrift nachgezogen
 (→ `#339`); (2) **`TODO.md` hing >5 PRs zurück** — die Slices #331–#338 standen mit Datum, aber ohne
