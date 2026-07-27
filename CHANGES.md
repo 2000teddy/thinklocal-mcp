@@ -8,6 +8,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs+test(tl14a): Auflage C (Revocation) gegroundet + `crl.ts`-Charakterisierung (2026-07-27 06:47)
+**Grounding-Doc + Charakterisierungs-Test** (non-gated Vorbedingungs-Lane, keine Verdrahtung/Entscheidung).
+Auflage C („keine Revocation-Infra", Consensus **blockierend**) war die **einzige** der drei blockierenden
+Auflagen ohne Grounding (A/B haben eins + gemergte Slices). Neu `TL-14a-blocker-C-grounding.md`: `crl.ts`
+(`CertificateRevocationList`, `revoke`/`isRevoked`, datei-persistiert) **existiert bereits** als genau die vom
+Consensus vorgeschlagene gepinnte Fingerprint-Denylist, ist aber **0-Aufrufer-Dead-Code** + war ungetestet
+(Kopf behauptet Verdrahtung, die fehlt); Hook-Kandidat `agent-card.ts:311,353`. Aufgedeckter Widerspruch:
+Consensus stuft A–C blockierend ein, **ADR-045 §74 führt nur A/B**. Neu `crl.test.ts` charakterisiert das
+Ist-Verhalten (+6, keine Verdrahtung). Offen (CO/Owner): Denylist vs CRL/OCSP · verdrahten vs Neubau ·
+C-Blocking-Status vs ADR-045 · Distribution. Suite **2093 grün** (148 Files).
+`changes/2026-07-27_tl14a-blocker-C-grounding.md`.
+
 ### docs(reconcile): #339-Nachtrag + TODO-PR-Nummern-Aufholung (#331 → #339) (2026-07-26 07:16)
 **Doc-only** Post-Merge-Reconcile + Doku-Hygiene. Zwei Lücken nach der Serie #331–#339: (1) #339 (Reconcile
 für #336–#338) kannte seine eigene Nummer nicht ⇒ COMPLIANCE-Erst-Spalte + CHANGES-Überschrift nachgezogen
