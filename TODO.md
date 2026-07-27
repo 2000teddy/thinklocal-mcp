@@ -223,6 +223,21 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     **KEINE Persistenz, KEIN Execute-Pfad, KEIN Dispatch, 0 Aufrufer**; keine der vier §9-Entscheidungen
     beruehrt. +27 Tests (inkl. vollstaendiger 12-Kombinationen-Matrix), Suite **2027 gruen**. CR: kein HIGH, 3 MEDIUM behoben (u.a. `malformed`-Zweig setzte `state: null` = Sentinel fuer „claimbar" -> Feld jetzt `observed`, rein diagnostisch).
     Doku: Scoping §4.1 (Uebergangstabelle + B1-Persistenz- und B3-Dispatch-Pflichten).
+  - [ ] **B1-Reihenfolge-Pflicht: Keyid-Backfill VOR der `UNIQUE`-Bedingung** (Befund aus dem #323-Review,
+    2026-07-27): B1 will den kanonischen DER-SPKI-Keyid auf `UNIQUE(signer_keyid, order_nonce)` legen. Die
+    Spalte `signer_keyid` wird aber **heute schon befüllt** — mit dem **format-malleablen PEM-Hash** aus dem
+    unveränderten `orderKeyId` (`index.ts:876`, Schreibpfad `agent-inbox.ts:315/336`) — und trägt bereits
+    einen (nicht-unique) Index `idx_messages_order ON messages (signer_keyid, order_nonce)`
+    (`agent-inbox.ts:188/219`). **Reihenfolge-Bedingung:** die Altzeilen müssen auf den kanonischen Keyid
+    **gebackfillt** werden, **bevor** B1 die Spaltensemantik auf „kanonisch" umstellt und die `UNIQUE`-
+    Bedingung setzt. Sonst kollidiert ein wiedereingespielter Alt-Auftrag (Altzeile = PEM-Hash) nicht mit
+    seiner neuen kanonischen Zeile → der Replay-Schutz startet mit einem **Übergangsloch für Alt-Aufträge**,
+    ausgerechnet im Slice, der ihn einführt. **Backfill ist möglich, ohne neu zu sammeln:** `signer_pubkey`
+    liegt unveränderlich in derselben Zeile (`agent-inbox.ts:73`, trust-on-first-verify, rotationsfest,
+    `verifyStoredOrder` §374ff.) → der kanonische Keyid ist für jede Altzeile aus `signer_pubkey`
+    nachrechenbar (`canonicalOrderKeyId`; `null` ⇒ Zeile ehrlich als nicht-backfillbar markieren, **nicht**
+    den PEM-Hash weiterschleppen). Reine Reihenfolge-Notiz — **kein** Schema-Eingriff, **keine** Migration in
+    diesem Eintrag; gehört in den gateten B0/B1-Slice.
   - [~] **TL-12 Slice B**: **Ausführung** eines gelesenen Auftrags. **Scoping-Doku (CO 2026-07-16, opus+sonnet)
     fertig:** `docs/architecture/TL-12-slice-b-execution-scoping.md` — Votum **B1 nicht starten**, bis Owner-Opt-in
     + Epoch-Grenze entschieden. Korrigierte Zerlegung **B0→B1→B2a→B2b→B3**: B0 Executable-Profil (`ttl_ms>0`,
