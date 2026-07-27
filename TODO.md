@@ -476,6 +476,12 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
       zweiter CA-Monitor in `index.ts` (subject `'CA'`, gleiche Schwellen, im Shutdown geräumt). Damit ist die
       CA/das Intermediate **live** überwacht (vorher nur Node-Leaf). +6 Tests, Suite **1762 grün**. Reissue
       bleibt Start-gebunden (own-CA); token-onboarded/künftiges Intermediate = eigener Pfad.
+      - [x] **B — Verdrahtung regressionsfest** (2026-07-27): die Monitor-Auswahl lag inline in `index.ts` und
+        war **ungetestet** (ein „beide lesen `node.crt.pem`" oder ein weggefallener CA-Monitor wäre unsichtbar).
+        Neu reine `cert-monitor-wiring.ts` `buildCertExpiryMonitorSpecs` (Node/CA getrennte Quellen+subjects);
+        `index.ts` mapt darüber (verhaltensbewahrend). +4 Tests (`cert-monitor-wiring.test.ts`: 2 Specs, subjects
+        Node/CA, **getrennte Quellen bewiesen**, kein I/O beim Bauen), Suite **2101 grün**. **Kein Doppel** zu
+        #297 — schließt die Verdrahtungs-Testlücke. Damit ist Vorbedingung B code-seitig **komplett + verdrahtungsfest**.
     - [~] **C — Revocation gegroundet + Charakterisierung** (2026-07-27): `docs/architecture/TL-14a-blocker-C-grounding.md`
       — C war die **einzige** der drei blockierenden Auflagen ohne Grounding. Befund: `crl.ts`
       (`CertificateRevocationList`, `revoke`/`isRevoked`, datei-persistiert) **existiert bereits** als genau
