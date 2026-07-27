@@ -433,6 +433,15 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
       NICHT — belegt + gefixt). +6 Tests (`chain-verify.test.ts`: gültige 2-Stufen-Kette, **pathLen-0-Reject**,
       Charakterisierung-Kontrast, Fremd-Anker, unvollständige Kette, fail-closed). Der **flache** `verifyPeerCert`
       + Charakterisierungs-Test #295 bleiben unverändert.
+      - [x] **A — Transport-Ebenen-pathLen-Test (ADR-045 §77 Rest)** (2026-07-27): `tls-transport-pathlen.conformance.test.ts`
+        — der letzte offene A-Punkt („ein Test, der einen pathLen-Verstoß **auf der Transport-Ebene** ablehnt").
+        **Befund (echter mTLS-Handshake, `requestCert`+`rejectUnauthorized`):** Node-TLS erzwingt
+        `pathLenConstraint` **NICHT** — `Root(pathLen 0)→Intermediate→Leaf` **und** `Root(p2)→Inter(p0)→Sub-CA→Leaf`
+        werden am Transport **akzeptiert** (Positiv-Kontrolle pathLen 1 beweist: Kette baut real durch → kein
+        Harness-Fehler). **Kontrast im selben Test:** die App-Ebene `verifyPeerCertChain` lehnt denselben
+        Verstoß ab. ⇒ macht die ADR-045-Aussage „D2 auf App-Pfad kosmetisch/ungetestet" **regressionsfest** und
+        beweist: Zwei-Stufen-Trust MUSS über die App-Ebene laufen, nicht über die Transport-mTLS. +4 Tests,
+        Suite **2097 grün**. Test-only, keine Verdrahtung. Damit ist Vorbedingung A code-seitig **komplett**.
       - [x] **A — D2-Invariante direkt getestet** (2026-07-21, #311): fokussierter Negativtest — ein **Intermediate**
         mit `pathLen 0` darf **keine Sub-CA** ausstellen (`Root(pathLen 2)→Intermediate(pathLen 0)→Sub-CA→Leaf`
         wird abgelehnt). Ergänzt den bestehenden pathLen-Test (Constraint am **Root**) um den Fall mit Constraint

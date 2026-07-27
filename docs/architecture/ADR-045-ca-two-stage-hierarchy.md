@@ -84,6 +84,15 @@ Aus `TL-14a-blocker-AB-grounding.md`; beide Modelle stuften sie als **blockieren
   aller Trust-Entscheidungen auf die Transport-Ebene; **Charakterisierungs-Test**, der `verifyPeerCert(root,
   leaf@intermediate) === false` belegt (macht die Lücke regressionsfest) + ein Test, der einen `pathLen`-
   Verstoß auf der Transport-Ebene ablehnt.
+- **Umsetzungsstand (2026-07-27, code-verifiziert — ändert keinen Beschluss/Status):** App-Ebene
+  `verifyPeerCertChain` + `pathLen`-Enforcement gebaut (#298/#299/#311); Charakterisierung der flachen Lücke
+  vorhanden (#295). **Neu:** der Transport-Ebenen-Test (`tls-transport-pathlen.conformance.test.ts`, echter
+  mTLS-Handshake) **korrigiert die Annahme** hinter „ein Test, der … ablehnt": Node-TLS **erzwingt `pathLen`
+  in dieser mTLS-Konfiguration NICHT** — `Root(pathLen 0)→Intermediate→Leaf` (und `Root(p2)→Inter(p0)→Sub-CA→Leaf`)
+  werden am Transport **akzeptiert** (Positiv-Kontrolle pathLen 1 = kein Harness-Fehler), während die App-Ebene
+  `verifyPeerCertChain` denselben Verstoß **ablehnt** (Kontrast im selben Test). ⇒ **Konsequenz:**
+  Zwei-Stufen-Trust MUSS über die App-Ebene laufen; die Transport-mTLS ist **nicht** der pathLen-Enforcement-Punkt.
+  Damit ist Vorbedingung A code-seitig **komplett + regressionsfest**. (D3/ADR-Status/TL-14b bleiben unberührt.)
 
 ### Vorbedingung B — Intermediate-Expiry-Monitoring (macht D3 sicher)
 - **Befund:** der Live-Monitor liest nur `node.crt.pem` (`getCertDaysLeft`, `index.ts:1613`,
