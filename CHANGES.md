@@ -8,14 +8,23 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### docs(reconcile): PR-Nummern-Nachtrag für #340 (2026-07-27 08:16)
+### docs(reconcile): PR-Nummern-Nachtrag für #341 … #345 (2026-07-27 08:42)
+**Doc-only** Post-Merge-Reconcile — dieselbe Selbst-Reconcile-Lücke wie zuvor: eine PR kennt ihre eigene
+Merge-Nummer beim Schreiben noch nicht. Der Dispatch nannte #343/#344/#345 — beim Zählen fielen zusätzlich
+**#341 und #342** als noch offen auf; um die trailing Drift **vollständig** zu schließen, zieht dieser PR
+#341 (`dd2c4e9`), #342 (`873c2d2`), #343 (`ba9a143`), #344 (`f52af5d`), #345 (`14b90ad`) — alle
+`gh`-verifiziert MERGED. COMPLIANCE-Erst-Spalten `(offen, base=main)` → `#NNN` + `(base=main, gemergt)`,
+CHANGES-Überschriften um `, #NNN)` ergänzt — 1:1 in-place. Suite unverändert **2101 grün** (kein `.ts`-Diff).
+`changes/2026-07-27_reconcile-pr-341-345.md`.
+
+### docs(reconcile): PR-Nummern-Nachtrag für #340 (2026-07-27 08:16, #345)
 **Doc-only** Post-Merge-Reconcile (laut Reconcile-Bericht 2026-07-27 03:30). #340 (`docs(reconcile):
 #339-Nachtrag + TODO-PR-Nummern-Aufholung`, `MERGED` `53dfa2f` `2026-07-26T05:20:35Z`) kannte seine eigene
 Merge-Nummer beim Schreiben nicht ⇒ COMPLIANCE-Erst-Spalte `(offen, base=main)` → `#340` + `(base=main,
 gemergt)`, CHANGES-Überschrift → `…, #340)`. Reine Nachpflege, keine neue Erfindung. Suite unverändert
 **2101 grün** (kein `.ts`-Diff). `changes/2026-07-27_reconcile-pr-340.md`.
 
-### refactor+test(tl14a): Vorbedingung-B-Monitor-Verdrahtung regressionsfest (2026-07-27 07:51)
+### refactor+test(tl14a): Vorbedingung-B-Monitor-Verdrahtung regressionsfest (2026-07-27 07:51, #344)
 **Behavior-preserving Refactor + Test** (kein Verhaltens-Delta; gate-frei/D3-unabhängig). **Kein Doppel zu
 #297:** die B-Funktionsteile (`getCaCertDaysLeft` + `subject`-Label) sind seit #297 gemergt; dies schließt die
 **ungetestete Verdrahtung** — die Monitor-Auswahl lag inline in `index.ts` (ein „beide lesen `node.crt.pem`"
@@ -26,7 +35,7 @@ oder ein weggefallener CA-Monitor wäre unsichtbar). Neu reine `cert-monitor-wir
 Refactor brach keine Test. ⇒ Vorbedingung B code-seitig **komplett + verdrahtungsfest**.
 `changes/2026-07-27_tl14a-B-monitor-wiring.md`.
 
-### test(tl14a): Vorbedingung A — pathLen am Transport (echter mTLS-Handshake) (2026-07-27 07:19)
+### test(tl14a): Vorbedingung A — pathLen am Transport (echter mTLS-Handshake) (2026-07-27 07:19, #342)
 **Test-only** (non-gated Vorbedingungs-Lane, D3-unabhängig; keine Produktionsänderung). ADR-045 §77 verlangte
 einen pathLen-Test **auf der Transport-Ebene** — App-Ebene war gedeckt (`verifyPeerCertChain`, #298/#299/#311),
 der Transport-Test fehlte. Neu `tls-transport-pathlen.conformance.test.ts` (echter Node-TLS-Handshake,
@@ -38,7 +47,7 @@ App-Ebene laufen; macht ADR-045s „D2 kosmetisch/ungetestet" regressionsfest �
 komplett** (B fertig, #297). +4 Tests, Suite **2097 grün** (149 Files).
 `changes/2026-07-27_tl14a-A-transport-pathlen.md`.
 
-### docs(tl12): B1-Reihenfolge-Pflicht — Keyid-Backfill VOR der `UNIQUE`-Bedingung (2026-07-27 07:50)
+### docs(tl12): B1-Reihenfolge-Pflicht — Keyid-Backfill VOR der `UNIQUE`-Bedingung (2026-07-27 07:50, #343)
 **Reine TODO-Notiz** (Befund aus dem #323-Review, kein Code/Test/Schema/Migration). Verankert in `TODO.md`
 (neuer Unterpunkt direkt nach der B1-Vorarbeit #324) eine harte Reihenfolge-Bedingung für TL-12 **B1**: die
 Spalte `signer_keyid` wird **heute schon** mit dem format-malleablen **PEM-Hash** aus `orderKeyId`
@@ -52,7 +61,7 @@ Der Backfill ist ohne Neu-Sammeln möglich, weil `signer_pubkey` unveränderlich
 keine Migration** in diesem Eintrag — Umsetzung gehört in den gateten B0/B1-Slice; Slice B bleibt vollständig gated.
 `changes/2026-07-27_tl12-b1-backfill-before-unique.md`.
 
-### docs+test(tl14a): Auflage C (Revocation) gegroundet + `crl.ts`-Charakterisierung (2026-07-27 06:47)
+### docs+test(tl14a): Auflage C (Revocation) gegroundet + `crl.ts`-Charakterisierung (2026-07-27 06:47, #341)
 **Grounding-Doc + Charakterisierungs-Test** (non-gated Vorbedingungs-Lane, keine Verdrahtung/Entscheidung).
 Auflage C („keine Revocation-Infra", Consensus **blockierend**) war die **einzige** der drei blockierenden
 Auflagen ohne Grounding (A/B haben eins + gemergte Slices). Neu `TL-14a-blocker-C-grounding.md`: `crl.ts`
