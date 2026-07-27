@@ -8,6 +8,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### test(tl14a): Vorbedingung A — pathLen am Transport (echter mTLS-Handshake) (2026-07-27 07:19)
+**Test-only** (non-gated Vorbedingungs-Lane, D3-unabhängig; keine Produktionsänderung). ADR-045 §77 verlangte
+einen pathLen-Test **auf der Transport-Ebene** — App-Ebene war gedeckt (`verifyPeerCertChain`, #298/#299/#311),
+der Transport-Test fehlte. Neu `tls-transport-pathlen.conformance.test.ts` (echter Node-TLS-Handshake,
+`requestCert`+`rejectUnauthorized`). **Befund:** Node-TLS erzwingt `pathLenConstraint` in dieser
+mTLS-Konfiguration **NICHT** — `Root(pathLen 0)→Intermediate→Leaf` (und `Root(p2)→Inter(p0)→Sub-CA→Leaf`)
+werden am Transport **akzeptiert** (Positiv-Kontrolle pathLen 1 = kein Harness-Fehler); die App-Ebene
+`verifyPeerCertChain` lehnt denselben Verstoß ab (Kontrast im selben Test). ⇒ Zwei-Stufen-Trust MUSS über die
+App-Ebene laufen; macht ADR-045s „D2 kosmetisch/ungetestet" regressionsfest ⇒ **Vorbedingung A code-seitig
+komplett** (B fertig, #297). +4 Tests, Suite **2097 grün** (149 Files).
+`changes/2026-07-27_tl14a-A-transport-pathlen.md`.
+
 ### docs+test(tl14a): Auflage C (Revocation) gegroundet + `crl.ts`-Charakterisierung (2026-07-27 06:47)
 **Grounding-Doc + Charakterisierungs-Test** (non-gated Vorbedingungs-Lane, keine Verdrahtung/Entscheidung).
 Auflage C („keine Revocation-Infra", Consensus **blockierend**) war die **einzige** der drei blockierenden
