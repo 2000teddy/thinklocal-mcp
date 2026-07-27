@@ -452,6 +452,15 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
       zweiter CA-Monitor in `index.ts` (subject `'CA'`, gleiche Schwellen, im Shutdown geräumt). Damit ist die
       CA/das Intermediate **live** überwacht (vorher nur Node-Leaf). +6 Tests, Suite **1762 grün**. Reissue
       bleibt Start-gebunden (own-CA); token-onboarded/künftiges Intermediate = eigener Pfad.
+    - [~] **C — Revocation gegroundet + Charakterisierung** (2026-07-27): `docs/architecture/TL-14a-blocker-C-grounding.md`
+      — C war die **einzige** der drei blockierenden Auflagen ohne Grounding. Befund: `crl.ts`
+      (`CertificateRevocationList`, `revoke`/`isRevoked`, datei-persistiert) **existiert bereits** als genau
+      die vom Consensus vorgeschlagene gepinnte Fingerprint-Denylist, ist aber **0-Aufrufer-Dead-Code** +
+      war **ungetestet**; der Datei-Kopf behauptet „geprüft beim Heartbeat/Agent-Card" — **nicht verdrahtet**.
+      Neu `crl.test.ts` charakterisiert das Ist-Verhalten (+6 Tests), **keine Verdrahtung**. Note deckt zudem
+      einen **Widerspruch** auf: Consensus stuft A–C blockierend ein, ADR-045 §74 führt nur A/B. **Offen
+      (CO/Owner):** Form (Denylist vs CRL/OCSP), `crl.ts` verdrahten vs Neubau, C-Blocking-Status vs ADR-045,
+      Distribution/Pinning. Rein Grounding — nimmt die C-Entscheidung NICHT vorweg.
   - [ ] **Runbook-Volltext + Zeremonie-Skripte** (nach Sign-off/ADR-045, Papier+Skripte, non-gated).
 - [ ] **[v5.1] TL-14b (≈4 h, ⛔ Termin)** CA-Umzug durchführen (mit Christian). ↔ vgl. Decision-7
   Trust-Domain-Flip (KW30).
