@@ -8,6 +8,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs(tl14a): ADR-045-Klassifikations-Hinweis zu Auflage C (Consensus vs. §100) (2026-07-27 09:45)
+**Doc-only** (kein Beschluss, nimmt kein Gate vorweg). Die #341-C-Grounding-Note deckte auf: der Consensus
+stuft **A–C blockierend** ein, ADR-045 führt aber nur **A/B** (§74) und behandelt **C** in §100 stumm als
+„out of scope". Neuer **Klassifikations-Hinweis in ADR-045 §100** macht diese (bewusste, aber nicht
+owner-ratifizierte) Herabstufung sichtbar + verweist auf die C-Grounding-§2 — **entscheidet nichts** (C-Blocking-
+Status = offener CO/Owner-Punkt). Sauberer TL-14-Befund statt Restwärme (WOCHENPLAN-KW31 §116), gate-frei: die
+A/B/C-Lane ist code-seitig abgetragen, der einzige verbleibende gate-freie Schritt ist Doku-Ehrlichkeit. Suite
+unverändert **2101 grün** (kein `.ts`-Diff). `changes/2026-07-27_tl14a-adr045-C-classification-note.md`.
+
 ### docs(reconcile): PR-Nummern-Nachtrag für #341 … #345 (2026-07-27 08:42)
 **Doc-only** Post-Merge-Reconcile — dieselbe Selbst-Reconcile-Lücke wie zuvor: eine PR kennt ihre eigene
 Merge-Nummer beim Schreiben noch nicht. Der Dispatch nannte #343/#344/#345 — beim Zählen fielen zusätzlich
