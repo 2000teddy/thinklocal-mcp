@@ -397,6 +397,10 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
   + `TLMCP_STRICT_IDENTITY`.
 - [~] **[v5.1] TL-14a (≈3 h)** CA-Zweistufen-Umzug: Runbook (Offline-Wurzel-Zeremonie, Intermediate TH01,
   Geschwister-Intermediate TH02) — nur Papier+Skripte.
+  - **GATE-STATUS (2026-07-28, KW31):** `docs/architecture/TL-14a-gate-status.md` — agent-ausführbare Lane
+    **erschöpft**: Vorbedingungen A + B code-verifiziert komplett; **kein non-gated Slice offen**. Nächste
+    Entriegelung = **G1** (D3-Intermediate-Laufzeit 1–3 J, Christian) + unabhängig **G2** (C-Klassifikation
+    Blocker/Fast-Follow, CO/Owner). G3 (Cross-Vendor-CO) infra-blockiert, G4 (TL-14b) ⛔-gated. Sauber geparkt.
   - [x] **Scoping/Discovery** (2026-07-19): `docs/architecture/TL-14a-ca-two-stage-scoping.md` — Ist-Zustand
     gegroundet (heute flache Self-Signed-Root `createMeshCA` `tls.ts:59`, Root-Key online + ko-lokalisiert;
     Attesting-Pfad `cert-issuer.ts`), Zielhierarchie (offline Root → Intermediate TH01 → Geschwister TH02),
