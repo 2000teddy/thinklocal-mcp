@@ -8,7 +8,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### docs(tl14a): ADR-045-Klassifikations-Hinweis zu Auflage C (Consensus vs. §100) (2026-07-27 09:45)
+### docs(reconcile): PR-Nummern-Nachtrag für #346 + #347 + TODO-Aufholung #338→#347 (2026-07-28 06:15)
+**Doc-only** Post-Merge-Reconcile — dieselbe Selbst-Reconcile-Lücke wie zuvor: eine PR kennt ihre eigene
+Merge-Nummer beim Schreiben noch nicht. Die beiden jüngsten Merges blieben offen: **#346** (`923142f`, der
+#341–#345-Reconcile selbst) und **#347** (`0345546`, ADR-045-Klassifikations-Hinweis) — beide `gh`-verifiziert
+MERGED. COMPLIANCE-Erst-Spalten `(offen, base=main)` → `#NNN` + `(base=main, gemergt)` (08:42→#346, 09:45→#347),
+CHANGES-Überschriften um `, #NNN)` ergänzt. Zusätzlich **`TODO.md` von #338 auf #347 aufgeholt**: die
+substantiellen Task-Zeilen seit #338 trugen Datum aber keine Merge-Nummer — nachgezogen #341 (C-Grounding) ·
+#342 (A-pathLen) · #343 (tl12 B1) · #344 (B-Monitor-Verdrahtung) · #347 (ADR-045-Hinweis); die reinen
+Reconcile-PRs #340/#345/#346 haben keinen TODO-Task-Eintrag. Danach spiegeln COMPLIANCE/CHANGES/TODO dieselben
+Nummern bis #347. Suite unverändert **2101 grün** (kein `.ts`-Diff). `changes/2026-07-28_reconcile-pr-346-347.md`.
+
+### docs(tl14a): ADR-045-Klassifikations-Hinweis zu Auflage C (Consensus vs. §100) (2026-07-27 09:45, #347)
 **Doc-only** (kein Beschluss, nimmt kein Gate vorweg). Die #341-C-Grounding-Note deckte auf: der Consensus
 stuft **A–C blockierend** ein, ADR-045 führt aber nur **A/B** (§74) und behandelt **C** in §100 stumm als
 „out of scope". Neuer **Klassifikations-Hinweis in ADR-045 §100** macht diese (bewusste, aber nicht
@@ -17,7 +28,7 @@ Status = offener CO/Owner-Punkt). Sauberer TL-14-Befund statt Restwärme (WOCHEN
 A/B/C-Lane ist code-seitig abgetragen, der einzige verbleibende gate-freie Schritt ist Doku-Ehrlichkeit. Suite
 unverändert **2101 grün** (kein `.ts`-Diff). `changes/2026-07-27_tl14a-adr045-C-classification-note.md`.
 
-### docs(reconcile): PR-Nummern-Nachtrag für #341 … #345 (2026-07-27 08:42)
+### docs(reconcile): PR-Nummern-Nachtrag für #341 … #345 (2026-07-27 08:42, #346)
 **Doc-only** Post-Merge-Reconcile — dieselbe Selbst-Reconcile-Lücke wie zuvor: eine PR kennt ihre eigene
 Merge-Nummer beim Schreiben noch nicht. Der Dispatch nannte #343/#344/#345 — beim Zählen fielen zusätzlich
 **#341 und #342** als noch offen auf; um die trailing Drift **vollständig** zu schließen, zieht dieser PR

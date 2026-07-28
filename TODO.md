@@ -224,7 +224,7 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     beruehrt. +27 Tests (inkl. vollstaendiger 12-Kombinationen-Matrix), Suite **2027 gruen**. CR: kein HIGH, 3 MEDIUM behoben (u.a. `malformed`-Zweig setzte `state: null` = Sentinel fuer „claimbar" -> Feld jetzt `observed`, rein diagnostisch).
     Doku: Scoping §4.1 (Uebergangstabelle + B1-Persistenz- und B3-Dispatch-Pflichten).
   - [ ] **B1-Reihenfolge-Pflicht: Keyid-Backfill VOR der `UNIQUE`-Bedingung** (Befund aus dem #323-Review,
-    2026-07-27): B1 will den kanonischen DER-SPKI-Keyid auf `UNIQUE(signer_keyid, order_nonce)` legen. Die
+    2026-07-27, #343): B1 will den kanonischen DER-SPKI-Keyid auf `UNIQUE(signer_keyid, order_nonce)` legen. Die
     Spalte `signer_keyid` wird aber **heute schon befüllt** — mit dem **format-malleablen PEM-Hash** aus dem
     unveränderten `orderKeyId` (`index.ts:876`, Schreibpfad `agent-inbox.ts:315/336`) — und trägt bereits
     einen (nicht-unique) Index `idx_messages_order ON messages (signer_keyid, order_nonce)`
@@ -448,7 +448,7 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
       NICHT — belegt + gefixt). +6 Tests (`chain-verify.test.ts`: gültige 2-Stufen-Kette, **pathLen-0-Reject**,
       Charakterisierung-Kontrast, Fremd-Anker, unvollständige Kette, fail-closed). Der **flache** `verifyPeerCert`
       + Charakterisierungs-Test #295 bleiben unverändert.
-      - [x] **A — Transport-Ebenen-pathLen-Test (ADR-045 §77 Rest)** (2026-07-27): `tls-transport-pathlen.conformance.test.ts`
+      - [x] **A — Transport-Ebenen-pathLen-Test (ADR-045 §77 Rest)** (2026-07-27, #342): `tls-transport-pathlen.conformance.test.ts`
         — der letzte offene A-Punkt („ein Test, der einen pathLen-Verstoß **auf der Transport-Ebene** ablehnt").
         **Befund (echter mTLS-Handshake, `requestCert`+`rejectUnauthorized`):** Node-TLS erzwingt
         `pathLenConstraint` **NICHT** — `Root(pathLen 0)→Intermediate→Leaf` **und** `Root(p2)→Inter(p0)→Sub-CA→Leaf`
@@ -476,13 +476,13 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
       zweiter CA-Monitor in `index.ts` (subject `'CA'`, gleiche Schwellen, im Shutdown geräumt). Damit ist die
       CA/das Intermediate **live** überwacht (vorher nur Node-Leaf). +6 Tests, Suite **1762 grün**. Reissue
       bleibt Start-gebunden (own-CA); token-onboarded/künftiges Intermediate = eigener Pfad.
-      - [x] **B — Verdrahtung regressionsfest** (2026-07-27): die Monitor-Auswahl lag inline in `index.ts` und
+      - [x] **B — Verdrahtung regressionsfest** (2026-07-27, #344): die Monitor-Auswahl lag inline in `index.ts` und
         war **ungetestet** (ein „beide lesen `node.crt.pem`" oder ein weggefallener CA-Monitor wäre unsichtbar).
         Neu reine `cert-monitor-wiring.ts` `buildCertExpiryMonitorSpecs` (Node/CA getrennte Quellen+subjects);
         `index.ts` mapt darüber (verhaltensbewahrend). +4 Tests (`cert-monitor-wiring.test.ts`: 2 Specs, subjects
         Node/CA, **getrennte Quellen bewiesen**, kein I/O beim Bauen), Suite **2101 grün**. **Kein Doppel** zu
         #297 — schließt die Verdrahtungs-Testlücke. Damit ist Vorbedingung B code-seitig **komplett + verdrahtungsfest**.
-    - [~] **C — Revocation gegroundet + Charakterisierung** (2026-07-27): `docs/architecture/TL-14a-blocker-C-grounding.md`
+    - [~] **C — Revocation gegroundet + Charakterisierung** (2026-07-27, #341): `docs/architecture/TL-14a-blocker-C-grounding.md`
       — C war die **einzige** der drei blockierenden Auflagen ohne Grounding. Befund: `crl.ts`
       (`CertificateRevocationList`, `revoke`/`isRevoked`, datei-persistiert) **existiert bereits** als genau
       die vom Consensus vorgeschlagene gepinnte Fingerprint-Denylist, ist aber **0-Aufrufer-Dead-Code** +
@@ -491,7 +491,7 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
       einen **Widerspruch** auf: Consensus stuft A–C blockierend ein, ADR-045 §74 führt nur A/B. **Offen
       (CO/Owner):** Form (Denylist vs CRL/OCSP), `crl.ts` verdrahten vs Neubau, C-Blocking-Status vs ADR-045,
       Distribution/Pinning. Rein Grounding — nimmt die C-Entscheidung NICHT vorweg.
-      - [x] **ADR-045-Klassifikations-Hinweis** (2026-07-27): der in der C-Note aufgedeckte Widerspruch stand
+      - [x] **ADR-045-Klassifikations-Hinweis** (2026-07-27, #347): der in der C-Note aufgedeckte Widerspruch stand
         bislang **nur** extern — ADR-045 selbst führte C stumm als „out of scope" (§100), obwohl der Consensus
         A–C blockierend einstuft. Neu: ein **Klassifikations-Hinweis in ADR-045 §100** macht die (bewusste, aber
         **nicht owner-ratifizierte**) Herabstufung sichtbar + verweist auf die C-Grounding-§2. **Doc-only, kein
