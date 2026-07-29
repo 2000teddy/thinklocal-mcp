@@ -2,6 +2,12 @@
 
 **KW30 · Change-Order / Decision-Register · Erstellt 2026-07-19 · Folge-Artefakt zu
 `TL-14a-ca-two-stage-scoping.md` §5.**
+> **Supersession-Hinweis (2026-07-29):** Die **D3**-Empfehlung „≥ 5 Jahre" unten ist **überholt**. Der spätere
+> `pal:consensus` (`TL-14a-consensus-result-D1-D6.md`) verwarf ≥5 J (beide Modelle) → Landing-Zone **1–3 Jahre**;
+> die exakte Zahl ist die offene Owner-Entscheidung **G1** (`TL-14a-G1-decision-brief.md`). D1/D2/D4/D5/D6 sind
+> per Consensus einstimmig bestätigt (ADR-045 §D1–D6). Maßgeblich ist ADR-045, nicht mehr die Empfehlungsspalte
+> dieses Registers.
+
 Zweck: die **6 offenen Entscheidungen** aus dem Scoping-§5 in ein **aktionierbares** Register überführen —
 je Entscheidung: Frage, Optionen, **nicht-bindende** Empfehlung (Entscheidungshilfe), Abhängigkeit,
 Entscheider, was sie blockiert, Status. **Dieses Artefakt trifft keine Entscheidung** — es macht sie
@@ -15,7 +21,7 @@ entstehen und **lange bevor** TL-14b (⛔ gated) läuft.
 |----|--------------|----------------------------|-------------|-----------|--------|
 | **D1** | Trust-Domain-Kopplung | **Entkoppeln** — Domain-Flip separat NACH CA-Umzug | Christian (+CO) | Runbook-Rahmen, D4 | ⬜ offen |
 | **D2** | `pathLenConstraint` der Root | **`0`** (Intermediates dürfen keine Sub-CAs) | CO | Zeremonie-Skript, D6 | ⬜ offen |
-| **D3** | Intermediate-Validität & Erneuerung | **≥ 5 Jahre**, eigener Zyklus, nicht `renew_before_days` | CO | cert-issuer-Erweiterung | ⬜ offen |
+| **D3** | Intermediate-Validität & Erneuerung | ~~**≥ 5 Jahre**~~ **überholt → Korridor 1–3 J** (s. Supersession-Hinweis unten) | CO/Christian | cert-issuer-Erweiterung | 🟨 in CO (G1-Sign-off offen) |
 | **D4** | Cross-Sign vs. harter Cutover | **Doppel-Pin-Cutover** (Alt+Neu im Fenster) | Christian (+CO) | TL-14b-Sequenz, D1/D5 | ⬜ offen |
 | **D5** | Chain-Ausroll-Mechanik | **Token-Re-Onboard** je Node | Christian | TL-14b-Kern | ⬜ offen |
 | **D6** | TH02-Geschwister-Rolle | **Kalt** (versiegelte Reserve, identische Kette) | Christian (+CO) | HA-Runbook-Zweig | ⬜ offen |
