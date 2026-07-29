@@ -8,7 +8,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### docs(tl14a): Gate-Status-Snapshot + kein-non-gated-Slice-Befund (2026-07-28 18:04)
+### docs(tl14a): Gate-Status-Snapshot + kein-non-gated-Slice-Befund (2026-07-28 18:04, #349)
 **Doc-only** Status/Park-Note (kein Beschluss, kein Gate verschoben). Watchdog-scoped KW31: TL-14a-Gate-Stand
 in Repo-Wahrheit festhalten + prüfen, ob ein non-gated Slice existiert. **Befund: keiner.** Neue
 `docs/architecture/TL-14a-gate-status.md` konsolidiert die verstreuten TODO-`[~]`-Zeilen + ADR-045 zu einem
@@ -23,7 +23,7 @@ dokumentiert (Reparatur gehört in den G2-Slice, nicht in Churn-Micro-PR). `TODO
 ergänzt. Kein Christian-Escalate (Telegram-Entwurf verworfen). Suite unverändert **2101 grün** (kein
 `.ts`-Diff). `changes/2026-07-28_tl14a-gate-status.md`.
 
-### docs(reconcile): PR-Nummern-Nachtrag für #346 + #347 + TODO-Aufholung #338→#347 (2026-07-28 06:15)
+### docs(reconcile): PR-Nummern-Nachtrag für #346 + #347 + TODO-Aufholung #338→#347 (2026-07-28 06:15, #348)
 **Doc-only** Post-Merge-Reconcile — dieselbe Selbst-Reconcile-Lücke wie zuvor: eine PR kennt ihre eigene
 Merge-Nummer beim Schreiben noch nicht. Die beiden jüngsten Merges blieben offen: **#346** (`923142f`, der
 #341–#345-Reconcile selbst) und **#347** (`0345546`, ADR-045-Klassifikations-Hinweis) — beide `gh`-verifiziert
