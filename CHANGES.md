@@ -8,6 +8,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs(tl14a): Gate-Status-Snapshot + kein-non-gated-Slice-Befund (2026-07-28 18:04)
+**Doc-only** Status/Park-Note (kein Beschluss, kein Gate verschoben). Watchdog-scoped KW31: TL-14a-Gate-Stand
+in Repo-Wahrheit festhalten + prüfen, ob ein non-gated Slice existiert. **Befund: keiner.** Neue
+`docs/architecture/TL-14a-gate-status.md` konsolidiert die verstreuten TODO-`[~]`-Zeilen + ADR-045 zu einem
+prüfbaren Snapshot: die agent-ausführbare Lane ist **erschöpft** — Vorbedingungen **A** (`verifyPeerCertChain`
++ `tls-transport-pathlen.conformance.test.ts`, #298/#311/#342) und **B** (`cert-monitor-wiring.ts` + Test,
+#297/#344) code-verifiziert **komplett** (im Baum per grep/ls bestätigt). Vier offene Gates benannt: **G1**
+(D3-Intermediate-Laufzeit 1–3 J → Christian → ADR-045 `Accepted` → Runbook), **G2** (C-Klassifikation
+Blocker/Fast-Follow + Form + Distribution → CO/Owner → `crl.ts`-Verdrahtung), **G3** (Cross-Vendor-CO
+infra-blockiert), **G4** (TL-14b ⛔). Runbook-Volltext ist per Prozess nach G1 sequenziert, C-Verdrahtung
+hängt an G2, A2-rest bis TL-14b deferred ⇒ Vorziehen wäre Nebelmaschine. `crl.ts`-Header-Falschtext
+dokumentiert (Reparatur gehört in den G2-Slice, nicht in Churn-Micro-PR). `TODO.md`-Kopf um GATE-STATUS-Zeiger
+ergänzt. Kein Christian-Escalate (Telegram-Entwurf verworfen). Suite unverändert **2101 grün** (kein
+`.ts`-Diff). `changes/2026-07-28_tl14a-gate-status.md`.
+
 ### docs(reconcile): PR-Nummern-Nachtrag für #346 + #347 + TODO-Aufholung #338→#347 (2026-07-28 06:15)
 **Doc-only** Post-Merge-Reconcile — dieselbe Selbst-Reconcile-Lücke wie zuvor: eine PR kennt ihre eigene
 Merge-Nummer beim Schreiben noch nicht. Die beiden jüngsten Merges blieben offen: **#346** (`923142f`, der
