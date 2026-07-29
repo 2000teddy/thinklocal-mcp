@@ -401,6 +401,10 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     **erschöpft**: Vorbedingungen A + B code-verifiziert komplett; **kein non-gated Slice offen**. Nächste
     Entriegelung = **G1** (D3-Intermediate-Laufzeit 1–3 J, Christian) + unabhängig **G2** (C-Klassifikation
     Blocker/Fast-Follow, CO/Owner). G3 (Cross-Vendor-CO) infra-blockiert, G4 (TL-14b) ⛔-gated. Sauber geparkt.
+  - **⛔ G1-ENTSCHEIDUNG NÖTIG (Christian, 2026-07-29):** `docs/architecture/TL-14a-G1-decision-brief.md` —
+    entscheidungsreifer Owner-Brief für die eine offene Zahl (D3-Intermediate-Laufzeit, Korridor 1–3 J) +
+    Mit-Bestätigung D1/D2/D4/D5/D6; Sign-off → ADR-045 `Proposed`→`Accepted` → Runbook-Volltext. Brief entscheidet
+    nichts, entriegelt nichts; Code-Lane bleibt danach an G2/G4 gated. (Checkliste-D3 „≥5 J" als überholt markiert.)
   - [x] **Scoping/Discovery** (2026-07-19): `docs/architecture/TL-14a-ca-two-stage-scoping.md` — Ist-Zustand
     gegroundet (heute flache Self-Signed-Root `createMeshCA` `tls.ts:59`, Root-Key online + ko-lokalisiert;
     Attesting-Pfad `cert-issuer.ts`), Zielhierarchie (offline Root → Intermediate TH01 → Geschwister TH02),

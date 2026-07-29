@@ -8,6 +8,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs(tl14a): G1-Entscheidungs-Brief für Christian (Owner-Sign-off) (2026-07-29 07:40)
+**Doc-only** Owner-Decision-Brief (kein Beschluss, kein Gate verschoben, kein Fortschritt). Neue
+`docs/architecture/TL-14a-G1-decision-brief.md` zieht die **eine** Owner-Entscheidung, die ADR-045 auf `Proposed`
+hält (Gate **G1**), entscheidungsreif zusammen: die exakte **D3-Intermediate-Laufzeit im Korridor 1–3 Jahre**
+(opus ~12–24 Mon. vs. sonnet 3 J; beide verwerfen ≥5 J), plus die konsens-einstimmigen, mit-zu-bestätigenden
+Punkte D1/D2/D4/D5/D6 und ein Fill-in-Sign-off-Block. Explizit gehalten: entriegelt **nichts** bis zum Sign-off,
+und selbst danach bleibt die Code-Lane an **G2** (Revocation/`crl.ts`) und **G4** (TL-14b ⛔) gated; Vorbedingung B
+(`cert-monitor-wiring.ts`) ist erfüllt, sichert die längere-Laufzeit-Option ab. **Nebenbei (Ehrlichkeit):** die
+ältere `TL-14a-decision-checklist.md` empfahl in §D3 noch „≥5 Jahre" — durch den Consensus überholt; ein
+Supersession-Hinweis + korrigierte D3-Zeile ergänzt (kein neuer Beschluss). Kein `.ts`-Diff, Suite unverändert
+**2101 grün**. `changes/2026-07-29_tl14a-g1-decision-brief.md`.
+
 ### docs(tl14a): Gate-Status-Snapshot + kein-non-gated-Slice-Befund (2026-07-28 18:04, #349)
 **Doc-only** Status/Park-Note (kein Beschluss, kein Gate verschoben). Watchdog-scoped KW31: TL-14a-Gate-Stand
 in Repo-Wahrheit festhalten + prüfen, ob ein non-gated Slice existiert. **Befund: keiner.** Neue
