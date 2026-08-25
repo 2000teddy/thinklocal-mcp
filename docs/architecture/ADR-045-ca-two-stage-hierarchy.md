@@ -117,6 +117,19 @@ Aus `TL-14a-blocker-AB-grounding.md`; beide Modelle stuften sie als **blockieren
     **eine offene C-Punkt** (CO/Owner) — inkl. Ist-Zustand (`crl.ts` = bereits gebaute, aber 0-Aufrufer-
     Fingerprint-Denylist) gegroundet in `TL-14a-blocker-C-grounding.md` §2. Der Hinweis macht die Abweichung
     in der ADR **sichtbar statt still**; er trifft keine C-Entscheidung.
+  - **CO-Anteil gelaufen (2026-08-25, KW35 — `TL-14a-consensus-result-C.md`; ändert diese ADR noch NICHT):**
+    Ein adversarialer `pal:consensus`-Doppellauf löst den Widerspruch über einen **Split** auf, statt sich für
+    „blockierend" oder „Fast-Follow" zu entscheiden: **C1** = lokales `isRevoked`-Enforcement (App-Ebene,
+    `agent-card.ts:311` Issuer **+** `:353` Leaf, bestehende `crl.ts` verdrahten) ⇒ **blockierend vor TL-14b,
+    aber klein**; **C2** = Mesh-Verteilung der Denylist ⇒ **Fast-Follow, bewusst nichts bauen** (lokale
+    owner-gepflegte Datei; eine fernverteilte Denylist wäre ein DoS-Vektor). Form: **Denylist**, kein CRL/OCSP
+    (OCSP = SPOF im Trust-Pfad; eine echte CRL bräuchte für jede Sperrung den **Offline-Root-Key** und
+    widerspräche damit D3). Damit versöhnen sich Consensus-Wortlaut und ADR-Herabstufung: **der Consensus
+    meinte C1, diese ADR meinte C2.** Stärkster Einzelgrund für C1: die kalte TH02-Reserve (**D6**, §68-72) ist
+    ohne Sperrfähigkeit nur **halb** aktivierbar — sie stellt Verfügbarkeit wieder her, **nicht Integrität**,
+    weil das kompromittierte Intermediate gültig bleibt. **Noch offen: die Owner-Ratifizierung** (§74/§100
+    werden erst danach nachgezogen). Rückwirkung auf D3: eine kürzere Laufzeit ist **kein Revocation-Ersatz**;
+    Empfehlung 24 Monate, begründet als **Zeremonie-Probe-Erzwingung** (D6), nicht als Kompensation.
 
 ## Verworfene Alternativen
 - **Gekoppelter Domain-Flip** (D1-Gegenoption) — zwei Variablen/Fenster, schlechte Bisektierbarkeit.

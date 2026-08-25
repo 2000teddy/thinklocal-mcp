@@ -8,6 +8,28 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs(tl14a): G2-Consensus-Ergebnis zu Auflage C — Revocation gesplittet (2026-08-25 16:45)
+**Doc-only** Consensus-Protokoll (**CO-Anteil von Gate G2**; keine Owner-Entscheidung, kein Gate entriegelt).
+Neue `docs/architecture/TL-14a-consensus-result-C.md` protokolliert einen tatsächlich gelaufenen
+`pal:consensus`-**Doppellauf** über den in `TL-14a-blocker-C-grounding.md` §2 aufgedeckten Widerspruch
+(Consensus stuft A–C blockierend, ADR-045 §74 führt nur A/B). **Ergebnis: C wird gesplittet** statt „Blocker"
+oder „Fast-Follow" — der Streit lag an einem falsch geschnittenen Objekt. **C1** (lokales
+`isRevoked`-Enforcement, App-Ebene, `agent-card.ts:311` Issuer **+** `:353` Leaf, bestehende `crl.ts`
+verdrahten) = **blockierend vor TL-14b, aber klein**; **C2** (Mesh-Verteilung) = **Fast-Follow, bewusst nichts
+bauen** (lokale owner-gepflegte Datei — eine fernverteilte unsignierte Denylist wäre ein DoS-Primitiv). ⇒ **Der
+Consensus meinte C1, die ADR meinte C2.** Form: **Denylist**, kein CRL/OCSP (OCSP = SPOF im Trust-Pfad; eine
+echte CRL bräuchte für jede Sperrung den Offline-Root-Key ⇒ Widerspruch zu D3). **Stärkster Einzelgrund für C1**
+(von der Fast-Follow-Seite eingeräumt): die kalte **TH02-Reserve (D6)** ist ohne Sperrfähigkeit nur **halb**
+aktivierbar — Verfügbarkeit ja, **Integrität nein**. **Lauf-Ehrlichkeit:** Runde 1 lieferte nur **eine** Stimme
+(`codex`/`agy` beide *"executable not found in PATH"* ⇒ **G3 erneut verifiziert offen**), deshalb Runde 2
+**adversarial nachgezogen** (sonnet *for* vs. opus *against*); der Gegenangriff traf und korrigierte die
+Begründung — **Same-Vendor-Panel, kein Cross-Vendor-Pass**, so gekennzeichnet. **Rückwirkung auf G1:** eine
+kürzere D3-Laufzeit ist **kein Revocation-Ersatz**; Empfehlung **24 Monate**, begründet als
+Zeremonie-Probe-Erzwingung (D6) — Korridor 1–3 J unverändert, Zahl bleibt Christians. Nachgezogen:
+G1-Brief §1/§3, ADR-045 §100 (Zeiger; **Status/§74 bewusst NICHT geändert**), `TL-14a-gate-status.md` §2/§3/§5.
+**Die Owner-Hälfte von G2 bleibt offen**, der C1-Slice ist **nicht freigegeben**. Kein `.ts`-Diff, Daemon-Suite
+unverändert **2101 grün**. `changes/2026-08-25_tl14a-g2-consensus-result-C.md`.
+
 ### docs(tl14a): G1-Entscheidungs-Brief für Christian (Owner-Sign-off) (2026-07-29 07:40)
 **Doc-only** Owner-Decision-Brief (kein Beschluss, kein Gate verschoben, kein Fortschritt). Neue
 `docs/architecture/TL-14a-G1-decision-brief.md` zieht die **eine** Owner-Entscheidung, die ADR-045 auf `Proposed`
