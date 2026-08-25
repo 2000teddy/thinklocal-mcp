@@ -22,8 +22,8 @@ nur laut Commit-Prosa, sondern im aktuellen Baum verifiziert:
 | Gate | Was fehlt | Entscheider | Entriegelt |
 |------|-----------|-------------|-----------|
 | **G1** | **D3 — exakte Intermediate-Laufzeit** im Korridor **1–3 Jahre** setzen (opus 12–24 Mon., sonnet 3 J; beide verwerfen ≥5 J). → ADR-045 `Proposed`→`Accepted`, D1/D4/D5/D6-Gates bestätigen | **Christian (Owner)** | Runbook-Volltext + Zeremonie-Skripte |
-| **G2** | **C-Klassifikation**: Revocation-Lücke = **TL-14b-Blocker** (dann fehlt C in ADR-045 §74) oder **Fast-Follow** (dann widerspricht §74 dem Consensus A–C-blockierend)? + Form (Denylist vs CRL/OCSP) + Distribution/Pinning | **CO/Owner** | `crl.ts`-Verdrahtung |
-| **G3** | **Cross-Vendor-Consensus-Pass**: `codex`/`agy` NOT in PATH (2026-07-21 verifiziert) → GPT/Gemini-Sicht fehlt. **Kein** Konsens-Fehlschlag (5/6 stehen), reine Infra-Blockade | Infra/Christian | optionale Zusatz-Sicht |
+| **G2** | ~~**C-Klassifikation**~~ **CO-Anteil erledigt (2026-08-25, `TL-14a-consensus-result-C.md`)**: C wird **gesplittet** — **C1** (lokales `isRevoked`-Enforcement, App-Ebene, `agent-card.ts:311`+`:353`) = **blockierend, klein**; **C2** (Mesh-Verteilung) = **Fast-Follow, nichts bauen**. Form: **Denylist**, kein CRL/OCSP. **Weiterhin offen: die Owner-Ratifizierung** (Tabelle am Ende jenes Dokuments) | ~~CO/Owner~~ **Owner** | `crl.ts`-Verdrahtung (C1-Slice) |
+| **G3** | **Cross-Vendor-Consensus-Pass**: `codex`/`agy` NOT in PATH (**2026-08-25 erneut laufzeit-verifiziert**: PAL listet beide als konfiguriert, beide scheitern beim Aufruf) → GPT/Gemini-Sicht fehlt. **Kein** Konsens-Fehlschlag, reine Infra-Blockade | Infra/Christian | optionale Zusatz-Sicht |
 | **G4** | **TL-14b-Durchführung**: Token-Re-Onboard je Node + Zwei-Peer-Proof | **⛔ Termin + Christian** | out-of-repo |
 
 ## 3. Warum kein non-gated Slice vorgezogen wird (bewusst, nicht faul)
@@ -34,6 +34,10 @@ nur laut Commit-Prosa, sondern im aktuellen Baum verifiziert:
   + PR-#83-Lehre (Reihenfolge nicht umgehen).
 - **C-Verdrahtung** (`isRevoked` in den Connection-Setup, Kandidat `agent-card.ts:311/353`) hängt an G2
   (Form + Blocking-Status + Distribution) — Owner/CO-Entscheidungen, kein Code-Slice.
+  **Update 2026-08-25:** Form + Blocking-Status + Distribution sind durch den CO-Lauf **beantwortet**
+  (`TL-14a-consensus-result-C.md`: C1 blockierend/klein, C2 Fast-Follow, Denylist, App-Ebene, beide
+  Fingerprints). Der C1-Slice ist damit **inhaltlich definiert**, aber **weiterhin nicht freigegeben** — er
+  wartet auf die **Owner-Ratifizierung**. Kein Vorgriff.
 - **A2-rest** (`selectTrustDistributionCa` + Token-Onboard rewiren) ist deferred bis 2-Tier es erfordert
   (TL-14b); flacher `verifyPeerCert` ist dort der natürliche Fit. Vorziehen wäre spekulativ.
 
@@ -50,6 +54,11 @@ gleich zurückdreht (Churn).
 TL-14a steht an der agent-ausführbaren Grenze: **A + B fertig, Rest gated.** Nächste Entriegelung = **G1**
 (eine Zahl, Christian) und unabhängig davon **G2** (CO/Owner). Bis dahin: **sauber geparkt, keine offene
 Code-Arbeit.**
+
+**Nachtrag 2026-08-25 (KW35):** Der **CO-Anteil von G2 ist erledigt** (`TL-14a-consensus-result-C.md`) — damit
+sind **beide** verbleibenden Entriegelungen jetzt **reine Owner-Entscheidungen**: **G1** (die D3-Zahl) und
+**G2-Owner** (C1/C2-Ratifizierung + Freigabe des C1-Slices). Die agent-ausführbare Lane bleibt **erschöpft**;
+der inhaltlich definierte C1-Slice wird **nicht** vorgezogen.
 
 ## Abgrenzung
 Doc-only. Kein Code/Config/Skript, kein Deploy/Secret/Cross-Host, keine Entscheidung, kein Gate vorweggenommen.

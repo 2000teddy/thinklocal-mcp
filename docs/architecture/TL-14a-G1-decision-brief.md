@@ -34,6 +34,18 @@ ist **1–3 Jahre** (`TL-14a-consensus-result-D1-D6.md` §D3). Offen ist nur die
 Kompromittierungs-Fenster (spricht für **kürzer**). Die zweite Achse ist **härter, solange G2/Revocation offen
 ist** — ohne Denylist/CRL ist der Doppel-Pin-Cutover die *einzige* Reaktion auf einen Intermediate-Kompromiss.
 
+> **⚠️ Nachtrag 2026-08-25 (KW35) — die Begründung oben ist korrigiert, der Korridor nicht.**
+> Der G2-Consensus-Lauf (`TL-14a-consensus-result-C.md`) hat die Achsen-Abwägung geprüft und **eine der beiden
+> Achsen entwertet**: eine kürzere Laufzeit ist **kein Revocation-Ersatz** (beide Modelle ausdrücklich). Sie
+> deckelt nur das Worst-Case-Fenster bei **planmäßiger Rotation** und tut nichts gegen „Kompromittierung an
+> Tag 2" — 12 vs. 36 Monate ist relativ zur Reaktionszeit eines Angreifers **kein qualitativer Unterschied**.
+> Was die kürzere Laufzeit *tatsächlich* kauft, ist eine **erzwungene Wiederholung der Offline-Zeremonie** —
+> was die D6-Auflage („mind. einmal trocken proben") faktisch von selbst erfüllt und Prozedur-Verrottung im
+> Solo-Betrieb verhindert.
+> **⇒ Empfehlung: 24 Monate**, begründet als **Zeremonie-Frequenz/Probe-Erzwingung**, nicht als
+> Kompromittierungs-Fenster-Kompensation. Der Korridor **1–3 J bleibt unverändert**; die Zahl bleibt **deine**
+> Entscheidung. Der Lauf **entscheidet nichts** und ist selbst noch **nicht owner-ratifiziert**.
+
 > **➡️ Zu setzen:** **eine Zahl im Korridor 1–3 Jahre.** Alles andere an G1 ist Bestätigung (§2).
 
 **Vorbedingung für eine sichere Wahl ist erfüllt:** B (Intermediate-Expiry-Monitoring) ist code-seitig
@@ -67,6 +79,15 @@ owner-ratifizierte** Abweichung. Ist-Zustand: `crl.ts` existiert als Fingerprint
 Nicht-Test-Aufrufer** (Dead-Code; der Datei-Header behauptet fälschlich eine Verdrahtung). Das ist **Gate G2**
 (CO/Owner: Blocker vs. Fast-Follow + Form + Distribution) und **bewusst kein Teil dieses Briefs** — es beeinflusst
 G1 nur als *Argument* (längere D3-Laufzeit ⇒ größeres Risiko ohne Revocation), nicht als Blocker der Zahl selbst.
+
+**Stand 2026-08-25 (KW35): der CO-Anteil von G2 ist gelaufen** — `TL-14a-consensus-result-C.md`. Ergebnis in
+einem Satz: **C wird gesplittet.** **C1** (lokales `isRevoked`-Enforcement an `agent-card.ts:311` + `:353`,
+App-Ebene, bestehende `crl.ts` verdrahten) = **blockierend vor TL-14b, aber klein**; **C2** (Mesh-Verteilung der
+Denylist) = **Fast-Follow, bewusst nichts bauen**. Form: **Denylist, kein CRL/OCSP**. Der stärkste Einzelgrund:
+ohne Sperrfähigkeit ist die **kalte TH02-Reserve (D6) nur halb aktivierbar** — sie stellt Verfügbarkeit wieder
+her, nicht Integrität, weil das kompromittierte Intermediate gültig bleibt. **Die Owner-Hälfte von G2 steht
+weiterhin aus** (Ratifizierungs-Tabelle am Ende jenes Dokuments); an G1 ändert das nur die *Begründung* der
+D3-Zahl (siehe Nachtrag in §1), nicht den Korridor.
 
 ## 4. Was dein Sign-off entriegelt (und was NICHT)
 
