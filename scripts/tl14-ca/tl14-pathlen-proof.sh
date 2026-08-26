@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
 # Copyright (c) 2026 Christian — ThinkLocal/ThinkHub. Licensed under the Elastic License 2.0 (ELv2). See LICENSE.
 #
-# tl14-pathlen-proof.sh — reproduzierbarer Beleg für den ADR-045-D2-Widerspruch.
+# tl14-pathlen-proof.sh — reproduzierbarer Beleg für das ADR-045-D2-Cert-Profil.
 #
-# BEFUND: Die Zielhierarchie von ADR-045 ist Root -> Intermediate (TH01/TH02) -> Node-Leafs.
-# D2 schreibt für die Root `pathLen 0` vor. Nach RFC 5280 ist `pathLenConstraint` aber die
-# maximale Anzahl NICHT-selbst-ausgestellter Zwischen-CAs, die diesem Zertifikat im Pfad
-# FOLGEN dürfen. Root(pathlen:0) erlaubt damit KEIN Intermediate — die Zielhierarchie ist
-# mit D2-wie-geschrieben nicht verifizierbar.
+# ADR-045 D2 (Stand 2026-08-26, korrigiert): Root `pathLen 1` + Intermediate `pathLen 0`.
+# Nach RFC 5280 §4.2.1.9 ist `pathLenConstraint` die maximale Anzahl NICHT-selbst-ausgestellter
+# Zwischen-CAs, die dem Zertifikat im Pfad FOLGEN dürfen. Root(pathlen:1) erlaubt damit genau
+# eine Zwischenstufe; Root(pathlen:0) erlaubt KEINE und macht die Zielhierarchie
+# Root -> Intermediate (TH01/TH02) -> Node-Leafs unverifizierbar.
+#
+# HISTORIE: Die D2-Erstfassung schrieb `Root pathLen 0` vor. Dieses Skript war der Beleg, der
+# den Fehler zeigte (siehe docs/architecture/TL-14a-D2-pathlen-blocker.md); es bleibt als
+# Vor-Zeremonie-Check erhalten — vor der Offline-Wurzel-Zeremonie einmal laufen lassen, um zu
+# bestätigen, dass das OpenSSL der Zeremonie-Maschine sich wie erwartet verhält.
 #
 # Dieses Skript beweist das vendor-neutral mit OpenSSL (unabhängig von node-forge).
 # Es ist NICHT Teil der Zeremonie: es erzeugt ausschließlich Wegwerf-Material in einem
@@ -70,9 +75,10 @@ done
 
 echo
 if [ "$rc_expected" = "0" ]; then
-  echo "BEFUND REPRODUZIERT: ADR-045 D2 (Root pathLen 0) ist mit der Zweistufen-Zielhierarchie unvereinbar."
-  echo "Korrekt waere: Root pathLen 1  +  Intermediate pathLen 0."
+  echo "BESTAETIGT: ADR-045 D2 ist korrekt kodiert — Root pathLen 1 + Intermediate pathLen 0."
+  echo "(Root pathLen 0 waere mit der Zweistufen-Zielhierarchie unvereinbar.)"
   exit 0
 fi
-echo "BEFUND NICHT REPRODUZIERT — Note pruefen/aktualisieren." >&2
+echo "ABWEICHUNG: Das OpenSSL dieser Maschine verhaelt sich anders als erwartet — NICHT mit der" >&2
+echo "Zeremonie fortfahren, bevor das geklaert ist (docs/architecture/TL-14a-D2-pathlen-blocker.md)." >&2
 exit 1

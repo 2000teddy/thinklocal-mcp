@@ -1,7 +1,13 @@
-# TL-14a — BLOCKER: ADR-045 D2 (`Root pathLen 0`) ist mit der Zweistufen-Hierarchie unvereinbar
+# TL-14a — BLOCKER (GELÖST): ADR-045 D2 (`Root pathLen 0`) war mit der Zweistufen-Hierarchie unvereinbar
 
-**Typ:** Blocker-Befund, code- und laufzeit-verifiziert. **Entscheidet nichts** — die Korrektur ist ein
-Owner-/CO-Akt. **Datum:** 2026-08-26 (KW35).
+> **✅ ENTSCHIEDEN 2026-08-26 — Option A freigegeben (Christian).** ADR-045 §D2 ist auf
+> **Root `pathLen 1` + Intermediate `pathLen 0`** korrigiert; Zielhierarchie-Diagramm und §Verworfene
+> Alternativen sind mitgezogen. Der **Beschluss** „exakt zwei Stufen, keine Sub-CAs" ist **unverändert** —
+> nur seine Kodierung war falsch. **Der Runbook-Slice ist damit entblockt** und ab Schritt 2 fortsetzbar.
+> Dieses Dokument bleibt als **Befund- und Entscheidungs-Beleg** stehen.
+
+**Typ:** Blocker-Befund, code- und laufzeit-verifiziert. **Status: gelöst** (Owner-Freigabe Option A,
+2026-08-26). **Datum:** 2026-08-26 (KW35).
 **Entdeckt beim:** Schreiben des Runbook-Volltexts + der Zeremonie-Skripte (der erste Slice, den der
 G1/G2-Sign-off entriegelt hat). Der Befund **stoppt genau diesen Slice** an Schritt 2 von 7.
 
@@ -104,14 +110,17 @@ gepinnt.
 
 ## 5. Die Entscheidung (Owner/CO)
 
-| Option | Bewertung |
-|---|---|
-| **A — D2 korrigieren: Root `pathLen 1`, Intermediate `pathLen 0`** (empfohlen) | Erfüllt das dokumentierte Schutzziel exakt, ist RFC-konform, durch 4.1–4.3 belegt. Reine ADR-Text-Korrektur, **kein** Code-Diff. |
-| **B — D2 beibehalten (`Root pathLen 0`)** | Technisch unmöglich in Kombination mit der Zielhierarchie. Ginge nur, wenn man die Zweistufigkeit aufgibt — dann ist TL-14 als Ganzes gegenstandslos. |
-| **C — `pathLen` an der Root weglassen** | RFC-konform (unbegrenzte Tiefe), aber schwächer als A: die Root dürfte beliebig tiefe CA-Ketten erlauben. Verstösst gegen „Minimal-Vollmacht". **Nicht empfohlen.** |
+| Option | Bewertung | Beschluss |
+|---|---|---|
+| **A — D2 korrigieren: Root `pathLen 1`, Intermediate `pathLen 0`** (empfohlen) | Erfüllt das dokumentierte Schutzziel exakt, ist RFC-konform, durch 4.1–4.3 belegt. Reine ADR-Text-Korrektur, **kein** Code-Diff. | **✅ FREIGEGEBEN (Christian, 2026-08-26)** |
+| **B — D2 beibehalten (`Root pathLen 0`)** | Technisch unmöglich in Kombination mit der Zielhierarchie. Ginge nur, wenn man die Zweistufigkeit aufgibt — dann ist TL-14 als Ganzes gegenstandslos. | verworfen |
+| **C — `pathLen` an der Root weglassen** | RFC-konform (unbegrenzte Tiefe), aber schwächer als A: die Root dürfte beliebig tiefe CA-Ketten erlauben. Verstösst gegen „Minimal-Vollmacht". | verworfen |
 
-> **➡️ Zu entscheiden:** Option **A** bestätigen ⇒ ADR-045 §D2 + §Verworfene Alternativen + Zielhierarchie-
-> Diagramm (`pathLen 0` in der Root-Zeile) korrigieren. Danach ist der Runbook-Slice sofort fortsetzbar.
+**Umgesetzt am 2026-08-26** (minimale Textkorrektur, genau drei Stellen in ADR-045):
+1. **§D2** — Überschrift + Kodierungs-Tabelle (Root `1` / Intermediate `0`) + RFC-Begründung + Korrektur-Historie.
+2. **§Zielhierarchie** — Root-Zeile im Diagramm: `pathLen 0` → `pathLen 1 — genau EINE Zwischenstufe erlaubt`.
+3. **§Verworfene Alternativen** — die Verwerfung von „`pathLen 1`" **zurückgezogen** (Fehllesung) und durch die
+   tatsächlich verworfene Alternative ersetzt (`pathLen` an der Root **weglassen**).
 
 ## 6. Was dieser Befund NICHT ändert
 
@@ -124,11 +133,16 @@ gepinnt.
 
 ## 7. Stand des Runbook-Slices
 
-**Gestoppt an Schritt 2 von 7** (Offline-Wurzel-Zeremonie). Die Schritte 1/5/7 (Vorbedingungen/Inventar,
-Chain-Verifikation, Rollback) hängen nicht am `pathLen`; die Schritte 2/3/4 (Root-Zeremonie, Intermediate
+War **gestoppt an Schritt 2 von 7** (Offline-Wurzel-Zeremonie). Die Schritte 1/5/7 (Vorbedingungen/Inventar,
+Chain-Verifikation, Rollback) hingen nicht am `pathLen`; die Schritte 2/3/4 (Root-Zeremonie, Intermediate
 TH01, Geschwister TH02) **vollständig**. Ein Runbook, dessen Zeremonie-Schritt nicht ausführbar ist, wäre
-genau die „Nebelmaschine", vor der `TL-14a-gate-status.md` §3 warnt — deshalb hier **Halt und Meldung**
+genau die „Nebelmaschine", vor der `TL-14a-gate-status.md` §3 warnt — deshalb **Halt und Meldung**
 statt Weiterschreiben.
+
+**✅ Seit der Freigabe von Option A (2026-08-26) ist der Slice entblockt.** Das Zeremonie-Skript kann
+`basicConstraints = critical, CA:TRUE, pathlen:1` für die Root und `pathlen:0` für die Intermediates setzen;
+beide Werte sind durch `tests/integration/tl14-ceremony-cert-profile.test.ts` gegen den echten Daemon-Verify
+abgesichert. **Der Runbook-Volltext selbst ist NICHT Teil dieses PRs** — er folgt als eigener Slice.
 
 ## Verweise
 

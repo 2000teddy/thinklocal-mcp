@@ -13,13 +13,18 @@
  * (OpenSSL, echte CSR/Signatur-Schritte), und prueft sie mit der **echten** Daemon-Funktion
  * `verifyPeerCertChain`.
  *
- * BEFUND, DEN ER FESTNAGELT (siehe `docs/architecture/TL-14a-D2-pathlen-blocker.md`):
- * ADR-045 **D2** schreibt fuer die Root `pathLen 0` vor. Nach RFC 5280 ist `pathLenConstraint`
+ * WAS ER FESTNAGELT — das **korrigierte** D2 (ADR-045, Stand 2026-08-26):
+ * **Root `pathLen 1` + Intermediate `pathLen 0`.** Nach RFC 5280 §4.2.1.9 ist `pathLenConstraint`
  * die maximale Anzahl NICHT-selbst-ausgestellter Zwischen-CAs, die dem Zertifikat im Pfad
- * **folgen** duerfen — `pathlen:0` erlaubt also **kein** Intermediate. Die Zweistufen-Zielhierarchie
- * Root -> Intermediate -> Leaf ist mit D2-wie-geschrieben **nicht verifizierbar**.
- * Korrekt ist: **Root `pathLen 1` + Intermediate `pathLen 0`** — das erlaubt genau eine
- * Zwischenstufe und verbietet dem Intermediate weiterhin jede Sub-CA (D2-Schutzziel bleibt intakt).
+ * **folgen** duerfen. `Root pathLen 1` erlaubt damit genau eine Zwischenstufe; `Intermediate
+ * pathLen 0` verbietet TH01/TH02 jede Sub-CA — das Schutzziel „exakt zwei Stufen" bleibt intakt.
+ *
+ * HISTORIE: Die Erstfassung von D2 schrieb **`Root pathLen 0`** vor. Das erlaubt **kein einziges**
+ * Intermediate und haette die Zielhierarchie unverifizierbar gemacht (jedes Node-Cert mesh-weit
+ * ungueltig). Entdeckt beim Zeremonie-Skript-Slice, korrigiert per Owner-Freigabe (Option A) am
+ * 2026-08-26 — Analyse: `docs/architecture/TL-14a-D2-pathlen-blocker.md`. Der zweite Test unten
+ * haelt die falsche Variante als **Regressionsschutz** fest: faellt sie je wieder in die Zeremonie
+ * zurueck, schlaegt er an.
  *
  * Der Test ist **read-only** gegenueber dem Repo und dem Daemon-State: er arbeitet ausschliesslich
  * in einem temporaeren Verzeichnis und faesst keine echten CA-Dateien an.
@@ -116,16 +121,17 @@ describe.skipIf(!OPENSSL)('TL-14 Zeremonie-Cert-Profil (OpenSSL) gegen den echte
     if (dir) rmSync(dir, { recursive: true, force: true });
   });
 
-  it('KORREKTES Profil (Root pathLen 1 + Intermediate pathLen 0) wird von verifyPeerCertChain AKZEPTIERT', () => {
+  it('D2-Profil (Root pathLen 1 + Intermediate pathLen 0) wird von verifyPeerCertChain AKZEPTIERT', () => {
     const { rootPem, interPem, leafPem } = buildChain(dir, 'p1', 1);
     // Kette ist leaf-first, der Anker (Root) wird separat uebergeben — wie im Produktivpfad.
     expect(verifyPeerCertChain([rootPem], [leafPem, interPem])).toBe(true);
   });
 
-  it('D2-WIE-GESCHRIEBEN (Root pathLen 0) wird ABGELEHNT — die Zielhierarchie waere unbrauchbar', () => {
+  it('REGRESSION: Root pathLen 0 (die korrigierte D2-Erstfassung) wird ABGELEHNT', () => {
     const { rootPem, interPem, leafPem } = buildChain(dir, 'p0', 0);
     // Kryptografisch lueckenlos signiert; die EINZIGE Abweichung zum Test darueber ist der
-    // pathLen der Root. Ablehnung ⇒ mit D2-wie-geschrieben ist kein Node-Cert mesh-weit gueltig.
+    // pathLen der Root. Ablehnung ⇒ mit `Root pathLen 0` waere kein Node-Cert mesh-weit gueltig.
+    // Dieser Test ist der Regressionsschutz gegen einen Rueckfall in die falsche Kodierung.
     expect(verifyPeerCertChain([rootPem], [leafPem, interPem])).toBe(false);
   });
 

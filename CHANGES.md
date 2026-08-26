@@ -8,7 +8,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### docs+test(tl14): BLOCKER — ADR-045 D2 (`Root pathLen 0`) unvereinbar mit der Zweistufen-Hierarchie (2026-08-26 07:50)
+### docs+test(tl14): D2-pathLen-Blocker gefunden UND korrigiert — Root `pathLen 1` + Intermediate `pathLen 0` (2026-08-26 07:50 / Korrektur 08:40)
 Auftrag war der durch den G1/G2-Sign-off entriegelte Slice **Runbook-Volltext + Zeremonie-Skripte**. Beim
 Schreiben von **Schritt 2 von 7** (Offline-Wurzel-Zeremonie) — der Zeile
 `basicConstraints = critical, CA:TRUE, pathlen:<N>` — zeigte sich, dass der von ADR-045 **D2**
@@ -36,6 +36,19 @@ bleibt offen** (Owner/CO). **Nicht berührt:** `packages/daemon/**` (`verifyPeer
 **korrekt** und lehnt zu Recht ab), D1/D3/D4/D5/D6, C1/C2, ADR-045-Status (`Accepted` bleibt), C1-Slice
 weiter nicht freigegeben, TL-14b weiter ⛔. Daemon-Suite unverändert **2101 grün**, Gesamt **2226 grün**.
 `changes/2026-08-26_tl14-d2-pathlen-blocker.md`.
+**NACHTRAG — Korrektur eingetragen (2026-08-26 08:40):** Christian hat **Option A freigegeben**. ADR-045 §D2
+lautet jetzt **Root `pathLen 1` + Intermediate `pathLen 0`** — minimale Textkorrektur an **genau drei
+Stellen**: (1) **§D2** Überschrift + Kodierungs-Tabelle + RFC-Begründung + Korrektur-Historie; (2)
+**§Zielhierarchie**-Diagramm, Root-Zeile `pathLen 0` → `pathLen 1 — genau EINE Zwischenstufe erlaubt`;
+(3) **§Verworfene Alternativen** — die Verwerfung von „`pathLen 1`" **zurückgezogen** (Fehllesung: der
+Root-`pathLen` sagt nichts über die Sub-CA-Vollmacht des Intermediates) und durch die **tatsächlich**
+verworfene Alternative ersetzt (`pathLen` an der Root ganz weglassen ⇒ unbegrenzte Kettentiefe). **Der
+Beschluss „exakt zwei Stufen, keine Sub-CAs" ist unverändert** — nur seine Kodierung war falsch. Die
+Blocker-Note ist auf **gelöst** gesetzt und bleibt als Befund-/Entscheidungs-Beleg stehen; der Profiltest
+nagelt jetzt das **korrigierte** D2 fest und hält `Root pathLen 0` als **Regressionsschutz** gegen einen
+Rückfall; das Proof-Skript ist zum **Vor-Zeremonie-Check** umgewidmet (bestätigt vor der Offline-Zeremonie,
+dass das OpenSSL der Zeremonie-Maschine sich erwartungsgemäss verhält). **Der Runbook-Volltext ist NICHT
+Teil dieses PRs** — er folgt als eigener, jetzt entblockter Slice.
 
 ### docs(tl14a): Owner-Sign-off G1 + G2 eingetragen — ADR-045 `Accepted`, D3 = 24 Monate (2026-08-26 06:15, #353)
 **Doc-only Beschluss-Eintragung** (trägt eine Owner-Entscheidung ein, trifft selbst keine). Christian hat am

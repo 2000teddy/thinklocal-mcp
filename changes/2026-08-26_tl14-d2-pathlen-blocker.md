@@ -1,7 +1,32 @@
-# changes/2026-08-26 — docs+test(tl14): BLOCKER — ADR-045 D2 (`Root pathLen 0`) unvereinbar mit der Zweistufen-Hierarchie
+# changes/2026-08-26 — docs+test(tl14): D2-pathLen-Blocker gefunden UND korrigiert (Root `pathLen 1` + Intermediate `pathLen 0`)
 
-**Typ:** Blocker-Befund + Regressionsschutz. **Entscheidet nichts, ändert keinen Beschluss.** Kein
-`packages/`-Diff, kein Deploy/Secret/Cross-Host. Risiko-Delta **null**.
+**Typ:** Blocker-Befund + Regressionsschutz + die owner-freigegebene Korrektur. Kein `packages/`-Diff, kein
+Deploy/Secret/Cross-Host. Risiko-Delta **null**.
+
+> **Ablauf in diesem PR:** (1) Befund beim Zeremonie-Skript-Slice, Slice gestoppt, Blocker gemeldet —
+> **ohne** die ADR anzufassen. (2) Christian gibt **Option A** frei. (3) Die minimale Textkorrektur ist
+> eingetragen. Der PR enthält damit **beides**: den Beleg und die freigegebene Korrektur.
+
+## Die Korrektur (Owner-Freigabe Option A, 2026-08-26)
+**ADR-045 §D2 lautet jetzt: Root `pathLen 1` + Intermediate `pathLen 0`.** Genau drei Stellen geändert:
+1. **§D2** — Überschrift, Kodierungs-Tabelle (Root `1` / Intermediate `0`), RFC-5280-Begründung,
+   Korrektur-Historie.
+2. **§Zielhierarchie** — Root-Zeile im Diagramm: `pathLen 0` → `pathLen 1 — genau EINE Zwischenstufe erlaubt`.
+3. **§Verworfene Alternativen** — die Verwerfung von „`pathLen 1`" **zurückgezogen** (Fehllesung) und durch
+   die tatsächlich verworfene Alternative ersetzt (`pathLen` an der Root **weglassen** ⇒ unbegrenzte
+   Kettentiefe, verstösst gegen Minimal-Vollmacht).
+
+**Der Beschluss selbst ist unverändert:** „exakt zwei Stufen, keine Sub-CAs" — nur seine Kodierung war
+falsch. Das Schutzziel hängt am `pathLen` des **Intermediates**, nicht an dem der Root.
+
+**Mitgezogen:** Blocker-Note auf **gelöst** gesetzt (bleibt als Befund-/Entscheidungs-Beleg stehen);
+Profiltest nagelt jetzt das **korrigierte** D2 fest und hält `Root pathLen 0` als **Regressionsschutz**;
+Proof-Skript zum **Vor-Zeremonie-Check** umgewidmet. **Der Runbook-Volltext ist NICHT Teil dieses PRs** —
+er folgt als eigener, jetzt entblockter Slice.
+
+---
+
+## Der ursprüngliche Befund (bleibt als Beleg)
 
 ## Auftrag und was daraus wurde
 Auftrag war der durch den G1/G2-Sign-off entriegelte Slice **„Runbook-Volltext + Zeremonie-Skripte"**. Beim
@@ -49,8 +74,8 @@ der Root sagt nichts über die Vollmacht des Intermediates. **Korrekt: Root `pat
   3. Sub-CA unter dem Intermediate ⇒ **abgelehnt** ⇒ **die Korrektur schwächt D2 nicht**
   4. `certFingerprint()` == OpenSSL-DER-SHA256 (lowercase hex) ⇒ **Pin-Kompatibilität für D4 belegt**
      (zweites ungetestetes Risiko: bei abweichenden Formaten hätte der Doppel-Pin-Cutover ins Leere gepinnt)
-- **`ADR-045` §D2** — ⛔-Korrekturhinweis eingefügt, der die Abweichung **sichtbar statt still** macht.
-  **Die Entscheidung selbst ist NICHT geändert** (Owner-/CO-Akt).
+- **`ADR-045` §D2 / §Zielhierarchie / §Verworfene Alternativen** — erst ⛔-Sichtbarkeits-Hinweis (ohne die
+  Entscheidung anzutasten), nach der Owner-Freigabe dann die **eingetragene Korrektur** (s. oben).
 - **DO:** `CHANGES.md`, `COMPLIANCE-TABLE.md`, `TODO.md`, dieser `changes/`-Eintrag.
 
 ## Warum gestoppt statt weitergeschrieben
@@ -65,7 +90,27 @@ Stelle unvollständig" entstehen (dieselbe Begründung, die den Slice vor G1 ges
 - **CG:** entfällt — kein generierter Code/Typ.
 - **TS:** ✅ **+4 Integrationstests, grün.** Daemon-Suite unverändert **2101 grün**; Gesamt-Suite
   **2226 grün** (2222 + 4). Der Proof-Skript-Lauf ist zusätzlich manuell verifiziert (Exit 0).
-- **CR:** ✅ echtes Fremd-Vendor-Review über **`agy` (Gemini)** — siehe PR-Body/Kommentar.
+- **CR:** ✅ **zwei** echte Fremd-Vendor-Reviews über **`agy` (Gemini)**.
+  - **Runde 1 (Befund-Diff): APPROVE, keine Findings.** Der Reviewer verifizierte die RFC-5280-Auslegung
+    eigenständig („100% korrekt") und bestätigte das Stoppen des Slices als „einzig saubere Option"
+    (ein stilles `pathlen:1` wäre ein „Stealth-Fix" an einer frisch gezeichneten Klausel gewesen).
+  - **Runde 2 (Korrektur-Diff): REQUEST_CHANGES — 2 HIGH + 1 MEDIUM. Die 2 HIGH sind widerlegte
+    Fehlalarme, das MEDIUM bewusst abgelehnt.** Ehrlich dokumentiert statt weggelassen:
+    - **HIGH-1/HIGH-2 (widerlegt):** Der Reviewer behauptete, `tl14-pathlen-proof.sh` baue „weiterhin nur
+      eine Kette mit `Root pathLen 0`" und melde deshalb fälschlich Erfolg. **Falsch** — das Skript
+      iteriert `for PL in 0 1`, baut **beide** Ketten und prüft **beide** Erwartungen
+      (`pathlen:0` muss scheitern **und** `pathlen:1` muss gelingen). Ursache des Fehlalarms: die
+      Prüfschleife steht in der **unveränderten Dateimitte** und war deshalb **nicht im Diff**, den der
+      Reviewer sah. **Empirisch widerlegt per Mutationstest:** baut man beide Roots mit `pathlen:0`,
+      schlägt das Skript korrekt an — Ausgabe „ABWEICHUNG … NICHT mit der Zeremonie fortfahren",
+      **Exit 1**. Keine Änderung nötig.
+    - **MEDIUM-3 (bewusst abgelehnt):** Vorschlag, die Datei in `tl14-pre-ceremony-check.sh` umzubenennen.
+      **Nicht umgesetzt:** (a) der Auftrag lautete ausdrücklich „**nur die minimale Textkorrektur für
+      diesen Blocker**"; (b) das Skript **ist** weiterhin ein Beleg — es beweist beide Richtungen der
+      `pathLen`-Semantik; (c) eine Umbenennung würde Referenzen in **sechs** Dateien nachziehen
+      (ADR-045, Blocker-Note, dieser Eintrag, `CHANGES`, `COMPLIANCE`, `TODO`) und damit genau den Churn
+      erzeugen, den die Minimalitäts-Vorgabe vermeiden soll. Kann jederzeit als eigener Hygiene-Slice
+      nachgeholt werden.
 - **PC:** Secret-Scan clean; kein `packages/`-Diff verifiziert.
 
 ## Nicht berührt

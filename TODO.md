@@ -404,9 +404,13 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     Vorbedingung** vor TL-14b, jetzt in ADR-045 §Vorbedingung C1; **C2** (Mesh-Verteilung) = **Fast-Follow,
     bewusst nichts bauen** (Trigger für Re-Evaluierung: >25 Nodes / Nicht-Owner-Betreiber). Belege:
     `TL-14a-G1-decision-brief.md` §5, `TL-14a-consensus-result-C.md` §Ratifizierung.
-    - [~] **Runbook-Volltext + Zeremonie-Skripte — BEGONNEN, an Schritt 2/7 GESTOPPT (2026-08-26).**
-      **⛔ NEUER BLOCKER, Entscheidung nötig:** `docs/architecture/TL-14a-D2-pathlen-blocker.md` —
-      ADR-045 **D2** (`Root pathLen 0`) ist mit der Zweistufen-Zielhierarchie **unvereinbar**. RFC 5280:
+    - [~] **Runbook-Volltext + Zeremonie-Skripte — an Schritt 2/7 gestoppt, Blocker inzwischen GELÖST.**
+      **✅ D2-KORREKTUR FREIGEGEBEN + EINGETRAGEN (Christian, Option A, 2026-08-26):** ADR-045 §D2 lautet
+      jetzt **Root `pathLen 1` + Intermediate `pathLen 0`** (Diagramm + §Verworfene Alternativen mitgezogen);
+      der Beschluss „exakt zwei Stufen, keine Sub-CAs" ist unverändert, nur seine Kodierung war falsch.
+      **Der Slice ist damit entblockt** — Runbook-Volltext folgt als eigener Slice.
+      **Der ursprüngliche Befund** (`docs/architecture/TL-14a-D2-pathlen-blocker.md`, bleibt als Beleg):
+      ADR-045 **D2** (`Root pathLen 0`) war mit der Zweistufen-Zielhierarchie **unvereinbar**. RFC 5280:
       `pathLenConstraint` zählt die Zwischen-CAs, die dem Cert **folgen** dürfen ⇒ `pathlen:0` erlaubt
       **kein** Intermediate; jedes Node-Cert der neuen Kette wäre mesh-weit ungültig. **Korrekt: Root
       `pathLen 1` + Intermediate `pathLen 0`** — Schutzziel bleibt voll erhalten (Sub-CA-Verbot erzwingt
