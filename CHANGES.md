@@ -8,7 +8,28 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### docs(tl14a): G2-Consensus-Ergebnis zu Auflage C — Revocation gesplittet (2026-08-25 16:45)
+### docs(tl14a): Owner-Sign-off G1 + G2 eingetragen — ADR-045 `Accepted`, D3 = 24 Monate (2026-08-26 06:15)
+**Doc-only Beschluss-Eintragung** (trägt eine Owner-Entscheidung ein, trifft selbst keine). Christian hat am
+2026-08-26 **beide** verbleibenden TL-14a-Gates gezeichnet: **G1 — D3 = 24 Monate** (+ D1/D4/D5/D6 mit-bestätigt (D2 = CO/technisch, bereits per Consensus entschieden, nicht Teil der Sign-off-Tabelle)) und **G2 — Auflage C ratifiziert** (**C1** blockierend, **C2** Fast-Follow).
+**ADR-045** wechselt damit von `Proposed` auf **`Accepted`**: §D3 trägt die **24 Monate**, begründet als
+**Zeremonie-Probe-Erzwingung (D6)** und ausdrücklich **nicht** als Kompromittierungs-Fenster-Kompensation —
+der G2-Consensus hatte belegt, dass eine kürzere Laufzeit **kein Revocation-Ersatz** ist. Neu in §Zwingende
+Vorbedingungen: **Vorbedingung C1** (blockierend) mit tragendem Grund — die kalte **TH02-Reserve (D6)** ist
+ohne Sperrfähigkeit nur **halb** aktivierbar (Verfügbarkeit ja, **Integrität nein**) —, Form **Denylist**
+(kein CRL/OCSP), Enforcement auf der **App-Ebene** (empirisch erzwungen durch #342), **beide** Fingerprints
+(`agent-card.ts:311` Issuer + `:353` Leaf), drei Pflicht-Tests inkl. **„Alt-Pin aktiv (D4) + Alt-Intermediate
+revoziert"**, eigener Audit-Event, Header-Korrektur. In §Konsequenzen ist **C2** als bewusst **nicht gebaut**
+dokumentiert (lokale owner-gepflegte `crl.json`; unsignierte Fernverteilung = DoS-Primitiv) inkl.
+**Re-Evaluierungs-Trigger** (>25 Nodes / Nicht-Owner-Betreiber); der Klassifikations-Hinweis vom 2026-07-27 ist
+**aufgelöst** (*der Consensus meinte C1, die ADR meinte C2*). Nachgezogen: G1-Brief §5 Sign-off-Tabelle
+ausgefüllt, `TL-14a-consensus-result-C.md` Ratifizierung ausgefüllt, `TL-14a-gate-status.md` G1+G2
+**GESCHLOSSEN**, `TL-14a-decision-checklist.md` alle sechs D-Zeilen ✅ + als historisch markiert.
+**Entriegelt:** Runbook-Volltext + Zeremonie-Skripte (non-gated, agent-ausführbar). **Bewusst offen gelassen:**
+die **Freigabe des C1-Umsetzungs-Slices** (Klassifikation ≠ Code-Freigabe) und die exakte Root-Laufzeit (nie
+genannt; Korridor 10–15 J, Festlegung bei der Zeremonie). **G3/G4 unverändert gated.** Kein `.ts`-Diff,
+Daemon-Suite unverändert **2101 grün**. `changes/2026-08-26_tl14a-g1-g2-owner-signoff.md`.
+
+### docs(tl14a): G2-Consensus-Ergebnis zu Auflage C — Revocation gesplittet (2026-08-25 16:45, #352)
 **Doc-only** Consensus-Protokoll (**CO-Anteil von Gate G2**; keine Owner-Entscheidung, kein Gate entriegelt).
 Neue `docs/architecture/TL-14a-consensus-result-C.md` protokolliert einen tatsächlich gelaufenen
 `pal:consensus`-**Doppellauf** über den in `TL-14a-blocker-C-grounding.md` §2 aufgedeckten Widerspruch

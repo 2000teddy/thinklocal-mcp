@@ -397,7 +397,20 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
   + `TLMCP_STRICT_IDENTITY`.
 - [~] **[v5.1] TL-14a (≈3 h)** CA-Zweistufen-Umzug: Runbook (Offline-Wurzel-Zeremonie, Intermediate TH01,
   Geschwister-Intermediate TH02) — nur Papier+Skripte.
-  - **GATE-STATUS (2026-07-28, KW31):** `docs/architecture/TL-14a-gate-status.md` — agent-ausführbare Lane
+  - **✅ OWNER-SIGN-OFF ERTEILT (Christian, 2026-08-26) — G1 + G2 beide geschlossen.** **D3 = 24 Monate**
+    (Begründung: Zeremonie-Probe-Erzwingung nach D6, **nicht** Kompromittierungs-Fenster-Kompensation);
+    D1/D4/D5/D6 mit-bestätigt (D2 = CO/technisch, bereits per Consensus entschieden, nicht Teil der Sign-off-Tabelle); **ADR-045 `Proposed` → `Accepted`**. Zugleich **Auflage C ratifiziert**:
+    **C1** (lokales `isRevoked`-Enforcement, App-Ebene, `agent-card.ts:311`+`:353`) = **blockierende
+    Vorbedingung** vor TL-14b, jetzt in ADR-045 §Vorbedingung C1; **C2** (Mesh-Verteilung) = **Fast-Follow,
+    bewusst nichts bauen** (Trigger für Re-Evaluierung: >25 Nodes / Nicht-Owner-Betreiber). Belege:
+    `TL-14a-G1-decision-brief.md` §5, `TL-14a-consensus-result-C.md` §Ratifizierung.
+    - [ ] **JETZT ENTRIEGELT (non-gated, agent-ausführbar):** **Runbook-Volltext + Zeremonie-Skripte** —
+      die D3-Zahl steht in der Cert-Erzeugung fest, die Sequenzierungs-Sperre ist gefallen.
+    - [ ] **⛔ C1-Umsetzungs-Slice** (`crl.ts` verdrahten: App-Verify + `agent-card.ts:311`/`:353`;
+      3 Pflicht-Tests inkl. **„Alt-Pin aktiv + Alt-Intermediate revoziert"**; eigener Audit-Event;
+      `crl.ts:5-7`-Header wahr machen) — **inhaltlich definiert, Codier-Freigabe steht noch aus.**
+      Blockiert **TL-14b**.
+  - **GATE-STATUS (2026-07-28, KW31 — durch den Sign-off oben überholt):** `docs/architecture/TL-14a-gate-status.md` — agent-ausführbare Lane
     **erschöpft**: Vorbedingungen A + B code-verifiziert komplett; **kein non-gated Slice offen**. Nächste
     Entriegelung = **G1** (D3-Intermediate-Laufzeit 1–3 J, Christian) + unabhängig **G2** (C-Klassifikation
     Blocker/Fast-Follow, CO/Owner). G3 (Cross-Vendor-CO) infra-blockiert, G4 (TL-14b) ⛔-gated. Sauber geparkt.
