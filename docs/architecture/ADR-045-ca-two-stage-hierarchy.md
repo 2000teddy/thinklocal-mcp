@@ -46,6 +46,21 @@ Root darf nur Intermediates ausstellen, die **keine** weiteren Sub-CAs erzeugen.
 Stufen. **Bindet an Vorbedingung A** (s.u.): heute ist `pathLen` auf dem App-Verify-Pfad wirkungslos — ohne
 A-Fix ist D2 dort kosmetisch.
 
+> **⛔ KORREKTURBEDÜRFTIG (Befund 2026-08-26, entdeckt beim Runbook-Slice — entscheidet nichts):**
+> Die **Zahl `0`** ist an dieser Stelle technisch falsch, das **Schutzziel** darüber ist richtig. Nach
+> RFC 5280 §4.2.1.9 zählt `pathLenConstraint` die Zwischen-CAs, die dem Zertifikat im Pfad **folgen** dürfen
+> — `Root pathlen:0` erlaubt daher **kein einziges Intermediate** und macht die Zielhierarchie oben
+> unverifizierbar. Dreifach belegt: der eigene grüne Testbestand (`chain-verify.test.ts:55` baut die
+> funktionierende Kette mit **Root `pathLen 1`**, `:61-67` nagelt `Root pathLen 0` als **Ablehnung** fest),
+> ein vendor-neutraler OpenSSL-Beleg (`scripts/tl14-ca/tl14-pathlen-proof.sh`) und ein neuer
+> End-to-End-Profiltest (`tests/integration/tl14-ceremony-cert-profile.test.ts`).
+> **Korrekt wäre: Root `pathLen 1` + Intermediate `pathLen 0`** — dabei bleibt das D2-Schutzziel **voll
+> erhalten** (dass TH01/TH02 keine Sub-CAs ausstellen dürfen, erzwingt der `pathLen 0` **am Intermediate**,
+> nicht der an der Root; die Ablehnung von „`pathLen 1`" unter §Verworfene Alternativen beruht auf einer
+> Fehllesung). **Der Runbook-Slice ist deshalb an Schritt 2 gestoppt.** Analyse + Entscheidungs-Optionen:
+> `TL-14a-D2-pathlen-blocker.md`. **Diese ADR ist hier bewusst NICHT geändert** — die Korrektur ist ein
+> Owner-/CO-Akt.
+
 ### D3 — Intermediate-Validität & Erneuerung: **ENTSCHIEDEN — 24 Monate** (Owner-Sign-off 2026-08-26)
 **Beschluss (Christian, G1):** Die Intermediate-CA-Laufzeit beträgt **24 Monate**.
 
