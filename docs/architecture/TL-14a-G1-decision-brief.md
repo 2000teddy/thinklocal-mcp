@@ -101,16 +101,23 @@ D3-Zahl (siehe Nachtrag in §1), nicht den Korridor.
 
 | Punkt | Beschluss | Datum | Entscheider |
 |-------|-----------|-------|-------------|
-| **D3 Intermediate-Laufzeit** (Zahl im Korridor 1–3 J) | | | Christian |
-| Root-Laufzeit (10–15 J) | | | Christian |
-| D1 entkoppeln — bestätigt? | | | Christian |
-| D4 Doppel-Pin — bestätigt? | | | Christian |
-| D5 Token-Re-Onboard — bestätigt? | | | Christian |
-| D6 TH02 kalt — bestätigt? | | | Christian |
-| → ADR-045 auf `Accepted` setzen | | | Christian |
+| **D3 Intermediate-Laufzeit** (Zahl im Korridor 1–3 J) | **24 Monate** | 2026-08-26 | Christian |
+| Root-Laufzeit (10–15 J) | **Korridor 10–15 J bestätigt**; exakte Zahl bei der Offline-Zeremonie im Runbook | 2026-08-26 | Christian |
+| D1 entkoppeln — bestätigt? | ✅ ja | 2026-08-26 | Christian |
+| D4 Doppel-Pin — bestätigt? | ✅ ja | 2026-08-26 | Christian |
+| D5 Token-Re-Onboard — bestätigt? | ✅ ja | 2026-08-26 | Christian |
+| D6 TH02 kalt — bestätigt? | ✅ ja | 2026-08-26 | Christian |
+| → ADR-045 auf `Accepted` setzen | ✅ gesetzt | 2026-08-26 | Christian |
 
-Nach dem Ausfüllen: ADR-045 §Status auf `Accepted` ändern + die Zahl in §D3 eintragen; dieser Brief bleibt als
-Entscheidungs-Beleg stehen.
+**✅ Gate G1 ist damit geschlossen.** ADR-045 §Status = `Accepted`, §D3 = **24 Monate** eingetragen; die
+Begründung dort ist bewusst **Zeremonie-Probe-Erzwingung (D6)**, nicht Kompromittierungs-Fenster-Kompensation
+(siehe Nachtrag §1). Dieser Brief bleibt als Entscheidungs-Beleg stehen.
+
+**Gleichzeitig gezeichnet: G2** — Auflage C gesplittet, **C1 blockierend** / **C2 Fast-Follow**
+(Ratifizierungs-Tabelle in `TL-14a-consensus-result-C.md`).
+
+**Was der Sign-off NICHT umfasst:** die **Freigabe des C1-Umsetzungs-Slices** (Codier-Start) und **TL-14b**
+selbst (⛔ Termin + Christian). Entriegelt ist ab jetzt: **Runbook-Volltext + Zeremonie-Skripte**.
 
 ## 6. Korrektur-Hinweis (Ehrlichkeit)
 

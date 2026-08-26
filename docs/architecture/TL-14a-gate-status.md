@@ -21,8 +21,8 @@ nur laut Commit-Prosa, sondern im aktuellen Baum verifiziert:
 
 | Gate | Was fehlt | Entscheider | Entriegelt |
 |------|-----------|-------------|-----------|
-| **G1** | **D3 — exakte Intermediate-Laufzeit** im Korridor **1–3 Jahre** setzen (opus 12–24 Mon., sonnet 3 J; beide verwerfen ≥5 J). → ADR-045 `Proposed`→`Accepted`, D1/D4/D5/D6-Gates bestätigen | **Christian (Owner)** | Runbook-Volltext + Zeremonie-Skripte |
-| **G2** | ~~**C-Klassifikation**~~ **CO-Anteil erledigt (2026-08-25, `TL-14a-consensus-result-C.md`)**: C wird **gesplittet** — **C1** (lokales `isRevoked`-Enforcement, App-Ebene, `agent-card.ts:311`+`:353`) = **blockierend, klein**; **C2** (Mesh-Verteilung) = **Fast-Follow, nichts bauen**. Form: **Denylist**, kein CRL/OCSP. **Weiterhin offen: die Owner-Ratifizierung** (Tabelle am Ende jenes Dokuments) | ~~CO/Owner~~ **Owner** | `crl.ts`-Verdrahtung (C1-Slice) |
+| ~~**G1**~~ ✅ **GESCHLOSSEN 2026-08-26** | **D3 = 24 Monate** gesetzt (Owner-Sign-off Christian), D1/D2/D4/D5/D6 mit-bestätigt, **ADR-045 `Proposed`→`Accepted`**. Begründung der Zahl: **Zeremonie-Probe-Erzwingung (D6)**, nicht Kompromittierungs-Fenster-Kompensation. Beleg: `TL-14a-G1-decision-brief.md` §5 | ~~Christian~~ **erledigt** | ✅ **Runbook-Volltext + Zeremonie-Skripte entriegelt** |
+| ~~**G2**~~ ✅ **GESCHLOSSEN 2026-08-26** | C **gesplittet + owner-ratifiziert**: **C1** (lokales `isRevoked`-Enforcement, App-Ebene, `agent-card.ts:311`+`:353`) = **blockierende Vorbedingung** (jetzt in ADR-045 §Vorbedingung C1); **C2** (Mesh-Verteilung) = **Fast-Follow, bewusst nichts bauen** (ADR-045 §Konsequenzen, Trigger >25 Nodes / Nicht-Owner). Form: **Denylist**, kein CRL/OCSP. Belege: `TL-14a-consensus-result-C.md` (CO + Ratifizierungs-Tabelle) | ~~CO/Owner~~ **erledigt** | C1-Slice **inhaltlich definiert** — ⛔ **Codier-Freigabe steht noch aus** |
 | **G3** | **Cross-Vendor-Consensus-Pass**: `codex`/`agy` NOT in PATH (**2026-08-25 erneut laufzeit-verifiziert**: PAL listet beide als konfiguriert, beide scheitern beim Aufruf) → GPT/Gemini-Sicht fehlt. **Kein** Konsens-Fehlschlag, reine Infra-Blockade | Infra/Christian | optionale Zusatz-Sicht |
 | **G4** | **TL-14b-Durchführung**: Token-Re-Onboard je Node + Zwei-Peer-Proof | **⛔ Termin + Christian** | out-of-repo |
 
@@ -59,6 +59,16 @@ Code-Arbeit.**
 sind **beide** verbleibenden Entriegelungen jetzt **reine Owner-Entscheidungen**: **G1** (die D3-Zahl) und
 **G2-Owner** (C1/C2-Ratifizierung + Freigabe des C1-Slices). Die agent-ausführbare Lane bleibt **erschöpft**;
 der inhaltlich definierte C1-Slice wird **nicht** vorgezogen.
+
+**Nachtrag 2026-08-26 — G1 UND G2 gezeichnet, die Lane ist wieder offen.** Christian hat **D3 = 24 Monate**
+gesetzt und **C1/C2 ratifiziert**; ADR-045 ist `Accepted`. Damit ändert sich der Befund dieses Dokuments
+grundlegend:
+- **Entriegelt und agent-ausführbar:** **Runbook-Volltext + Zeremonie-Skripte** (Papier+Skripte, non-gated) —
+  die D3-Zahl steht jetzt in der Cert-Erzeugung fest, die Sequenzierungs-Begründung aus §3 ist damit erfüllt.
+- **Definiert, aber ⛔ nicht freigegeben:** der **C1-Slice** (`crl.ts`-Verdrahtung). Die *Klassifikation* ist
+  ratifiziert, der *Codier-Start* ist ein **eigener Owner-Akt** und steht aus.
+- **Weiter gated:** **G3** (Cross-Vendor-CO, Infra) und **G4** (TL-14b, ⛔ Termin) — Letzteres setzt jetzt
+  zusätzlich **C1** voraus.
 
 ## Abgrenzung
 Doc-only. Kein Code/Config/Skript, kein Deploy/Secret/Cross-Host, keine Entscheidung, kein Gate vorweggenommen.

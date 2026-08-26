@@ -163,17 +163,27 @@ Keine Verdrahtung, kein `.ts`-Diff, keine ADR-045-Statusänderung, **keine Owner
 bleiben unberührt. Der C1-Umsetzungs-Slice ist **nicht** freigegeben — er wartet auf die Owner-Ratifizierung
 unten.
 
-## Offen: Owner-Ratifizierung (G2, zweite Hälfte)
+## ✅ Owner-Ratifizierung (G2, zweite Hälfte) — gezeichnet 2026-08-26
 
 | Punkt | Beschluss | Datum | Entscheider |
 |-------|-----------|-------|-------------|
-| **C1 (lokales `isRevoked`-Enforcement) = blockierend vor TL-14b?** | | | Christian |
-| **C2 (Mesh-Verteilung) = Fast-Follow, jetzt nichts bauen?** | | | Christian |
-| Form = Fingerprint-Denylist (kein CRL/OCSP)? | | | Christian |
-| ADR-045 §74 um **C1** ergänzen + §100-Hinweis auflösen? | | | Christian |
-| C1-Umsetzungs-Slice freigeben? | | | Christian |
+| **C1 (lokales `isRevoked`-Enforcement) = blockierend vor TL-14b?** | **✅ ja — blockierend** | 2026-08-26 | Christian |
+| **C2 (Mesh-Verteilung) = Fast-Follow, jetzt nichts bauen?** | **✅ ja — Fast-Follow, nichts bauen** | 2026-08-26 | Christian |
+| Form = Fingerprint-Denylist (kein CRL/OCSP)? | **✅ ja — Denylist** | 2026-08-26 | Christian |
+| ADR-045 §74 um **C1** ergänzen + §100-Hinweis auflösen? | **✅ ja — nachgezogen** | 2026-08-26 | Christian |
+| C1-Umsetzungs-Slice freigeben? | **⛔ NICHT Teil dieses Sign-offs — weiterhin offen** | — | Christian |
 
-Nach dem Ausfüllen: ADR-045 §74/§100 entsprechend nachziehen; dieses Protokoll bleibt als Entscheidungs-Beleg stehen.
+**✅ Gate G2 ist damit inhaltlich geschlossen.** ADR-045 führt **C1** jetzt unter „Zwingende Vorbedingungen
+(blockierend)" mit Enforcement-Punkt, Pflicht-Tests und Auflagen; **C2** steht in den Konsequenzen als
+bewusst nicht gebaut, inkl. Re-Evaluierungs-Trigger (>25 Nodes / Nicht-Owner-Betreiber). Der
+Klassifikations-Hinweis vom 2026-07-27 ist **aufgelöst**.
+
+**⛔ Was weiterhin offen ist:** die **Freigabe des C1-Umsetzungs-Slices** (Codier-Start). Die Klassifikation
+ist ratifiziert, der Code ist damit **nicht** freigegeben — das bleibt ein eigener Owner-Akt. Bis dahin wird
+`crl.ts` **nicht** verdrahtet.
+
+**Rückwirkung auf G1, umgesetzt:** D3 = **24 Monate**, begründet als Zeremonie-Probe-Erzwingung (D6), nicht
+als Revocation-Kompensation. ADR-045 ist seit 2026-08-26 `Accepted`.
 
 ## Verweise
 

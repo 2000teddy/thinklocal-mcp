@@ -19,14 +19,20 @@ entstehen und **lange bevor** TL-14b (⛔ gated) läuft.
 
 | ID | Entscheidung | Empfehlung (nicht bindend) | Entscheider | Blockiert | Status |
 |----|--------------|----------------------------|-------------|-----------|--------|
-| **D1** | Trust-Domain-Kopplung | **Entkoppeln** — Domain-Flip separat NACH CA-Umzug | Christian (+CO) | Runbook-Rahmen, D4 | ⬜ offen |
-| **D2** | `pathLenConstraint` der Root | **`0`** (Intermediates dürfen keine Sub-CAs) | CO | Zeremonie-Skript, D6 | ⬜ offen |
-| **D3** | Intermediate-Validität & Erneuerung | ~~**≥ 5 Jahre**~~ **überholt → Korridor 1–3 J** (s. Supersession-Hinweis unten) | CO/Christian | cert-issuer-Erweiterung | 🟨 in CO (G1-Sign-off offen) |
-| **D4** | Cross-Sign vs. harter Cutover | **Doppel-Pin-Cutover** (Alt+Neu im Fenster) | Christian (+CO) | TL-14b-Sequenz, D1/D5 | ⬜ offen |
-| **D5** | Chain-Ausroll-Mechanik | **Token-Re-Onboard** je Node | Christian | TL-14b-Kern | ⬜ offen |
-| **D6** | TH02-Geschwister-Rolle | **Kalt** (versiegelte Reserve, identische Kette) | Christian (+CO) | HA-Runbook-Zweig | ⬜ offen |
+| **D1** | Trust-Domain-Kopplung | **Entkoppeln** — Domain-Flip separat NACH CA-Umzug | Christian (+CO) | Runbook-Rahmen, D4 | ✅ beschlossen (2026-08-26) |
+| **D2** | `pathLenConstraint` der Root | **`0`** (Intermediates dürfen keine Sub-CAs) | CO | Zeremonie-Skript, D6 | ✅ beschlossen (2026-08-26) |
+| **D3** | Intermediate-Validität & Erneuerung | ~~**≥ 5 Jahre**~~ überholt → **beschlossen: 24 Monate** | CO/Christian | cert-issuer-Erweiterung | ✅ beschlossen (2026-08-26) |
+| **D4** | Cross-Sign vs. harter Cutover | **Doppel-Pin-Cutover** (Alt+Neu im Fenster) | Christian (+CO) | TL-14b-Sequenz, D1/D5 | ✅ beschlossen (2026-08-26) |
+| **D5** | Chain-Ausroll-Mechanik | **Token-Re-Onboard** je Node | Christian | TL-14b-Kern | ✅ beschlossen (2026-08-26) |
+| **D6** | TH02-Geschwister-Rolle | **Kalt** (versiegelte Reserve, identische Kette) | Christian (+CO) | HA-Runbook-Zweig | ✅ beschlossen (2026-08-26) |
 
 Legende Status: ⬜ offen · 🟨 in CO · ✅ beschlossen (→ ADR-Zeile eintragen).
+
+> **Abschluss-Hinweis (2026-08-26):** Alle sechs Entscheidungen sind mit dem Owner-Sign-off **gezeichnet**
+> (D3 = **24 Monate**; D1/D2/D4/D5/D6 mit-bestätigt) — **ADR-045 ist `Accepted`** und ab jetzt die maßgebliche
+> Fassung. Zusätzlich gezeichnet: **Auflage C gesplittet** (C1 blockierend / C2 Fast-Follow, siehe
+> `TL-14a-consensus-result-C.md`). Dieses Register ist damit **historisch** — es dokumentiert den Weg zur
+> Entscheidung, nicht mehr den Stand.
 
 ---
 
