@@ -62,7 +62,9 @@ for PL in 0 1; do
     result="OK (Kette gültig)"
     ok=1
   else
-    reason="$(printf '%s' "$verify_out" | grep -i 'error' | head -1 | sed 's/^ *//')"
+    # `grep -m 1` statt `grep | head -1`: unter `pipefail` wuerde `head` die Pipe schliessen,
+    # `grep` bekaeme SIGPIPE (Exit 141), und `set -e` braeche das Skript ab. `-m 1` ist pipefail-sicher.
+    reason="$(printf '%s' "$verify_out" | grep -i -m 1 'error' | sed 's/^ *//' || true)"
     result="ABGELEHNT — ${reason:-unbekannter Fehler}"
     ok=0
   fi

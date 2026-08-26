@@ -111,6 +111,19 @@ Stelle unvollständig" entstehen (dieselbe Begründung, die den Slice vor G1 ges
       (ADR-045, Blocker-Note, dieser Eintrag, `CHANGES`, `COMPLIANCE`, `TODO`) und damit genau den Churn
       erzeugen, den die Minimalitäts-Vorgabe vermeiden soll. Kann jederzeit als eigener Hygiene-Slice
       nachgeholt werden.
+  - **Runde 3 (Re-Review am VOLLTEXT, nicht am Diff): APPROVE, keine HIGH/MEDIUM.** Der Reviewer
+    verifizierte die Schleife selbst und stufte die HIGHs aus Runde 2 ausdrücklich als **„eindeutig
+    Fehlalarme"** ein („Wer nur den Diff liest, verpasst den Kontext"). Zusätzlich bestätigt: ADR-045 hat
+    **keine** normative `Root pathLen 0`-Stelle mehr; der Profiltest ist „hervorragend und aussagekräftig";
+    die Blocker-Note ist „faktisch zu 100 % korrekt", die Blocker-Einstufung „keine Übertreibung".
+    - **LOW-Finding übernommen (echter latenter Bug):** `grep … | head -1` ist unter `set -o pipefail`
+      eine Falle — schliesst `head` die Pipe, bekommt `grep` SIGPIPE (Exit 141), `pipefail` reicht ihn
+      durch und `set -e` bricht ab. Greift heute nur nicht, weil `openssl verify` genau **eine**
+      error-Zeile ausgibt. **Auf `grep -i -m 1 … || true` umgestellt** (pipefail-sicher). Der Reviewer
+      hielt die Änderung für diesen PR für optional; umgesetzt trotzdem, weil das Skript als
+      **Vor-Zeremonie-Check auf einer Air-Gap-Maschine** laufen soll, wo ein spuriöser Abbruch als
+      „OpenSSL verhält sich anders" fehlgedeutet würde. **Verifiziert:** Normallauf Exit 0 ·
+      Mutationstest Exit 1 · Mehrzeilen-Fall liefert `reason` korrekt ohne Abbruch.
 - **PC:** Secret-Scan clean; kein `packages/`-Diff verifiziert.
 
 ## Nicht berührt
