@@ -192,7 +192,7 @@ Mesh-Verteilung) bleibt bewusst draußen.
 
 ## Nächste Schritte
 1. ~~**Christian-Sign-off:** exakte D3-Laufzeit → ADR auf `Accepted`; D1/D4/D5/D6-Gates bestätigen.~~
-   ✅ **erledigt 2026-08-26** — D3 = **24 Monate**, D1/D2/D4/D5/D6 mit-bestätigt, Status `Accepted`.
+   ✅ **erledigt 2026-08-26** — D3 = **24 Monate**, D1/D4/D5/D6 mit-bestätigt (D2 = CO/technisch, bereits per Consensus entschieden, nicht Teil der Sign-off-Tabelle), Status `Accepted`.
    Gleichzeitig **G2** gezeichnet: C1 blockierend / C2 Fast-Follow.
 2. ~~**Vorbedingungs-Slices A + B**~~ ✅ **erledigt** — A (`verifyPeerCertChain` + `pathLen`, #298/#299/#311,
    Transport-Konformitätstest #342) und B (`cert-monitor-wiring.ts`, #297/#344) sind code-komplett +

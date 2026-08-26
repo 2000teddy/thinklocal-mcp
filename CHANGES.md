@@ -10,8 +10,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ### docs(tl14a): Owner-Sign-off G1 + G2 eingetragen — ADR-045 `Accepted`, D3 = 24 Monate (2026-08-26 06:15)
 **Doc-only Beschluss-Eintragung** (trägt eine Owner-Entscheidung ein, trifft selbst keine). Christian hat am
-2026-08-26 **beide** verbleibenden TL-14a-Gates gezeichnet: **G1 — D3 = 24 Monate** (+ D1/D2/D4/D5/D6
-mit-bestätigt) und **G2 — Auflage C ratifiziert** (**C1** blockierend, **C2** Fast-Follow).
+2026-08-26 **beide** verbleibenden TL-14a-Gates gezeichnet: **G1 — D3 = 24 Monate** (+ D1/D4/D5/D6 mit-bestätigt (D2 = CO/technisch, bereits per Consensus entschieden, nicht Teil der Sign-off-Tabelle)) und **G2 — Auflage C ratifiziert** (**C1** blockierend, **C2** Fast-Follow).
 **ADR-045** wechselt damit von `Proposed` auf **`Accepted`**: §D3 trägt die **24 Monate**, begründet als
 **Zeremonie-Probe-Erzwingung (D6)** und ausdrücklich **nicht** als Kompromittierungs-Fenster-Kompensation —
 der G2-Consensus hatte belegt, dass eine kürzere Laufzeit **kein Revocation-Ersatz** ist. Neu in §Zwingende

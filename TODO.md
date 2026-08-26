@@ -399,7 +399,7 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
   Geschwister-Intermediate TH02) — nur Papier+Skripte.
   - **✅ OWNER-SIGN-OFF ERTEILT (Christian, 2026-08-26) — G1 + G2 beide geschlossen.** **D3 = 24 Monate**
     (Begründung: Zeremonie-Probe-Erzwingung nach D6, **nicht** Kompromittierungs-Fenster-Kompensation);
-    D1/D2/D4/D5/D6 mit-bestätigt; **ADR-045 `Proposed` → `Accepted`**. Zugleich **Auflage C ratifiziert**:
+    D1/D4/D5/D6 mit-bestätigt (D2 = CO/technisch, bereits per Consensus entschieden, nicht Teil der Sign-off-Tabelle); **ADR-045 `Proposed` → `Accepted`**. Zugleich **Auflage C ratifiziert**:
     **C1** (lokales `isRevoked`-Enforcement, App-Ebene, `agent-card.ts:311`+`:353`) = **blockierende
     Vorbedingung** vor TL-14b, jetzt in ADR-045 §Vorbedingung C1; **C2** (Mesh-Verteilung) = **Fast-Follow,
     bewusst nichts bauen** (Trigger für Re-Evaluierung: >25 Nodes / Nicht-Owner-Betreiber). Belege:
