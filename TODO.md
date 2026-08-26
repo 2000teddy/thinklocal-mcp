@@ -404,8 +404,22 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     Vorbedingung** vor TL-14b, jetzt in ADR-045 §Vorbedingung C1; **C2** (Mesh-Verteilung) = **Fast-Follow,
     bewusst nichts bauen** (Trigger für Re-Evaluierung: >25 Nodes / Nicht-Owner-Betreiber). Belege:
     `TL-14a-G1-decision-brief.md` §5, `TL-14a-consensus-result-C.md` §Ratifizierung.
-    - [ ] **JETZT ENTRIEGELT (non-gated, agent-ausführbar):** **Runbook-Volltext + Zeremonie-Skripte** —
-      die D3-Zahl steht in der Cert-Erzeugung fest, die Sequenzierungs-Sperre ist gefallen.
+    - [~] **Runbook-Volltext + Zeremonie-Skripte — an Schritt 2/7 gestoppt, Blocker inzwischen GELÖST.**
+      **✅ D2-KORREKTUR FREIGEGEBEN + EINGETRAGEN (Christian, Option A, 2026-08-26):** ADR-045 §D2 lautet
+      jetzt **Root `pathLen 1` + Intermediate `pathLen 0`** (Diagramm + §Verworfene Alternativen mitgezogen);
+      der Beschluss „exakt zwei Stufen, keine Sub-CAs" ist unverändert, nur seine Kodierung war falsch.
+      **Der Slice ist damit entblockt** — Runbook-Volltext folgt als eigener Slice.
+      **Der ursprüngliche Befund** (`docs/architecture/TL-14a-D2-pathlen-blocker.md`, bleibt als Beleg):
+      ADR-045 **D2** (`Root pathLen 0`) war mit der Zweistufen-Zielhierarchie **unvereinbar**. RFC 5280:
+      `pathLenConstraint` zählt die Zwischen-CAs, die dem Cert **folgen** dürfen ⇒ `pathlen:0` erlaubt
+      **kein** Intermediate; jedes Node-Cert der neuen Kette wäre mesh-weit ungültig. **Korrekt: Root
+      `pathLen 1` + Intermediate `pathLen 0`** — Schutzziel bleibt voll erhalten (Sub-CA-Verbot erzwingt
+      der `pathLen` **am Intermediate**). Dreifach belegt: eigener grüner Testbestand
+      (`chain-verify.test.ts:55` vs. `:61-67`), OpenSSL-Beleg (`scripts/tl14-ca/tl14-pathlen-proof.sh`),
+      neuer End-to-End-Profiltest (`tests/integration/tl14-ceremony-cert-profile.test.ts`, +4 grün — deckt
+      zusätzlich die bis dahin ungetestete **OpenSSL↔Daemon**-Kompatibilität und die **D4-Fingerprint-Pin**-
+      Kompatibilität ab). Empfehlung: **Option A** (ADR-045 §D2 korrigieren). Danach ist der Slice sofort
+      fortsetzbar — Schritte 1/5/7 hängen nicht am `pathLen`, 2/3/4 vollständig.
     - [ ] **⛔ C1-Umsetzungs-Slice** (`crl.ts` verdrahten: App-Verify + `agent-card.ts:311`/`:353`;
       3 Pflicht-Tests inkl. **„Alt-Pin aktiv + Alt-Intermediate revoziert"**; eigener Audit-Event;
       `crl.ts:5-7`-Header wahr machen) — **inhaltlich definiert, Codier-Freigabe steht noch aus.**

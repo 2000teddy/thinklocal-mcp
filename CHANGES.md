@@ -8,7 +8,49 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### docs(tl14a): Owner-Sign-off G1 + G2 eingetragen — ADR-045 `Accepted`, D3 = 24 Monate (2026-08-26 06:15)
+### docs+test(tl14): D2-pathLen-Blocker gefunden UND korrigiert — Root `pathLen 1` + Intermediate `pathLen 0` (2026-08-26 07:50 / Korrektur 08:40)
+Auftrag war der durch den G1/G2-Sign-off entriegelte Slice **Runbook-Volltext + Zeremonie-Skripte**. Beim
+Schreiben von **Schritt 2 von 7** (Offline-Wurzel-Zeremonie) — der Zeile
+`basicConstraints = critical, CA:TRUE, pathlen:<N>` — zeigte sich, dass der von ADR-045 **D2**
+vorgeschriebene Wert die Zielhierarchie **unbrauchbar** macht: nach **RFC 5280 §4.2.1.9** zählt
+`pathLenConstraint` die Zwischen-CAs, die dem Zertifikat im Pfad **folgen** dürfen ⇒ `Root pathlen:0` erlaubt
+**kein einziges Intermediate**, und **jedes** Node-Cert der neuen Kette wäre mesh-weit ungültig. Das
+**Schutzziel** der ADR ist richtig, nur an der falschen Stufe kodiert: dass TH01/TH02 keine Sub-CAs
+ausstellen dürfen, erzwingt der `pathLen 0` **am Intermediate**; die Verwerfung von „`pathLen 1`" beruht auf
+einer **Fehllesung**. **Korrekt: Root `pathLen 1` + Intermediate `pathLen 0`.** Der Slice wurde deshalb
+**gestoppt und gemeldet** statt fortgeschrieben (ADR-045 verlangt selbst, dass Skripte nicht „an genau der
+offenen Stelle unvollständig" entstehen). **Dreifach belegt:** (1) der **eigene grüne Testbestand**
+widerspricht D2 bereits — `chain-verify.test.ts:55` baut die funktionierende Kette mit **Root `pathLen 1`**,
+`:61-67` nagelt `Root pathLen 0` als **Ablehnung** fest (seit #298/#311 im Repo, nie gegen D2 gehalten);
+(2) **OpenSSL vendor-neutral** — *„error 25 … path length constraint exceeded"* vs. `OK`, re-runnable via
+neuem `scripts/tl14-ca/tl14-pathlen-proof.sh` (nur `mktemp -d`, kein Daemon-State); (3) **neuer
+End-to-End-Profiltest** `tests/integration/tl14-ceremony-cert-profile.test.ts` (**+4 grün**), der eine reale
+Lücke schliesst — alle bisherigen Ketten-Tests minten mit **node-forge**, die Zeremonie läuft aber mit
+**OpenSSL**; ob ein OpenSSL-Profil vom Daemon akzeptiert wird, war **ungetestet** und wäre erst im
+TL-14b-Fenster aufgefallen. Der Test belegt zusätzlich, dass die Korrektur **D2 nicht schwächt** (Sub-CA
+unter dem Intermediate bleibt abgelehnt) und dass **`certFingerprint()` == OpenSSL-DER-SHA256** ist
+(**D4-Doppel-Pin-Kompatibilität** — zweites ungetestetes Risiko). Neue
+`docs/architecture/TL-14a-D2-pathlen-blocker.md` mit drei Entscheidungs-Optionen (Empfehlung: **A**,
+ADR-045 §D2 korrigieren); ADR-045 §D2 bekommt einen ⛔-Sichtbarkeits-Hinweis, **die Entscheidung selbst
+bleibt offen** (Owner/CO). **Nicht berührt:** `packages/daemon/**` (`verifyPeerCertChain` verhält sich
+**korrekt** und lehnt zu Recht ab), D1/D3/D4/D5/D6, C1/C2, ADR-045-Status (`Accepted` bleibt), C1-Slice
+weiter nicht freigegeben, TL-14b weiter ⛔. Daemon-Suite unverändert **2101 grün**, Gesamt **2226 grün**.
+`changes/2026-08-26_tl14-d2-pathlen-blocker.md`.
+**NACHTRAG — Korrektur eingetragen (2026-08-26 08:40):** Christian hat **Option A freigegeben**. ADR-045 §D2
+lautet jetzt **Root `pathLen 1` + Intermediate `pathLen 0`** — minimale Textkorrektur an **genau drei
+Stellen**: (1) **§D2** Überschrift + Kodierungs-Tabelle + RFC-Begründung + Korrektur-Historie; (2)
+**§Zielhierarchie**-Diagramm, Root-Zeile `pathLen 0` → `pathLen 1 — genau EINE Zwischenstufe erlaubt`;
+(3) **§Verworfene Alternativen** — die Verwerfung von „`pathLen 1`" **zurückgezogen** (Fehllesung: der
+Root-`pathLen` sagt nichts über die Sub-CA-Vollmacht des Intermediates) und durch die **tatsächlich**
+verworfene Alternative ersetzt (`pathLen` an der Root ganz weglassen ⇒ unbegrenzte Kettentiefe). **Der
+Beschluss „exakt zwei Stufen, keine Sub-CAs" ist unverändert** — nur seine Kodierung war falsch. Die
+Blocker-Note ist auf **gelöst** gesetzt und bleibt als Befund-/Entscheidungs-Beleg stehen; der Profiltest
+nagelt jetzt das **korrigierte** D2 fest und hält `Root pathLen 0` als **Regressionsschutz** gegen einen
+Rückfall; das Proof-Skript ist zum **Vor-Zeremonie-Check** umgewidmet (bestätigt vor der Offline-Zeremonie,
+dass das OpenSSL der Zeremonie-Maschine sich erwartungsgemäss verhält). **Der Runbook-Volltext ist NICHT
+Teil dieses PRs** — er folgt als eigener, jetzt entblockter Slice.
+
+### docs(tl14a): Owner-Sign-off G1 + G2 eingetragen — ADR-045 `Accepted`, D3 = 24 Monate (2026-08-26 06:15, #353)
 **Doc-only Beschluss-Eintragung** (trägt eine Owner-Entscheidung ein, trifft selbst keine). Christian hat am
 2026-08-26 **beide** verbleibenden TL-14a-Gates gezeichnet: **G1 — D3 = 24 Monate** (+ D1/D4/D5/D6 mit-bestätigt (D2 = CO/technisch, bereits per Consensus entschieden, nicht Teil der Sign-off-Tabelle)) und **G2 — Auflage C ratifiziert** (**C1** blockierend, **C2** Fast-Follow).
 **ADR-045** wechselt damit von `Proposed` auf **`Accepted`**: §D3 trägt die **24 Monate**, begründet als

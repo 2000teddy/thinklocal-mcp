@@ -26,7 +26,7 @@ Vorbedingungen (A/B), **bevor** Runbook-Volltext + Zeremonie-Skripte entstehen u
 
 ## Zielhierarchie
 ```
-Offline Root CA (air-gapped, Key NIE online, pathLen 0)
+Offline Root CA (air-gapped, Key NIE online, pathLen 1 — genau EINE Zwischenstufe erlaubt)
         │  signiert NUR die beiden Intermediates
         ├── Intermediate CA @ TH01 (operativer Aussteller — ersetzt die heutige createMeshCA-Root-Rolle)
         │        └── node/<PeerID>-Leafs (.94/.55/.52/.56/.222/…)
@@ -41,10 +41,31 @@ ein **separater, späterer** Schnitt. Grund: Signierpfad **und** Namensraum in e
 TLS-Fehldiagnose (Chain-Build vs. SAN-Mismatch) mehrdeutig. **Auflage:** Domain-Flip als eigene, **terminierte**
 Folge-CO führen, sonst versandet er.
 
-### D2 — `pathLenConstraint` der Root: **0** (einstimmig)
+### D2 — `pathLenConstraint`: **Root `1` · Intermediate `0`** (korrigiert 2026-08-26)
 Root darf nur Intermediates ausstellen, die **keine** weiteren Sub-CAs erzeugen. Minimal-Vollmacht, exakt zwei
 Stufen. **Bindet an Vorbedingung A** (s.u.): heute ist `pathLen` auf dem App-Verify-Pfad wirkungslos — ohne
 A-Fix ist D2 dort kosmetisch.
+
+**Kodierung (RFC 5280 §4.2.1.9):** `pathLenConstraint` begrenzt die Anzahl nicht-selbst-ausgestellter
+Zwischen-CAs, die dem Zertifikat im Pfad **folgen** dürfen — er beschreibt also die Tiefe **unterhalb** der
+CA, nicht deren eigene Ausstell-Vollmacht.
+
+| Zertifikat | `pathLen` | Wirkung |
+|---|---|---|
+| **Root** | **1** | genau **eine** Zwischen-CA darf folgen ⇒ exakt die gewünschte Zweistufigkeit |
+| **Intermediate (TH01/TH02)** | **0** | **keine** weitere CA darf folgen ⇒ TH01/TH02 können **keine Sub-CAs** ausstellen |
+
+Das Schutzziel „exakt zwei Stufen, keine Sub-CAs" wird damit **vollständig** erfüllt — es hängt am `pathLen`
+des **Intermediates**, nicht an dem der Root.
+
+> **Korrektur-Historie (Owner-Freigabe 2026-08-26, Option A):** Die Erstfassung dieser Klausel schrieb
+> **`Root pathLen 0`** vor. Das war technisch falsch: `Root pathlen:0` erlaubt **kein einziges Intermediate**
+> und hätte die Zielhierarchie unverifizierbar gemacht — **jedes** Node-Cert der neuen Kette wäre mesh-weit
+> ungültig gewesen. Entdeckt beim Schreiben des Zeremonie-Skripts (Schritt 2/7), dreifach belegt
+> (eigener grüner Testbestand `chain-verify.test.ts:55` vs. `:61-67` · vendor-neutraler OpenSSL-Beleg
+> `scripts/tl14-ca/tl14-pathlen-proof.sh` · End-to-End-Profiltest
+> `tests/integration/tl14-ceremony-cert-profile.test.ts`). Vollständige Analyse: `TL-14a-D2-pathlen-blocker.md`.
+> **Der Beschluss „exakt zwei Stufen, keine Sub-CAs" ist unverändert** — nur seine Kodierung ist korrigiert.
 
 ### D3 — Intermediate-Validität & Erneuerung: **ENTSCHIEDEN — 24 Monate** (Owner-Sign-off 2026-08-26)
 **Beschluss (Christian, G1):** Die Intermediate-CA-Laufzeit beträgt **24 Monate**.
@@ -183,7 +204,13 @@ Mesh-Verteilung) bleibt bewusst draußen.
 
 ## Verworfene Alternativen
 - **Gekoppelter Domain-Flip** (D1-Gegenoption) — zwei Variablen/Fenster, schlechte Bisektierbarkeit.
-- **`pathLen 1`** (D2) — unnötige Vollmacht (TH02 könnte Sub-CAs), widerspricht „exakt zwei Stufen".
+- ~~**`pathLen 1`** (D2) — unnötige Vollmacht (TH02 könnte Sub-CAs), widerspricht „exakt zwei Stufen".~~
+  **Zurückgezogen 2026-08-26 (Owner-Freigabe Option A): diese Verwerfung beruhte auf einer Fehllesung.**
+  `pathLen 1` **an der Root** gibt TH02 keinerlei Sub-CA-Vollmacht — das entscheidet allein TH02s **eigener**
+  `pathLen 0`. „Root `pathLen 1` + Intermediate `pathLen 0`" **ist** die Kodierung von „exakt zwei Stufen";
+  `Root pathLen 0` wäre die Kodierung von „exakt **eine** Stufe" (flach — der heutige Zustand). Die
+  tatsächlich verworfene Alternative ist damit: **`pathLen` an der Root ganz weglassen** (RFC-konform, aber
+  unbegrenzte Kettentiefe ⇒ verstösst gegen Minimal-Vollmacht). Siehe `TL-14a-D2-pathlen-blocker.md` §5.
 - **Cross-Sign** (D4) — neue ungetestete Chain-Verifikation im Sicherheitspfad, Nutzen bei ~10 Nodes gering.
 - **`ca.crt.pem`-Chain-Swap** (D5) — repo-belegte, ungelöste Fallen.
 - **Heißes TH02** (D6) — doppelte Angriffsfläche ohne HA-Bedarf.
