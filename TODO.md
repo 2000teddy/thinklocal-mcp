@@ -408,7 +408,9 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
       **✅ D2-KORREKTUR FREIGEGEBEN + EINGETRAGEN (Christian, Option A, 2026-08-26):** ADR-045 §D2 lautet
       jetzt **Root `pathLen 1` + Intermediate `pathLen 0`** (Diagramm + §Verworfene Alternativen mitgezogen);
       der Beschluss „exakt zwei Stufen, keine Sub-CAs" ist unverändert, nur seine Kodierung war falsch.
-      **Der Slice ist damit entblockt** — Runbook-Volltext folgt als eigener Slice.
+      **Der Slice ist damit entblockt** — Runbook-Volltext **erledigt 2026-08-31** (siehe unten,
+      `docs/runbooks/RUNBOOK-TL-14-ca-ceremony.md`). Damit ist die agent-ausführbare TL-14a-Lane
+      **tatsächlich erschöpft**: der einzige verbleibende TL-14a-Punkt ist der ⛔ C1-Umsetzungs-Slice.
       **Der ursprüngliche Befund** (`docs/architecture/TL-14a-D2-pathlen-blocker.md`, bleibt als Beleg):
       ADR-045 **D2** (`Root pathLen 0`) war mit der Zweistufen-Zielhierarchie **unvereinbar**. RFC 5280:
       `pathLenConstraint` zählt die Zwischen-CAs, die dem Cert **folgen** dürfen ⇒ `pathlen:0` erlaubt
@@ -541,7 +543,30 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
         A–C blockierend einstuft. Neu: ein **Klassifikations-Hinweis in ADR-045 §100** macht die (bewusste, aber
         **nicht owner-ratifizierte**) Herabstufung sichtbar + verweist auf die C-Grounding-§2. **Doc-only, kein
         Beschluss** — trifft keine C-Entscheidung, nimmt kein Gate vorweg; macht den Ist-Stand nur ehrlich.
-  - [ ] **Runbook-Volltext + Zeremonie-Skripte** (nach Sign-off/ADR-045, Papier+Skripte, non-gated).
+  - [x] **Runbook-Volltext + Zeremonie-Skripte** (2026-08-31, non-gated wie geführt):
+    `docs/runbooks/RUNBOOK-TL-14-ca-ceremony.md` — alle **7 Schritte im Volltext** (Kommandos,
+    Zeremonie-Protokoll-Vorlage, vorab festgeschriebenes Rollback-Kriterium). Schritte **1–5 + 7 gate-frei
+    ausführbar** (erzeugen nur neues, paralleles Material); **Schritt 6 als ⛔ TL-14b markiert** — nur Plan,
+    nicht ausführbar (Termin-Gate **+** Vorbedingung C1). Dazu **4 Zeremonie-Skripte** (`scripts/tl14-ca/`:
+    `tl14-ceremony-root.sh` · `tl14-ceremony-intermediate-csr.sh` · `tl14-ceremony-sign-intermediate.sh` ·
+    `tl14-verify-chain.sh` + `_tl14-common.sh`), alle **fail-closed** (nie Überschreiben von
+    Schlüsselmaterial; Abbruch bei Abweichung vom D2-Profil oder den Laufzeit-Korridoren) und
+    **`tests/integration/tl14-ceremony-scripts.test.ts` (+12 grün)**, der die **echten Skripte** gegen die
+    **echte** `verifyPeerCertChain` prüft. **Ertrag = 7 code-verifizierte Befunde** (Runbook §1), die sonst
+    erst im TL-14b-Fenster aufgefallen wären — u.a. **F1**: eine **Chain** in `ca.crt.pem` schaltet den
+    Attesting-Pin **still ab** (`cert-issuer.ts:132-133`) ⇒ 403 für jeden kanonischen Sender ⇒
+    `TLMCP_PEERID_ATTESTING_CA_FP` **vor** dem Cutover explizit setzen; **F2/F4**: gepinnt gehört das
+    **Intermediate** — das ist die Variante, die `tls.ts:392` **ohne Codeänderung** korrekt lässt;
+    **F5**: `ca.crt.pem` im Onboarding-Bundle = Intermediate (flacher Verify `tls.ts:520`); **F3**: der
+    #352-**Format-Vorbehalt ist erledigt** (`normalizeFingerprint`, `peer-identity.ts:260-262`); **F6**:
+    Cert/Key-Paar-Prüfung vor dem Neustart, sonst reisst der Daemon eine frische Root aus; **F7**:
+    `cert-issuer.ts:118-119`-Kommentar wird unwahr ⇒ **Doku-Schuld für den TL-14b-Slice** (bewusst nicht
+    gefixt — kein Code-Churn im Papier-Slice). **Zwei Defekte fand der eigene Test in den neuen Skripten**
+    (beide vor Commit behoben + regressionsgetestet): `openssl req -noout -verify` liefert **Exit 0 auch bei
+    gebrochener Selbstsignatur** (Guard war wirkungslos → prüft jetzt auf `verify OK`) und
+    `openssl … 2>/dev/null` erzeugte **stumme** Abbrüche unter `set -e` (→ `tl14_openssl` mit Fehlertext).
+    **Nicht getan:** keine Zeremonie durchgeführt (kein Root-Key existiert), kein Schritt 6, keine
+    C1-Umsetzung, ADR-045 unangetastet, **kein `packages/`-Diff**.
 - [ ] **[v5.1] TL-14b (≈4 h, ⛔ Termin)** CA-Umzug durchführen (mit Christian). ↔ vgl. Decision-7
   Trust-Domain-Flip (KW30).
 - [ ] **[v5.1] TL-15 (≈3 h)** Uhr-Abweichungs-Erkennung zwischen Partnern (Skew-Messung im
