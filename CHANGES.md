@@ -8,6 +8,45 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs+test(tl14): Runbook-Volltext + Zeremonie-Skripte — der entblockte Slice (2026-08-31 06:20)
+Fortsetzung genau des Slices, der am 2026-08-26 bei **Schritt 2 von 7** am D2-Blocker gestoppt wurde und den
+`TODO.md:544` seither als **non-gated** führt. Neu: **`docs/runbooks/RUNBOOK-TL-14-ca-ceremony.md`** (alle
+sieben Schritte im Volltext, mit Kommandos, Zeremonie-Protokoll-Vorlage und vorab festgeschriebenem
+Rollback-Kriterium; Schritte 1–5/7 gate-frei ausführbar, **Schritt 6 als ⛔ TL-14b markiert** und nur als
+Plan enthalten), **vier Zeremonie-Skripte** in `scripts/tl14-ca/` (`tl14-ceremony-root.sh`,
+`tl14-ceremony-intermediate-csr.sh`, `tl14-ceremony-sign-intermediate.sh`, `tl14-verify-chain.sh` + gemeinsame
+Helfer `_tl14-common.sh`) und **`tests/integration/tl14-ceremony-scripts.test.ts` (+12 grün)**, der die
+**echten Skripte** ausführt und ihr Ergebnis mit der **echten** Daemon-Funktion `verifyPeerCertChain` prüft —
+das schliesst die von #354 offen gelassene Lücke (dort war belegt, dass *ein* OpenSSL-D2-Profil akzeptiert
+wird, nicht dass die **ausgelieferten Skripte** dieses Profil erzeugen). Alle Skripte sind fail-closed:
+**niemals** Überschreiben vorhandenen Schlüsselmaterials (ein zweiter Root-Lauf würde die gesamte Hierarchie
+darunter entwerten) und Abbruch bei Abweichung vom D2-Profil oder von den Laufzeit-Korridoren (Root 10–15 J,
+Intermediate 24 Mon./Korridor 1–3 J). **Der eigentliche Ertrag sind sieben code-verifizierte Befunde**
+(Runbook §1), die sonst erst **im TL-14b-Fenster** aufgefallen wären: **F1** — eine **Chain** in `ca.crt.pem`
+schaltet den Attesting-Pin **still ab** (`cert-issuer.ts:132-133` leitet nur bei **genau einem** Cert ab ⇒
+Pin leer ⇒ fail-closed ⇒ **403 für jeden kanonischen Sender**, `agent-card.ts:319-322`; dieselbe Fehlerklasse
+wie der TH02-Phase-3-Deadlock) ⇒ `TLMCP_PEERID_ATTESTING_CA_FP` **muss vor dem Cutover explizit gesetzt
+sein**; **F2/F4** — gepinnt gehört das **Intermediate** (`agent-card.ts:311` liest den **direkten**
+Aussteller), und das ist zugleich die Variante, die die **einelementige** Kette aus `tls.ts:392` **ohne
+Codeänderung** korrekt verifizieren lässt (beide Richtungen als Test festgenagelt: Intermediate-Anker grün,
+Root-Anker rot); **F5** — im Onboarding-Bundle gehört das Intermediate als `ca.crt.pem`, weil der
+Token-Onboard-Pfad mit dem **flachen** `verifyPeerCert` prüft (`tls.ts:520`) und die Root sonst fail-closed
+abgewiesen wird (`:540-544`); **F3** — das Fingerprint-Format passt bereits (`normalizeFingerprint`,
+`peer-identity.ts:260-262`) ⇒ der in **#352** offen geführte **Format-Vorbehalt ist damit erledigt**; **F6** —
+vor dem Neustart muss `ca.crt.pem`/`ca.key.pem` ein **Paar** sein, sonst reisst der Daemon eine frische
+selbstsignierte Root aus (`tls.ts:472-477`/`:549-554`) und macht die Zeremonie zunichte; **F7** — der
+Kommentar `cert-issuer.ts:118-119` („DIREKTE Issuance … invariant") wird durch den Umzug unwahr, als
+**Doku-Schuld für den TL-14b-Slice** notiert, **nicht** gefixt (kein Code-Churn im Papier-Slice).
+**Zwei Defekte fand der eigene Test in den Skripten dieses PRs** (beide vor dem ersten Commit behoben +
+regressionsgetestet): (1) **`openssl req -noout -verify` liefert Exit 0 auch bei gebrochener
+Selbstsignatur** (verifiziert an 3.0.13, Fehlschlag steht **nur im Text**) — der als Exit-Code-Prüfung
+gebaute CSR-Guard war damit **wirkungslos**, eine CSR ohne Schlüsselbesitz-Nachweis wäre signiert worden;
+jetzt wird auf `verify OK` geprüft, und der Test korrumpiert ein Byte **im DER**, weil ein gekipptes
+Base64-Zeichen nachweislich **nicht** reicht; (2) **`openssl … 2>/dev/null`** liess das Skript unter `set -e`
+mit Exit 1 und **ohne jede Ausgabe** enden — jetzt über `tl14_openssl` mit Fehlertext. **Nicht getan:**
+keine Zeremonie durchgeführt (es existiert kein Root-Key), kein Schritt 6, keine C1-Umsetzung, ADR-045 nicht
+angefasst, **kein `packages/`-Diff**. Daemon-Suite unverändert **2101 grün**.
+
 ### docs+test(tl14): D2-pathLen-Blocker gefunden UND korrigiert — Root `pathLen 1` + Intermediate `pathLen 0` (2026-08-26 07:50 / Korrektur 08:40)
 Auftrag war der durch den G1/G2-Sign-off entriegelte Slice **Runbook-Volltext + Zeremonie-Skripte**. Beim
 Schreiben von **Schritt 2 von 7** (Offline-Wurzel-Zeremonie) — der Zeile
