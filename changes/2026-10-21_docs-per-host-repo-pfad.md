@@ -60,3 +60,28 @@ Pfad in der Tabelle mit Datei:Zeile belegt.
 
 Ein Punkt wurde **nicht** übernommen: `agy` wollte `cd <repo>` in ADR-017 unangetastet lassen (NIT,
 „als Platzhalter erkennbar") — das deckt sich mit der Umsetzung, dort wurde nichts weiter geändert.
+
+## Merge-Blocker (festgehalten 2026-10-21 12:10) — Self-Approval, **nicht** OAuth
+
+Das Re-Review über `agy` lief real durch: **0 HIGH / 0 MEDIUM / 3 LOW** (reine Kosmetik — PR-Body-Text,
+`changes/`-Wortlaut, `CHANGES.md`-PR-Nummern-Suffix), alle **12 Pfadkorrekturen gegen das Live-Dateisystem
+verifiziert**, die **10** „begründet gelassen"-Entscheidungen belegt, **CI 5/5 grün**, PR `MERGEABLE`.
+
+**Trotzdem blockiert**, und zwar aus einem Grund, der nichts mit dem OAuth-Lock zu tun hat:
+| Fakt | Wert (verifiziert 2026-10-21 12:11) |
+|---|---|
+| Branch-Protection `main` | `required_approving_review_count=1`, Required-Check `CI` (`strict: true`) |
+| `allow_auto_merge` | `false` |
+| `gh` angemeldet als | `2000teddy` |
+| Autor von #356 | `2000teddy` ⇒ `gh pr review --approve` → `Can not approve your own pull request` |
+| Collaborators mit `push` | `2000teddy`, `ChristianUllmann`, `peppiseppiullmann-ci` |
+
+⇒ **Der Merge braucht ein approving Review von `ChristianUllmann` oder `peppiseppiullmann-ci`.** Das ist ein
+echtes Christian-Gate, kein Werkzeugproblem und nichts, was der Agent umgehen kann oder soll. Festgehalten in
+`TODO.md` §B1.
+
+**Kein `HISTORY.md`-Eintrag:** diese Datei existiert im Repo bewusst **nicht** — `CONTRIBUTING.md:34-36` führt
+die Agenten-Erzählung derzeit über **ADRs + `changes/`** und sieht eine separate `HISTORY.md` erst „bei Bedarf
+zum nächsten Meilenstein" vor. Sie eigenmächtig anzulegen wäre eine Änderung am Doku-Kanon, kein Protokoll-
+Eintrag — deshalb steht die Erzählung hier, wo der Kanon sie vorsieht.
+
