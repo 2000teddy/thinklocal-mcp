@@ -71,7 +71,7 @@ Empfohlenes Muster fuer parallele Agent-Arbeit:
 Beispiel:
 
 ```bash
-cd ~/Entwicklung_local/thinklocal-mcp
+cd /opt/thinklocal-mcp
 git worktree add .codex/worktrees/codex-source -b agent/codex/source-worktree main
 
 # im Worktree arbeiten und committen
