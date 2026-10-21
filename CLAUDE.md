@@ -37,7 +37,7 @@ Verschlüsselte Peer-to-Peer-Kommunikation zwischen AI CLI Agenten im lokalen Ne
 ## Arbeitsverzeichnis
 
 ```
-~/Entwicklung_local/thinklocal-mcp
+/opt/thinklocal-mcp
 ```
 
 Dieses Verzeichnis ist bereits angelegt mit vollständiger Projektstruktur, Dokumentation und Architektur-Spezifikation. Lies zuerst README.md, TODO.md und SECURITY.md komplett durch, bevor du mit der Implementierung beginnst.

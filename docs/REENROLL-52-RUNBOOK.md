@@ -33,7 +33,7 @@ ist (Anti-Substitution — nötig, weil die Mesh eine **geteilte** CA nutzt). Be
 ## 2. Preflight (read-only, im Fenster VOR dem Apply)
 
 ```bash
-cd ~/Entwicklung_local/thinklocal-mcp/packages/daemon
+cd /opt/thinklocal-mcp/packages/daemon
 
 # TH01: Ist-Zustand nur lesen. Erwartet: ein iobroker-Eintrag mit Legacy-host/-URI und caCertPem.
 node -e 'const p=require("fs").readFileSync(process.env.HOME+"/.thinklocal/pairing/paired-peers.json","utf8"); for (const e of JSON.parse(p).filter(e=>e.hostname==="iobroker")) console.log(JSON.stringify({hostname:e.hostname,agentId:e.agentId,hasCaCertPem:!!e.caCertPem,hasPublicKeyPem:!!e.publicKeyPem,hasFingerprint:!!e.fingerprint},null,2))'
@@ -84,7 +84,7 @@ bereits token-onboarded kanonisch und wird hier nicht per ADR-034 selbstmigriert
 ## 4. Apply (im Fenster) — TH01-Seite
 
 ```bash
-cd ~/Entwicklung_local/thinklocal-mcp/packages/daemon
+cd /opt/thinklocal-mcp/packages/daemon
 EXPECT=spiffe://thinklocal/node/12D3KooWFgnDgukhD5AxSHs3uNQC9kBVq9xHrY85kxYXD5EX6J5d  # aus discover_peers
 # 1) DRY-RUN (keine Mutation): zeigt den geplanten Re-Key .52
 npm run canonicalize-pairings -- --dry-run --peer iobroker --address 10.10.10.52 --expect-uri "$EXPECT"

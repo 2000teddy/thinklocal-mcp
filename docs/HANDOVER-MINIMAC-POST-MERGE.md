@@ -29,13 +29,33 @@ Dieser Plan beschreibt die naechsten Schritte ab Merge von PR #134.
 Repo per `git pull` auf jedem Host aktualisieren, dann Daemon neu starten:
 
 ```bash
-# Auf jeder der 5 Nodes
-cd ~/Entwicklung_local/thinklocal-mcp
-git pull
-cd packages/daemon
-npm install   # falls package-lock-Aenderungen
+# Auf jeder der 5 Nodes. ACHTUNG: der Repo-Pfad ist NICHT mesh-weit einheitlich,
+# siehe "Repo-Pfad je nach Host" unten -- vorher pruefen, sonst laeuft der
+# git pull im falschen (oder in keinem) Repo.
+cd "${TLMCP_REPO:?TLMCP_REPO auf den Repo-Pfad DIESES Hosts setzen, s. Liste unten}" &&
+git pull &&
+cd packages/daemon &&
+npm install &&        # falls package-lock-Aenderungen
 npm run build
 ```
+
+Repo-Pfad je nach Host:
+- **TH01** (`ThinkHub`, 10.10.10.80, Linux): `/opt/thinklocal-mcp`
+- **macOS Mac Mini** (`minimac-60`/.94): `~/Entwicklung_local/thinklocal-mcp`
+  (`docs/PROMPT-MINIMAC-GENESIS.md:9`)
+- **`.55`** (MacBook Pro): **die Doku widerspricht sich — hier zwingend `ls -d` vorher.**
+  `docs/REENROLL-55-RUNBOOK.md:7` sagt `/Users/chris/Entwicklung_lo**c**al/thinklocal-mcp`,
+  `docs/LIVE-TEST-2026-04-09.md:117` sagt für **denselben Host** (Überschrift „MacBook Pro
+  (10.10.10.55)") ausdrücklich `~/Entwicklung_lo**k**al/thinklocal-mcp` „(nicht
+  `Entwicklung_local`!)". Dritte Fundstelle mit **c**: `packages/daemon/scripts/discovery-poc.ts:28`
+  (`ssh chris@10.10.10.55 'cd ~/Entwicklung_local/...'`). Welche Schreibweise heute stimmt, ist
+  **nicht** aus dem Repo entscheidbar.
+- **`.52`** (`iobroker`, Linux/systemd-user laut Liste unten): `~/Entwicklung_local/thinklocal-mcp`
+  (`docs/REENROLL-52-RUNBOOK.md:108`) — gleich geschriebener Pfad wie auf den Macs, aber **anderer Host**
+- **per Installer aufgesetzte Nodes**: `${TLMCP_INSTALL_DIR:-$HOME/thinklocal-mcp}`
+  (`scripts/install.sh:15`)
+- **`.56` / `ai-n8n-local`**: im Repo **nicht** belegt
+- Pfad des jeweiligen Hosts **nicht raten** — `ls -d` davor, dann `TLMCP_REPO` setzen.
 
 Daemon-Restart je nach Host:
 - **macOS LaunchDaemon** (MacBook, ggf. Mac Mini):
