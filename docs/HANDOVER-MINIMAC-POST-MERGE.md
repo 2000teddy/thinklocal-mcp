@@ -32,10 +32,10 @@ Repo per `git pull` auf jedem Host aktualisieren, dann Daemon neu starten:
 # Auf jeder der 5 Nodes. ACHTUNG: der Repo-Pfad ist NICHT mesh-weit einheitlich,
 # siehe "Repo-Pfad je nach Host" unten -- vorher pruefen, sonst laeuft der
 # git pull im falschen (oder in keinem) Repo.
-cd "$TLMCP_REPO"   # z. B. /opt/thinklocal-mcp auf TH01
-git pull
-cd packages/daemon
-npm install   # falls package-lock-Aenderungen
+cd "${TLMCP_REPO:?TLMCP_REPO auf den Repo-Pfad DIESES Hosts setzen, s. Liste unten}" &&
+git pull &&
+cd packages/daemon &&
+npm install &&        # falls package-lock-Aenderungen
 npm run build
 ```
 
@@ -45,8 +45,11 @@ Repo-Pfad je nach Host:
   (`docs/PROMPT-MINIMAC-GENESIS.md:9`; auf `.55` als `/Users/chris/Entwicklung_local/...`,
   `docs/REENROLL-55-RUNBOOK.md:7`) — **aber** auf mindestens einem Mac heisst das Verzeichnis
   `~/Entwicklung_lokal/` **mit k** (`docs/LIVE-TEST-2026-04-09.md:117`)
+- **`.52`** (`iobroker`, Linux/systemd-user laut Liste unten): `~/Entwicklung_local/thinklocal-mcp`
+  (`docs/REENROLL-52-RUNBOOK.md:108`) — gleich geschriebener Pfad wie auf den Macs, aber **anderer Host**
 - **per Installer aufgesetzte Nodes**: `${TLMCP_INSTALL_DIR:-$HOME/thinklocal-mcp}`
   (`scripts/install.sh:15`)
+- **`.56` / `ai-n8n-local`**: im Repo **nicht** belegt
 - Pfad des jeweiligen Hosts **nicht raten** — `ls -d` davor, dann `TLMCP_REPO` setzen.
 
 Daemon-Restart je nach Host:

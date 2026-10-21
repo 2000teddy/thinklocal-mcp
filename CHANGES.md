@@ -19,19 +19,28 @@ nach Host" darunter. Jeder gelistete Pfad ist mit Datei:Zeile belegt (`PROMPT-MI
 `~/Entwicklung_lokal/` **mit k**, `scripts/install.sh:15`); für `.52`/`.56`/`ai-n8n-local` ist im Repo kein
 Pfad belegt, dort steht die Anweisung zum `ls -d`-Check statt eines geratenen Werts. In ADR-017 wurde **nur**
 die Pfad-/Restart-Annotation im Kontext-Block angefasst, nicht §Entscheidung oder §Status.
+**Fremd-Review (`agy`) auf den 4-Commit-Diff: 4 Findings, alle behoben** — darunter zwei HIGH: (1) `cd
+"$TLMCP_REPO"` ohne Guard ist bei ungesetzter Variable `cd ""` und damit in bash **Exit 0**, der `git pull`
+wäre **still** im falschen Repo gelaufen ⇒ jetzt `cd "${TLMCP_REPO:?…}" &&`-Kette (live verifiziert: Exit
+127); (2) falsche Trefferzahlen in beiden Einträgen ⇒ gegen den Basis-Commit neu gezählt (22/12/10). Dazu
+MEDIUM: `.52` war fälschlich als Mac-Host geführt — es ist Linux und hat einen belegten Pfad.
 Doc-only, kein `packages/`-Diff. Details: `changes/2026-10-21_docs-per-host-repo-pfad.md`.
 
 ### docs: veraltete Arbeitsverzeichnis-Pfade korrigiert (2026-10-21 09:40)
-`~/Entwicklung_local/thinklocal-mcp` stand an 20 Stellen der Doku als Arbeitsverzeichnis — das Verzeichnis
-existiert auf TH01 **nicht**. Korrigiert wurden **8 Treffer**, pro Treffer nach gelesenem Host-Kontext:
-**TH01-Workdir → `/opt/thinklocal-mcp`** (`CLAUDE.md:40`, `CONTRIBUTING.md:74`,
-`docs/REENROLL-52-RUNBOOK.md:36`+`:87` — dort sagen Kommentar bzw. Überschrift ausdrücklich „TH01",
-`docs/DEVELOPER-GUIDE.md:223`) und **Endnutzer-Pfad → `~/thinklocal-mcp`** (`docs/USER-GUIDE.md` 5×, weil der
-Installer nach `${TLMCP_INSTALL_DIR:-$HOME/thinklocal-mcp}` klont, `scripts/install.sh:15` — `/opt` wäre dort
-genauso falsch gewesen). **Bewusst gelassen: 12** — neun Mac-Treffer (`.55`/`.52`/`minimac-60`), wo der Pfad
-korrekt ist (**drei davon ohne `/Users/chris/`-Präfix, ein pauschales `sed` hätte sie zerstört**), zwei
-Mehr-Host-Anleitungen ohne eindeutigen Host (`HANDOVER-MINIMAC:33`, `ADR-017:15`) und `chatlogs/`.
-Doc-only, kein `packages/`-Diff, kein Daemon-Eingriff. Details: `changes/2026-10-21_docs-stale-workdir-paths.md`.
+`~/Entwicklung_local/thinklocal-mcp` stand in der Doku als Arbeitsverzeichnis — das Verzeichnis existiert auf
+TH01 **nicht**. Universum (gezählt gegen den Basis-Commit `a16b475`, ohne `chatlogs/`): **22 Treffer**.
+Korrigiert in diesem Slice **10**, pro Treffer nach gelesenem Host-Kontext: **TH01-Workdir →
+`/opt/thinklocal-mcp`** (`CLAUDE.md:40`, `CONTRIBUTING.md:74`, `docs/REENROLL-52-RUNBOOK.md:36`+`:87` — dort
+sagen Kommentar bzw. Überschrift ausdrücklich „TH01", `docs/DEVELOPER-GUIDE.md:223`) und **Endnutzer-Pfad →
+`~/thinklocal-mcp`** (`docs/USER-GUIDE.md` 5×, weil der Installer nach
+`${TLMCP_INSTALL_DIR:-$HOME/thinklocal-mcp}` klont, `scripts/install.sh:15` — `/opt` wäre dort genauso falsch
+gewesen). **Bewusst gelassen: 10** — acht Treffer auf fremden Hosts, wo der Pfad gültig ist (macOS `.55`,
+Mac Mini `minimac-60`, sowie **`.52`/`iobroker`, das Linux ist** und dessen eigenes Home meint,
+`REENROLL-52:108` + Host-Klasse `HANDOVER-MINIMAC:55`; **vier davon ohne `/Users/chris/`-Präfix — ein
+pauschales `sed` hätte sie zerstört**), zwei Historie-Treffer (`.codex/CODEX_HISTORY:7,10`) und `chatlogs/`.
+Die zwei verbleibenden Mehr-Host-Stellen löst der Folge-Eintrag darunter **im selben PR** ⇒ PR-Bilanz
+**12 geändert / 10 gelassen**. Doc-only, kein `packages/`-Diff, kein Daemon-Eingriff.
+Details: `changes/2026-10-21_docs-stale-workdir-paths.md`.
 
 ### docs+test(tl14): Runbook-Volltext + Zeremonie-Skripte — der entblockte Slice (2026-08-31 06:20)
 Fortsetzung genau des Slices, der am 2026-08-26 bei **Schritt 2 von 7** am D2-Blocker gestoppt wurde und den

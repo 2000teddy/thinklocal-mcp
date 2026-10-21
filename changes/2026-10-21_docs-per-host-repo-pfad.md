@@ -32,10 +32,13 @@ geändert wurde allein die Pfad-/Restart-Annotation im Kontext-Block.
 | Mac Mini `minimac-60` / .94 | `~/Entwicklung_local/thinklocal-mcp` | `docs/PROMPT-MINIMAC-GENESIS.md:9` |
 | `.55` | `/Users/chris/Entwicklung_local/thinklocal-mcp` | `docs/REENROLL-55-RUNBOOK.md:7` |
 | ein Mac (launchd) | `~/Entwicklung_lokal/` — **mit k** | `docs/LIVE-TEST-2026-04-09.md:117` |
+| `.52` (`iobroker`, **Linux**/systemd-user) | `~/Entwicklung_local/thinklocal-mcp` | `docs/REENROLL-52-RUNBOOK.md:108`, Host-Klasse aus `docs/HANDOVER-MINIMAC-POST-MERGE.md:55` |
 | Installer-Nodes | `${TLMCP_INSTALL_DIR:-$HOME/thinklocal-mcp}` | `scripts/install.sh:15` |
 
-Für `.52`/`.56`/`ai-n8n-local` ist im Repo **kein** Pfad belegt — deshalb steht dort kein geratener
-Wert, sondern die Anweisung, vor dem `cd` mit `ls -d` zu prüfen. Ein falscher Pfad lässt `git pull`
+Für `.56` und `ai-n8n-local` ist im Repo **kein** Pfad belegt — deshalb steht dort kein geratener
+Wert, sondern die Anweisung, vor dem `cd` mit `ls -d` zu prüfen. (`.52` **ist** belegt, s. Tabelle; der
+Vorgänger-Slice hatte es fälschlich unter „Mac-Hosts" geführt — `HANDOVER-MINIMAC:55` listet `iobroker`
+unter systemd-user, also Linux. Korrigiert.) Ein falscher Pfad lässt `git pull`
 im falschen Repo laufen; das ist die Fehlerklasse, die der Slice verhindern soll.
 
 ## Abgrenzung
@@ -45,3 +48,14 @@ TL-14 bleibt C1-gated. Keine Beschlussänderung.
 ## Tests
 Doc-only, keine Test-Änderung. Verifikation: beide Blöcke vor dem Edit im Volltext gelesen, jeder
 Pfad in der Tabelle mit Datei:Zeile belegt.
+
+## Code-Review (`agy`, echtes Fremd-Vendor-Review auf den 4-Commit-Diff) — 4 Findings, alle behoben
+| Schwere | Finding | Behebung |
+|---|---|---|
+| **HIGH** | `cd "$TLMCP_REPO"` ohne Guard: bei ungesetzter Variable expandiert das zu `cd ""` — das ist in bash **Exit 0** und bleibt im aktuellen Verzeichnis, d. h. `git pull` läuft **still** im falschen Repo | `cd "${TLMCP_REPO:?…}" &&`-Kette; live geprüft: ungesetzt ⇒ Abbruch mit Exit 127, kein stilles Weiterlaufen. Dass der Kommentar hinter `npm install &&` die `&&`-Kette **nicht** bricht, wurde ebenfalls live geprüft |
+| **HIGH** | Trefferzahlen falsch („8 von 20", Tabellen-Überschrift „(6)" über 5 Zeilen) | Universum gegen den Basis-Commit `a16b475` gezählt statt gegen den eigenen Arbeitsbaum: **22 Treffer, 12 geändert, 10 gelassen**; alle Zwischensummen angeglichen |
+| **MEDIUM** | Widerspruch zu `.52`: Slice 1 führte es unter „Mac-Hosts", Slice 2 behauptete „kein Pfad belegt" | `.52` ist **Linux** (`HANDOVER-MINIMAC:55`, systemd-user) und **hat** einen belegten Pfad (`REENROLL-52:108`); beide Dateien korrigiert, der Host steht jetzt in der Per-Host-Liste |
+| **LOW** | Slice-1-Eintrag sagte „eigener Slice" / „nur noch 12 gelassene Treffer", obwohl der Folge-Slice im selben PR liegt | Querverweis + Gesamtbilanz des PR in beide Einträge aufgenommen |
+
+Ein Punkt wurde **nicht** übernommen: `agy` wollte `cd <repo>` in ADR-017 unangetastet lassen (NIT,
+„als Platzhalter erkennbar") — das deckt sich mit der Umsetzung, dort wurde nichts weiter geändert.
