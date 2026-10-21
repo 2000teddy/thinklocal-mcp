@@ -26,6 +26,15 @@ die Pfad-/Restart-Annotation im Kontext-Block angefasst, nicht §Entscheidung od
 wäre **still** im falschen Repo gelaufen ⇒ jetzt `cd "${TLMCP_REPO:?…}" &&`-Kette (live verifiziert: Exit
 127); (2) falsche Trefferzahlen in beiden Einträgen ⇒ gegen den Basis-Commit neu gezählt (22/12/10). Dazu
 MEDIUM: `.52` war fälschlich als Mac-Host geführt — es ist Linux und hat einen belegten Pfad.
+**Für den Re-Reviewer — die 5 Fixes aus `agy`s REQUEST CHANGES (Kommentar 2026-10-21T09:17:59Z) liegen
+vollständig in `d018d9c`** („agy-Re-Review #356 nachgebessert"), kein Force-Push, History linear: (1) `.52`-Selbstwiderspruch
+→ `CHANGES.md`; (2) Trefferzahl „vier davon" war die Datei- statt Trefferzahl ⇒ 6/5 bzw. 5/4 → `CHANGES.md` +
+`COMPLIANCE-TABLE.md` + `changes/2026-10-21_docs-stale-workdir-paths.md`; (3) Liste „Fremde Hosts (8)" enthielt 7 ⇒
+`LIVE-TEST:117` aufgenommen, Selbstwiderspruch gestrichen → `changes/2026-10-21_docs-stale-workdir-paths.md`;
+(4) `.52`/Linux in der Annotation + `.55`-c/k-Widerspruch festgehalten → `docs/architecture/ADR-017-auto-update.md` +
+`docs/HANDOVER-MINIMAC-POST-MERGE.md`; (5) PR-Nummern #351/#354/#355 gehoben (+ fehlende Spalte in der #351-Zeile)
+→ `COMPLIANCE-TABLE.md`. Die vier Findings der **ersten** `agy`-Runde stecken in `81379bc`, die Compliance-Zeile in
+`1880f2d`, der Blocker-Vermerk in `b5d462a` (= aktueller PR-Head).
 Doc-only, kein `packages/`-Diff. Details: `changes/2026-10-21_docs-per-host-repo-pfad.md`.
 
 ### docs: veraltete Arbeitsverzeichnis-Pfade korrigiert (2026-10-21 09:40)
