@@ -29,13 +29,25 @@ Dieser Plan beschreibt die naechsten Schritte ab Merge von PR #134.
 Repo per `git pull` auf jedem Host aktualisieren, dann Daemon neu starten:
 
 ```bash
-# Auf jeder der 5 Nodes
-cd ~/Entwicklung_local/thinklocal-mcp
+# Auf jeder der 5 Nodes. ACHTUNG: der Repo-Pfad ist NICHT mesh-weit einheitlich,
+# siehe "Repo-Pfad je nach Host" unten -- vorher pruefen, sonst laeuft der
+# git pull im falschen (oder in keinem) Repo.
+cd "$TLMCP_REPO"   # z. B. /opt/thinklocal-mcp auf TH01
 git pull
 cd packages/daemon
 npm install   # falls package-lock-Aenderungen
 npm run build
 ```
+
+Repo-Pfad je nach Host:
+- **TH01** (`ThinkHub`, 10.10.10.80, Linux): `/opt/thinklocal-mcp`
+- **macOS** (MacBook, Mac Mini `minimac-60`/.94): `~/Entwicklung_local/thinklocal-mcp`
+  (`docs/PROMPT-MINIMAC-GENESIS.md:9`; auf `.55` als `/Users/chris/Entwicklung_local/...`,
+  `docs/REENROLL-55-RUNBOOK.md:7`) — **aber** auf mindestens einem Mac heisst das Verzeichnis
+  `~/Entwicklung_lokal/` **mit k** (`docs/LIVE-TEST-2026-04-09.md:117`)
+- **per Installer aufgesetzte Nodes**: `${TLMCP_INSTALL_DIR:-$HOME/thinklocal-mcp}`
+  (`scripts/install.sh:15`)
+- Pfad des jeweiligen Hosts **nicht raten** — `ls -d` davor, dann `TLMCP_REPO` setzen.
 
 Daemon-Restart je nach Host:
 - **macOS LaunchDaemon** (MacBook, ggf. Mac Mini):

@@ -12,11 +12,17 @@ Ein Software-Update erfordert derzeit auf **jedem Node** manuell:
 
 ```bash
 ssh peer
-cd ~/Entwicklung_local/thinklocal-mcp   # oder /opt/thinklocal
+cd <repo>        # Pfad ist je Host verschieden: /opt/thinklocal-mcp (TH01),
+                 # ~/Entwicklung_local/thinklocal-mcp (macOS; auf einem Host
+                 # ~/Entwicklung_lokal/ mit k), ${TLMCP_INSTALL_DIR:-$HOME/thinklocal-mcp}
+                 # (Installer, scripts/install.sh:15)
 git pull
 npm install
-systemctl --user restart thinklocal-daemon
+systemctl --user restart thinklocal-daemon   # macOS: launchctl kickstart -k
 ```
+
+Dass dieser Pfad **pro Host anders** lautet, ist Teil des Problems: ein mesh-weites
+Copy-Paste-Kommando gibt es nicht.
 
 Bei 5+ Nodes ist das zeitaufwaendig und fehleranfaellig:
 - Vergessene Nodes laufen auf alter Version

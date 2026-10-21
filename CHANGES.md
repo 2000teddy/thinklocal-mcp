@@ -8,6 +8,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs: Per-Host-Notiz für den Repo-Pfad (Folge-Slice) (2026-10-21 09:45)
+Die zwei Treffer, die der Workdir-Slice bewusst offen liess, weil es **Mehr-Host-Anleitungen** sind:
+`docs/HANDOVER-MINIMAC-POST-MERGE.md:33` (§4 „Verteilung auf alle 5 Mesh-Nodes") und
+`docs/architecture/ADR-017-auto-update.md:15` (§Kontext, manueller Ist-Zustand). Statt eines Pfades, der
+für vier von fünf Nodes falsch wäre, stehen dort jetzt `cd "$TLMCP_REPO"` bzw. `cd <repo>` **plus eine
+Per-Host-Liste** — in `HANDOVER` bewusst in derselben Form wie die schon vorhandene Liste „Daemon-Restart je
+nach Host" darunter. Jeder gelistete Pfad ist mit Datei:Zeile belegt (`PROMPT-MINIMAC-GENESIS.md:9`,
+`REENROLL-55-RUNBOOK.md:7`, `LIVE-TEST-2026-04-09.md:117` — dort heisst das Verzeichnis
+`~/Entwicklung_lokal/` **mit k**, `scripts/install.sh:15`); für `.52`/`.56`/`ai-n8n-local` ist im Repo kein
+Pfad belegt, dort steht die Anweisung zum `ls -d`-Check statt eines geratenen Werts. In ADR-017 wurde **nur**
+die Pfad-/Restart-Annotation im Kontext-Block angefasst, nicht §Entscheidung oder §Status.
+Doc-only, kein `packages/`-Diff. Details: `changes/2026-10-21_docs-per-host-repo-pfad.md`.
+
 ### docs: veraltete Arbeitsverzeichnis-Pfade korrigiert (2026-10-21 09:40)
 `~/Entwicklung_local/thinklocal-mcp` stand an 20 Stellen der Doku als Arbeitsverzeichnis — das Verzeichnis
 existiert auf TH01 **nicht**. Korrigiert wurden **8 Treffer**, pro Treffer nach gelesenem Host-Kontext:
