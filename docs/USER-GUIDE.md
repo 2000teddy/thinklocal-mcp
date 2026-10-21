@@ -23,7 +23,7 @@ Voraussetzungen: curl, git, Node.js 22+ (wird automatisch via nvm installiert).
 ### Remote-Installation auf einem Server
 
 ```bash
-cd ~/Entwicklung_local/thinklocal-mcp && npx tsx packages/cli/src/thinklocal.ts deploy user@server-ip --with-env
+cd ~/thinklocal-mcp && npx tsx packages/cli/src/thinklocal.ts deploy user@server-ip --with-env
 ```
 
 ---
@@ -31,7 +31,7 @@ cd ~/Entwicklung_local/thinklocal-mcp && npx tsx packages/cli/src/thinklocal.ts 
 ## 2. Ersteinrichtung
 
 ```bash
-cd ~/Entwicklung_local/thinklocal-mcp && npx tsx packages/cli/src/thinklocal.ts bootstrap
+cd ~/thinklocal-mcp && npx tsx packages/cli/src/thinklocal.ts bootstrap
 ```
 
 Bootstrap erledigt automatisch:
@@ -141,7 +141,7 @@ INFLUXDB_PASSWORD=secret
 Starten:
 
 ```bash
-cd ~/Entwicklung_local/thinklocal-mcp && npm run dashboard
+cd ~/thinklocal-mcp && npm run dashboard
 ```
 
 Oeffnen: http://localhost:3000
@@ -430,10 +430,10 @@ Das ist normales macOS-Verhalten. Die Agent-ID bleibt stabil (SPIFFE-URI).
 ssh-copy-id user@server
 
 # Dry-Run zuerst
-cd ~/Entwicklung_local/thinklocal-mcp && npx tsx packages/cli/src/thinklocal.ts deploy user@server --dry-run
+cd ~/thinklocal-mcp && npx tsx packages/cli/src/thinklocal.ts deploy user@server --dry-run
 
 # Dann echt
-cd ~/Entwicklung_local/thinklocal-mcp && npx tsx packages/cli/src/thinklocal.ts deploy user@server --with-env
+cd ~/thinklocal-mcp && npx tsx packages/cli/src/thinklocal.ts deploy user@server --with-env
 ```
 
 ---

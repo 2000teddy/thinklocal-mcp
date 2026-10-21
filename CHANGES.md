@@ -8,6 +8,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs: veraltete Arbeitsverzeichnis-Pfade korrigiert (2026-10-21 09:40)
+`~/Entwicklung_local/thinklocal-mcp` stand an 20 Stellen der Doku als Arbeitsverzeichnis — das Verzeichnis
+existiert auf TH01 **nicht**. Korrigiert wurden **8 Treffer**, pro Treffer nach gelesenem Host-Kontext:
+**TH01-Workdir → `/opt/thinklocal-mcp`** (`CLAUDE.md:40`, `CONTRIBUTING.md:74`,
+`docs/REENROLL-52-RUNBOOK.md:36`+`:87` — dort sagen Kommentar bzw. Überschrift ausdrücklich „TH01",
+`docs/DEVELOPER-GUIDE.md:223`) und **Endnutzer-Pfad → `~/thinklocal-mcp`** (`docs/USER-GUIDE.md` 5×, weil der
+Installer nach `${TLMCP_INSTALL_DIR:-$HOME/thinklocal-mcp}` klont, `scripts/install.sh:15` — `/opt` wäre dort
+genauso falsch gewesen). **Bewusst gelassen: 12** — neun Mac-Treffer (`.55`/`.52`/`minimac-60`), wo der Pfad
+korrekt ist (**drei davon ohne `/Users/chris/`-Präfix, ein pauschales `sed` hätte sie zerstört**), zwei
+Mehr-Host-Anleitungen ohne eindeutigen Host (`HANDOVER-MINIMAC:33`, `ADR-017:15`) und `chatlogs/`.
+Doc-only, kein `packages/`-Diff, kein Daemon-Eingriff. Details: `changes/2026-10-21_docs-stale-workdir-paths.md`.
+
 ### docs+test(tl14): Runbook-Volltext + Zeremonie-Skripte — der entblockte Slice (2026-08-31 06:20)
 Fortsetzung genau des Slices, der am 2026-08-26 bei **Schritt 2 von 7** am D2-Blocker gestoppt wurde und den
 `TODO.md:544` seither als **non-gated** führt. Neu: **`docs/runbooks/RUNBOOK-TL-14-ca-ceremony.md`** (alle
