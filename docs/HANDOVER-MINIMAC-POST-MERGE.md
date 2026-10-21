@@ -41,10 +41,15 @@ npm run build
 
 Repo-Pfad je nach Host:
 - **TH01** (`ThinkHub`, 10.10.10.80, Linux): `/opt/thinklocal-mcp`
-- **macOS** (MacBook, Mac Mini `minimac-60`/.94): `~/Entwicklung_local/thinklocal-mcp`
-  (`docs/PROMPT-MINIMAC-GENESIS.md:9`; auf `.55` als `/Users/chris/Entwicklung_local/...`,
-  `docs/REENROLL-55-RUNBOOK.md:7`) — **aber** auf mindestens einem Mac heisst das Verzeichnis
-  `~/Entwicklung_lokal/` **mit k** (`docs/LIVE-TEST-2026-04-09.md:117`)
+- **macOS Mac Mini** (`minimac-60`/.94): `~/Entwicklung_local/thinklocal-mcp`
+  (`docs/PROMPT-MINIMAC-GENESIS.md:9`)
+- **`.55`** (MacBook Pro): **die Doku widerspricht sich — hier zwingend `ls -d` vorher.**
+  `docs/REENROLL-55-RUNBOOK.md:7` sagt `/Users/chris/Entwicklung_lo**c**al/thinklocal-mcp`,
+  `docs/LIVE-TEST-2026-04-09.md:117` sagt für **denselben Host** (Überschrift „MacBook Pro
+  (10.10.10.55)") ausdrücklich `~/Entwicklung_lo**k**al/thinklocal-mcp` „(nicht
+  `Entwicklung_local`!)". Dritte Fundstelle mit **c**: `packages/daemon/scripts/discovery-poc.ts:28`
+  (`ssh chris@10.10.10.55 'cd ~/Entwicklung_local/...'`). Welche Schreibweise heute stimmt, ist
+  **nicht** aus dem Repo entscheidbar.
 - **`.52`** (`iobroker`, Linux/systemd-user laut Liste unten): `~/Entwicklung_local/thinklocal-mcp`
   (`docs/REENROLL-52-RUNBOOK.md:108`) — gleich geschriebener Pfad wie auf den Macs, aber **anderer Host**
 - **per Installer aufgesetzte Nodes**: `${TLMCP_INSTALL_DIR:-$HOME/thinklocal-mcp}`

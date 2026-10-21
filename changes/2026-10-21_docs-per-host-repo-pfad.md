@@ -30,11 +30,12 @@ geändert wurde allein die Pfad-/Restart-Annotation im Kontext-Block.
 |---|---|---|
 | TH01 (`ThinkHub`, .80, Linux) | `/opt/thinklocal-mcp` | dieses Repo, live verifiziert |
 | Mac Mini `minimac-60` / .94 | `~/Entwicklung_local/thinklocal-mcp` | `docs/PROMPT-MINIMAC-GENESIS.md:9` |
-| `.55` | `/Users/chris/Entwicklung_local/thinklocal-mcp` | `docs/REENROLL-55-RUNBOOK.md:7` |
-| ein Mac (launchd) | `~/Entwicklung_lokal/` — **mit k** | `docs/LIVE-TEST-2026-04-09.md:117` |
+| `.55` (MacBook Pro) | **widersprüchlich:** `…Entwicklung_lo**c**al/` vs. `~/Entwicklung_lo**k**al/` | `docs/REENROLL-55-RUNBOOK.md:7` vs. `docs/LIVE-TEST-2026-04-09.md:117` (dritte Fundstelle mit **c**: `packages/daemon/scripts/discovery-poc.ts:28`) |
 | `.52` (`iobroker`, **Linux**/systemd-user) | `~/Entwicklung_local/thinklocal-mcp` | `docs/REENROLL-52-RUNBOOK.md:108`, Host-Klasse aus `docs/HANDOVER-MINIMAC-POST-MERGE.md:55` |
 | Installer-Nodes | `${TLMCP_INSTALL_DIR:-$HOME/thinklocal-mcp}` | `scripts/install.sh:15` |
 
+Für `.55` ist die Doku **widersprüchlich** (c- vs. k-Schreibweise für denselben Host, s. Tabelle) —
+deshalb steht dort keine „Korrektur", sondern der Widerspruch plus Pflicht-`ls -d`.
 Für `.56` und `ai-n8n-local` ist im Repo **kein** Pfad belegt — deshalb steht dort kein geratener
 Wert, sondern die Anweisung, vor dem `cd` mit `ls -d` zu prüfen. (`.52` **ist** belegt, s. Tabelle; der
 Vorgänger-Slice hatte es fälschlich unter „Mac-Hosts" geführt — `HANDOVER-MINIMAC:55` listet `iobroker`

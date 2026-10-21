@@ -13,9 +13,10 @@ Ein Software-Update erfordert derzeit auf **jedem Node** manuell:
 ```bash
 ssh peer
 cd <repo>        # Pfad ist je Host verschieden: /opt/thinklocal-mcp (TH01),
-                 # ~/Entwicklung_local/thinklocal-mcp (macOS; auf einem Host
-                 # ~/Entwicklung_lokal/ mit k), ${TLMCP_INSTALL_DIR:-$HOME/thinklocal-mcp}
-                 # (Installer, scripts/install.sh:15)
+                 # ~/Entwicklung_local/thinklocal-mcp (macOS UND .52/iobroker, Linux),
+                 # ${TLMCP_INSTALL_DIR:-$HOME/thinklocal-mcp} (Installer,
+                 # scripts/install.sh:15). Fuer .55 ist die Doku widerspruechlich
+                 # (Entwicklung_local vs. Entwicklung_lokal) -- vorher pruefen.
 git pull
 npm install
 systemctl --user restart thinklocal-daemon   # macOS: launchctl kickstart -k

@@ -7,9 +7,14 @@ angefasst. Risiko-Delta **null**.
 dieses Verzeichnis existiert auf TH01 **nicht** (`ls ~/Entwicklung_local` → ENOENT).
 
 **Trefferuniversum:** `git grep -c "Entwicklung_local\|Entwicklung_lokal" a16b475 -- '*.md'` ohne
-`chatlogs/` ⇒ **22 Treffer** in 13 Dateien. (Einer davon, `LIVE-TEST-2026-04-09.md:117`, ist
-`Entwicklung_lo**k**al` mit k und damit kein `Entwicklung_local`-Treffer — er zählt nur mit, weil das
-Suchmuster beide Schreibweisen fängt.)
+`chatlogs/` ⇒ **22 Treffer in 13 Markdown-Dateien**. Beide Schreibweisen (`…local` / `…lokal`) sind im
+Muster, weil die Doku beide benutzt.
+
+**Ein 23. Treffer liegt ausserhalb von `*.md`:** `packages/daemon/scripts/discovery-poc.ts:28` —
+ein **Kommentar** mit einem `ssh chris@10.10.10.55 'cd ~/Entwicklung_local/…'`-Beispiel. Bewusst
+**nicht** angefasst: ein `.ts`-Diff würde diesen Slice aus „doc-only" herausheben (TS-Spalte, Suite).
+Er ist in §`.55`-Widerspruch unten als dritte Fundstelle dokumentiert und gehört in einen eigenen
+Slice.
 
 ---
 
@@ -38,20 +43,36 @@ Gesamtbilanz des PR damit: **12 geändert, 10 bewusst gelassen**.
 ## Was bewusst NICHT geändert wurde — 10 Treffer
 
 - **Fremde Hosts, Pfad dort gültig (8):**
-  - **macOS:** `RUNBOOK-55-C2:46` (ruft `/Users/chris/.nvm/…/node`), `RUNBOOK-55-A:63`
-    („.55-Terminal (Jump-GUI)", `launchctl`), `REENROLL-55:7,14`, `PROMPT-MINIMAC-GENESIS:9,30`
-    („Du bist auf dem Mac Mini `minimac-60`").
+  - **`.55`** (MacBook Pro, 10.10.10.55) — **4 Treffer:** `RUNBOOK-55-C2:46` (ruft
+    `/Users/chris/.nvm/…/node`), `RUNBOOK-55-A:63` („.55-Terminal (Jump-GUI)", `launchctl`),
+    `REENROLL-55:7,14`.
+  - **Mac Mini `minimac-60`/.94 — 2 Treffer:** `PROMPT-MINIMAC-GENESIS:9,30` („Du bist auf dem Mac
+    Mini `minimac-60`").
   - **`.52` (`iobroker`) — Linux, nicht macOS** (`HANDOVER-MINIMAC:55` führt `iobroker` unter
-    **systemd-user**): `REENROLL-52:108` steht unter „# Auf .52" und meint dessen **eigenes** Home.
-    Gleich geschriebener Pfad wie auf den Macs, anderer Host.
-  - **Merke:** vier dieser Treffer schreiben `~/…` **ohne** `/Users/chris/`-Präfix und sind trotzdem
-    nicht TH01 — ein pauschales `sed` über alle Dateien hätte sie zerstört. Pro Treffer wurde der
-    umgebende Host-Kontext gelesen.
+    **systemd-user**) — **1 Treffer:** `REENROLL-52:108` steht unter „# Auf .52" und meint dessen
+    **eigenes** Home. Gleich geschriebener Pfad wie auf den Macs, anderer Host.
+  - **`LIVE-TEST-2026-04-09:117` — 1 Treffer**, ebenfalls `.55` (Überschrift „MacBook Pro
+    (10.10.10.55)"), aber in der Schreibweise `Entwicklung_lo**k**al` — s. §`.55`-Widerspruch unten.
 - **Historie (2):** `.codex/CODEX_HISTORY:7,10` (`/Users/chris/Entwicklung_lokal/…`, reines
   Sitzungsprotokoll).
-- **Nicht gezählt, weil andere Schreibweise:** `LIVE-TEST-2026-04-09:117` (`Entwicklung_lokal` mit k,
-  launchd-Mac) — bleibt unangetastet und ist in den 10 oben enthalten.
+- **Merke:** **6 dieser 10 Treffer** (in **5 Dateien**) schreiben `~/…` **ohne** `/Users/chris/`-Präfix
+  und sind trotzdem nicht TH01 — davon **5 Treffer in 4 Dateien** in der `…local`-Schreibweise plus
+  `LIVE-TEST:117` in der `…lokal`-Schreibweise. Ein pauschales `sed` über alle Dateien hätte sie
+  zerstört; pro Treffer wurde der umgebende Host-Kontext gelesen.
 - **`chatlogs/`** per Auftrag nicht angefasst (dort weitere Treffer, bewusst ignoriert).
+
+## Nebenbefund: `.55` hat drei widersprüchliche Pfad-Angaben
+Für denselben Host nennt die Doku drei Varianten:
+| Fundstelle | Pfad | Schreibweise |
+|---|---|---|
+| `docs/REENROLL-55-RUNBOOK.md:7` | `/Users/chris/Entwicklung_local/thinklocal-mcp` | **c** |
+| `docs/LIVE-TEST-2026-04-09.md:117` | `~/Entwicklung_lokal/thinklocal-mcp` — ausdrücklich „(nicht `Entwicklung_local`!)" | **k** |
+| `packages/daemon/scripts/discovery-poc.ts:28` | `~/Entwicklung_local/…` (ssh-Beispiel, Kommentar) | **c** |
+
+Welche heute stimmt, ist **aus dem Repo nicht entscheidbar** — nur auf `.55` selbst prüfbar. Deshalb
+wurde **keine** der drei Stellen „korrigiert"; statt dessen hält
+`HANDOVER-MINIMAC-POST-MERGE.md` den Widerspruch fest und verlangt für `.55` einen `ls -d`-Check
+**vor** dem `cd`. Das ist der ehrliche Stand, keine geratene Vereinheitlichung.
 
 ## Abgrenzung
 Keine Re-Enroll-Aktion, kein `.94`-Admin-Token, kein Daemon-Eingriff — das bleibt Christian-Gate.

@@ -15,8 +15,10 @@ Die zwei Treffer, die der Workdir-Slice bewusst offen liess, weil es **Mehr-Host
 für vier von fünf Nodes falsch wäre, stehen dort jetzt `cd "$TLMCP_REPO"` bzw. `cd <repo>` **plus eine
 Per-Host-Liste** — in `HANDOVER` bewusst in derselben Form wie die schon vorhandene Liste „Daemon-Restart je
 nach Host" darunter. Jeder gelistete Pfad ist mit Datei:Zeile belegt (`PROMPT-MINIMAC-GENESIS.md:9`,
-`REENROLL-55-RUNBOOK.md:7`, `LIVE-TEST-2026-04-09.md:117` — dort heisst das Verzeichnis
-`~/Entwicklung_lokal/` **mit k**, `scripts/install.sh:15`); für `.52`/`.56`/`ai-n8n-local` ist im Repo kein
+`scripts/install.sh:15`). **Nebenbefund:** für `.55` widerspricht sich die Doku —
+`REENROLL-55-RUNBOOK.md:7` sagt `Entwicklung_lo**c**al`, `LIVE-TEST-2026-04-09.md:117` sagt für denselben Host
+ausdrücklich `Entwicklung_lo**k**al`, `packages/daemon/scripts/discovery-poc.ts:28` wieder **c**; welche stimmt,
+ist aus dem Repo nicht entscheidbar ⇒ dokumentiert + Pflicht-`ls -d` statt geratener Vereinheitlichung); für `.56`/`ai-n8n-local` ist im Repo kein
 Pfad belegt, dort steht die Anweisung zum `ls -d`-Check statt eines geratenen Werts. In ADR-017 wurde **nur**
 die Pfad-/Restart-Annotation im Kontext-Block angefasst, nicht §Entscheidung oder §Status.
 **Fremd-Review (`agy`) auf den 4-Commit-Diff: 4 Findings, alle behoben** — darunter zwei HIGH: (1) `cd
@@ -28,7 +30,7 @@ Doc-only, kein `packages/`-Diff. Details: `changes/2026-10-21_docs-per-host-repo
 
 ### docs: veraltete Arbeitsverzeichnis-Pfade korrigiert (2026-10-21 09:40)
 `~/Entwicklung_local/thinklocal-mcp` stand in der Doku als Arbeitsverzeichnis — das Verzeichnis existiert auf
-TH01 **nicht**. Universum (gezählt gegen den Basis-Commit `a16b475`, ohne `chatlogs/`): **22 Treffer**.
+TH01 **nicht**. Universum (gezählt gegen den Basis-Commit `a16b475`, ohne `chatlogs/`): **22 Treffer in 13 Markdown-Dateien**; ein **23.** liegt ausserhalb `*.md` (`packages/daemon/scripts/discovery-poc.ts:28`, Kommentar) und bleibt bewusst unangetastet, weil ein `.ts`-Diff den Slice aus „doc-only" heben würde.
 Korrigiert in diesem Slice **10**, pro Treffer nach gelesenem Host-Kontext: **TH01-Workdir →
 `/opt/thinklocal-mcp`** (`CLAUDE.md:40`, `CONTRIBUTING.md:74`, `docs/REENROLL-52-RUNBOOK.md:36`+`:87` — dort
 sagen Kommentar bzw. Überschrift ausdrücklich „TH01", `docs/DEVELOPER-GUIDE.md:223`) und **Endnutzer-Pfad →
@@ -36,8 +38,9 @@ sagen Kommentar bzw. Überschrift ausdrücklich „TH01", `docs/DEVELOPER-GUIDE.
 `${TLMCP_INSTALL_DIR:-$HOME/thinklocal-mcp}` klont, `scripts/install.sh:15` — `/opt` wäre dort genauso falsch
 gewesen). **Bewusst gelassen: 10** — acht Treffer auf fremden Hosts, wo der Pfad gültig ist (macOS `.55`,
 Mac Mini `minimac-60`, sowie **`.52`/`iobroker`, das Linux ist** und dessen eigenes Home meint,
-`REENROLL-52:108` + Host-Klasse `HANDOVER-MINIMAC:55`; **vier davon ohne `/Users/chris/`-Präfix — ein
-pauschales `sed` hätte sie zerstört**), zwei Historie-Treffer (`.codex/CODEX_HISTORY:7,10`) und `chatlogs/`.
+`REENROLL-52:108` + Host-Klasse `HANDOVER-MINIMAC:55`; **sechs dieser zehn Treffer, in fünf Dateien, schreiben `~/…` ohne
+`/Users/chris/`-Präfix und sind trotzdem nicht TH01 — fünf davon in vier Dateien in der `…local`-Schreibweise;
+ein pauschales `sed` hätte sie zerstört**), zwei Historie-Treffer (`.codex/CODEX_HISTORY:7,10`) und `chatlogs/`.
 Die zwei verbleibenden Mehr-Host-Stellen löst der Folge-Eintrag darunter **im selben PR** ⇒ PR-Bilanz
 **12 geändert / 10 gelassen**. Doc-only, kein `packages/`-Diff, kein Daemon-Eingriff.
 Details: `changes/2026-10-21_docs-stale-workdir-paths.md`.
