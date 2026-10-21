@@ -220,7 +220,7 @@ bus.on('peer:join', (event) => {
 
 ```bash
 # Alle Tests
-cd ~/Entwicklung_local/thinklocal-mcp && npm test
+cd /opt/thinklocal-mcp && npm test
 
 # Einzelne Test-Datei
 npx vitest run packages/daemon/src/policy.test.ts
