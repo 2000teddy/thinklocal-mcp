@@ -8,6 +8,35 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs(reconcile): CHANGES-Suffix für #281 nachgezogen (2026-10-26 12:45)
+**Doc-only**, **eine** Zeile — der in #360 belegte, damals ausserhalb der Freigabe liegende Nebenbefund, jetzt
+freigegeben. #281 hat **zwei** `CHANGES.md`-Einträge geliefert, nur einer trug die PR-Nummer: `:1176`
+(Feature, Suffix vorhanden) und `:1162` (Robustheits-Fix aus dem codex-Review, Suffix fehlte).
+`CHANGES.md:1162` → `… (CR-MEDIUM codex-Review #281) (2026-07-17 06:14, #281)`, **1:1 in-place**, Suffix vor
+der schliessenden Klammer und hinter dem **ganzen** Zeitstempel (Muster #359); der Klammerausdruck *mitten*
+in der Überschrift blieb unangetastet, geändert wurde nur die **letzte** Klammer. Suffix-Bestand **79 → 80**;
+nach dem Einschub dieses Eintrags liegt die Zeile auf `:1191`. **Zeilennummer selbst gemessen:** der Dispatch
+nannte zuerst `:1131` und korrigierte auf `:1162` — die Korrektur ist richtig, `:1131` war der Stand **vor**
+dem #360-Merge (`git show origin/main:CHANGES.md`, `origin/main` = `d747145`). **Zuordnung belegt, nicht
+geraten:** `gh pr view 281` ⇒ `MERGED`, mergeCommit `830feed`, mergedAt 2026-07-17T09:44:22Z;
+`git log -S'Skelett-Übersicht total gegen malformed' -- CHANGES.md` nennt genau diesen Commit, der auch
+`:1176` schrieb; und der Body der Zielzeile beginnt mit „**Robustheits-Fix auf dem offenen PR #281**".
+**Abschluss-Zählung, live und auf den nummerierten Bereich begrenzt (Grenze dynamisch über die älteste
+suffigierte Überschrift):** **2 Treffer** — ausschliesslich die Überschriften von **#360** und **diesem**
+Slice, also nur Reconcile-PRs, die ihre eigene Nummer beim Schreiben nicht kennen konnten. **Die Bedingung
+„0" ist mit diesem Mechanismus nicht erreichbar**, nicht nur noch nicht: jede Reconcile-PR schliesst fremde
+Lücken und fügt dabei genau eine eigene hinzu. Der erreichbare Endzustand heisst „**nur noch Eigen-Einträge
+von Reconcile-PRs**" — und der ist jetzt erreicht; ein #362 würde zwei Felder nachziehen und zwei neue öffnen.
+**Zwei Korrekturen zur Auftrags-Beleglage:** (1) die Konventionsgrenze ist **#281**, nicht #261 — für
+#261 … #280 existiert **keine** suffigierte Überschrift, deshalb wird die Grenze dynamisch bestimmt statt auf
+eine Nummer festgenagelt; (2) eine eigene COMPLIANCE-Zeile **ist** nötig — gemeint war „keine für #281", und
+#281 hat seine (`COMPLIANCE-TABLE.md:1791`, gegengeprüft, **nicht** angefasst), während `CLAUDE.md` für
+**jeden** PR eine verlangt und das CI-Gate sie erzwingt. **Nicht angefasst:** `CHANGES.md:1110` (nennt #281
+nur im Text, gehört zu #286), die Überschrift und COMPLIANCE-Zeile von **#360** (dokumentierter Endzustand),
+die historischen Überschriften unterhalb der Konventionsgrenze, die **43** alten `(offen, base=main)`-Zeilen
+ohne PR-Bezug, **#350**. Kein `.ts`-Diff ⇒ Suite nicht betroffen; kein Deploy/Secret/State, Risiko-Delta
+**null**. `changes/2026-10-26_reconcile-281-changes-suffix.md`.
+
 ### docs(reconcile): Abschluss der Reconcile-Kette — #357/#358/#359 nachgezogen (2026-10-26 12:15)
 **Doc-only** Post-Merge-Reconcile und **letzter** Nachtrag der Welle, die mit #356 begann. Jede Reconcile-PR
 hinterlässt ihre **eigene** Nummer offen — sie kennt ihre Merge-Nummer beim Schreiben nicht; nach
@@ -1159,7 +1188,7 @@ Cert-Fixtures bzw. Nicht-Loopback-Bindung): §2 mTLS-Pflicht + Nicht-Loopback-`4
 De-riskt TL-11 Slice B, ohne den Out-of-Repo-Supervisor→CLI-Hop zu bauen. Suite **1721 grün + 2 todo**,
 tsc(strict)/neue-Datei-Lint 0. Kein Runtime-Change, kein Deploy.
 
-### fix(api): TL-21 Skelett-Übersicht total gegen malformed CRDT-Daten (CR-MEDIUM codex-Review #281) (2026-07-17 06:14)
+### fix(api): TL-21 Skelett-Übersicht total gegen malformed CRDT-Daten (CR-MEDIUM codex-Review #281) (2026-07-17 06:14, #281)
 Robustheits-Fix auf dem offenen PR #281: `firstSentence(text)` nahm einen Laufzeit-**String** an
 (`(text ?? '').trim()`), aber `Capability.description` ist runtime-untyped — `importPeerCapabilities()`
 schema-validiert es nicht, `stripNonCrdtFields` erhält malformed Metadaten. Ein authentifizierter/buggy
