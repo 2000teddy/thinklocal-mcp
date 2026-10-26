@@ -51,7 +51,7 @@ Die beiden Kommandos, mit denen gezählt wurde, und ihr Ergebnis:
 # 1) Status-Spalten mit PR-Bezug, die noch offen stehen
 grep -cE '^\| #[0-9]+ \| \(offen, base=main\) \|' COMPLIANCE-TABLE.md
 # 2) Ueberschriften OHNE ", #NNN)"-Suffix, begrenzt auf den nummerierten Bereich:
-#    bis zur aeltesten suffigierten Ueberschrift (:1171 auf main, :1176 in diesem Branch).
+#    bis zur aeltesten suffigierten Ueberschrift (:1145 auf main, :1176 in diesem Branch).
 #    Ohne diese Begrenzung liefert der Grep zusaetzlich alle historischen Ueberschriften
 #    aus der Zeit vor der PR-Nummern-Konvention und damit weit mehr als 2 Treffer.
 LAST=$(grep -nE '^### .*, #[0-9]+\)$' CHANGES.md | tail -1 | cut -d: -f1)
@@ -64,14 +64,14 @@ wichtiger als ein glattes Ergebnis:
 | Kommando | Treffer | welche |
 |---|---|---|
 | (1) Status-Spalten | **1** | nur die eigene `#360`-Zeile |
-| (2) Suffix-Lücken im nummerierten Bereich (`main`-Zeilen 11–1171, bis zur ältesten suffigierten Überschrift) | **2** | die eigene `#360`-Überschrift **+ `CHANGES.md:1157`** |
+| (2) Suffix-Lücken im nummerierten Bereich (`main`-Zeilen 11–1145, bis zur ältesten suffigierten Überschrift) | **2** | die eigene `#360`-Überschrift **+ `CHANGES.md:1131`** |
 
 **Treffer 1 ist strukturell unvermeidbar:** die Selbst-Reconcile-Lücke lässt sich nicht in derselben PR
 schliessen, in der sie entsteht — die eigene `#360`-Zeile steht auf `(offen, base=main)` und die eigene
 Überschrift trägt keinen Suffix. Keine Restarbeit.
 
 **Treffer 2 ist ein neuer Fund und wird hier nur belegt, nicht gefixt.**
-`CHANGES.md:1157` lautet `fix(api): TL-21 Skelett-Übersicht total gegen malformed CRDT-Daten (CR-MEDIUM
+`CHANGES.md:1131` (`main`-Stand; in diesem Branch `:1162`) lautet `fix(api): TL-21 Skelett-Übersicht total gegen malformed CRDT-Daten (CR-MEDIUM
 codex-Review #281) (2026-07-17 06:14)` und trägt keinen Suffix. Er gehört zu **#281** — belegt, nicht geraten:
 
 ```bash
@@ -79,15 +79,15 @@ git log -S'Skelett-Übersicht total gegen malformed' --oneline -- CHANGES.md
 # 830feed [claude-code] feat(api): TL-21 Skelett-Auskunft GET /api/capabilities/overview (Kap. 06) (#281)
 ```
 
-Derselbe Merge-Commit schrieb auch `:1171`, das den Suffix `, #281)` **hat** — **#281 lieferte zwei
+Derselbe Merge-Commit schrieb auch `:1145`, das den Suffix `, #281)` **hat** — **#281 lieferte zwei
 `CHANGES.md`-Einträge, nur einer bekam die Nummer.** Das ist dieselbe Fehlerklasse wie die drei in #359,
 liegt aber **ausserhalb dieser Freigabe** (historische Überschriften ausdrücklich ausgeschlossen). Der
-nächste Slice bräuchte dafür genau eine Zeile: `:1157` → `… (2026-07-17 06:14, #281)`.
+nächste Slice bräuchte dafür genau eine Zeile: `:1131` → `… (2026-07-17 06:14, #281)`.
 
 **Die Kette dieser Welle endet hier trotzdem bewusst.** Ein `#361`, das nur die beiden Eigen-Felder nachzieht,
 würde dabei zwei neue öffnen — reine Buchhaltung ohne Informationswert. Der Reststand ist damit
 **dokumentiert statt fortgeschrieben**: wer die Felder später braucht, findet hier die Begründung, warum sie
-offen sind, und mit `:1157` gleich den einen Fall, bei dem ein Nachtrag wirklich noch etwas bewirkt.
+offen sind, und mit `:1131` gleich den einen Fall, bei dem ein Nachtrag wirklich noch etwas bewirkt.
 
 ## Was bewusst NICHT angefasst wurde
 
@@ -114,7 +114,7 @@ offen sind, und mit `:1157` gleich den einen Fall, bei dem ein Nachtrag wirklich
 | Suffix-Bestand vor/nach | ✅ **76 → 79** |
 | `Zuvor:`-Kette nicht abgeschnitten | ✅ 36 → 38, Schluss-Satz und `*` identisch |
 | Post-Diff-Zeilen `:42`/`:68`/`:90` tragen die drei Überschriften | ✅ einzeln per `sed -n` gegengeprüft |
-| Abschluss-Zählung | ⚠️ **1 / 2**, nicht 0/0 — Eigen-Einträge plus der neue Fund `:1157` (#281), s. o. |
+| Abschluss-Zählung | ⚠️ **1 / 2**, nicht 0/0 — Eigen-Einträge plus der neue Fund `:1131` (#281), s. o. |
 
 ## Precommit (manuell)
 `pal:precommit` ist weiter am PATH-Problem nicht aufrufbar ⇒ manuell: Diff vollständig gelesen, Secret-Scan

@@ -20,11 +20,11 @@ dieses Eintrags liegen sie auf `:42`, `:68` und `:90`. Suffix-Bestand **76 → 7
 `2026-10-26 12:15` gehoben, `Zuvor:`-Historie vollständig erhalten (36 → **38** Glieder, Schluss-Satz und `*`
 identisch). Reihenfolge wie beauftragt: erst (a) und (b), dann (c). Alle Merge-Commits `gh`-verifiziert.
 **Abschluss-Beleg, live gezählt nach dem Edit** — `grep -cE '^\| #[0-9]+ \| \(offen, base=main\) \|'
-COMPLIANCE-TABLE.md` ⇒ **1**, und der Suffix-Grep im nummerierten Bereich (`main`-Zeilen 11–**1171**,
+COMPLIANCE-TABLE.md` ⇒ **1**, und der Suffix-Grep im nummerierten Bereich (`main`-Zeilen 11–**1145**,
 bis zur ältesten suffigierten Überschrift) ⇒ **2**. **Die erwartete „0/0“ trifft also nicht ganz:** Treffer 1 ist
 die eigene #360-Zeile bzw. -Überschrift (strukturell unvermeidbar, s. u.) — Treffer 2 ist ein **neuer Fund**,
-`CHANGES.md:1157` (`fix(api): TL-21 Skelett-Übersicht total gegen malformed CRDT-Daten … (2026-07-17 06:14)`).
-Der gehört zu **#281**: `git log -S` weist ihn dem Merge-Commit `830feed` zu, derselben PR, die auch `:1171`
+`CHANGES.md:1131` (`fix(api): TL-21 Skelett-Übersicht total gegen malformed CRDT-Daten … (2026-07-17 06:14)`).
+Der gehört zu **#281**: `git log -S` weist ihn dem Merge-Commit `830feed` zu, derselben PR, die auch `:1145`
 schrieb — **#281 lieferte zwei Einträge, nur einer bekam den Suffix**. Das ist dieselbe Fehlerklasse wie die
 drei in #359, liegt aber **ausserhalb dieser Freigabe** (historische Überschriften ausgeschlossen) und ist
 deshalb hier nur belegt, nicht gefixt. Von allem Übrigen: **0**. **Treffer 1 im Klartext:** die eigene
