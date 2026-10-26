@@ -8,7 +8,28 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### docs: Per-Host-Notiz für den Repo-Pfad (Folge-Slice) (2026-10-21 09:45)
+### docs(reconcile): PR-Nummern-Nachtrag für #356 (2026-10-26 11:30)
+**Doc-only** Post-Merge-Reconcile — dieselbe Selbst-Reconcile-Lücke wie zuvor: eine PR kennt ihre eigene
+Merge-Nummer beim Schreiben noch nicht. #356 (`docs: veraltete Arbeitsverzeichnis-Pfade — 12 korrigiert,
+10 begründet gelassen (+ Per-Host-Notiz)`) ist seit **2026-10-26T10:09:05Z** `MERGED`, Squash-Merge-Commit
+**`8e7f683e`**, `reviewDecision=APPROVED` (Approver `peppiseppiullmann-ci`) — `gh`-verifiziert, nicht aus
+einem Report übernommen. Nachgezogen: COMPLIANCE-Status-Spalte `(offen, base=main)` → `(base=main,
+gemergt)` (`COMPLIANCE-TABLE.md:2063`, Inhalt und Spaltenzahl unverändert) und die beiden
+CHANGES-Überschriften von #356 um `, #356)` ergänzt (`CHANGES.md:11`+`:40` — `main`-Stand vor diesem
+Diff; nach dem Einschub dieses Eintrags `:32`+`:61`) — **1:1 in-place**, 3 Zeilen.
+**Bewusst nicht gezogen:** die `changes/`-Formulierung aus #356 — die beanstandeten Zahlen wurden gegen
+`a16b475` nachgeprüft und **stimmen** (6 Treffer / 5 Dateien mit `~/`-Form, davon 5 / 4 in `…local`), und
+die einzige überholte Aussage steht unter der ausdrücklich datierten Überschrift „Merge-Blocker
+(festgehalten 2026-10-21 12:10)" — `changes/` sind Momentaufnahmen je PR, der lebende Stand gehört hierher.
+**Eine Protokoll-Korrektur gehört dazu:** die dortige Einordnung „echtes Christian-Gate" war zu stark — der
+Merge lief ohne Christian über den sanktionierten Bot-Pfad; richtig war nur, dass der **Autor** sich nicht
+selbst approven kann. **Self-Approval-Sperre ≠ Christian-Gate.** Die 43 übrigen `(offen, base=main)`-Zeilen
+sind nicht PR-nummeriert (alle älter als #296) und bleiben unangetastet; damit **0** stale Zeilen mit
+PR-Bezug ausser der eigenen. Kein `.ts`-Diff ⇒ Suite nicht betroffen; kein Deploy/Secret/State, Risiko-Delta
+**null**. Präzedenz #328/#330/#332/#336/#339/#340/#345/#346/#347/#348.
+`changes/2026-10-26_reconcile-356.md`.
+
+### docs: Per-Host-Notiz für den Repo-Pfad (Folge-Slice) (2026-10-21 09:45, #356)
 Die zwei Treffer, die der Workdir-Slice bewusst offen liess, weil es **Mehr-Host-Anleitungen** sind:
 `docs/HANDOVER-MINIMAC-POST-MERGE.md:33` (§4 „Verteilung auf alle 5 Mesh-Nodes") und
 `docs/architecture/ADR-017-auto-update.md:15` (§Kontext, manueller Ist-Zustand). Statt eines Pfades, der
@@ -37,7 +58,7 @@ vollständig in `d018d9c`** („agy-Re-Review #356 nachgebessert"), kein Force-P
 `1880f2d`, der Blocker-Vermerk in `b5d462a` (= aktueller PR-Head).
 Doc-only, kein `packages/`-Diff. Details: `changes/2026-10-21_docs-per-host-repo-pfad.md`.
 
-### docs: veraltete Arbeitsverzeichnis-Pfade korrigiert (2026-10-21 09:40)
+### docs: veraltete Arbeitsverzeichnis-Pfade korrigiert (2026-10-21 09:40, #356)
 `~/Entwicklung_local/thinklocal-mcp` stand in der Doku als Arbeitsverzeichnis — das Verzeichnis existiert auf
 TH01 **nicht**. Universum (gezählt gegen den Basis-Commit `a16b475`, ohne `chatlogs/`): **22 Treffer in 13 Markdown-Dateien**; ein **23.** liegt ausserhalb `*.md` (`packages/daemon/scripts/discovery-poc.ts:28`, Kommentar) und bleibt bewusst unangetastet, weil ein `.ts`-Diff den Slice aus „doc-only" heben würde.
 Korrigiert in diesem Slice **10**, pro Treffer nach gelesenem Host-Kontext: **TH01-Workdir →
