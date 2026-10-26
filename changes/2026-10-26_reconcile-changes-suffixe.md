@@ -29,16 +29,19 @@ der Korrektur-Hinweis bleibt vollständig erhalten. Nur der Text **nach** dem le
 **vor** der schliessenden Klammer wurde eingefügt; kein Wort der Überschriften wurde sonst angefasst.
 
 **Reihenfolge wie beauftragt:** erst die drei Überschriften, dann dieser Eintrag und der `CHANGES.md`-Eintrag
-mit den **korrigierten** Zeilennummern — der eigene Einschub verschiebt die drei Ziele um +22 Zeilen auf
-`:122` / `:161` / `:246`. Beide Nummernsätze sind gegen den Dateistand gegengeprüft, nicht gerechnet.
+mit den **korrigierten** Zeilennummern — der eigene Einschub verschiebt die drei Ziele um +26 Zeilen auf
+`:126` / `:165` / `:250`. Beide Nummernsätze sind gegen den Dateistand gegengeprüft, nicht gerechnet.
 
 ## Was bewusst NICHT geändert wurde
 
 - **Die Überschriften von #357 und #358** tragen ihre eigene PR-Nummer weiterhin nicht: #357
-  (`main`-Stand `:33`, nach dem Einschub `:55`) und #358 (`:11` → `:33`). Das ist die bekannte
-  **Selbst-Reconcile-Lücke** — eine PR kennt ihre Merge-Nummer beim Schreiben nicht —, und sie wird wie
-  immer vom **nächsten** Nachtrag geschlossen (Muster #346 → #348). Dieser Slice fügt mit seiner eigenen
-  Überschrift die dritte offene hinzu; das ist erwartetes Verhalten des Verfahrens, kein Versäumnis.
+  (`main`-Stand `:33`, nach dem Einschub `:59`) und #358 (`:11` → `:37`). Das ist die bekannte
+  **Selbst-Reconcile-Lücke** — eine PR kennt ihre Merge-Nummer beim Schreiben nicht; das erklärt, warum
+  auch die Überschrift *dieses* Slices keinen Suffix trägt. **Dass sie hier nicht geschlossen wird, hat
+  aber einen zweiten Grund:** diese Teilfreigabe ist ausdrücklich auf die drei #356-Altfälle
+  (#351/#354/#355) begrenzt. Das ist der entscheidende Grund bei **#357**, dessen COMPLIANCE-Zeile in
+  #358 schon gehoben wurde — dort trägt die Selbst-Reconcile-Begründung allein nicht mehr. Beide gehen
+  in den nächsten **regulären** Reconcile-Nachtrag (Muster #346 → #348); kein Versäumnis dieses Slices.
 - **#350:** ausdrücklich nicht Teil dieser Freigabe, bleibt unangetastet.
 - **Die COMPLIANCE-Zeile von #358** bleibt auf `(offen, base=main)` — dieselbe Lücke, nächster Nachtrag.
 - **Die 43 nicht-PR-nummerierten `(offen, base=main)`-Zeilen** (Erst-Spalte `v0.34.x`/`ADR-033`/
@@ -56,7 +59,7 @@ mit den **korrigierten** Zeilennummern — der eigene Einschub verschiebt die dr
 | #351 / #354 / #355 `gh pr view --json state,mergeCommit` | ✅ alle `MERGED`: `136c2f7` / `132c1ad` / `a16b475` |
 | Zuordnung Überschrift → PR gegen den Dateiinhalt geprüft (nicht gegen den Dispatch) | ✅ `:100` Runbook-Volltext = #355, `:139` D2-pathLen = #354, `:224` G1-Brief = #351 |
 | Suffix-Bestand vor/nach | ✅ **73 → 76** Überschriften mit `, #NNN)` |
-| Post-Diff-Zeilen `:122`/`:161`/`:246` tragen wirklich die drei Überschriften | ✅ einzeln per `sed -n` gegengeprüft |
+| Post-Diff-Zeilen `:126`/`:165`/`:250` tragen wirklich die drei Überschriften | ✅ einzeln per `sed -n` gegengeprüft |
 | Post-Diff-Zeilen `:33`/`:55` tragen die #358-/#357-Überschrift | ✅ gegengeprüft (eine erste Fassung hatte die beiden **verdreht**, korrigiert) |
 | Nur Überschriften-Enden angefasst, kein Rumpftext | ✅ `--numstat` = 3 geänderte Bestandszeilen |
 
