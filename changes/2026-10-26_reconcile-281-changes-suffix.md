@@ -85,7 +85,9 @@ Zwei Punkte weichen von der Dispatch-Angabe ab, beide nachgemessen:
 
 - **`CHANGES.md:1110`** — nennt #281 nur im Text, gehört zu #286, trägt seinen Suffix korrekt.
 - **`COMPLIANCE-TABLE.md:1791`** (#281) — nur gegengeprüft, nicht editiert.
-- **Die Überschrift von #360** (`:11`) und die **COMPLIANCE-Zeile von #360** (`:2067`) — Selbst-Reconcile-
+- **Die Überschrift von #360** (`main`-Stand `:11`, nach dem Einschub dieses Eintrags `:40`; auf `:11` liegt
+  im Branch die Überschrift **dieses** Slices) und die **COMPLIANCE-Zeile von #360** (`:2067`, in beiden
+  Ständen gleich) — Selbst-Reconcile-
   Lücke, dokumentierter Endzustand aus #360, bewusst nicht fortgeschrieben.
 - **Die historischen Überschriften** unterhalb der Konventionsgrenze und die **43** alten
   `(offen, base=main)`-Zeilen ohne PR-Bezug (alle älter als #296).
