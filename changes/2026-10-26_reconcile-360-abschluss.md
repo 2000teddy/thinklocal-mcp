@@ -24,7 +24,7 @@ vor und nach dem Edit verglichen), kein Textumbau.
 ## (b) CHANGES-Überschriften — 3 Zeilen, 1:1 in-place
 
 Suffix `, #NNN)` jeweils **vor** der schliessenden Klammer; Suffix-Bestand **76 → 79**. Zeilennummern =
-`main`-Stand vor diesem Diff (nach dem Einschub des neuen Eintrags `:37`/`:63`/`:85`):
+`main`-Stand vor diesem Diff (nach dem Einschub des neuen Eintrags `:42`/`:68`/`:90`):
 
 | Datei:Zeile | Überschrift | PR | Merge-Commit |
 |---|---|---|---|
@@ -54,15 +54,36 @@ grep -cE '^\| #[0-9]+ \| \(offen, base=main\) \|' COMPLIANCE-TABLE.md
 grep -nE '^### ' CHANGES.md | grep -vE ', #[0-9]+\)$'
 ```
 
-Ergebnis siehe `CHANGES.md`-Eintrag (dort stehen die live gezählten Zahlen). **Mit einer Einschränkung, die
-ausdrücklich genannt sein muss:** beide Zahlen sind **0 ausser den zwei Eigen-Einträgen dieses PR** — die
-eigene `#360`-COMPLIANCE-Zeile steht auf `(offen, base=main)`, und die eigene Überschrift trägt keinen
-Suffix. Das ist **keine** Restarbeit, sondern strukturell unvermeidbar: die Selbst-Reconcile-Lücke lässt sich
-nicht in derselben PR schliessen, in der sie entsteht.
+**Ergebnis: 1 und 2 — nicht 0 und 0.** Die Auftrags-Erwartung trifft damit **nicht ganz**, und das ist
+wichtiger als ein glattes Ergebnis:
 
-**Deshalb endet die Kette hier bewusst.** Ein `#361` würde genau zwei Felder nachziehen und dabei zwei neue
-öffnen — reine Buchhaltung ohne Informationswert. Der Reststand ist damit **dokumentiert statt
-fortgeschrieben**; wer die beiden Felder später braucht, findet hier die Begründung, warum sie offen sind.
+| Kommando | Treffer | welche |
+|---|---|---|
+| (1) Status-Spalten | **1** | nur die eigene `#360`-Zeile |
+| (2) Suffix-Lücken im nummerierten Bereich (`main`-Zeilen 11–1171, bis zur ältesten suffigierten Überschrift) | **2** | die eigene `#360`-Überschrift **+ `CHANGES.md:1157`** |
+
+**Treffer 1 ist strukturell unvermeidbar:** die Selbst-Reconcile-Lücke lässt sich nicht in derselben PR
+schliessen, in der sie entsteht — die eigene `#360`-Zeile steht auf `(offen, base=main)` und die eigene
+Überschrift trägt keinen Suffix. Keine Restarbeit.
+
+**Treffer 2 ist ein neuer Fund und wird hier nur belegt, nicht gefixt.**
+`CHANGES.md:1157` lautet `fix(api): TL-21 Skelett-Übersicht total gegen malformed CRDT-Daten (CR-MEDIUM
+codex-Review #281) (2026-07-17 06:14)` und trägt keinen Suffix. Er gehört zu **#281** — belegt, nicht geraten:
+
+```bash
+git log -S'Skelett-Übersicht total gegen malformed' --oneline -- CHANGES.md
+# 830feed [claude-code] feat(api): TL-21 Skelett-Auskunft GET /api/capabilities/overview (Kap. 06) (#281)
+```
+
+Derselbe Merge-Commit schrieb auch `:1171`, das den Suffix `, #281)` **hat** — **#281 lieferte zwei
+`CHANGES.md`-Einträge, nur einer bekam die Nummer.** Das ist dieselbe Fehlerklasse wie die drei in #359,
+liegt aber **ausserhalb dieser Freigabe** (historische Überschriften ausdrücklich ausgeschlossen). Der
+nächste Slice bräuchte dafür genau eine Zeile: `:1157` → `… (2026-07-17 06:14, #281)`.
+
+**Die Kette dieser Welle endet hier trotzdem bewusst.** Ein `#361`, das nur die beiden Eigen-Felder nachzieht,
+würde dabei zwei neue öffnen — reine Buchhaltung ohne Informationswert. Der Reststand ist damit
+**dokumentiert statt fortgeschrieben**: wer die Felder später braucht, findet hier die Begründung, warum sie
+offen sind, und mit `:1157` gleich den einen Fall, bei dem ein Nachtrag wirklich noch etwas bewirkt.
 
 ## Was bewusst NICHT angefasst wurde
 
@@ -88,8 +109,8 @@ fortgeschrieben**; wer die beiden Felder später braucht, findet hier die Begrü
 | Pipe-/Spaltenzahl der zwei gehobenen Zeilen vor/nach | ✅ je 11 unescaped Pipes = 10 Spalten |
 | Suffix-Bestand vor/nach | ✅ **76 → 79** |
 | `Zuvor:`-Kette nicht abgeschnitten | ✅ 36 → 38, Schluss-Satz und `*` identisch |
-| Post-Diff-Zeilen `:37`/`:63`/`:85` tragen die drei Überschriften | ✅ einzeln per `sed -n` gegengeprüft |
-| Abschluss-Zählung | ✅ **0 / 0** ausser den zwei Eigen-Einträgen (s. o.) |
+| Post-Diff-Zeilen `:42`/`:68`/`:90` tragen die drei Überschriften | ✅ einzeln per `sed -n` gegengeprüft |
+| Abschluss-Zählung | ⚠️ **1 / 2**, nicht 0/0 — Eigen-Einträge plus der neue Fund `:1157` (#281), s. o. |
 
 ## Precommit (manuell)
 `pal:precommit` ist weiter am PATH-Problem nicht aufrufbar ⇒ manuell: Diff vollständig gelesen, Secret-Scan
