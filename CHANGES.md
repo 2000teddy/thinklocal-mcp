@@ -8,6 +8,52 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs: Per-Host-Notiz für den Repo-Pfad (Folge-Slice) (2026-10-21 09:45)
+Die zwei Treffer, die der Workdir-Slice bewusst offen liess, weil es **Mehr-Host-Anleitungen** sind:
+`docs/HANDOVER-MINIMAC-POST-MERGE.md:33` (§4 „Verteilung auf alle 5 Mesh-Nodes") und
+`docs/architecture/ADR-017-auto-update.md:15` (§Kontext, manueller Ist-Zustand). Statt eines Pfades, der
+für vier von fünf Nodes falsch wäre, stehen dort jetzt `cd "$TLMCP_REPO"` bzw. `cd <repo>` **plus eine
+Per-Host-Liste** — in `HANDOVER` bewusst in derselben Form wie die schon vorhandene Liste „Daemon-Restart je
+nach Host" darunter. Jeder gelistete Pfad ist mit Datei:Zeile belegt (`PROMPT-MINIMAC-GENESIS.md:9`,
+`scripts/install.sh:15`). **Nebenbefund:** für `.55` widerspricht sich die Doku —
+`REENROLL-55-RUNBOOK.md:7` sagt `Entwicklung_lo**c**al`, `LIVE-TEST-2026-04-09.md:117` sagt für denselben Host
+ausdrücklich `Entwicklung_lo**k**al`, `packages/daemon/scripts/discovery-poc.ts:28` wieder **c**; welche stimmt,
+ist aus dem Repo nicht entscheidbar ⇒ dokumentiert + Pflicht-`ls -d` statt geratener Vereinheitlichung); für `.56`/`ai-n8n-local` ist im Repo kein
+Pfad belegt, dort steht die Anweisung zum `ls -d`-Check statt eines geratenen Werts. In ADR-017 wurde **nur**
+die Pfad-/Restart-Annotation im Kontext-Block angefasst, nicht §Entscheidung oder §Status.
+**Fremd-Review (`agy`) auf den 4-Commit-Diff: 4 Findings, alle behoben** — darunter zwei HIGH: (1) `cd
+"$TLMCP_REPO"` ohne Guard ist bei ungesetzter Variable `cd ""` und damit in bash **Exit 0**, der `git pull`
+wäre **still** im falschen Repo gelaufen ⇒ jetzt `cd "${TLMCP_REPO:?…}" &&`-Kette (live verifiziert: Exit
+127); (2) falsche Trefferzahlen in beiden Einträgen ⇒ gegen den Basis-Commit neu gezählt (22/12/10). Dazu
+MEDIUM: `.52` war fälschlich als Mac-Host geführt — es ist Linux und hat einen belegten Pfad.
+**Für den Re-Reviewer — die 5 Fixes aus `agy`s REQUEST CHANGES (Kommentar 2026-10-21T09:17:59Z) liegen
+vollständig in `d018d9c`** („agy-Re-Review #356 nachgebessert"), kein Force-Push, History linear: (1) `.52`-Selbstwiderspruch
+→ `CHANGES.md`; (2) Trefferzahl „vier davon" war die Datei- statt Trefferzahl ⇒ 6/5 bzw. 5/4 → `CHANGES.md` +
+`COMPLIANCE-TABLE.md` + `changes/2026-10-21_docs-stale-workdir-paths.md`; (3) Liste „Fremde Hosts (8)" enthielt 7 ⇒
+`LIVE-TEST:117` aufgenommen, Selbstwiderspruch gestrichen → `changes/2026-10-21_docs-stale-workdir-paths.md`;
+(4) `.52`/Linux in der Annotation + `.55`-c/k-Widerspruch festgehalten → `docs/architecture/ADR-017-auto-update.md` +
+`docs/HANDOVER-MINIMAC-POST-MERGE.md`; (5) PR-Nummern #351/#354/#355 gehoben (+ fehlende Spalte in der #351-Zeile)
+→ `COMPLIANCE-TABLE.md`. Die vier Findings der **ersten** `agy`-Runde stecken in `81379bc`, die Compliance-Zeile in
+`1880f2d`, der Blocker-Vermerk in `b5d462a` (= aktueller PR-Head).
+Doc-only, kein `packages/`-Diff. Details: `changes/2026-10-21_docs-per-host-repo-pfad.md`.
+
+### docs: veraltete Arbeitsverzeichnis-Pfade korrigiert (2026-10-21 09:40)
+`~/Entwicklung_local/thinklocal-mcp` stand in der Doku als Arbeitsverzeichnis — das Verzeichnis existiert auf
+TH01 **nicht**. Universum (gezählt gegen den Basis-Commit `a16b475`, ohne `chatlogs/`): **22 Treffer in 13 Markdown-Dateien**; ein **23.** liegt ausserhalb `*.md` (`packages/daemon/scripts/discovery-poc.ts:28`, Kommentar) und bleibt bewusst unangetastet, weil ein `.ts`-Diff den Slice aus „doc-only" heben würde.
+Korrigiert in diesem Slice **10**, pro Treffer nach gelesenem Host-Kontext: **TH01-Workdir →
+`/opt/thinklocal-mcp`** (`CLAUDE.md:40`, `CONTRIBUTING.md:74`, `docs/REENROLL-52-RUNBOOK.md:36`+`:87` — dort
+sagen Kommentar bzw. Überschrift ausdrücklich „TH01", `docs/DEVELOPER-GUIDE.md:223`) und **Endnutzer-Pfad →
+`~/thinklocal-mcp`** (`docs/USER-GUIDE.md` 5×, weil der Installer nach
+`${TLMCP_INSTALL_DIR:-$HOME/thinklocal-mcp}` klont, `scripts/install.sh:15` — `/opt` wäre dort genauso falsch
+gewesen). **Bewusst gelassen: 10** — acht Treffer auf fremden Hosts, wo der Pfad gültig ist (macOS `.55`,
+Mac Mini `minimac-60`, sowie **`.52`/`iobroker`, das Linux ist** und dessen eigenes Home meint,
+`REENROLL-52:108` + Host-Klasse `HANDOVER-MINIMAC:55`; **sechs dieser zehn Treffer, in fünf Dateien, schreiben `~/…` ohne
+`/Users/chris/`-Präfix und sind trotzdem nicht TH01 — fünf davon in vier Dateien in der `…local`-Schreibweise;
+ein pauschales `sed` hätte sie zerstört**), zwei Historie-Treffer (`.codex/CODEX_HISTORY:7,10`) und `chatlogs/`.
+Die zwei verbleibenden Mehr-Host-Stellen löst der Folge-Eintrag darunter **im selben PR** ⇒ PR-Bilanz
+**12 geändert / 10 gelassen**. Doc-only, kein `packages/`-Diff, kein Daemon-Eingriff.
+Details: `changes/2026-10-21_docs-stale-workdir-paths.md`.
+
 ### docs+test(tl14): Runbook-Volltext + Zeremonie-Skripte — der entblockte Slice (2026-08-31 06:20)
 Fortsetzung genau des Slices, der am 2026-08-26 bei **Schritt 2 von 7** am D2-Blocker gestoppt wurde und den
 `TODO.md:544` seither als **non-gated** führt. Neu: **`docs/runbooks/RUNBOOK-TL-14-ca-ceremony.md`** (alle

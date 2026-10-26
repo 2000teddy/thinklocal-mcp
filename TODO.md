@@ -5,6 +5,41 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 
 ---
 
+## ⛔ OFFENE BLOCKER (Christian-Gate) — Stand 2026-10-21
+
+### B1 — PR #356 kann nicht gemergt werden: Self-Approval
+**Ursache ist NICHT der OAuth-Lock.** `main` ist branch-protected mit
+`required_approving_review_count=1` + Required-Status-Check `CI` (`strict`), und `allow_auto_merge=false`.
+`gh` ist als **`2000teddy`** angemeldet — das ist auch der **Autor** von #356 ⇒ `gh pr review 356 --approve`
+antwortet `Can not approve your own pull request`. Alles andere ist grün: `MERGEABLE`, CI **5/5 grün**,
+`agy`-Review real gelaufen mit **0 HIGH / 0 MEDIUM / 3 LOW** (reine Kosmetik), alle 12 Pfadkorrekturen gegen
+das **Live-Dateisystem** verifiziert, die 10 „begründet gelassen"-Entscheidungen belegt.
+**Was fehlt:** ein approving Review von **`ChristianUllmann`** oder **`peppiseppiullmann-ci`** — die einzigen
+weiteren Collaborators mit `push`. Danach `gh pr merge 356`.
+Inhalt des PR: veraltete Arbeitsverzeichnis-Pfade (12 korrigiert / 10 begründet gelassen) + Per-Host-Notiz;
+`changes/2026-10-21_docs-stale-workdir-paths.md`, `changes/2026-10-21_docs-per-host-repo-pfad.md`.
+**Offen gelassen (nicht blockierend):** die 3 LOW aus dem Re-Review (PR-Body-Text, `changes/`-Wortlaut,
+`CHANGES.md`-PR-Nummern-Suffix `, #356)`) — Letzteres gehört ohnehin erst in den Post-Merge-Reconcile.
+**Nicht Teil dieses PR, als eigener Slice vermerkt:** `packages/daemon/scripts/discovery-poc.ts:28` (23.
+Treffer, ausserhalb `*.md` — ein `.ts`-Diff würde den Slice aus „doc-only" heben) und der
+**`.55`-c/k-Pfad-Widerspruch**, der aus dem Repo nicht entscheidbar ist (nur auf `.55` selbst prüfbar).
+
+### B2 — TH01-Daemon in Crash-Loop seit 2026-09-07 01:45
+`thinklocal-daemon.service` (user unit) läuft `auto-restart` im ~11-s-Takt: `node.crt.pem` ist am
+**2026-09-02 18:38:56 UTC abgelaufen**, Abbruch in `loadOrCreateTlsBundle` (`tls.ts:540`). Die CA selbst ist
+gültig bis 2027-04-07 ⇒ reine Leaf-Expiry. Ohne CA-Key auf dem Node ist **kein** Self-Reissue möglich.
+**Was fehlt:** Christians „ja" zum Re-Enroll (Pfad wie `docs/REENROLL-55-RUNBOOK.md` §1-2 über
+`packages/daemon/ws3-rejoin.mjs` / `requestNodeCert()`, PeerID bleibt) **plus** der `.94`-Admin-Token.
+Zwei Reboots (14.09., 13.09.) haben den Zähler zurückgesetzt, nicht die Ursache behoben.
+**Folgepunkt danach:** T2.1 (Cert-Rotation im Betrieb) — sonst wiederholt sich das zum nächsten 90-Tage-Ende;
+dazu eine Logrotate-Regel (`~/.thinklocal/logs/daemon.log` war am 13.10. bei 673 MB).
+
+### B3 — TL-14: C1-Codier-Freigabe steht aus
+Unverändert seit dem Owner-Sign-off vom 2026-08-26 (G1/G2, ADR-045 `Accepted`). Siehe TL-14a unten,
+`⛔ C1-Umsetzungs-Slice`.
+
+---
+
 ## v5.1-Roadmap — Arbeits-Wahrheit (übernommen 2026-07-07 aus Architektur-Referenz)
 
 > Quelle (bleibt **Referenz**, read-only): `~/hermes/reference/architecture-v5.1/todos/TODO-thinklocal-mcp.md`.
