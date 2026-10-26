@@ -22,7 +22,7 @@ Status-Spalte `(offen, base=main)` → `(base=main, gemergt)`, **1:1 in-place**,
 unverändert. Reihenfolge wie beauftragt: erst Zeile 2064, dann der Footer. Die `Zuvor:`-Historie ist
 **vollständig erhalten** (26 → 36 Glieder, Schluss-Satz und `*` identisch); die Datumsangaben folgen der
 COMPLIANCE-Zeilen-Konvention, für #350 steht statt eines abgeleiteten Datums ausdrücklich „(ohne
-COMPLIANCE-Zeile, Merge 2026-07-29T04:36:20Z)". Danach **0** `(offen, base=main)`-Zeilen mit PR-Bezug; die 43
+COMPLIANCE-Zeile, Merge 2026-07-29T04:36:20Z)". Danach **0** `(offen, base=main)`-Zeilen mit PR-Bezug ausser dieser (#358, dieselbe Selbst-Reconcile-Lücke); die 43
 übrigen sind nicht PR-nummeriert (alle älter als #296) und bleiben unangetastet. **Dabei gefunden, bewusst
 nicht gefixt (ausserhalb des Scopes, eigener Slice):** #350 hat **gar keine** COMPLIANCE-Zeile und keinen
 `CHANGES.md`-Eintrag — eine fehlende Zeile, kein stale Status; und drei `CHANGES.md`-Überschriften tragen den

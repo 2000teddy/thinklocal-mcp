@@ -88,7 +88,7 @@ gelesen statt aus dem Dispatch übernommen:
 | Prüfung | Ergebnis |
 |---|---|
 | Alle zehn PRs #348…#357 `gh pr view --json state,mergedAt,mergeCommit` | ✅ alle `MERGED`, Commits wie in der Tabelle oben |
-| `#357` Status-Spalte gehoben | ✅ Zeilen mit PR-Nummer **und** `(offen, base=main)`: **0** |
+| `#357` Status-Spalte gehoben | ✅ Zeilen mit PR-Nummer **und** `(offen, base=main)`: **0** ausser der eigenen #358-Zeile |
 | Spalten-/Pipe-Zahl der #357-Zeile vor/nach | ✅ je 11 unescaped Pipes = 10 Spalten |
 | `Zuvor:`-Kette nicht abgeschnitten | ✅ 26 → 36 Glieder, Schluss-Satz und `*` identisch |
 | Zeilenzahl der Datei | ✅ Footer-Neufassung bleibt **eine** Zeile (kein Zuwachs); 2068 → **2069** allein durch die eigene #358-Zeile |
