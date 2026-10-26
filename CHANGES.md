@@ -8,6 +8,32 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs(reconcile): CHANGES-Suffixe für #351, #354, #355 nachgezogen (2026-10-26 12:00)
+**Doc-only** Post-Merge-Reconcile, Teilfreigabe aus dem #358-Bericht. Drei `CHANGES.md`-Überschriften
+trugen die PR-Nummer **gar nicht** — ihre COMPLIANCE-Zeilen wurden in #356 gehoben, die Hebung war damals
+aber auf die Tabelle beschränkt, sodass der Doku-Kanon zwischen `COMPLIANCE-TABLE.md` und `CHANGES.md`
+auseinanderlief. Nachgezogen, **3 Zeilen 1:1 in-place**, Suffix `, #NNN)` jeweils **vor** der schliessenden
+Klammer, Format exakt wie die bestehenden Belege (73 → **76**):
+- `:100` → `… — der entblockte Slice (2026-08-31 06:20, #355)` — **#355** `a16b475`
+- `:139` → `… Intermediate ``pathLen 0`` (2026-08-26 07:50 / Korrektur 08:40, #354)` — **#354** `132c1ad`;
+  hier steht der Suffix hinter dem **zweiteiligen** Zeitstempel, der Korrektur-Teil bleibt erhalten
+- `:224` → `… (Owner-Sign-off) (2026-07-29 07:40, #351)` — **#351** `136c2f7`
+
+Alle drei Merge-Commits `gh`-verifiziert MERGED. Zeilennummern sind der `main`-Stand vor diesem Diff; nach
+dem Einschub dieses Eintrags liegen die drei Überschriften auf `:126`, `:165` und `:250`. Reihenfolge wie
+beauftragt: erst die drei Überschriften, dann dieser Eintrag mit den korrigierten Nummern.
+**Nicht angefasst:** die Überschriften von **#357** (`main`-Stand `:33`, jetzt `:59`) und **#358** (`:11`,
+jetzt `:37`) tragen ihre eigene PR-Nummer weiterhin nicht. Zwei Gründe, beide nötig: die Lücke **entsteht**
+durch das Selbst-Reconcile-Problem (eine PR kennt ihre Merge-Nummer beim Schreiben nicht) — das erklärt
+auch, warum diese Überschrift hier selbst keinen Suffix trägt; **nicht geschlossen** wird sie, weil diese
+Teilfreigabe ausdrücklich auf die drei #356-Altfälle (#351/#354/#355) begrenzt ist. Das gilt besonders für
+**#357**, dessen COMPLIANCE-Zeile in #358 bereits gehoben wurde — dort wäre die Selbst-Reconcile-Begründung
+allein nicht tragfähig. Beide gehen in den nächsten regulären Nachtrag (Muster #346 → #348).
+Ebenfalls nicht angefasst: **#350**, `TODO.md`, TL-08/09/10, TL-14 (bleibt C1-gated),
+ADR-046 §9, `README.md`/`CONTRIBUTING.md`/`CLAUDE.md` und die 43 nicht-PR-nummerierten
+`(offen, base=main)`-Zeilen. Kein `.ts`-Diff ⇒ Suite nicht betroffen; kein Deploy/Secret/State,
+Risiko-Delta **null**. `changes/2026-10-26_reconcile-changes-suffixe.md`.
+
 ### docs(reconcile): Footer-Nachtrag + #357-Zeile (2026-10-26 11:40)
 **Doc-only** Post-Merge-Reconcile, aus dem #357-Bericht als eigener Slice hervorgegangen. Der **Footer** von
 `COMPLIANCE-TABLE.md` (letzte Zeile) stand seit dem **2026-07-28** auf dem #346/#347-Stand, während die
@@ -97,7 +123,7 @@ Die zwei verbleibenden Mehr-Host-Stellen löst der Folge-Eintrag darunter **im s
 **12 geändert / 10 gelassen**. Doc-only, kein `packages/`-Diff, kein Daemon-Eingriff.
 Details: `changes/2026-10-21_docs-stale-workdir-paths.md`.
 
-### docs+test(tl14): Runbook-Volltext + Zeremonie-Skripte — der entblockte Slice (2026-08-31 06:20)
+### docs+test(tl14): Runbook-Volltext + Zeremonie-Skripte — der entblockte Slice (2026-08-31 06:20, #355)
 Fortsetzung genau des Slices, der am 2026-08-26 bei **Schritt 2 von 7** am D2-Blocker gestoppt wurde und den
 `TODO.md:544` seither als **non-gated** führt. Neu: **`docs/runbooks/RUNBOOK-TL-14-ca-ceremony.md`** (alle
 sieben Schritte im Volltext, mit Kommandos, Zeremonie-Protokoll-Vorlage und vorab festgeschriebenem
@@ -136,7 +162,7 @@ mit Exit 1 und **ohne jede Ausgabe** enden — jetzt über `tl14_openssl` mit Fe
 keine Zeremonie durchgeführt (es existiert kein Root-Key), kein Schritt 6, keine C1-Umsetzung, ADR-045 nicht
 angefasst, **kein `packages/`-Diff**. Daemon-Suite unverändert **2101 grün**.
 
-### docs+test(tl14): D2-pathLen-Blocker gefunden UND korrigiert — Root `pathLen 1` + Intermediate `pathLen 0` (2026-08-26 07:50 / Korrektur 08:40)
+### docs+test(tl14): D2-pathLen-Blocker gefunden UND korrigiert — Root `pathLen 1` + Intermediate `pathLen 0` (2026-08-26 07:50 / Korrektur 08:40, #354)
 Auftrag war der durch den G1/G2-Sign-off entriegelte Slice **Runbook-Volltext + Zeremonie-Skripte**. Beim
 Schreiben von **Schritt 2 von 7** (Offline-Wurzel-Zeremonie) — der Zeile
 `basicConstraints = critical, CA:TRUE, pathlen:<N>` — zeigte sich, dass der von ADR-045 **D2**
@@ -221,7 +247,7 @@ G1-Brief §1/§3, ADR-045 §100 (Zeiger; **Status/§74 bewusst NICHT geändert**
 **Die Owner-Hälfte von G2 bleibt offen**, der C1-Slice ist **nicht freigegeben**. Kein `.ts`-Diff, Daemon-Suite
 unverändert **2101 grün**. `changes/2026-08-25_tl14a-g2-consensus-result-C.md`.
 
-### docs(tl14a): G1-Entscheidungs-Brief für Christian (Owner-Sign-off) (2026-07-29 07:40)
+### docs(tl14a): G1-Entscheidungs-Brief für Christian (Owner-Sign-off) (2026-07-29 07:40, #351)
 **Doc-only** Owner-Decision-Brief (kein Beschluss, kein Gate verschoben, kein Fortschritt). Neue
 `docs/architecture/TL-14a-G1-decision-brief.md` zieht die **eine** Owner-Entscheidung, die ADR-045 auf `Proposed`
 hält (Gate **G1**), entscheidungsreif zusammen: die exakte **D3-Intermediate-Laufzeit im Korridor 1–3 Jahre**
