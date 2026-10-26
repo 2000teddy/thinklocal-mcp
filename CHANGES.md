@@ -27,9 +27,9 @@ die eigene #360-Zeile bzw. -Überschrift (strukturell unvermeidbar, s. u.) — T
 Der gehört zu **#281**: `git log -S` weist ihn dem Merge-Commit `830feed` zu, derselben PR, die auch `:1171`
 schrieb — **#281 lieferte zwei Einträge, nur einer bekam den Suffix**. Das ist dieselbe Fehlerklasse wie die
 drei in #359, liegt aber **ausserhalb dieser Freigabe** (historische Überschriften ausgeschlossen) und ist
-deshalb hier nur belegt, nicht gefixt. Von allem Übrigen: **0**.
-die eigene #360-COMPLIANCE-Zeile steht auf `(offen, base=main)` und die eigene Überschrift trägt keinen
-Suffix. Das ist keine Restarbeit, sondern strukturell unvermeidbar — die Selbst-Reconcile-Lücke lässt sich
+deshalb hier nur belegt, nicht gefixt. Von allem Übrigen: **0**. **Treffer 1 im Klartext:** die eigene
+#360-COMPLIANCE-Zeile steht auf `(offen, base=main)`, die eigene Überschrift trägt keinen
+Suffix — keine Restarbeit, sondern strukturell unvermeidbar: die Selbst-Reconcile-Lücke lässt sich
 nicht in derselben PR schliessen, in der sie entsteht. **Deshalb endet die Kette hier bewusst:** ein #361
 würde zwei Felder nachziehen und dabei zwei neue öffnen, also reine Buchhaltung ohne Informationswert; der
 Reststand ist **dokumentiert statt fortgeschrieben**. **Unverändert nicht angefasst:** **#350** (hat bewusst

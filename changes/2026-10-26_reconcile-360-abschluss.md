@@ -50,8 +50,12 @@ Die beiden Kommandos, mit denen gezählt wurde, und ihr Ergebnis:
 ```bash
 # 1) Status-Spalten mit PR-Bezug, die noch offen stehen
 grep -cE '^\| #[0-9]+ \| \(offen, base=main\) \|' COMPLIANCE-TABLE.md
-# 2) Ueberschriften im Bereich der nummerierten PRs ohne ", #NNN)"-Suffix
-grep -nE '^### ' CHANGES.md | grep -vE ', #[0-9]+\)$'
+# 2) Ueberschriften OHNE ", #NNN)"-Suffix, begrenzt auf den nummerierten Bereich:
+#    bis zur aeltesten suffigierten Ueberschrift (:1171 auf main, :1176 in diesem Branch).
+#    Ohne diese Begrenzung liefert der Grep zusaetzlich alle historischen Ueberschriften
+#    aus der Zeit vor der PR-Nummern-Konvention und damit weit mehr als 2 Treffer.
+LAST=$(grep -nE '^### .*, #[0-9]+\)$' CHANGES.md | tail -1 | cut -d: -f1)
+grep -nE '^### ' CHANGES.md | grep -vE ', #[0-9]+\)$' | awk -F: -v L="$LAST" '$1<L'
 ```
 
 **Ergebnis: 1 und 2 — nicht 0 und 0.** Die Auftrags-Erwartung trifft damit **nicht ganz**, und das ist
