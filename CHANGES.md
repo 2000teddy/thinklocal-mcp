@@ -8,7 +8,38 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
-### docs(reconcile): CHANGES-Suffixe für #351, #354, #355 nachgezogen (2026-10-26 12:00)
+### docs(reconcile): Abschluss der Reconcile-Kette — #357/#358/#359 nachgezogen (2026-10-26 12:15)
+**Doc-only** Post-Merge-Reconcile und **letzter** Nachtrag der Welle, die mit #356 begann. Jede Reconcile-PR
+hinterlässt ihre **eigene** Nummer offen — sie kennt ihre Merge-Nummer beim Schreiben nicht; nach
+#357/#358/#359 waren das genau fünf Stellen. **(a)** Die beiden letzten `(offen, base=main)`-Status-Spalten
+**mit PR-Bezug** gehoben: `COMPLIANCE-TABLE.md:2065` = **#358** (`9c551d2`, mergedAt 2026-10-26T10:44:48Z)
+und `:2066` = **#359** (`2cd3101`, 10:54:55Z) → `(base=main, gemergt)`, **1:1 in-place**, Nachweis-Text,
+Spalten- und Pipe-Zahl unverändert. **(b)** Die drei verbliebenen `CHANGES.md`-Überschriften um `, #NNN)`
+ergänzt — `main`-Stand `:11` = **#359**, `:37` = **#358**, `:59` = **#357** (`0c8d4b6`); nach dem Einschub
+dieses Eintrags liegen sie auf `:42`, `:68` und `:90`. Suffix-Bestand **76 → 79**. **(c)** Footer auf
+`2026-10-26 12:15` gehoben, `Zuvor:`-Historie vollständig erhalten (36 → **38** Glieder, Schluss-Satz und `*`
+identisch). Reihenfolge wie beauftragt: erst (a) und (b), dann (c). Alle Merge-Commits `gh`-verifiziert.
+**Abschluss-Beleg, live gezählt nach dem Edit** — `grep -cE '^\| #[0-9]+ \| \(offen, base=main\) \|'
+COMPLIANCE-TABLE.md` ⇒ **1**, und der Suffix-Grep im nummerierten Bereich (`main`-Zeilen 11–**1145**,
+bis zur ältesten suffigierten Überschrift) ⇒ **2**. **Die erwartete „0/0“ trifft also nicht ganz:** Treffer 1 ist
+die eigene #360-Zeile bzw. -Überschrift (strukturell unvermeidbar, s. u.) — Treffer 2 ist ein **neuer Fund**,
+`CHANGES.md:1131` (`fix(api): TL-21 Skelett-Übersicht total gegen malformed CRDT-Daten … (2026-07-17 06:14)`).
+Der gehört zu **#281**: `git log -S` weist ihn dem Merge-Commit `830feed` zu, derselben PR, die auch `:1145`
+schrieb — **#281 lieferte zwei Einträge, nur einer bekam den Suffix**. Das ist dieselbe Fehlerklasse wie die
+drei in #359, liegt aber **ausserhalb dieser Freigabe** (historische Überschriften ausgeschlossen) und ist
+deshalb hier nur belegt, nicht gefixt. Von allem Übrigen: **0**. **Treffer 1 im Klartext:** die eigene
+#360-COMPLIANCE-Zeile steht auf `(offen, base=main)`, die eigene Überschrift trägt keinen
+Suffix — keine Restarbeit, sondern strukturell unvermeidbar: die Selbst-Reconcile-Lücke lässt sich
+nicht in derselben PR schliessen, in der sie entsteht. **Deshalb endet die Kette hier bewusst:** ein #361
+würde zwei Felder nachziehen und dabei zwei neue öffnen, also reine Buchhaltung ohne Informationswert; der
+Reststand ist **dokumentiert statt fortgeschrieben**. **Unverändert nicht angefasst:** **#350** (hat bewusst
+keine eigene Zeile — `27c5cc0` änderte die Zeilen von #348/#349 statt eine anzulegen; eine zu rekonstruieren
+wäre Erfindung), die **43** alten `(offen, base=main)`-Zeilen **ohne** PR-Bezug (alle älter als #296) und die
+historischen Überschriften aus der Zeit vor der PR-Nummern-Konvention. Kein `.ts`-Diff ⇒ Suite nicht
+betroffen; kein Deploy/Secret/State, Risiko-Delta **null**.
+`changes/2026-10-26_reconcile-360-abschluss.md`.
+
+### docs(reconcile): CHANGES-Suffixe für #351, #354, #355 nachgezogen (2026-10-26 12:00, #359)
 **Doc-only** Post-Merge-Reconcile, Teilfreigabe aus dem #358-Bericht. Drei `CHANGES.md`-Überschriften
 trugen die PR-Nummer **gar nicht** — ihre COMPLIANCE-Zeilen wurden in #356 gehoben, die Hebung war damals
 aber auf die Tabelle beschränkt, sodass der Doku-Kanon zwischen `COMPLIANCE-TABLE.md` und `CHANGES.md`
@@ -34,7 +65,7 @@ ADR-046 §9, `README.md`/`CONTRIBUTING.md`/`CLAUDE.md` und die 43 nicht-PR-numme
 `(offen, base=main)`-Zeilen. Kein `.ts`-Diff ⇒ Suite nicht betroffen; kein Deploy/Secret/State,
 Risiko-Delta **null**. `changes/2026-10-26_reconcile-changes-suffixe.md`.
 
-### docs(reconcile): Footer-Nachtrag + #357-Zeile (2026-10-26 11:40)
+### docs(reconcile): Footer-Nachtrag + #357-Zeile (2026-10-26 11:40, #358)
 **Doc-only** Post-Merge-Reconcile, aus dem #357-Bericht als eigener Slice hervorgegangen. Der **Footer** von
 `COMPLIANCE-TABLE.md` (letzte Zeile) stand seit dem **2026-07-28** auf dem #346/#347-Stand, während die
 Tabellenzeilen darüber längst nachgezogen waren — der Doku-Kanon driftete gegen sich selbst. **Korrektur der
@@ -56,7 +87,7 @@ nicht gefixt (ausserhalb des Scopes, eigener Slice):** #350 hat **gar keine** CO
 die Tabelle beschränkt war. Kein `.ts`-Diff ⇒ Suite nicht betroffen; kein Deploy/Secret/State, Risiko-Delta
 **null**. `changes/2026-10-26_reconcile-footer.md`.
 
-### docs(reconcile): PR-Nummern-Nachtrag für #356 (2026-10-26 11:30)
+### docs(reconcile): PR-Nummern-Nachtrag für #356 (2026-10-26 11:30, #357)
 **Doc-only** Post-Merge-Reconcile — dieselbe Selbst-Reconcile-Lücke wie zuvor: eine PR kennt ihre eigene
 Merge-Nummer beim Schreiben noch nicht. #356 (`docs: veraltete Arbeitsverzeichnis-Pfade — 12 korrigiert,
 10 begründet gelassen (+ Per-Host-Notiz)`) ist seit **2026-10-26T10:09:05Z** `MERGED`, Squash-Merge-Commit
