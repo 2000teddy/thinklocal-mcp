@@ -91,7 +91,7 @@ gelesen statt aus dem Dispatch übernommen:
 | `#357` Status-Spalte gehoben | ✅ Zeilen mit PR-Nummer **und** `(offen, base=main)`: **0** |
 | Spalten-/Pipe-Zahl der #357-Zeile vor/nach | ✅ je 11 unescaped Pipes = 10 Spalten |
 | `Zuvor:`-Kette nicht abgeschnitten | ✅ 26 → 36 Glieder, Schluss-Satz und `*` identisch |
-| Zeilenzahl der Datei | ✅ 2068, unverändert |
+| Zeilenzahl der Datei | ✅ Footer-Neufassung bleibt **eine** Zeile (kein Zuwachs); 2068 → **2069** allein durch die eigene #358-Zeile |
 
 ## Precommit (manuell)
 `pal:precommit` ist weiter am PATH-Problem nicht aufrufbar ⇒ manuell: Diff vollständig gelesen, Secret-Scan
