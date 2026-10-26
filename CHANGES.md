@@ -15,7 +15,8 @@ Merge-Nummer beim Schreiben noch nicht. #356 (`docs: veraltete Arbeitsverzeichni
 **`8e7f683e`**, `reviewDecision=APPROVED` (Approver `peppiseppiullmann-ci`) — `gh`-verifiziert, nicht aus
 einem Report übernommen. Nachgezogen: COMPLIANCE-Status-Spalte `(offen, base=main)` → `(base=main,
 gemergt)` (`COMPLIANCE-TABLE.md:2063`, Inhalt und Spaltenzahl unverändert) und die beiden
-CHANGES-Überschriften von #356 um `, #356)` ergänzt (`CHANGES.md:11`+`:40`) — **1:1 in-place**, 3 Zeilen.
+CHANGES-Überschriften von #356 um `, #356)` ergänzt (`CHANGES.md:11`+`:40` — `main`-Stand vor diesem
+Diff; nach dem Einschub dieses Eintrags `:32`+`:61`) — **1:1 in-place**, 3 Zeilen.
 **Bewusst nicht gezogen:** die `changes/`-Formulierung aus #356 — die beanstandeten Zahlen wurden gegen
 `a16b475` nachgeprüft und **stimmen** (6 Treffer / 5 Dateien mit `~/`-Form, davon 5 / 4 in `…local`), und
 die einzige überholte Aussage steht unter der ausdrücklich datierten Überschrift „Merge-Blocker
