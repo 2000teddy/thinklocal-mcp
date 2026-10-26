@@ -8,6 +8,28 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs(reconcile): Footer-Nachtrag + #357-Zeile (2026-10-26 11:40)
+**Doc-only** Post-Merge-Reconcile, aus dem #357-Bericht als eigener Slice hervorgegangen. Der **Footer** von
+`COMPLIANCE-TABLE.md` (letzte Zeile) stand seit dem **2026-07-28** auf dem #346/#347-Stand, während die
+Tabellenzeilen darüber längst nachgezogen waren — der Doku-Kanon driftete gegen sich selbst. **Korrektur der
+Auftragsannahme:** der Dispatch nannte sieben Merges seit #347; gegen `gh` nachgezählt sind es **zehn** — es
+fehlten **#350** (`27c5cc0`, `docs(reconcile): finalize merged #348 and #349`), **#352** (`de77a2f`,
+G2-Consensus zu Auflage C) und **#353** (`63cd72f`, Owner-Sign-off G1+G2). Der Footer nennt jetzt alle zehn
+mit `gh`-verifizierten Merge-Commits (#348 `6ef6b11`, #349 `8d2c088`, #350 `27c5cc0`, #351 `136c2f7`,
+#352 `de77a2f`, #353 `63cd72f`, #354 `132c1ad`, #355 `a16b475`, #356 `8e7f683`, #357 `0c8d4b6`). Zusätzlich
+**`COMPLIANCE-TABLE.md:2064`** gehoben: **#357** ist seit 2026-10-26T10:24:45Z `MERGED` (`0c8d4b6`) ⇒
+Status-Spalte `(offen, base=main)` → `(base=main, gemergt)`, **1:1 in-place**, Inhalt/Spalten-/Pipe-Zahl
+unverändert. Reihenfolge wie beauftragt: erst Zeile 2064, dann der Footer. Die `Zuvor:`-Historie ist
+**vollständig erhalten** (26 → 36 Glieder, Schluss-Satz und `*` identisch); die Datumsangaben folgen der
+COMPLIANCE-Zeilen-Konvention, für #350 steht statt eines abgeleiteten Datums ausdrücklich „(ohne
+COMPLIANCE-Zeile, Merge 2026-07-29T04:36:20Z)". Danach **0** `(offen, base=main)`-Zeilen mit PR-Bezug; die 43
+übrigen sind nicht PR-nummeriert (alle älter als #296) und bleiben unangetastet. **Dabei gefunden, bewusst
+nicht gefixt (ausserhalb des Scopes, eigener Slice):** #350 hat **gar keine** COMPLIANCE-Zeile und keinen
+`CHANGES.md`-Eintrag — eine fehlende Zeile, kein stale Status; und drei `CHANGES.md`-Überschriften tragen den
+`, #NNN)`-Suffix nicht (`main`-Stand: `:202` = #351, `:117` = #354, `:78` = #355; nach dem Einschub dieses Eintrags `:224`/`:139`/`:100`), weil die Hebung in #356 auf
+die Tabelle beschränkt war. Kein `.ts`-Diff ⇒ Suite nicht betroffen; kein Deploy/Secret/State, Risiko-Delta
+**null**. `changes/2026-10-26_reconcile-footer.md`.
+
 ### docs(reconcile): PR-Nummern-Nachtrag für #356 (2026-10-26 11:30)
 **Doc-only** Post-Merge-Reconcile — dieselbe Selbst-Reconcile-Lücke wie zuvor: eine PR kennt ihre eigene
 Merge-Nummer beim Schreiben noch nicht. #356 (`docs: veraltete Arbeitsverzeichnis-Pfade — 12 korrigiert,
