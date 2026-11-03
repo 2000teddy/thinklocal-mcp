@@ -8,6 +8,63 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### docs(todo): B2-Trust-Anchor-Stand belegt + T2.1 datiert und im Mechanismus korrigiert (2026-11-03 16:05)
+Reiner Doku-Slice in `TODO.md`. **Kein** `packages/`-Diff, kein Code, kein Testlauf, kein Deploy, kein
+Secret, kein Schreibzugriff auf `~/.thinklocal/`, kein Peer-Write.
+**Der alte B2-Satz war überholt.** Dort stand, für die „3 offline-Peers" sei ein Zusammenhang zum
+Anker-Wechsel **nicht belegt** und nur *zu prüfen*. Die read-only-Ermittlung vom 2026-11-03 14:40–16:03 UTC
+hat ihn **geklärt, aber anders als vermutet**: der Anker-Wechsel war die Auslöse-Ursache eines **einmaligen
+Fensters** am 2026-11-02, **kein fortbestehender Trust-Defekt**.
+**Belegt, nicht abgeleitet:** `.52`, `.56`, `.222`, `.82`, `.158`, `.44` — für **alle sechs** wurde ein
+`GET /api/status` mit TH01s `cf00a5…`-signiertem Client-Cert gefahren, alle **HTTP 200**. Das ist der Beleg,
+weil das Card-Socket `requestCert: true, rejectUnauthorized: true` fährt
+(`packages/daemon/src/agent-card.ts:229-230`) und Anwendungsdaten erst nach erfolgreichem mTLS fließen — ein
+200 ist ohne Treffer im **peer-eigenen** Trust-Store nicht möglich. Ein `openssl s_client`-`Verify return
+code 0` allein wäre **kein** Beleg (es bewertet nur TH01s Prüfung des Server-Certs; unter TLS 1.3 kommt eine
+Client-Cert-Ablehnung erst nach dem Handshake) — der zunächst nur so geprüfte `.52` wurde deshalb
+nachgemessen, statt die Aussage abzuschwächen.
+**Nicht prüfbar:** `.94` (einziger `paired-peers.json`-Eintrag eines nicht migrierten Peers, noch auf der
+alten CA `69bc0bc908229c9f`) und `.55` — von TH01 aus weder per ICMP noch auf 9440/22 erreichbar; *nicht
+feststellbar*, nicht „kaputt". Beide zählen nicht zu `peers_known=7` (das ist die flüchtige Daemon-Map:
+die 6 belegten plus `.104`); insgesamt sind **9** Identitäten bekannt.
+**Belegt negativ — `.104` (raspberrypi4):** eigene, self-signed CA `39a4d76c84a72d02`,
+`notBefore 2026-09-17 13:44:42`, `notAfter 2026-12-16 14:44:42 UTC`, Handshake ⇒ `verify error:num=19`.
+Für `.104` ist „offline" **korrekt**. Dass er **seit mindestens 2026-09-17** in keiner Mesh-CA war, folgt aus
+der Own-CA — **nicht** aus dem fehlenden `paired-peers.json`-Eintrag (ein token-onboardeter Node bräuchte
+dort keinen); über die Zeit davor sagt keines von beidem etwas. Seine Frist ist sein eigenes Leaf:
+**2026-12-16**, danach ist der Handshake in **beiden** Richtungen tot und es braucht **Host-Zugriff**.
+**Warum der heutige Offline-Status eine andere Ursache hat als das Fenster:** 2026-11-02 20:22:09 UTC
+Anker-Wechsel, 20:35:45 UTC Daemon-Start, 20:35:47 UTC drei Card-Fetches `self-signed certificate in
+certificate chain`, 20:36:17 UTC offline markiert, 20:50–20:52 UTC `.56`/`.222` neu enrollt,
+20:54:21/20:54:30 UTC **ADR-022-Flip** erfolgreich — Status aber nie zurückgesetzt, weil `checkPeers()` auf
+`p.status !== 'offline'` filtert (`packages/daemon/src/mesh.ts:600`). ADR-035-Klasse, Code-Slice-Kandidat,
+**nicht freigegeben, nicht implementiert**.
+**T2.1 ist jetzt datiert — und der Mechanismus korrigiert.** Alle **sieben** `cf00a5…`-Leafs laufen am
+**2027-01-31** ab, das früheste (TH01) um **20:35:41 UTC**, exakt **90 Tage** nach Ausstellung. Das
+Renew-Fenster öffnet **2026-12-31 20:35:42 UTC**, nicht 2027-01-01: `daysLeft` ist `Math.floor`
+(`tls.ts:590-592`) und das Gate behält nur bei `daysLeft > 30` (`tls.ts:655`, `tls.ts:671-673`; Default 30
+aus `config.ts:251`). **Ein Neustart allein genügt nicht und ist sogar gefährlich:** bei `daysLeft <= 30`
+stellt `createNodeCert(ca, hostname, spiffeUri, localIps)` (`tls.ts:700`) mit `identity.spiffeUri`
+(`index.ts:175`) aus — der **Legacy**-URI `host/<nodeId>` — und überschreibt damit die kanonische
+`node/<PeerID>`-Identität. Genau dieser Cert-Clobber ist am 2026-11-02 passiert und wurde erst von
+`pop-canonicalize.ts` repariert. **`cert.migrate_legacy_identity` verhindert ihn nicht** (Befund aus
+Review-Runde 2): das Flag steht auf dem Default **false** (`config.ts:252`) und greift selbst aktiviert nur
+bei `certSpiffeUri.startsWith('spiffe://thinklocal/host/')` (`tls.ts:632-633`), auf einem bereits
+kanonischen Cert also gar nicht — es würde den Clobber erst bei einem **zweiten** Neustart rückgängig
+machen. **Token-onboardete Nodes ohne lokalen `ca.key.pem` renewen überhaupt nicht** — für sie gilt
+`renewBeforeDays` ausdrücklich nicht (`tls.ts:522-531`), sie brauchen ein **Re-Onboarding**. T2.1 ist damit
+kein Neustart-Termin, sondern ein **Zwei-Wege-Problem**: TH01-Seite ⇒ Neustart **plus** kanonische
+Reparatur danach bzw. echte In-Process-Rotation; Peer-Seite ⇒ Re-Onboarding — welcher Peer in welchen
+Zweig fällt, ist von TH01 aus **nicht feststellbar** (Own-CA ist nur für TH01 belegt) und bleibt pro Peer
+offen. Beides vor dem 2027-01-31. CAs unkritisch: `cf00a5…` bis 2027-11-02, `69bc…` bis 2027-04-07.
+**Zwei datierte Termine für Christian**, plus einen undatierbaren: `.104`-Enrollment bis **2026-12-16**
+(Host-Zugriff), Renew-Fenster ab **2026-12-31**, und `.94`/`.55`, solange sie unerreichbar bleiben.
+**CR:** zwei Runden extern (Gemini über `agy`, nicht das implementierende Modell; `pal:codereview`
+weiterhin unbrauchbar, beide Fremd-Backends `executable not found in PATH`) — Runde 1: 3 HIGH / 4 MEDIUM /
+1 LOW / 1 NIT, Runde 2: 0 HIGH / 1 MEDIUM / 1 LOW / 2 NIT; alle 13 Befunde eingearbeitet und je mit der
+Auflösung protokolliert.
+Doku: `TODO.md` B2 + Blocker-Kopfzeile, `changes/2026-11-03_b2-trust-anchor-stand.md`.
+
 ### build(gates): `packages/daemon/scripts/` in tsc und eslint aufgenommen (2026-11-03 07:20)
 Build-/CI-Verdrahtung (additiv, reversibel) plus ein Fix an `discovery-poc.ts`, den die neu geöffneten Gates
 aufgedeckt haben. **Kein** `src/`-Diff, kein Deploy, kein Secret, kein State, kein Dienst-Eingriff.
