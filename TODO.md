@@ -5,24 +5,31 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 
 ---
 
-## ⛔ OFFENE BLOCKER (Christian-Gate) — Stand 2026-10-21
+## ⛔ OFFENE BLOCKER (Christian-Gate) — Stand 2026-11-03
+Von den drei Einträgen ist nur noch **B3** ein echter Christian-Gate; **B1** (Self-Approval, war nie einer)
+und **B2** (TH01-Crash-Loop) sind erledigt und stehen hier nur noch als Historie mit Beleg.
 
-### B1 — PR #356 kann nicht gemergt werden: Self-Approval
-**Ursache ist NICHT der OAuth-Lock.** `main` ist branch-protected mit
-`required_approving_review_count=1` + Required-Status-Check `CI` (`strict`), und `allow_auto_merge=false`.
-`gh` ist als **`2000teddy`** angemeldet — das ist auch der **Autor** von #356 ⇒ `gh pr review 356 --approve`
-antwortet `Can not approve your own pull request`. Alles andere ist grün: `MERGEABLE`, CI **5/5 grün**,
-`agy`-Review real gelaufen mit **0 HIGH / 0 MEDIUM / 3 LOW** (reine Kosmetik), alle 12 Pfadkorrekturen gegen
-das **Live-Dateisystem** verifiziert, die 10 „begründet gelassen"-Entscheidungen belegt.
-**Was fehlt:** ein approving Review von **`ChristianUllmann`** oder **`peppiseppiullmann-ci`** — die einzigen
-weiteren Collaborators mit `push`. Danach `gh pr merge 356`.
-Inhalt des PR: veraltete Arbeitsverzeichnis-Pfade (12 korrigiert / 10 begründet gelassen) + Per-Host-Notiz;
-`changes/2026-10-21_docs-stale-workdir-paths.md`, `changes/2026-10-21_docs-per-host-repo-pfad.md`.
-**Offen gelassen (nicht blockierend):** die 3 LOW aus dem Re-Review (PR-Body-Text, `changes/`-Wortlaut,
-`CHANGES.md`-PR-Nummern-Suffix `, #356)`) — Letzteres gehört ohnehin erst in den Post-Merge-Reconcile.
-**Nicht Teil dieses PR, als eigener Slice vermerkt:** `packages/daemon/scripts/discovery-poc.ts:28` (23.
-Treffer, ausserhalb `*.md` — ein `.ts`-Diff würde den Slice aus „doc-only" heben) und der
-**`.55`-c/k-Pfad-Widerspruch**, der aus dem Repo nicht entscheidbar ist (nur auf `.55` selbst prüfbar).
+### B1 — ✅ ERLEDIGT 2026-10-26 10:09 UTC: PR #356 ist gemergt (Self-Approval war kein Christian-Gate)
+**Kein Blocker mehr.** `gh pr view 356` ⇒ `MERGED`, `mergedAt 2026-10-26T10:09:05Z`, Merge-Commit
+**`8e7f683e`**, Review `APPROVED` durch **`peppiseppiullmann-ci`** (Autor war `2000teddy`).
+**Die Diagnose war richtig, die Einordnung war zu stark:** `main` ist branch-protected mit
+`required_approving_review_count=1` + Required-Check `CI` (`strict`), `allow_auto_merge=false`, und
+`gh pr review 356 --approve` scheitert als Autor mit `Can not approve your own pull request`. Das war aber
+eine **Self-Approval-Sperre, kein Christian-Gate** — der zweite Collaborator mit `push`
+(`peppiseppiullmann-ci`) konnte den Review jederzeit liefern, Pfad
+`~/skripte/github-bot-review-merge --merge local <N>`. Diese Protokoll-Korrektur ist in #357 festgehalten
+und seitdem der Standardweg (zuletzt #362).
+**Die 3 LOW aus dem Re-Review sind abgearbeitet oder gegenstandslos:** der `CHANGES.md`-Suffix `, #356)`
+wurde im Post-Merge-Reconcile **#357** nachgezogen (`grep -c ', #356)' CHANGES.md` ⇒ **3** Treffer), die
+beiden anderen (PR-Body-Text, `changes/`-Wortlaut) sind mit dem Merge erledigt.
+**Was aus B1 offen BLEIBT — unverändert und je als eigener Slice:**
+- `packages/daemon/scripts/discovery-poc.ts:28` trägt weiter den Pfad `~/Entwicklung_local/thinklocal-mcp`
+  (live geprüft: genau **ein** Treffer, einzige `.ts`/`.sh`/`.mjs`-Datei im Repo mit diesem String). Der
+  Grund fürs Liegenlassen ist inzwischen **präziser als „es wäre ein `.ts`-Diff"**: die Zeile lautet
+  `ssh chris@10.10.10.55 'cd ~/Entwicklung_local/…'` und beschreibt damit das Arbeitsverzeichnis **auf `.55`**
+  — genau die Frage, die aus diesem Repo **nicht** entscheidbar ist. Sie zu „korrigieren" wäre eine
+  Behauptung über einen fremden Host.
+- Der **`.55`-c/k-Pfad-Widerspruch** — nur auf `.55` selbst prüfbar.
 
 ### B2 — ✅ ERLEDIGT 2026-11-02 20:35 UTC: TH01-Daemon-Crash-Loop (seit 2026-09-07 01:45) beendet
 **Kein Blocker mehr.** Der Daemon läuft seit **2026-11-02 20:35:45 UTC** durchgehend: `NRestarts=0`,
