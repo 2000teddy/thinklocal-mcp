@@ -7,7 +7,10 @@ Priorität: 🔴 Kritisch | 🟠 Hoch | 🟡 Mittel | 🟢 Niedrig | 💡 Idee/Z
 
 ## ⛔ OFFENE BLOCKER (Christian-Gate) — Stand 2026-11-03
 Von den drei Einträgen ist nur noch **B3** ein echter Christian-Gate; **B1** (Self-Approval, war nie einer)
-und **B2** (TH01-Crash-Loop) sind erledigt und stehen hier nur noch als Historie mit Beleg.
+und **B2** (TH01-Crash-Loop) sind erledigt und stehen hier nur noch als Historie mit Beleg — mit **zwei
+datierten Folge-Terminen** aus B2, die kein Blocker, aber auch nicht erledigt sind: `.104`-Enrollment bis
+**2026-12-16** (Host-Zugriff) und das T2.1-Renew-Fenster ab **2026-12-31**. Ein **dritter** Punkt ist offen,
+aber undatierbar: `.94`/`.55` sind von TH01 aus nicht prüfbar.
 
 ### B1 — ✅ ERLEDIGT 2026-10-26 10:09 UTC: PR #356 ist gemergt (Self-Approval war kein Christian-Gate)
 **Kein Blocker mehr.** `gh pr view 356` ⇒ `MERGED`, `mergedAt 2026-10-26T10:09:05Z`, Merge-Commit
@@ -53,14 +56,75 @@ nicht-kanonischen `CN=ThinkHub`-Bootstrap-Leaf — der dokumentierte Cert-Clobbe
 (ADR-024-Retention hängt an `!needsCaReissue`). Erst das PoP-Skript stellte 13 Minuten später die kanonische
 Identität wieder her. **Self-Reissue ist damit ab jetzt möglich** (CA-Key liegt lokal) — der Satz „ohne
 CA-Key auf dem Node kein Self-Reissue" gilt für TH01 nicht mehr.
-**Neu offen, aus (b) folgend — nicht verbucht, nur notiert:** TH01s Trust-Anchor ist von
-`69bc0bc908229c9f` auf `cf00a5bab06832c1` gewechselt. Die 4 online-Peers validieren weiter
-(`converged=true`); für die **3 offline-Peers** ist ein Zusammenhang **nicht belegt** und wird hier
-ausdrücklich nur als *zu prüfen* geführt. Wer das aufgreift, prüft zuerst, welche Peers den neuen CA-Cert
-kennen, und nicht die Vermutung.
-**Folgepunkt bleibt:** **T2.1** (Cert-Rotation im Betrieb) — das neue Leaf endet am **2027-01-31**, dieselbe
-90-Tage-Falle wie am 2026-09-02; dazu die Logrotate-Regel (`~/.thinklocal/logs/daemon.log` war am 13.10. bei
-673 MB).
+**Trust-Anchor-Lage — belegt 2026-11-03 14:46–16:03 UTC; ersetzt die frühere Einschätzung „nicht belegt":**
+TH01s Trust-Anchor ist von `69bc0bc908229c9f` auf `cf00a5bab06832c1` gewechselt. Der Zusammenhang zu den
+„3 offline-Peers" ist damit **geklärt, aber anders als vermutet**: der Anker-Wechsel war die Auslöse-Ursache
+eines **einmaligen Fensters** am 2026-11-02 (siehe unten), **kein fortbestehender Trust-Defekt** — heute
+kennen alle prüfbaren Peers den neuen Anker. **Belegt** (eigener mTLS-Request mit TH01s
+`cf00a5…`-signiertem Client-Cert auf den mTLS-gegateten Pfad `GET /api/status` ⇒ **HTTP 200**): `.52`,
+`.56`, `.222`, `.82`, `.158`, `.44` — also **6 von 7** Peers der Daemon-Map. Das Card-Socket der Peers fährt
+`requestCert: true, rejectUnauthorized: true` (`packages/daemon/src/agent-card.ts:229-230`), Anwendungsdaten
+fließen erst nach erfolgreichem mTLS — ein 200 ist ohne Treffer im **peer-eigenen** Trust-Store nicht
+möglich. (Ein bloßes `openssl s_client`-`Verify return code 0` wäre **kein** Beleg: es bewertet nur TH01s
+Prüfung des Server-Certs, und unter TLS 1.3 kommt eine Client-Cert-Ablehnung erst nach dem Handshake —
+deshalb wurde für alle sechs die HTTP-Antwort gelesen.) **Belegt negativ — `.104` (raspberrypi4):** eigene,
+self-signed CA `39a4d76c84a72d02`, `CN=raspberrypi4`, Leaf `notBefore 2026-09-17 13:44:42`,
+`notAfter 2026-12-16 14:44:42 UTC`; der Handshake gegen TH01s Leaf schlägt fehl
+(`verify error:num=19: self-signed certificate in certificate chain`). Für `.104` ist „offline" also
+**korrekt**, nicht Buchhaltung. Dass er **seit mindestens 2026-09-17** in keiner Mesh-CA war, folgt aus
+dieser Own-CA — **nicht** aus dem fehlenden `paired-peers.json`-Eintrag (ein token-onboardeter Node bräuchte
+dort keinen); über die Zeit davor sagt keines von beidem etwas. **Nicht prüfbar:** `.94` und `.55` — von
+TH01 aus weder per ICMP noch auf 9440/22 erreichbar; das heißt *nicht feststellbar*, **nicht** „kaputt".
+Beide zählen auch **nicht** zu den 7 Peers: `peers_known=7` ist die flüchtige Daemon-Map (die 6 oben plus
+`.104`), während insgesamt **9** Identitäten bekannt sind. **Registerstand ist kein Beweis, aber auch nicht
+bedeutungslos:** `paired-peers.json` hat 12 Einträge, **6 mit der alten und 6 mit der neuen CA**; 5 der 6
+Alt-Einträge sind überholte Duplikate inzwischen migrierter Peers, der 6. (`.94`, Hostname `admin`) ist der
+**einzige** Eintrag eines nicht migrierten Peers und damit der Hinweis, dass `.94` noch auf
+`69bc0bc908229c9f` steht. **Das einmalige Fenster, und warum `.56`/`.222` bis heute als offline geführt
+werden:** am 2026-11-02 20:22:09 UTC wechselte TH01 den Anker, 20:35:45 UTC startete der Daemon, und
+20:35:47 UTC scheiterten drei Card-Fetches mit `self-signed certificate in certificate chain` — `.56` und
+`.222` liefen zu diesem Zeitpunkt noch unter der alten CA. 20:36:17 UTC wurden alle drei offline markiert,
+20:50–20:52 UTC wurden `.56`/`.222` neu enrollt (`notBefore 20:52:16` / `20:52:40`), 20:54:21/20:54:30 UTC
+hat TH01 ihre Cards per **ADR-022-Flip** erfolgreich kanonisiert. Der Status blieb trotzdem `offline`, weil
+`checkPeers()` auf `p.status !== 'offline'` filtert (`packages/daemon/src/mesh.ts:600`): ein einmal offline
+markierter Peer wird **nie wieder** angepingt, der Flip schreibt nur den Map-Key um. `.158` kam nur zurück,
+weil es ein **statischer** Peer ist. Die Ursache des *heutigen* Offline-Status ist also dieser Filter, nicht
+der Anker. **ADR-035-Klasse, Code-Slice-KANDIDAT — nicht freigegeben, nicht implementiert.** **Daraus zwei
+datierte offene Termine** (plus `.94`/`.55` als undatierbarer dritter, falls sie wieder erreichbar werden):
+(1) **`.104`-Enrollment bis 2026-12-16** — braucht **Host-Zugriff auf `.104`**, von TH01 aus nicht machbar,
+danach ist der Handshake in **beiden** Richtungen tot; (2) das **T2.1-Renew-Fenster ab 2026-12-31**, siehe
+nächster Absatz.
+**Folgepunkt bleibt — T2.1 (Cert-Rotation im Betrieb), jetzt datiert UND im Mechanismus korrigiert:** alle
+**sieben** `cf00a5…`-Leafs laufen am **2027-01-31** ab, das früheste (TH01 selbst) um **20:35:41 UTC** —
+**exakt 90 Tage** nach Ausstellung am 2026-11-02 20:35:41 UTC. Renewal passiert weiterhin **nur beim
+Daemon-Start** (`loadOrCreateTlsBundle`, `packages/daemon/src/tls.ts:395`; Behalten-Gate
+`daysLeft > renewBeforeDays` auf `tls.ts:655` und `tls.ts:671-673`, Default **30** aus
+`packages/daemon/src/config.ts:251`), und TH01 fährt `NRestarts=0` — von allein passiert nichts.
+**Das Fenster öffnet am 2026-12-31, nicht am 2027-01-01:** `daysLeft` ist `Math.floor` (`tls.ts:590-592`),
+das Gate behält nur bei `daysLeft > 30`, also greift der Reissue ab **2026-12-31 20:35:42 UTC**
+(T-31d +1 s) für TH01 bzw. 2026-12-31 20:52:41 UTC für das späteste Leaf (`.222`).
+**Ein Neustart allein genügt aber NICHT — er ist sogar gefährlich:** fällt TH01 bei `daysLeft <= 30` durch
+beide Behalten-Gates, stellt `createNodeCert(ca, hostname, spiffeUri, localIps)` (`tls.ts:700`) mit
+`identity.spiffeUri` aus (`packages/daemon/src/index.ts:175`) — das ist die **Legacy**-URI
+`spiffe://thinklocal/host/<nodeId>`, die kanonische `node/<PeerID>`-Identität wird also **überschrieben**.
+Genau dieser Cert-Clobber ist am 2026-11-02 passiert und wurde erst durch `pop-canonicalize.ts` repariert.
+**`cert.migrate_legacy_identity` verhindert ihn NICHT** (Befund aus Review-Runde 2, im Code nachgeprüft):
+das Flag steht auf dem Default **false** (`config.ts:252`, im Unit nicht gesetzt), und selbst aktiviert
+greift der Migrationszweig nur bei `certSpiffeUri.startsWith('spiffe://thinklocal/host/')`
+(`tls.ts:632-633`) — auf einem **bereits kanonischen** Cert also gar nicht. Er würde den Clobber erst bei
+einem **zweiten** Neustart rückgängig machen. (`fullyValid` ist im ganzen Renew-Fenster `true`,
+`tls.ts:596`, und damit kein Hinderungsgrund — die frühere Begründung war falsch.)
+**Token-onboardete Nodes ohne lokalen `ca.key.pem` renewen überhaupt nicht:** für sie gilt
+`renewBeforeDays` ausdrücklich **nicht** (`tls.ts:522-531`) — sie behalten ihr Cert bis zum harten Ablauf
+und brauchen ein **Re-Onboarding**, keinen Neustart. T2.1 ist damit kein Neustart-Termin, sondern ein
+**Zwei-Wege-Problem**: **TH01-Seite** ⇒ Neustart **plus** kanonische Reparatur danach
+(`pop-canonicalize.ts`, wie am 2026-11-02) oder die echte In-Process-Rotation; **Peer-Seite** ⇒
+Re-Onboarding — wobei von TH01 aus **nicht feststellbar** ist, welcher Peer einen lokalen `ca.key.pem`
+besitzt und damit in welchen der beiden Zweige fällt (`/api/status` exponiert das nicht). Das bleibt pro
+Peer offen. Beides vor dem 2027-01-31; sonst wiederholt sich der Ausfall vom **2026-09-02**
+(`node.crt.legacy.pem`, `notAfter Sep 2 18:38:56 2026 GMT`). Die **CAs selbst sind unkritisch**:
+`cf00a5…` bis **2027-11-02**, `69bc…` bis **2027-04-07**. Dazu unverändert die Logrotate-Regel
+(`~/.thinklocal/logs/daemon.log` war am 13.10. bei 673 MB).
 
 ### B3 — TL-14: C1-Codier-Freigabe steht aus
 Unverändert seit dem Owner-Sign-off vom 2026-08-26 (G1/G2, ADR-045 `Accepted`). Siehe TL-14a unten,
