@@ -8,6 +8,41 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(scripts): `pop-canonicalize.ts` versioniert — PoP-Operator-Runner (ADR-022 WS-3) (2026-11-03 06:10)
+Ein Script-Add + Doku, **kein** `src/`-Diff, kein Deploy, kein Secret, kein State, kein Dienst-Eingriff.
+`packages/daemon/scripts/pop-canonicalize.ts` lag seit **2026-11-02 20:35 UTC** untracked im Working Tree
+(Mode `0600` → korrigiert auf `0644`; die Nachbarskripte sind `0664`, für Git gleichwertig `100644`). Das
+Skript ist der **fehlende Aufrufer** eines Flows, dessen Teile längst im Repo lagen: `requestNodeCert()`
+(`cert-request.ts:108`) war von nirgends erreichbar, die Admin-Routen `/api/cert/nonce` + `/api/cert/sign`
+(`cert-issuance-api.ts:42,58`) laufen live. Ablauf: libp2p-Key → PeerID, Nonce über das bestehende mTLS-Cert,
+frisches X.509-Keypair + CSR, PoP-Scope mit dem Ed25519-Key signiert, Cert signiert, Altbestand nach
+`tls/pre-pop-<timestamp>/`, Key `0600`.
+**Belegt statt getestet:** die Datei ist am **2026-11-02 20:35:41 UTC real gelaufen** und hat das kanonische
+Cert mit SAN `spiffe://thinklocal/node/12D3KooWKZ4zvnnd9mJimkncKatN9F6fQWRHc5ZNY9SMFNBb5Ynb` (gültig bis
+**2027-01-31**) erzeugt; damit endete der TH01-Crashloop (`NRestarts=0`, `ExecMainStatus=0` seit
+2026-11-02 20:35:45 UTC, Zähler stand um 21:00 CET noch bei **94246**). Ein eigener Unit-Test bleibt ein
+eigener Slice — deshalb wurde die Datei **unverändert** committet: ein Fix vor dem Commit hätte das
+versionierte Artefakt von dem verifizierten getrennt.
+**6 Review-Befunde dokumentiert, nicht gefixt** (Folge-Slice, 2 davon aus dem `agy`-Review): 4 unbenutzte
+Imports (`:41`/`:43`/`:44`/`:47`,
+4× `TS6133` — `scripts/` liegt ausserhalb von `tsconfig.json:23` **und** `npm run lint`); das verworfene
+`init.signal` im `fetchImpl`-Adapter (`:114-130`) macht `timeoutMs: 15_000` wirkungslos; `loadOrCreate…`
+(`:87`) kann eine **neue** PeerID erzeugen, wo der Header nur „laden" verspricht; `mkdirSync` ohne `mode`
+(`:141`) legt den Backup-Ordner mit umask-`0775` an (der Key darin bleibt `0600`); dazu aus dem Review das
+hartcodierte `servername: 'localhost'` (`:104`, trägt nur mit `DNS:localhost` im Admin-SAN) und ein
+`dispatcher`, der übergeben (`:131`) aber im eigenen Adapter nie gelesen wird.
+**`TODO.md` B2** („TH01-Daemon in Crash-Loop seit 2026-09-07") auf den Ist-Stand gezogen: (a) Leaf-Expiry
+**erledigt**; (b) `.94`-Admin-Token **gegenstandslos geworden, nicht erfüllt** — die PoP-Routen autorisieren
+rein über mTLS (`socket.authorized`), und TH01 hat beim CA-Reissee um 20:22 UTC eine **eigene** lokale Mesh-CA
+`cf00a5bab06832c1` samt lokalem `ca.key.pem` bekommen (der alte Anchor war `69bc0bc908229c9f`). Neu notiert
+statt verbucht: der Trust-Anchor-Wechsel (4 Peers online/`converged`, 3 offline — Zusammenhang **nicht**
+belegt) und **T2.1**, weil das neue Leaf am 2027-01-31 dieselbe 90-Tage-Falle stellt. **Nur gemeldet, nicht
+angefasst:** **B1** ist ebenfalls überholt (#356 gemergt am 2026-10-26, `8e7f683e`) ⇒ eigener Slice.
+**TS:** Suite **150 Dateien / 2101 Tests grün**, unverändert. **CR:** Review-of-Record über `agy` (`--sandbox`, absoluter Pfad) — **APPROVE, 0 HIGH / 0 MEDIUM / 0 LOW,
+2 NIT** (die 2 NIT sind die beiden zuletzt genannten Befunde); dass der Agent nichts verändert hat, wurde
+über `HEAD`, Diff-Hash, `git status` und SHA-256 aller fünf Dateien vor/nach dem Lauf geprüft.
+**PC:** manuell (Secret-Scan clean; einzige Konstante die LAN-Default-URL `https://10.10.10.80:9440`).
+
 ### docs(reconcile): CHANGES-Suffix für #281 nachgezogen (2026-10-26 12:45)
 **Doc-only**, **eine** Zeile — der in #360 belegte, damals ausserhalb der Freigabe liegende Nebenbefund, jetzt
 freigegeben. #281 hat **zwei** `CHANGES.md`-Einträge geliefert, nur einer trug die PR-Nummer: `:1176`

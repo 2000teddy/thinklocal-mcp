@@ -24,15 +24,36 @@ Inhalt des PR: veraltete Arbeitsverzeichnis-Pfade (12 korrigiert / 10 begründet
 Treffer, ausserhalb `*.md` — ein `.ts`-Diff würde den Slice aus „doc-only" heben) und der
 **`.55`-c/k-Pfad-Widerspruch**, der aus dem Repo nicht entscheidbar ist (nur auf `.55` selbst prüfbar).
 
-### B2 — TH01-Daemon in Crash-Loop seit 2026-09-07 01:45
-`thinklocal-daemon.service` (user unit) läuft `auto-restart` im ~11-s-Takt: `node.crt.pem` ist am
-**2026-09-02 18:38:56 UTC abgelaufen**, Abbruch in `loadOrCreateTlsBundle` (`tls.ts:540`). Die CA selbst ist
-gültig bis 2027-04-07 ⇒ reine Leaf-Expiry. Ohne CA-Key auf dem Node ist **kein** Self-Reissue möglich.
-**Was fehlt:** Christians „ja" zum Re-Enroll (Pfad wie `docs/REENROLL-55-RUNBOOK.md` §1-2 über
-`packages/daemon/ws3-rejoin.mjs` / `requestNodeCert()`, PeerID bleibt) **plus** der `.94`-Admin-Token.
-Zwei Reboots (14.09., 13.09.) haben den Zähler zurückgesetzt, nicht die Ursache behoben.
-**Folgepunkt danach:** T2.1 (Cert-Rotation im Betrieb) — sonst wiederholt sich das zum nächsten 90-Tage-Ende;
-dazu eine Logrotate-Regel (`~/.thinklocal/logs/daemon.log` war am 13.10. bei 673 MB).
+### B2 — ✅ ERLEDIGT 2026-11-02 20:35 UTC: TH01-Daemon-Crash-Loop (seit 2026-09-07 01:45) beendet
+**Kein Blocker mehr.** Der Daemon läuft seit **2026-11-02 20:35:45 UTC** durchgehend: `NRestarts=0`,
+`ExecMainStatus=0`, `ActiveState=active` (`systemctl --user show`); der Restart-Zähler stand um 21:00:04 CET
+noch bei **94246**. Live-Mesh trägt: `/api/status` meldet `peers_online=4`, `peers_known=7` und
+`registry_sync.converged=true` (670–683 Runden, `consecutive_timeouts: 0`).
+**Ursache war bestätigt die Leaf-Expiry:** `node.crt.legacy.pem` = `notAfter Sep 2 18:38:56 2026 GMT`,
+Issuer `Mesh CA 69bc0bc908229c9f`, Abbruch in `loadOrCreateTlsBundle` (`tls.ts:540`).
+**(a) Leaf-Expiry — erledigt.** Neues `node.crt.pem` mit SAN
+`spiffe://thinklocal/node/12D3KooWKZ4zvnnd9mJimkncKatN9F6fQWRHc5ZNY9SMFNBb5Ynb`, gültig bis
+**2027-01-31 20:35:41 UTC**, ausgestellt am 2026-11-02 20:35:41 UTC durch
+`packages/daemon/scripts/pop-canonicalize.ts` (seit 2026-11-03 im Repo) über die PoP-Routen
+`/api/cert/nonce` + `/api/cert/sign`. PeerID unverändert.
+**(b) `.94`-Admin-Token / CA-Key — gegenstandslos geworden, NICHT erfüllt.** Ein Re-Enroll in die Mesh-CA
+`69bc0bc908229c9f` hat **nicht** stattgefunden und der Token wurde **nicht** benutzt: die PoP-Routen
+autorisieren rein über mTLS (`cert-issuance-api.ts:43-45`, `59-61` — `socket.authorized === true`), kein
+Bearer. Stattdessen wurde die alte CA um **20:22:09 UTC** nach `~/.thinklocal/tls/pre-newca-20261102/`
+beiseitegelegt; der Daemon ging daraufhin in den Reissue-Pfad (`tls.ts:549-565`) und erzeugte eine **eigene
+lokale Mesh-CA `cf00a5bab06832c1`** samt lokalem `ca.key.pem` (`0600`, gültig bis 2027-11-02) plus einen
+nicht-kanonischen `CN=ThinkHub`-Bootstrap-Leaf — der dokumentierte Cert-Clobber bei CA-Reissue
+(ADR-024-Retention hängt an `!needsCaReissue`). Erst das PoP-Skript stellte 13 Minuten später die kanonische
+Identität wieder her. **Self-Reissue ist damit ab jetzt möglich** (CA-Key liegt lokal) — der Satz „ohne
+CA-Key auf dem Node kein Self-Reissue" gilt für TH01 nicht mehr.
+**Neu offen, aus (b) folgend — nicht verbucht, nur notiert:** TH01s Trust-Anchor ist von
+`69bc0bc908229c9f` auf `cf00a5bab06832c1` gewechselt. Die 4 online-Peers validieren weiter
+(`converged=true`); für die **3 offline-Peers** ist ein Zusammenhang **nicht belegt** und wird hier
+ausdrücklich nur als *zu prüfen* geführt. Wer das aufgreift, prüft zuerst, welche Peers den neuen CA-Cert
+kennen, und nicht die Vermutung.
+**Folgepunkt bleibt:** **T2.1** (Cert-Rotation im Betrieb) — das neue Leaf endet am **2027-01-31**, dieselbe
+90-Tage-Falle wie am 2026-09-02; dazu die Logrotate-Regel (`~/.thinklocal/logs/daemon.log` war am 13.10. bei
+673 MB).
 
 ### B3 — TL-14: C1-Codier-Freigabe steht aus
 Unverändert seit dem Owner-Sign-off vom 2026-08-26 (G1/G2, ADR-045 `Accepted`). Siehe TL-14a unten,
