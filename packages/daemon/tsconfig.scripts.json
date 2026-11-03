@@ -1,0 +1,17 @@
+{
+  // Typecheck-Gate für packages/daemon/scripts/ — bewusst eine EIGENE Config:
+  // die Basis-Config ist der BUILD (rootDir: "src", outDir: "dist", declaration).
+  // Würde man scripts/ dort ins "include" nehmen, zöge `npm run daemon:build`
+  // die Operator-Skripte mit nach dist/ und rootDir müsste auf "." wandern —
+  // das verschiebt jeden Emit-Pfad. Diese Config erbt nur die Regeln und emittiert nichts.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false
+  },
+  "include": ["scripts/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

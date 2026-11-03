@@ -33,7 +33,7 @@
  *   - Bei --no-pin: addresses enthaelt ALLE lokalen IPs des Publishers
  */
 
-import { Bonjour } from 'bonjour-service';
+import { Bonjour, type Service } from 'bonjour-service';
 import { networkInterfaces, hostname } from 'node:os';
 
 type Iface = { name: string; address: string; cidr: string; netmask: string };
@@ -115,10 +115,13 @@ async function runPublisher(args: Args, meshIp: string): Promise<Bonjour> {
   // os.networkInterfaces() und ignoriert die `interface`-Option komplett.
   // Wir muessen records() monkey-patchen um A-Records zu filtern.
   if (args.pin) {
-    const origRecords = (service as any).records.bind(service);
-    (service as any).records = function() {
+    // `records()` ist in `bonjour-service` oeffentlich typisiert (`Service.records(): ServiceRecord[]`),
+    // nur der Altcode hatte `as any` hingeschrieben. Der Rueckgabetyp wird deshalb aus der Deklaration
+    // abgeleitet statt lokal nachgebaut — kein Cast, Verhalten unveraendert.
+    const origRecords = service.records.bind(service);
+    service.records = function (): ReturnType<typeof service.records> {
       const all = origRecords();
-      return all.filter((r: any) => {
+      return all.filter((r) => {
         if (r.type === 'A') return r.data === meshIp;
         if (r.type === 'AAAA') return false;
         return true;
@@ -158,7 +161,7 @@ function runBrowser(args: Args): { bonjour: Bonjour; discoveries: Discovery[] } 
   console.log(`[browser] Starte Browser fuer _${args.serviceType}._tcp ...`);
 
   const browser = bonjour.find({ type: args.serviceType });
-  browser.on('up', (svc) => {
+  browser.on('up', (svc: Service) => {
     const addresses = svc.addresses ?? [];
     const txt = (svc.txt ?? {}) as Record<string, string>;
     const expectedMeshIp = txt['meshIp'];
@@ -195,7 +198,7 @@ function runBrowser(args: Args): { bonjour: Bonjour; discoveries: Discovery[] } 
   return { bonjour, discoveries };
 }
 
-function analyzeResults(discoveries: Discovery[], args: Args, meshIp: string) {
+function analyzeResults(discoveries: Discovery[], args: Args, meshIp: string): void {
   console.log('\n═══════════════════════════════════════════════════════════');
   console.log('  ERGEBNIS-ANALYSE');
   console.log('═══════════════════════════════════════════════════════════\n');
@@ -239,7 +242,7 @@ function analyzeResults(discoveries: Discovery[], args: Args, meshIp: string) {
   }
 }
 
-async function main() {
+async function main(): Promise<void> {
   const args = parseArgs();
   const interfaces = listActiveIPv4Interfaces();
   const meshIp = selectMeshIp(interfaces, args.meshIp);

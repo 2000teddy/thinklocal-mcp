@@ -8,6 +8,79 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### build(gates): `packages/daemon/scripts/` in tsc und eslint aufgenommen (2026-11-03 07:20)
+Build-/CI-Verdrahtung (additiv, reversibel) plus ein Fix an `discovery-poc.ts`, den die neu geöffneten Gates
+aufgedeckt haben. **Kein** `src/`-Diff, kein Deploy, kein Secret, kein State, kein Dienst-Eingriff.
+Folge-Slice zu #363, wo die Lücke als bewusst offen vermerkt war.
+**Drei Befunde haben den Zuschnitt bestimmt.** (1) Welche eslint-Config für `scripts/` gilt, war keine offene
+Frage: für alles unter `packages/daemon/` greift `packages/daemon/eslint.config.js`
+(`tseslint.configs.strict`) — belegt per `--print-config` (`no-explicit-any` ⇒ `[2]` für `daemon/scripts`
+**und** `daemon/src`, aber `[1]` für `cli/src`). Die aktive Entscheidung ist damit, diese Auflösung **zu
+akzeptieren statt sie zu überstimmen**. Der *Mechanismus* unterscheidet sich je Aufrufweg, das Ergebnis nicht
+(Präzisierung aus dem Review): der Root-Lauf nutzt eslint **v10.2.0** (`devDep ^10.2.0`, Auflösung **pro
+Datei**), `lint:scripts` und die CI laufen unter dem daemon-lokalen **v9.39.4** (`devDep ^9.17.0`, Auflösung
+über das **cwd**) — beide landen bei derselben Config, also **keine stille Divergenz**; die Versionsspreizung
+selbst ist Altbestand und bleibt ausserhalb der Freigabe.
+(2) `npm run lint` ist auf `main` bereits **rot**: `464 problems (246 errors, 218 warnings)`, Exit 1, alles
+aus `src/`. `scripts/` dort anzuhängen hätte die Lücke nicht geschlossen, sondern 0 neue Befunde zu 464
+bestehenden addiert. (3) Die **CI führt überhaupt kein eslint aus** — der `daemon`-Job hatte nur
+`tsc --noEmit` und `vitest run`. Ohne neuen CI-Schritt wäre „Gate geschlossen" eine Behauptung über einen
+Befehl, den die CI nie aufruft.
+**Umsetzung:** neue `packages/daemon/tsconfig.scripts.json` (`extends` auf die Basis, `include:
+["scripts/**/*.ts"]`, `noEmit`, `rootDir: "."`) — Weg (a), weil die Basis-Config **der Build** ist
+(`rootDir: "src"`, `outDir: "dist"`, `declaration`) und `scripts/` dort ins `include` zu nehmen jeden
+Emit-Pfad verschoben und die Operator-Skripte nach `dist/` mitgenommen hätte. `rootDir: "."` ist dabei
+notwendig, nicht kosmetisch: die Skripte importieren über `../src/*.js` und liegen damit ausserhalb von
+`rootDir: "src"` — geerbt bräche `tsc` mit `TS6059` ab. Dazu `lint:scripts` =
+`eslint "scripts/**/*.ts" --max-warnings 0`, `typecheck:scripts`, beide auch als Root-Alias, `scripts/**/*.ts`
+zusätzlich am Root-`lint`/`lint:fix`, und **zwei neue CI-Schritte** im bestehenden `daemon`-Job.
+**Zwei bewusste Details:** *Glob statt Verzeichnis*, weil `.mjs` laut Freigabe draussen bleiben — das gilt für
+die Root-Config, **nicht** für die hier wirksame Daemon-Config (`ignores` nur `dist/`, `node_modules/`,
+`*.config.js`); ein Verzeichnis-Argument hätte `migrate-pairings.mjs` und `produce-genesis-blob.mjs` still
+mit eingezogen (**32 `no-undef` + 6 Warnungen**). Und *`--max-warnings 0`*, weil eslint bei reinen Warnungen
+mit **0** endet — ohne das wären die drei Rückgabetyp-Befunde gefixt, aber nicht abgesichert.
+**Aufgedeckt, alles in `discovery-poc.ts`** (unverändert seit 2026-07-06, also keine Regression — nur bisher
+unsichtbar): 1× `TS7006` (`main`-Stand `:168`, implizites `any` in `addresses.filter`), 3× `no-explicit-any`
+im `records()`-Monkey-Patch (`:118/:119/:121`) und 3 fehlende Rückgabetypen (`:119`, `:198` `analyzeResults`,
+`:242` `main`). Gefixt über den **typisierten Callback-Parameter** `(svc: Service)` (damit entfällt jede
+Zusicherung, `svc.addresses` ist in `bonjour-service` als `string[] | undefined` deklariert), den direkten
+`service.records.bind(service)` mit Rückgabetyp `ReturnType<typeof service.records>` und drei Rückgabetypen —
+**Verhalten unverändert**; Diff gegen `main` **10 Einfügungen / 7 Löschungen** (288 → 291 Zeilen), wobei die
+CR-Nachbesserung den Fix gegenüber der ersten Fassung um 11 Zeilen verkleinert hat.
+`canonicalize-pairings.ts`, `pop-canonicalize.ts` und `pop-canonicalize.test.ts` gingen **ohne jeden Befund**
+durch beide Gates; an `pop-canonicalize.ts` wurde nichts geändert.
+**TS:** Suite **151 Dateien / 2123 Tests grün** (unverändert). `typecheck:scripts` **0 Fehler** über 4 Dateien
+(die Testdatei ist bewusst mit drin), `lint:scripts` **0 Probleme**. **Build-Pfad nachweislich unberührt:**
+`tsc --listFilesOnly -p tsconfig.json | grep -c '/scripts/'` ⇒ **0**, gegen **4** beim Gate-Programm.
+**Rückdrehprobe 7/7 rot**, zwei davon absichtlich an *fremden* Dateien (toter Import in
+`canonicalize-pairings.ts`, `any` in `pop-canonicalize.ts`) — sie belegen, dass das Gate das ganze
+Verzeichnis deckt; danach alle vier `.ts` per SHA-256 unverändert. `npm run lint` (Root) bleibt bei
+**denselben 464** Problemen: `scripts/` steuert 0 bei, die Altbefunde in `src/` sind nicht Teil dieser Freigabe.
+**Bewusst ausserhalb des Gates:** die beiden `.mjs` (laut Freigabe), die vier Werkzeug-Konfigurationen
+(`vitest.config.ts` ×3, `vite.config.ts`), das Wurzel-`scripts/` (enthält **kein** TypeScript) und die 464
+`src/`-Altbefunde. **Nicht getan und gemeldet:** eine `HISTORY.md` anzulegen — sie existiert hier bewusst
+nicht (`CONTRIBUTING.md:34-36`), das wäre ein Kanon-Beschluss statt einer Doku-Pflicht.
+**CR — der vorgeschriebene Weg hat nicht funktioniert, und das ist ein Befund:** `pal:codereview` lief als
+Workflow durch, brach aber in der externen Validierung bei **beiden** Fremdmodellen ab
+(`cli-codex-gpt` ⇒ `executable 'codex' not found in PATH`, `cli-agy-gemini-pro` ⇒ dasselbe für `agy`) — der
+`pal`-Serverprozess erbt `~/.local/bin` nicht, dieselbe Ursache wie bei `pal:precommit`. Ersatzweg
+ausdrücklich benannt: **`agy` direkt** über den absoluten Pfad (`--sandbox`), also dasselbe Fremdmodell wie
+`cli-agy-gemini-pro`, nur ohne `pal` davor — nie `pal:chat`, nie MiniMax.
+**Ergebnis: APPROVE, 0 HIGH / 0 MEDIUM / 3 LOW / 2 NIT — alle fünf umgesetzt:** die eslint-Versionsangabe
+präzisiert (LOW 1); **meine Kommentarbehauptung war falsch** — `bonjour-service` typisiert `records()` sehr
+wohl öffentlich (`service.d.ts:47`), also sind die zwei lokalen Interfaces und der `as unknown as`-Doppelcast
+wieder raus (LOW 2); der Compliance-Check in `ci.yml` erzwingt die COMPLIANCE-Zeile jetzt auch bei reinen
+`scripts/`-Änderungen (`(src|scripts)`, LOW 3); Parameter-Typisierung statt Zusicherung (NIT 1); und das
+wirkungslose `--ext .ts` im Nachbarskript `"lint"` entfernt — **erst gemessen** (`eslint src/` und
+`eslint src/ --ext .ts` liefern byte-identische Ausgabe), dann entfernt (NIT 2).
+**Zweite Runde über den nachgebesserten Stand: APPROVE, 0/0/0/1 NIT** — und das NIT war berechtigt: meine
+Diff-Angabe war das Delta zwischen den Review-Runden statt des Diffs gegen `main`, in allen drei Dokumenten
+nachgemessen und richtiggestellt. Die Runde prüfte strenger als ich selbst: beim Entfernen von `--ext` war
+„byte-identische Ausgabe" allein kein ausreichender Beleg, die Gegenprobe über die **Dateimenge** (je 297
+gelintete `.ts`-Dateien mit und ohne Flag) ist es.
+**PC:** manuell (Secret-Scan clean; die neuen CI-Schritte nutzen nur devDependencies, die `packages/daemon`
+bereits führt — in `package-lock.json` und `node_modules` verifiziert).
+
 ### fix(scripts): 6 Review-Befunde in `pop-canonicalize.ts` gefixt + `TODO.md` B1 auf Ist-Stand (2026-11-03 06:40)
 Bug-Fix **mit** Regression-Tests, plus eine Doku-Drift. Folge-Slice zu **#362**, dort waren die Befunde belegt
 und bewusst **nicht** gefixt (die Datei sollte byte-identisch zum real gelaufenen Artefakt ins Repo) — diese
