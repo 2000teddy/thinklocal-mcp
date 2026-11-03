@@ -28,6 +28,19 @@ jobs:
         working-directory: packages/daemon
         run: npx tsc --noEmit
 
+      # scripts/ liegt bewusst NICHT im Build-tsconfig (rootDir: src, outDir: dist).
+      # Eigene Config, die nur prueft und nichts emittiert — sonst zoege `daemon:build`
+      # die Operator-Skripte nach dist/. Ohne diesen Schritt waere scripts/ ungeprueft.
+      - name: TypeScript check (scripts/)
+        working-directory: packages/daemon
+        run: npx tsc --noEmit -p tsconfig.scripts.json
+
+      # Nur scripts/*.ts: `npm run lint` ist repoweit rot (vorbestehende src/-Befunde),
+      # taugt also nicht als Gate. Dieser eng gefasste Lauf ist gruen und blockiert deshalb.
+      - name: Lint (scripts/)
+        working-directory: packages/daemon
+        run: npm run lint:scripts
+
       # Run vitest from packages/daemon where it's installed.
       # Previously ran from root which caused "Cannot find package vitest"
       # on GitHub Runner (pre-existing bug since PR #80, fixed 2026-04-11).
@@ -92,7 +105,9 @@ jobs:
       - name: Check COMPLIANCE-TABLE.md updated
         run: |
           CHANGED=$(git diff --name-only origin/main...HEAD)
-          if echo "$CHANGED" | grep -qE 'packages/daemon/src/.*\.ts$'; then
+          # scripts/ zaehlt mit, seit das Verzeichnis unter tsc+lint steht — sonst koennte eine
+          # reine scripts/-Aenderung ohne COMPLIANCE-Zeile durchlaufen.
+          if echo "$CHANGED" | grep -qE 'packages/daemon/(src|scripts)/.*\.ts$'; then
             if ! echo "$CHANGED" | grep -q 'COMPLIANCE-TABLE.md'; then
               echo "::error::Daemon code changed but COMPLIANCE-TABLE.md was not updated."
               echo "Please add a compliance row for your PR."

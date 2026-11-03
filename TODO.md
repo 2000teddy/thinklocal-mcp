@@ -1158,6 +1158,20 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
 ### CI/CD & Build
 - [x] 🔴 GitHub Actions Pipeline — `.github/workflows/ci.yml` (2026-04-03)
 - [x] 🔴 Linting (ESLint + Prettier) — eslint.config.js + .prettierrc + npm run lint/format (2026-04-05)
+- [x] 🟠 **`packages/daemon/scripts/` unter tsc + eslint** — die Operator-Skripte lagen ausserhalb beider
+  Gates (`tsconfig.json` hat `include: ["src/**/*.ts"]`, `npm run lint` kannte nur die `src`-Pfade).
+  Geschlossen über eine eigene `packages/daemon/tsconfig.scripts.json` (`noEmit`, **Build-Pfad unberührt**:
+  `tsc --listFilesOnly -p tsconfig.json | grep -c '/scripts/'` ⇒ 0) plus `lint:scripts`
+  (`--max-warnings 0`, Glob auf `*.ts`, damit die `.mjs` bewusst draussen bleiben) — **beide als eigene
+  CI-Schritte** im `daemon`-Job, weil die CI zuvor gar kein eslint ausführte. Aufgedeckt und gefixt:
+  1× `TS7006` + 3× `no-explicit-any` + 3 fehlende Rückgabetypen in `discovery-poc.ts`; dazu aus dem Review
+  der Compliance-Check in `ci.yml`, der die COMPLIANCE-Zeile nun auch bei reinen `scripts/`-Änderungen
+  erzwingt. (2026-11-03)
+  **Offen geblieben, bewusst:** `npm run lint` ist repoweit weiter **rot** (464 Probleme / 246 Fehler aus
+  `src/`, Stand 2026-11-03) — ein eigener Slice, dieser hier ändert die Zahl nicht. Ebenso die
+  eslint-Versionsspreizung Root `^10.2.0` ↔ `packages/daemon` `^9.17.0` (folgenlos für dieses Gate, beide
+  Wege greifen dieselbe Config) und die beiden `.mjs` in `scripts/`, die laut Freigabe draussen bleiben
+  (ein Einschluss kostete 32 `no-undef` + 6 Warnungen und bräuchte `languageOptions.globals`).
 - [x] 🟠 Docker-Image-Build und -Push — Dockerfile Multi-Stage + .dockerignore (2026-04-05)
 - [x] 🟠 Automatische Release-Erstellung — `.github/workflows/release.yml` bei Tags (2026-04-05)
 - [ ] 🟡 Cross-Plattform-Tests (macOS, Linux, Windows via WSL)
