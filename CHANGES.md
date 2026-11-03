@@ -8,6 +8,60 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### fix(scripts): 6 Review-Befunde in `pop-canonicalize.ts` gefixt + `TODO.md` B1 auf Ist-Stand (2026-11-03 06:40)
+Bug-Fix **mit** Regression-Tests, plus eine Doku-Drift. Folge-Slice zu **#362**, dort waren die Befunde belegt
+und bewusst **nicht** gefixt (die Datei sollte byte-identisch zum real gelaufenen Artefakt ins Repo) — diese
+Begründung ist mit dem Merge verbraucht, der Fix liegt jetzt sichtbar als Diff darüber. **Kein** `src/`-Diff,
+kein Deploy, kein Secret, kein State, kein Dienst-Eingriff; das Skript lädt kein laufender Prozess.
+**Die 6 Fixes:** (1) 4 unbenutzte Imports entfernt, `writeFileSync`/`chmodSync`/`hostname` aus dem
+Inline-`await import()` in den Kopf gezogen; (2) `createMtlsFetch()` leitet `init.signal` an
+`dispatcher.request()` durch — vorher war `timeoutMs: 15_000` wirkungslos und ein hängender Admin blockierte
+unbegrenzt; (3) neue `assertOnboarded()` prüft die libp2p-Key-Datei als Voraussetzung mit, damit
+`loadOrCreateLibp2pPrivateKey()` nicht in den Create-Pfad läuft und still eine **neue** PeerID erzeugt;
+(4) `backupExistingTls()` legt den Backup-Ordner mit `0700` an statt umask-`0775` (ein privater Key liegt
+darin); (5) `servername` bleibt per Default `localhost` — jedes von `tls.ts` ausgestellte Node-Cert führt
+`DNS:localhost` im SAN, das ist mesh-weit der portabelste Name — ist aber über **`--servername`**
+überschreibbar und im Header begründet; (6) der Adapter nutzt `init.dispatcher ?? fallback`, statt den
+übergebenen Dispatcher zu ignorieren.
+**Zu (5) bewusst nicht das Naheliegende:** den SNI aus `--admin-url` abzuleiten hätte Verbindungen gebrochen,
+die vorher gingen (eine IP oder ein Hostname steht nur im SAN, wenn der Admin genau so ausgestellt wurde).
+Gefixt ist, dass die Annahme unsichtbar und nicht übersteuerbar war — nicht der Default.
+**Testbar gemacht, Logik unverändert:** `parseArgs(raw)` nimmt das Argument-Array als Parameter, vier
+Einheiten sind exportiert, und `main()` läuft nur noch hinter einem Direktaufruf-Guard
+(`process.argv[1]` ↔ `import.meta.url`) — ohne ihn hätte schon der Import im Test einen echten Cert-Request
+abgefeuert. Reihenfolge der 5 Schritte, Backup vor Überschreiben, Key `0600` / Cert `0644` und
+„kein Secret im Log" sind unberührt.
+**TS:** neue `packages/daemon/scripts/pop-canonicalize.test.ts` (**22 Tests**) ⇒ Suite **151 Dateien /
+2123 Tests grün** (vorher 150 / 2101). **Jeder Fix einzeln zurückgedreht ⇒ genau der zugehörige Test wird rot
+— 9/9** (6 Befunde + 3 testbare CR-Punkte), Datei nach jeder Probe per SHA-256 als unverändert bestätigt. `tsc --strict --noUnusedLocals`
+**0 Fehler in `scripts/`** (vorher 4× `TS6133`), `eslint` **0/0**. Die **Gate-Lücke bleibt**: `scripts/` liegt
+weiter ausserhalb von `tsconfig.json:23` und `npm run lint` — sie zu schliessen würde die drei
+Nachbarskripte mitziehen ⇒ eigener Slice; dieser Test ist deshalb die einzige Absicherung gegen Rückfall.
+**`TODO.md` B1** auf den Ist-Stand: #356 ist seit 2026-10-26T10:09:05Z gemergt (`8e7f683e`, `APPROVED` durch
+`peppiseppiullmann-ci`); neu formuliert mit der #357-Protokoll-Korrektur — **die Diagnose war richtig, die
+Einordnung zu stark: eine Self-Approval-Sperre ist kein Christian-Gate**. Die 3 LOW sind abgearbeitet oder
+gegenstandslos (`CHANGES.md`-Suffix `, #356)` kam in #357, `grep -c` ⇒ 3). **Offen bleibt aus B1**, jetzt mit
+schärferer Begründung: `discovery-poc.ts:28` trägt weiter `~/Entwicklung_local/thinklocal-mcp` — die Zeile
+lautet `ssh chris@10.10.10.55 'cd ~/Entwicklung_local/…'` und beschreibt das Arbeitsverzeichnis **auf `.55`**,
+also die aus diesem Repo nicht entscheidbare Frage; sie zu „korrigieren" wäre eine Behauptung über einen
+fremden Host. Dazu die **Blocker-Kopfzeile** `Stand 2026-10-21` → `2026-11-03` mit dem Hinweis, dass von B1/B2/B3
+nur noch **B3** ein echter Christian-Gate ist.
+**CR:** Review-of-Record über `agy` (`--sandbox`, absoluter Pfad) — **APPROVE, 0 HIGH / 0 MEDIUM / 2 LOW /
+2 NIT**, **alle vier umgesetzt**: `buildConnectOptions()` ausgelagert, damit Fund 5 auch an der **Senke**
+getestet ist und nicht nur in `parseArgs` (LOW 1); die Import-Heuristik von Regex auf einen
+**Zustandsautomaten** umgebaut, weil sie sonst falsch-negativ (Name im Kommentar) bzw. falsch-positiv (nur in
+`${…}` benutzt) wird — sie fiel beim Nachbauen zweimal selbst durch, beides im `changes/`-Eintrag festgehalten
+(LOW 2); `realpathSync` auf beiden Seiten des Direktaufruf-Guards plus ein End-to-End-Test über einen echten
+Symlink (NIT 1); `optionValue()` nimmt kein `--…` mehr als Optionswert (NIT 2). Für Fund 5 hat der Review die
+Begründung des unveränderten Defaults gegen `tls.ts:148` und `cert-issuer.ts:197` bestätigt — beide schreiben
+`DNS:localhost` **immer** ins SAN, es ist kein Scheinfix. **Zweite Runde über den nachgebesserten Stand:
+APPROVE, 0/0/0/0**; ihr einziger substanzieller Hinweis ist nachträglich als „BEKANNTE GRENZE" im
+Doc-Comment des Test-Helpers festgehalten — der Automat hat keinen Regex-Literal-Zustand, die Fehlerrichtung
+wäre falsch-**positiv** (Test wird rot), und das ist die einzige Änderung nach dem zweiten Review.
+**PC:** manuell (Secret-Scan clean; Test-Fixtures
+schreiben nur in `mkdtempSync` unter `os.tmpdir()` und räumen im `afterEach` ab — kein Zugriff auf
+`~/.thinklocal/`).
+
 ### feat(scripts): `pop-canonicalize.ts` versioniert — PoP-Operator-Runner (ADR-022 WS-3) (2026-11-03 06:10)
 Ein Script-Add + Doku, **kein** `src/`-Diff, kein Deploy, kein Secret, kein State, kein Dienst-Eingriff.
 `packages/daemon/scripts/pop-canonicalize.ts` lag seit **2026-11-02 20:35 UTC** untracked im Working Tree
