@@ -202,8 +202,56 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
 - [ ] **[v5.1] TL-00b (je ≈1 h, ⛔ Fenster)** Re-Enroll `.52`, dann `.55` (nach Christians Pfad-A-Schritt),
   dann `.94`. ↔ vgl. bestehend „ADR-024-Rollout-Gate" + „Produktiv-Flotten-Flip (.56/.52/.222)" + „.55
   Pfad A/C2". **.52-Fenster aktiv (heute Nacht, zielt auf TL-07-Beweis).**
-- [ ] **[v5.1] TL-00c (≈2 h)** Cert-Dry-Run: Test-Peer-Cert <30 Tage → Wochen-Restart simulieren → Reissue
+- [x] **[v5.1] TL-00c (≈2 h)** Cert-Dry-Run: Test-Peer-Cert <30 Tage → Wochen-Restart simulieren → Reissue
   + Schlüssel-Sync verifiziert. **Abnahmekriterium vor weiterem Staffel-Rollout.** ↔ vgl. #242 renew_before_days.
+  **Erledigt 2026-11-09 — PR #371 (nur Test-Code).** Fortschrittslog
+  `changes/2026-11-09_tl-00c-key-sync.md`.
+  **Stand vorher:** die **Reissue**-Hälfte war gedeckt — vier Tests im Block
+  `describe('loadOrCreateTlsBundle — Reissue-Schwelle (renewBeforeDays)')` in `tls.test.ts` prüfen
+  `<= 30 Tage → neu`, `> 30 Tage → behalten`, die Non-Regression bei explizitem `renewBeforeDays=7`
+  und die exakte Grenze `daysLeft == renewBeforeDays`. Die **Schlüssel-Sync**-Hälfte war es nicht:
+  **keiner** dieser Tests behauptete, dass das geschriebene `node.crt.pem` zum geschriebenen
+  `node.key.pem` **gehört** — verglichen wurde nur `bundle.certPem` gegen das alte Cert.
+  **Warum das eine echte Lücke war:** der Reissue-Pfad ruft `createNodeCert` **ohne**
+  `existingKeyPem` auf, erzeugt also ein **frisches** Keypair und schreibt **beide** Dateien — die
+  Gegenrichtung zur ADR-034-Migration, die den Key wiederverwendet und nur die Cert-Datei tauscht.
+  Der Paar-Zustand ist nach dem Reissue also **neu** und nur konsistent, wenn Cert und Key aus
+  demselben Bundle stammen. Die Prüfung selbst existiert (`certKeyMatches` vergleicht die Moduli),
+  läuft aber als **Eingangs**-Gate beim Laden und wird **nach** dem Reissue nicht mehr ausgewertet.
+  Deshalb reiner Test-Code: die Eigenschaft war da, nur nicht behauptet.
+  **Nachgezogen: 4 Tests** im neuen verschachtelten Block
+  `describe('TL-00c — Cert/Key-Paar-Konsistenz nach dem Reissue (Schlüssel-Sync)')` innerhalb des
+  bestehenden Reissue-Schwellen-Blocks (Helfer wiederverwendet, kein zweiter Harness). **Alle vier
+  prüfen auf der Platte, nicht am Bundle-Return** — der Rückgabewert kann stimmen, während die
+  Dateien auseinanderlaufen, und nur die Dateien überleben den Neustart: (1) das geschriebene Paar
+  gehört zusammen (RSA-Moduli gleich, Platte == Return, SPIFFE-Identität erhalten); (2) der Key ist
+  wirklich rotiert (alter Inhalt **und** Modulus weg) und das neue Paar trotzdem konsistent —
+  Gegenprobe zur Migration, wo `node.key.pem` unverändert bleibt; (3) **Wochen-Restart simuliert**:
+  Reissue → Start → Start auf demselben `dataDir` ⇒ **kein** zweiter Reissue, Cert und Key
+  bytegleich, Paar konsistent; (4) **Gegenprobe** — ein absichtlich fremdes Paar mit 90 Tagen
+  Restlaufzeit wird **nicht** still serviert, sondern erkannt und neu ausgestellt (ohne diesen Test
+  wäre grün, dass nichts geprüft wird).
+  **Rückdrehprobe:** temporär im Reissue-Pfad den Key aus einem fremden Bundle geschrieben ⇒ **genau
+  diese vier** Tests rot, die anderen 49 grün; danach zurückgedreht (0 Diff an `tls.ts`). Suite
+  `packages/daemon` 2188 → **2192 grün** (152 Dateien), `tls.test.ts` 49 → 53; `tsc` 0,
+  `tsc -p tsconfig.scripts.json` 0, `lint:scripts` 0, Dashboard `tsc` 0 + `vite build` Exit 0,
+  eslint in beiden Umfängen exakt auf Baseline (460 / 462). `git diff --stat -- packages/` ⇒ **eine**
+  Datei, `tls.test.ts`, **nur Test-Code**.
+  **Zwei Grenzen, benannt statt mitverbucht:** (1) der Test fährt den **Ladepfad**, nicht den
+  Daemon-Prozess — „Wochen-Restart simulieren" ist hier dreimaliges `loadOrCreateTlsBundle` auf
+  demselben `dataDir`, was ehrlich ist, weil die gesamte Wirkung eines Neustarts auf das Paar in
+  genau diesem Aufruf liegt (der Timer entscheidet **wann**, die Funktion **was**); **nicht** belegt
+  ist, dass der Timer feuert und ein laufender Daemon das neue Paar über seinen HTTPS-Socket
+  serviert — Betriebszustand, kein Agent-Schritt. *Nebenbei nachgemessen und als Korrektur
+  festgehalten: `th01-daemon-weekly-restart.timer` lief zuletzt **Mo 2026-11-09 01:45:14 CET**
+  (= 00:45 UTC, heute) und läuft das nächste Mal **Mo 2026-11-16 01:45 CET** — der Wochen-Restart
+  dieser Woche hat also bereits stattgefunden.* (2) **lokale** Cert/Key-Konsistenz, **kein**
+  Peer-Austausch — der Zwei-Rechner-Beweis gehört zu TL-00b / TL-01…TL-07.
+  **Externe CR (agy/Gemini): APPROVE**, 0 HIGH / 0 MEDIUM / 0 LOW / 0 NIT — der Reviewer hat für
+  Test (4) alle vier übrigen Konjunkte des Behalten-Gates einzeln als `true` nachgewiesen (der
+  Reissue wird also **ausschließlich** durch `certKeyMatches === false` ausgelöst) und für Test (3)
+  die Äquivalenz „wiederholter Aufruf ≡ Prozessstarts" belegt: es gibt **keine** In-Process-Rotation
+  und **kein** Modul-Singleton in `tls.ts`. Die Timer-Korrektur hat er unabhängig nachgemessen.
 - [x] **[v5.1] TL-00d** #242-Konfig-Keys dokumentieren (`cert.renew_before_days`,
   `TLMCP_CERT_RENEW_BEFORE_DAYS`) — **verifiziert erledigt (2026-07-20)** gegen HEAD: `docs/USER-GUIDE.md`
   deckt **beide** Knobs vollständig & korrekt ab — TOML-`[cert]`-Beispiel (l.79-82) + Env-Var-Tabelle (l.105) +

@@ -6,7 +6,55 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-11-09 13:40
+## [Unreleased] — 2026-11-09 14:20
+
+### test(tls): TL-00c — Cert-Dry-Run, die „Schlüssel-Sync"-Hälfte nachgezogen (2026-11-09 14:20)
+**Nur Test-Code:** `git diff --stat -- packages/` ⇒ **eine** Datei, `packages/daemon/src/tls.test.ts`,
++114 Zeilen. Kein Produktivcode, kein neuer Endpunkt, keine Config-Änderung, kein Deploy, kein
+Release, kein Laufzeit-Effekt.
+**Die Lücke:** TL-00c verlangt „Reissue **+ Schlüssel-Sync** verifiziert". Die Reissue-Hälfte war
+gedeckt (vier Tests an der 30-Tage-Schwelle), die Schlüssel-Sync-Hälfte nicht — **keiner** dieser
+Tests behauptete, dass das geschriebene `node.crt.pem` zum geschriebenen `node.key.pem` **gehört**;
+verglichen wurde nur `bundle.certPem` gegen das alte Cert. Dass das eine echte Lücke ist, folgt aus
+der Asymmetrie der beiden Pfade: der **Reissue** ruft `createNodeCert` **ohne** `existingKeyPem`,
+erzeugt also ein frisches Keypair und schreibt **beide** Dateien, während die **ADR-034-Migration**
+den Key wiederverwendet und nur die Cert-Datei tauscht. Nach einem Reissue ist der Paar-Zustand also
+neu und nur dann konsistent, wenn Cert und Key aus demselben Bundle stammen. Die Prüfung selbst
+existiert (`certKeyMatches` vergleicht die RSA-Moduli), läuft aber als **Eingangs**-Gate beim Laden
+und wird **nach** dem Reissue nicht mehr ausgewertet — die Eigenschaft war da, nur nicht behauptet.
+**Vier neue Tests** im verschachtelten Block `describe('TL-00c — Cert/Key-Paar-Konsistenz nach dem
+Reissue (Schlüssel-Sync)')` innerhalb des bestehenden Reissue-Schwellen-Blocks (Helfer
+wiederverwendet, kein zweiter Harness). **Alle vier prüfen auf der Platte, nicht am Bundle-Return** —
+der Rückgabewert kann stimmen, während die Dateien auseinanderlaufen, und nur die Dateien überleben
+den Neustart: (1) das geschriebene Paar gehört zusammen, Platte == Return, Identität erhalten;
+(2) der Key ist wirklich rotiert (Inhalt **und** Modulus) und das neue Paar trotzdem konsistent —
+Gegenprobe zur Migration; (3) **Wochen-Restart simuliert**, Reissue → Start → Start auf demselben
+`dataDir` ⇒ kein zweiter Reissue, Cert und Key bytegleich, Paar konsistent; (4) **Gegenprobe** — ein
+absichtlich fremdes Paar mit 90 Tagen Restlaufzeit wird nicht still serviert, sondern erkannt und neu
+ausgestellt. Ohne (4) wäre grün, dass nichts geprüft wird.
+**Rückdrehprobe:** temporär im Reissue-Pfad den Key aus einem fremden Bundle geschrieben ⇒ **genau
+diese vier** Tests rot, die anderen 49 grün; danach zurückgedreht, `git diff` an `tls.ts` ⇒ 0. Die
+Mutation ist nicht Teil des Diffs.
+**TS:** Suite `packages/daemon` 2188 → **2192 grün** (152 Dateien), `tls.test.ts` 49 → **53**;
+`tsc --noEmit` 0, `-p tsconfig.scripts.json` 0, `lint:scripts` 0; Dashboard `tsc` 0 und `vite build`
+Exit 0; eslint in **beiden** Umfängen exakt auf Baseline (Daemon-Scope 460, Wurzel-Umfang 462).
+**Zwei Grenzen, benannt statt mitverbucht:** (1) der Test fährt den **Ladepfad**, nicht den
+Daemon-Prozess — das ist ehrlich, weil die gesamte Wirkung eines Neustarts auf das Paar in genau
+diesem Funktionsaufruf liegt (der Timer entscheidet **wann**, die Funktion **was**); **nicht** belegt
+ist, dass der Timer feuert und ein laufender Daemon das neue Paar serviert. *Dazu eine nachgemessene
+Korrektur: `th01-daemon-weekly-restart.timer` lief zuletzt **Mo 2026-11-09 01:45:14 CET** (= 00:45
+UTC, heute) und läuft wieder **Mo 2026-11-16 01:45 CET** — der 10.11. ist ein Dienstag, der
+Wochen-Restart dieser Woche hat bereits stattgefunden.* (2) **lokale** Cert/Key-Konsistenz, **kein**
+Peer-Austausch — der Zwei-Rechner-Beweis gehört zu TL-00b / TL-01…TL-07.
+**CR (agy/Gemini): APPROVE — 0 HIGH / 0 MEDIUM / 0 LOW / 0 NIT.** Der Reviewer hat die drei Punkte,
+bei denen ich unsicher war, im Code nachgerechnet: für Test (4) alle **vier übrigen** Konjunkte des
+Behalten-Gates einzeln als `true` nachgewiesen (der Reissue wird also **ausschließlich** durch
+`certKeyMatches === false` ausgelöst), für Test (3) die Äquivalenz „wiederholter Aufruf ≡
+Prozessstarts" **belegt** (keine In-Process-Rotation, kein Modul-Singleton in `tls.ts`), und die
+Timer-Korrektur unabhängig nachgemessen. Dazu ein Hinweis ohne Befundstatus: `certKeyMatches`
+vergleicht zusätzlich den Exponenten `e`, der bei allen generierten Keys konstant `0x10001` ist —
+der Modulus ist die allein trennende Größe, der Test-Vergleich reicht. Ausführlich im
+`changes/`-Eintrag, Abschnitt „Externe Code-Review".
 
 ### docs(todo): TL-00a verifiziert erledigt — Re-Pair-Migrationsstufe liegt seit Juli in `main` (2026-11-09 13:40)
 Doku-only, **read-only** verifiziert: **kein** `packages/`-Diff, kein neuer Endpunkt, kein
