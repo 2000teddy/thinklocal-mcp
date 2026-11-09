@@ -182,6 +182,15 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
   Christian-gated). TL-00a schuldete die Stufe, nicht ihren Einsatz. (3) **Token-onboardete
   Legacy-Nodes können sich nicht selbst migrieren** (eigener Early-Return, müssen re-onboarden) — in
   ADR-034 als beabsichtigt dokumentiert und geloggt.
+  **Externe CR (agy/Gemini): APPROVE**, 0 HIGH / 0 MEDIUM / 1 LOW / 1 NIT, beide eingearbeitet —
+  der Reviewer hat alle drei Zusagen einzeln im Code gegengeprüft, „strukturell ausgeschlossen" als
+  nicht überdehnt bestätigt und die Enddatum-Auslegung ausdrücklich gestützt; die zwei Befunde waren
+  meine eigene Buchhaltung (Testzahl 7 + 2 = 9 statt 8; „zwei" statt „drei" Reste im Vorspann).
+  **Offene Doku-Lücke, vom Reviewer bemerkt und hier benannt:** `cert.migrate_legacy_identity` /
+  `TLMCP_CERT_MIGRATE_LEGACY_IDENTITY` steht **nicht** in `docs/USER-GUIDE.md` — anders als
+  `cert.renew_before_days` (TL-00d) und die `mesh.clock_skew_*`-Keys (TL-15); dokumentiert ist der
+  Schalter nur in ADR-034 und `SECURITY.md`. Hält TL-00a nicht offen (keine User-Guide-Pflicht im
+  Punkt-Text), ist aber ein eigener Doku-Punkt.
   *Zum zweiten Artefakt, weil es nach einem Verdrahtungs-Rest aussieht: `canonicalizePairedPeer`
   (`pairing-canonicalize.ts`, 9 Tests) hat genau einen Aufrufer, das Skript
   `packages/daemon/scripts/canonicalize-pairings.ts` — kein Daemon-Laufzeitpfad, aber als npm-Script

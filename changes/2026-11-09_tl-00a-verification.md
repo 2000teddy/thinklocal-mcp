@@ -137,6 +137,63 @@ beiden Retention-Tests zugleich als achten Listenpunkt, was rechnerisch zehn sug
 9. im Retention-Block: „verwirft überbreites Cert: eigene UND eine FREMDE kanonische `node/`-SAN"
    — schließt die Identitäts-Breite nach oben ab
 
+## 7b. Externe Code-Review
+
+`pal:codereview` unverändert unbrauchbar — beide Fremd-Backends liegen unter `~/.local/bin`, der
+`pal`-Serverprozess erbt den PATH nicht (CO-Vorbehalt, unverändert seit #364). Review-of-Record
+über `~/.local/bin/agy --sandbox` (Gemini), anderes Modell als das implementierende; nie MiniMax,
+nie `pal:chat`.
+
+**Runde 1: APPROVE — 0 HIGH / 0 MEDIUM / 1 LOW / 1 NIT, beide eingearbeitet.**
+
+Der Reviewer hat **jede der drei Zusagen einzeln im Code** gegengeprüft statt meiner
+Zusammenfassung zu folgen: das Eintritts-Gate mit allen sieben konjunktiven Vorbedingungen,
+`acquireMigrationLock` samt `openSync(..., 'wx')`-Semantik und Stale-/Timeout-Verhalten, und für
+Zusage (c) alle drei Gründe getrennt — `createNodeCert` übernimmt bei übergebenem `existingKeyPem`
+den bestehenden Schlüssel und setzt **genau einen** Typ-6-`altName`, `node.key.pem` wird in der
+Migration nur **gelesen**, und `node.crt.legacy-premigrate.pem` wird repo-weit von **keinem**
+Laufzeitpfad gelesen. Urteil zu meiner Formulierung „strukturell ausgeschlossen": **durch den Code
+gedeckt, nicht überdehnt.**
+
+**Zwei Dinge hat er über meine Prüfung hinaus belegt:**
+
+- Der strikte Vergleich `retention?.migrateLegacyIdentity === true` fängt selbst einen
+  versehentlichen **String**-Wert aus einer TOML-Datei ab — die Stufe kann also auch so nicht
+  ungewollt betreten werden.
+- Auch im Grenzfall „Migration schlägt fehl **und** `daysLeft <= renewBeforeDays`" fällt der Pfad in
+  den regulären Legacy-Reissue und bleibt bei **genau einer** (der Legacy-)Identität.
+
+Die **Enddatum-Auslegung** hat er ausdrücklich bestätigt und ergänzt, ein hartes Sunset **vor**
+Abschluss von TL-00b wäre betrieblich verkehrt herum; entscheidend sei, dass der fehlende Punkt
+nicht unter `[x]` verschwindet.
+
+**Die beiden Befunde waren meine eigene Buchhaltung:**
+
+- **LOW-1 — die Testzahl war falsch.** Der `ADR-034`-Block enthält **sieben** `it()`, nicht acht,
+  und ich hatte die beiden Retention-Tests zugleich als achten Listenpunkt geführt, was rechnerisch
+  zehn suggerierte. Nachgezählt **7 + 2 = 9**, in allen vier Dateien korrigiert.
+- **NIT-1 — Zählwiderspruch im eigenen Dokument.** Der Vorspann sagte „zwei" Reste, während
+  Abschnitt 5 und die drei anderen Dateien **drei** führten. Angeglichen.
+
+**Ein Hinweis ohne Befundstatus, hier festgehalten statt verschwiegen:**
+`cert.migrate_legacy_identity` / `TLMCP_CERT_MIGRATE_LEGACY_IDENTITY` steht **nicht** in
+`docs/USER-GUIDE.md` — anders als `cert.renew_before_days` (TL-00d) und die
+`mesh.clock_skew_*`-Keys (TL-15), die beide dort dokumentiert sind; den Schalter beschreiben nur
+ADR-034 und `SECURITY.md`. Der Reviewer hält das für kein Hindernis für TL-00a (der Punkt enthielt
+keine User-Guide-Pflicht, und der Schalter ist ein einmaliges Fenster-Werkzeug für ein
+Christian-gated Fenster). Es bleibt trotzdem eine **offene Doku-Lücke** und wird deshalb benannt.
+
+**Nachtrag 14:10 — ein Defekt an diesem Dokument selbst, vom Watchdog beim Merge-Check gefunden:**
+die COMPLIANCE-Zeile #370 trug an der Stelle des CR-Ergebnisses noch den Platzhalter
+`CR_PLACEHOLDER`, und dieser Abschnitt hier fehlte ganz. Das ist dieselbe Fehlerklasse, die in
+#366–#369 dreimal CR-seitig auflief: **Aussage statt Beleg** — eine Zeile, die ein Review behauptet,
+ohne sein Ergebnis zu nennen, in genau dem Dokument, das als Prozess-Nachweis gilt. In #368 und
+#369 hatte ich denselben Platzhalter aufgelöst, hier nicht. Bemerkenswert und festzuhalten: das
+**Doku-Gate hat ihn nicht gefangen**, weil `doc-compliance-gate.yml` die **Struktur** prüft
+(Pipe-Zahl, Zellen-Vollständigkeit), **nicht den Inhalt** — ein grünes Gate beweist hier also nicht,
+dass der Text vollständig ist. Nachgezogen in `COMPLIANCE-TABLE.md` (Zeile #370), diesem Abschnitt,
+`CHANGES.md`, `TODO.md` und im PR-Body von #370.
+
 ## 8. Commit-Belege
 
 | PR | Commit | Inhalt |

@@ -52,6 +52,22 @@ Node verifiziert und damit Identitäts-Substitution erlauben würde.
 weil ihr *Fertig-wenn* ein **Live**-Kriterium ist. TL-00a schuldete die **Stufe**, nicht ihren
 Einsatz — und der Einsatz hat mit TL-00b schon einen eigenen Punkt; den Eintrag offen zu lassen
 würde ihn doppeln.
+**CR (agy/Gemini): APPROVE — 0 HIGH / 0 MEDIUM / 1 LOW / 1 NIT, beide eingearbeitet.** Der
+Reviewer hat jede der drei Zusagen **einzeln im Code** gegengeprüft und „strukturell ausgeschlossen"
+als **nicht überdehnt** bestätigt; über meine Prüfung hinaus belegte er, dass der strikte Vergleich
+`=== true` selbst einen versehentlichen String-Wert aus einer TOML-Datei abfängt und dass auch im
+Grenzfall „Migration schlägt fehl **und** `daysLeft <= renewBeforeDays`" genau **eine** Identität
+bleibt. Die Enddatum-Auslegung hat er ausdrücklich bestätigt. Die zwei Befunde waren meine eigene
+Buchhaltung: die Testzahl (**7 + 2 = 9**, nicht 8) und ein Zählwiderspruch im Vorspann der
+`changes/`-Datei („zwei" statt „drei" Reste). Ein Hinweis ohne Befundstatus, hier benannt:
+`cert.migrate_legacy_identity` steht **nicht** in `docs/USER-GUIDE.md`, anders als
+`cert.renew_before_days` und die `mesh.clock_skew_*`-Keys — eine offene Doku-Lücke, die TL-00a laut
+Reviewer nicht offen hält. Ausführlich im `changes/`-Eintrag, Abschnitt „Externe Code-Review".
+**Nachtrag 14:10:** die COMPLIANCE-Zeile zu diesem PR trug an der Stelle des CR-Ergebnisses noch
+einen **Platzhalter**, und der CR-Abschnitt im `changes/`-Eintrag fehlte ganz — vom Watchdog beim
+Merge-Check gefunden und hier nachgezogen. Dieselbe Fehlerklasse wie in #366–#369: **Aussage statt
+Beleg**, diesmal in dem Dokument, das als Prozess-Nachweis gilt. Das Doku-Gate fing es nicht, weil
+es Struktur prüft und nicht Inhalt.
 **Nicht angefasst:** Zelle #369 (Selbst-Reconcile-Lücke, laut Auftrag Folge-Slice) und die
 `[Unreleased]`-Datumskonvention (Kanon-Beschluss, liegt bei Christian).
 
