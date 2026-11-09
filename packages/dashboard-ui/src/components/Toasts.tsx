@@ -20,6 +20,13 @@ function eventToToast(event: MeshEvent): Omit<Toast, 'id' | 'timestamp'> | null 
       return { message: `Task abgeschlossen: ${data['skillId'] ?? ''}`, type: 'success' };
     case 'task:failed':
       return { message: `Task fehlgeschlagen: ${data['skillId'] ?? ''}`, type: 'danger' };
+    // TL-18: place-or-refuse-Ablehnung — parallel zum Telegram-Sink. Warnung, nicht
+    // danger: der Knoten ist ueberlastet, der Task ist nicht fehlgeschlagen.
+    case 'task:refused':
+      return {
+        message: `Task abgelehnt (Ueberlast): ${data['skillId'] ?? ''}`,
+        type: 'warning',
+      };
     case 'system:startup':
       return { message: `Daemon gestartet`, type: 'info' };
     case 'system:shutdown':

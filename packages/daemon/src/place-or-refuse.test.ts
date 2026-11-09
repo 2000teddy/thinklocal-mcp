@@ -9,6 +9,8 @@
  *    (reason='capacity'); unterhalb fällt es normal durch.
  *  - Registry-Side-Map: setNodeResources/getNodeResources (non-repliziert).
  *  - config: placement-Defaults/Env/Range-Validierung.
+ *  - TL-18: die drei Alarmwege der Ablehnung (Event-Payload, Audit-Zeile, log.warn)
+ *    und die Zustellung des Events im Telegram-Sink.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -26,7 +28,10 @@ import { TaskManager } from './tasks.js';
 import { SkillManager } from './skills.js';
 import { AuditLog } from './audit.js';
 import { MeshEventBus } from './events.js';
+import type { MeshEvent } from './events.js';
+import { formatMeshEventForTelegram } from './telegram-gateway.js';
 import { loadConfig } from './config.js';
+import type { Logger } from 'pino';
 
 const NO_TOML = '/nonexistent/thinklocal-t24-test.toml';
 function makeKey(): string {
@@ -267,6 +272,133 @@ describe('TaskExecutor place-or-refuse gate', () => {
     const r = await exec.handleTaskRequest('t9', 'does.not.exist', {}, 'remote');
     expect(r.reason).toBeUndefined(); // Reader-Crash darf Request nicht crashen/ablehnen
     expect(r.error).toMatch(/nicht verfuegbar/);
+  });
+});
+
+describe('TL-18 — Alarmwege der Ablehnung (Event + Audit + log.warn)', () => {
+  let dir: string;
+  let audit: AuditLog;
+
+  interface WarnCall {
+    obj: Record<string, unknown>;
+    msg: string;
+  }
+
+  /** Executor + Sammler fuer die drei Wege. RAM-Schwelle immer 90. */
+  function build(opts: {
+    ramUsedPercent?: number;
+    cpuLoad?: number;
+    refuseCpuPercent?: number;
+  } = {}): { exec: TaskExecutor; events: MeshEvent[]; warns: WarnCall[] } {
+    audit = new AuditLog(dir, makeKey(), 'spiffe://test/host/x/agent/y');
+    const eventBus = new MeshEventBus();
+    const events: MeshEvent[] = [];
+    eventBus.onAny((e) => events.push(e));
+    const warns: WarnCall[] = [];
+    const log = {
+      debug: () => {},
+      info: () => {},
+      error: () => {},
+      warn: (obj: Record<string, unknown>, msg: string) => {
+        warns.push({ obj, msg });
+      },
+    } as unknown as Logger;
+    const exec = new TaskExecutor({
+      tasks: new TaskManager(),
+      skills: new SkillManager(dir, 'agent', new CapabilityRegistry()),
+      audit,
+      eventBus,
+      agentId: 'agent',
+      log,
+      getRamUsedPercent: async (): Promise<number> => opts.ramUsedPercent ?? 40,
+      refuseRamPercent: 90,
+      getCpuLoad: (): number | null => opts.cpuLoad ?? null,
+      refuseCpuPercent: opts.refuseCpuPercent ?? 0,
+    });
+    return { exec, events, warns };
+  }
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'tlmcp-tl18-'));
+  });
+  afterEach(() => {
+    audit?.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('Weg 1 — Event: task:refused mit vollstaendiger Payload, kein task:accepted', async () => {
+    const { exec, events } = build({ ramUsedPercent: 95.5 });
+    await exec.handleTaskRequest('t-ev', 'system.health', {}, 'remote-peer');
+    const refused = events.filter((e) => e.type === 'task:refused');
+    expect(refused).toHaveLength(1);
+    expect(refused[0]?.data).toMatchObject({
+      taskId: 't-ev',
+      skillId: 'system.health',
+      requester: 'remote-peer',
+      reason: 'capacity',
+      limit: 'ram',
+      ramUsedPercent: 95.5,
+    });
+    // Ablehnung heisst: der Task wird gar nicht erst eingereiht.
+    expect(events.map((e) => e.type)).not.toContain('task:accepted');
+  });
+
+  it('Weg 2 — Audit: TASK_DELEGATE-Zeile mit refused-Detail und Anfrager als peer_id', async () => {
+    const { exec } = build({ ramUsedPercent: 95.5 });
+    await exec.handleTaskRequest('t-audit', 'system.health', {}, 'remote-peer');
+    const rows = audit.getEvents(10).filter((e) => e.event_type === 'TASK_DELEGATE');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.details).toMatch(/^system\.health refused: RAM 95\.5% > 90%$/);
+    expect(rows[0]?.peer_id).toBe('remote-peer');
+  });
+
+  it('Weg 3 — log.warn: genau eine Warnung mit place-or-refuse-Kontext', async () => {
+    const { exec, warns } = build({ ramUsedPercent: 95.5 });
+    await exec.handleTaskRequest('t-log', 'system.health', {}, 'remote-peer');
+    const placement = warns.filter((w) => w.msg.includes('[place-or-refuse]'));
+    expect(placement).toHaveLength(1);
+    expect(placement[0]?.msg).toMatch(/abgelehnt/);
+    expect(placement[0]?.obj).toMatchObject({
+      taskId: 't-log',
+      skillId: 'system.health',
+      requester: 'remote-peer',
+      limit: 'ram',
+      ramUsedPercent: 95.5,
+      refuseRamPercent: 90,
+    });
+  });
+
+  it('CPU-Dimension: limit=cpu in Event UND Audit-Detail', async () => {
+    const { exec, events } = build({ cpuLoad: 97.2, refuseCpuPercent: 95 });
+    await exec.handleTaskRequest('t-cpu', 'system.health', {}, 'remote-peer');
+    expect(events.find((e) => e.type === 'task:refused')?.data).toMatchObject({
+      limit: 'cpu',
+      cpuLoad: 97.2,
+    });
+    const rows = audit.getEvents(10).filter((e) => e.event_type === 'TASK_DELEGATE');
+    expect(rows[0]?.details).toMatch(/refused: CPU 97\.2% > 95%/);
+  });
+
+  it('unter der Schwelle: kein Event, keine refused-Audit-Zeile, kein warn', async () => {
+    const { exec, events, warns } = build({ ramUsedPercent: 40 });
+    await exec.handleTaskRequest('t-ok', 'does.not.exist', {}, 'remote-peer');
+    expect(events.filter((e) => e.type === 'task:refused')).toHaveLength(0);
+    expect(
+      audit.getEvents(10).filter((e) => (e.details ?? '').includes('refused')),
+    ).toHaveLength(0);
+    expect(warns.filter((w) => w.msg.includes('[place-or-refuse]'))).toHaveLength(0);
+  });
+
+  it('Kette Executor→Sink: das emittierte Event ergibt eine Operator-Nachricht', async () => {
+    const { exec, events } = build({ ramUsedPercent: 95.5 });
+    await exec.handleTaskRequest('t-chain', 'system.health', {}, 'remote-peer');
+    const ev = events.find((e) => e.type === 'task:refused');
+    expect(ev).toBeDefined();
+    // Das war der Befund: hier kam vorher `null` zurueck → kein Operator erreicht.
+    const msg = ev ? formatMeshEventForTelegram(ev, '12:00:00') : null;
+    expect(msg).not.toBeNull();
+    expect(msg).toContain('system.health');
+    expect(msg).toContain('RAM 95.5 %');
   });
 });
 
