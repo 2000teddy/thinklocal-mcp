@@ -704,6 +704,22 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
 - [ ] **[v5.1] TL-17 (≈4 h)** Fremdtext-Kontrakt: Entschärfungs-Modul an den Eintrittspunkten
   (Discovery-Banner, Katalogtexte, fremde Antworten; Kap. 10.3).
 - [ ] **[v5.1] TL-18 (≈2 h)** place-or-refuse: >90 % RAM → Ablehnung + Alarm (Ressourcen-Daten laufen live).
+  **Stand nachgemessen 2026-11-09 (PR #366, read-only — dort nichts daran gebaut): die „Ablehnung“ ist
+  fertig, der „Alarm“ nicht.** Fertig und getestet ist die Ablehnung: Default
+  `placement.refuse_ram_percent: 90` (`config.ts:255`, Wertebereich 1..100 validiert `:480`), verdrahtet
+  in `index.ts:956-957` (`getRamUsedPercent`/`refuseRamPercent`), Entscheidung in
+  `task-executor.ts:147-149`, 21 Tests in `packages/daemon/src/place-or-refuse.test.ts`, Fortschrittslog
+  `changes/2026-06-30_t24-resource-attrs-place-or-refuse.md` (T2.4). **Offen ist die Alarmierung:**
+  `task-executor.ts:150-155` schreibt ein `log.warn`, eine Audit-Zeile
+  (`audit.append('TASK_DELEGATE', …)`) und emittiert `eventBus.emit('task:refused', …)` — dieses Event
+  hat aber **repo-weit keinen Consumer**: es ist nur in der Typ-Union deklariert (`events.ts:28`) und
+  fällt im Telegram-Sink `formatMeshEventForTelegram` in den `default`-Zweig mit `return null`
+  (`telegram-gateway.ts:96-99`), während `task:failed`, `system:cert_expiry` und `system:skill_health`
+  dort zugestellt werden. Ein Log-Eintrag und eine Audit-Zeile erreichen keinen Operator, und
+  `place-or-refuse.test.ts` prüft **keinen** der drei Wege — nur den Rückgabewert. **Restaufwand daher
+  klein und klar umrissen:** `task:refused` im Telegram-Sink zustellen (oder einen anderen Consumer
+  benennen) plus Assertions auf die drei Wege. *(Befund aus der externen CR-Runde 1 zu #366, MEDIUM;
+  im Code gegengeprüft und bestätigt — der Punkt war dort zuerst falsch auf `[x]` gezogen.)*
 - [ ] **[v5.1] TL-19 (≈4 h)** Verbindungs-Pooling + Sicherungs-Schalter je Owner-Peer; `resolveMcp` meidet
   kranke Anbieter.
 - [ ] **[v5.1] TL-20 (≈3 h)** Pro-Rechner-Transportpolitik (ADR-031) + Relay netzweit „aus" (Entsch. 5).
@@ -759,8 +775,18 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
   ADR-015 reaktivieren statt neu schreiben).
 - [ ] **[v5.1] TL-22b (≈4 h)** Slice 2: Wiederaufsetzen nach Abbruch, Gesamtprüfsumme, `.tlskill`-Paket als
   erster Nutzlast-Typ.
-- [ ] **[v5.1] TL-23 (≈1 h)** Tote GraphQL-Schnittstelle entfernen (`graphql-api.ts`, kein Aufrufer —
-  Befund 04.07.).
+- [x] **[v5.1] TL-23 (≈1 h)** Tote GraphQL-Schnittstelle entfernen (`graphql-api.ts`, kein Aufrufer —
+  Befund 04.07.). *Erledigt 2026-11-09, PR #366.* Verwaistheit **vor** dem Löschen selbst belegt, nicht
+  aus diesem Eintrag übernommen: einziger Export `registerGraphQL` ohne Importer (der einzige Treffer im
+  Quellbaum war der Feature-Matrix-Eintrag `version-compat.ts:114`), `index.ts` nennt weder `graphql` noch
+  `mercurius`, kein dynamischer Import, kein Re-Export-Barrel — und im **gebauten** Baum
+  `grep -c graphql dist/index.js` ⇒ **0** bei verwaist daliegender `dist/graphql-api.js`. Dazu die
+  Negativprobe: `graphql`, `mercurius` und `graphql-jit` unauflösbar gemacht ⇒ `tsc` 0 Fehler, Suite
+  **151 Dateien / 2123 Tests grün**. Mit entfernt: der Feature-Matrix-Eintrag, `docs/GRAPHQL-SCHEMA.md`,
+  drei Zeilen in `docs/DEVELOPER-GUIDE.md` sowie die Abhängigkeiten `graphql` **und** `mercurius`
+  (einziger Importer war diese Datei) mit neu erzeugtem `package-lock.json` — die CI fährt `npm ci`.
+  Historie in `CHANGES.md`/`COMPLIANCE-TABLE.md` und im Erledigt-Archiv unten **bewusst** stehen
+  gelassen; `FEATURE_MATRIX` als Ganzes bleibt, weil **ADR-046** (Proposed) darauf aufbaut.
 - [ ] **[v5.1] TL-24 (nach Beta)** ADR „Erneuerung ohne Neustart" (TLS-Hot-Reload). ↔ vgl. bestehend
   „Hot-Reload TrustStore #117" (verwandt, aber Trust-Store ≠ Cert-Renewal).
 

@@ -137,8 +137,6 @@ Basis-URL: `http://localhost:9440`
 | `/api/vault` | GET/POST | Credentials |
 | `/api/audit` | GET | Audit-Events |
 | `/api/auth/token` | POST | JWT-Token (nur localhost) |
-| `/graphql` | POST | GraphQL API |
-| `/graphiql` | GET | GraphQL IDE |
 | `/ws` | WS | WebSocket Events |
 | `/message` | POST | CBOR Mesh-Nachrichten |
 
@@ -253,7 +251,6 @@ thinklocal-mcp/
       sandbox.ts       # Skill-Sandboxing
       telegram-gateway.ts  # Telegram Bot
       mcp-stdio.ts     # MCP Server (Claude Code)
-      graphql-api.ts   # GraphQL API
       api-auth.ts      # JWT-Authentifizierung
     dashboard-ui/src/  # React Dashboard
     cli/src/           # CLI-Tools

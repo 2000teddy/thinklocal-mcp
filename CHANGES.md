@@ -8,6 +8,68 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### refactor(daemon): TL-23 — tote GraphQL-Schnittstelle entfernt (2026-11-09 09:30)
+Dead-Code-Entfernung. **Kein** Verhaltens-Delta am laufenden Dienst, kein Deploy, kein Secret, kein State,
+kein Dienst-Eingriff, kein Beschluss.
+**Verwaistheit selbst belegt, nicht aus `TODO.md` übernommen** (der Auftrag verlangte Abbruch bei einem
+echten Aufrufer): `graphql-api.ts` exportierte allein `registerGraphQL` und hatte **keinen** Importer —
+der einzige Treffer im Quellbaum war der Feature-Matrix-Eintrag `'graphql-api': '0.25.0'`
+(`version-compat.ts:114`), `index.ts` nennt weder `graphql` noch `mercurius`, es gab keinen dynamischen
+Import und kein Re-Export-Barrel. Der Beleg, den ein Grep über `src/` nicht liefert, kommt aus dem
+**gebauten** Baum: `grep -c graphql packages/daemon/dist/index.js` ⇒ **0**, und keine Datei unter `dist/`
+lädt `graphql-api.js` — `dist/graphql-api.js` lag als verwaistes Artefakt da. Weil ein Grep nach
+Bezeichnern einen Client, der nur den **Pfad** kennt, nicht findet (CR-Runde 1, LOW 1), zusätzlich auf
+Endpunkt-Ebene geprüft: `graphiql`/`/graphql` repo-weit ⇒ **0** Treffer außerhalb von Historie und diesem
+Slice, `packages/dashboard-ui/src` und `packages/cli/src` ⇒ 0, `config/` und `config.ts` ⇒ 0 (kein
+konfig-gesteuertes Laden). Dazu eine **Negativprobe**: `node_modules/graphql`, `node_modules/mercurius`
+und `node_modules/graphql-jit` unauflösbar gemacht, dann `tsc --noEmit` (0 Fehler) und voller Testlauf
+(**151 Dateien / 2123 Tests grün**).
+**Entfernt:** `packages/daemon/src/graphql-api.ts` (189 Zeilen), der eine Feature-Matrix-Eintrag, die
+Doku `docs/GRAPHQL-SCHEMA.md` (164 Zeilen), drei Zeilen in `docs/DEVELOPER-GUIDE.md` (Routen `/graphql`
+und `/graphiql` plus der Verzeichnisbaum-Eintrag) sowie die Abhängigkeiten `graphql ^16.13.2` **und**
+`mercurius ^16.9.0` — beide hatten `graphql-api.ts` als einzigen Importer und stehen in keiner anderen
+`package.json`. `package-lock.json` neu erzeugt, weil die CI `npm ci` fährt (`ci.yml:25`) und bei
+Lock-Drift abbricht: **1 Einfügung / 492 Löschungen**, die 40 verschwundenen Knoten sind ausnahmslos
+`graphql`/`mercurius` und deren Transitive, die einzige Einfügung ist `"dev": true` an `lodash.merge`
+(war Prod-Transitive über `mercurius`, jetzt nur noch Dev-Transitive über eslint) — keine Versionsänderung
+an einem fremden Paket. `npm ci --dry-run` ⇒ **Exit 0** — der tragende Beleg, denn er zeigt die
+Konsistenz Lock ↔ `package.json`; die Paketzähler derselben Ausgabe sind dagegen eine Differenz zum
+momentanen `node_modules/` und kein stabiler Beleg (CR-Runde 1, LOW 3).
+**Toter Code mit Auth-Fläche, deshalb kein Kosmetik-Punkt:** die Resolver holten ihre Daten über
+unauthentifizierte `fetch(…/api/status)`-Aufrufe und schalteten GraphiQL bei `NODE_ENV=development` frei —
+dieselbe Fläche lief historisch schon als HIGH auf (`COMPLIANCE-TABLE.md:299`, gefixt in #94).
+**Bewusst nicht angefasst:** die GraphQL-Nennungen in `CHANGES.md`, `COMPLIANCE-TABLE.md` und im
+`TODO.md`-Erledigt-Archiv sind **Historie und Prozess-Nachweis** (`CONTRIBUTING.md:15-21`) — rückwirkend
+zu löschen wäre Geschichtsfälschung. Kein **lebendes** Dokument verlinkt noch auf die gelöschte Doku
+(`docs/openapi.yaml` nennt GraphQL nicht). Ebenso bleibt `FEATURE_MATRIX` als Ganzes stehen, obwohl sie
+**überhaupt keinen** Aufrufer hat — auch keinen Test (CR-Runde 1, LOW 2; eine `version-compat.test.ts`
+existiert nicht). Weil sie nirgends gelesen wird, ist das Entfernen des einen Eintrags **garantiert** kein
+Wire- oder Protokoll-Bruch gegenüber älteren Peers; stehen bleibt die Matrix, weil **ADR-046** (Proposed)
+darauf aufbaut und sie zu entfernen ein Beschluss gegen einen offenen ADR wäre.
+**Bilanz gegen die vor dem Eingriff gemessene Baseline auf `main`** (CI-äquivalent in `packages/daemon`):
+`tsc --noEmit` 0 → **0**, `tsc --noEmit -p tsconfig.scripts.json` 0 → **0**, `lint:scripts` 0 → **0**,
+`vitest run` 151/2123 grün → **151/2123 grün**, `tsc`-Emit Exit 0. Wurzel-`vitest run` 2267 Tests grün mit
+**unverändert** derselben vorbestehenden Sammel-Fehlmeldung an `scripts/check-native-modules.test.cjs`
+(`node --test`-CJS-Datei, die der Wurzel-Glob fälschlich einsammelt; nicht CI-gated). `npm run lint`
+**464 → 462** Probleme — die zwei verschwundenen Befunde sind die aus `graphql-api.ts`. Testzahl bewusst
+unverändert: es gab keinen Test zu dieser Datei und es kam kein testbares Verhalten hinzu; der Beleg ist
+die Negativprobe, nicht ein neuer Test.
+**`TODO.md` nachgezogen — und nur, was belegt ist:** TL-23 auf `[x]`. **TL-18** (place-or-refuse >90 % RAM
+⇒ Ablehnung + Alarm) war in der ersten Fassung dieses Slices **falsch** auf `[x]` gezogen und steht nach
+der externen CR-Runde 1 (MEDIUM, im Code gegengeprüft und bestätigt) wieder auf `[ ]` — mit dem
+gemessenen Teilstand: die **Ablehnung** ist fertig und getestet (Default `refuse_ram_percent: 90`,
+`config.ts:255`; verdrahtet `index.ts:956-957`; Entscheidung `task-executor.ts:147-149`; 21 Tests in
+`place-or-refuse.test.ts`), der **Alarm** nicht. `task-executor.ts:150-155` schreibt ein `log.warn`, eine
+Audit-Zeile und emittiert `task:refused` — dieses Event hat repo-weit **keinen Consumer**: nur in der
+Typ-Union deklariert (`events.ts:28`), im Telegram-Sink verwirft es der `default`-Zweig
+(`telegram-gateway.ts:96-99`), während `task:failed`, `system:cert_expiry` und `system:skill_health` dort
+zugestellt werden; die Tests prüfen keinen der drei Wege. Ein emittiertes Event ohne Consumer ist kein
+Alarm. **TL-16** (systemd-credentials) und **TL-17**
+(Fremdtext-Entschärfung) bleiben offen — im Repo existiert dazu nichts. **TL-19** bleibt offen und ist nur
+halb: `circuit-breaker.ts` existiert, hat aber außer seinem Test **keinen Aufrufer**, `resolveMcp` kennt
+ihn nicht und Pooling gibt es nur für den lokalen Socket — ein Verdrahtungs-Rest, **kein** Löschkandidat,
+nur gemeldet und nicht freigegeben.
+
 ### docs(todo): B2-Trust-Anchor-Stand belegt + T2.1 datiert und im Mechanismus korrigiert (2026-11-03 16:05)
 Reiner Doku-Slice in `TODO.md`. **Kein** `packages/`-Diff, kein Code, kein Testlauf, kein Deploy, kein
 Secret, kein Schreibzugriff auf `~/.thinklocal/`, kein Peer-Write.
