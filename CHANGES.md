@@ -6,7 +6,58 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-11-09 14:20
+## [Unreleased] — 2026-11-09 14:45
+
+### docs(reconcile): COMPLIANCE-Status-Zellen #369, #370, #371 gezogen (2026-11-09 14:45)
+Doku-only, **kein** `packages/`-Diff, kein Code, kein Test, kein Deploy. Drei Zellen standen auf
+`(offen, base=main)`, obwohl alle drei PRs gemergt sind — die Merge-Zustände **einzeln per
+`gh pr view`** erhoben statt aus der Tabelle übernommen: #369 `5707f33` (12:16:34Z), #370 `d5c3d3a`
+(13:09:04Z), #371 `8fc7c69` (13:35:49Z). Geändert wurde **ausschließlich die zweite Spalte**, per
+erstem Vorkommen je Zeile, damit eine identische Zeichenkette im Nachweistext unberührt bleibt; der
+Fließtext beschreibt den Stand des jeweiligen PRs und wird nicht rückwirkend umgeschrieben.
+**Drei Assertions:** getroffen wurden genau `369/370/371` (Assertion gegen die Zielliste), jede
+geänderte Zeile trägt **11 unescaped Pipes**, und `git diff --numstat` zeigt **vor** dem Anhängen
+von Zeile #372 und Footer **+3/−3** mit einem Zeilen-Diff, der ausschließlich diese drei Zeilen
+enthält — **keine** Zeile vor #369 angefasst (Enddiff der Datei: `+5/−4`, inklusive Zeile #372 und
+Footer).
+**Zwei Überraschungen, gemeldet statt geraten und beide unangetastet:** (a) eine Auswertung der
+Statuszellen **aller Zeilen mit PR-Nummer in Spalte 1** (98 Stück: #164 plus lückenlos #271…#371)
+ergibt drei Werte — `(base=main, gemergt)` 94×, `(offen, base=main)` 3× (die gezogenen) und
+**einmal** den Text `mDNS-Interface-Pin-Disable (.55-Bug)`: Zeile **#164** vom 2026-06-08 trägt in
+der Statusspalte einen **Titel** statt eines Status. Die Zeile ist strukturell intakt (11 Pipes),
+und #164 ist laut `gh` MERGED — aber sie liegt vor #369 (vom Auftrag ausgeschlossen) und stammt aus
+einer Zeit uneinheitlicher Spaltenbelegung; sie zu „korrigieren" hieße zu entscheiden, wohin der
+Titel gehört. *Einschränkung, die ein erster Entwurf unterschlug (CR-LOW-1): „alle" gilt nur für
+diese 98 Zeilen — **vor #271** trug Spalte 1 Versions-/Kurz-Slugs, und dort stehen noch **31**
+Zeilen mit `offen`; sie sind seit #357–#361 als Altbestand abgegrenzt und bleiben unberührt.*
+(b) Mehrere ältere `CHANGES.md`-Einträge zitieren `COMPLIANCE-TABLE.md:<zeile>`, und diese Zitate
+stimmen nicht mehr — `:2063` meint #356 (zeigt auf **leer**), `:2064` meint #357 (zeigt auf **#344**),
+`:2065` meint #358 (**leer**), `:2066` meint #359 (Fließtext), `:299` zeigt auf Fließtext, `:1791`
+auf eine Trennzeile. *Auch hier zwei Korrekturen aus der CR-Runde (MEDIUM-1): ich hatte die Zitate
+pauschal „als #358" zugeordnet und damit den **zitierenden Eintrag** mit der **zitierten Zeile**
+verwechselt, und `:2066` ganz übersehen.* **Die Ursache ist benennbar und trifft mich selbst:** alle
+sechs sind um **exakt +27** Zeilen gewandert, weil der erste Hunk von **#369** (`5707f33`,
+`@@ -27,6 +27,33 @@`) den Konventions-Block im Tabellenkopf einfügt. Der Drift ist also **nicht**
+„vorbestehend", wie mein erster Text behauptete — **#369 hat ihn verursacht**, ausgerechnet der
+Slice, der diese Fehlerklasse dokumentiert hat. Von *diesem* Schnitt stammt er nicht (drei Zeilen
+in-place, #372 **unterhalb**). Unangetastet aus demselben Grund wie in #366 und #369: Historie
+rückwirkend umzuschreiben wäre Geschichtsfälschung.
+**Kein `TODO.md`-Diff:** reine Prozess-Hygiene, kein TL-Punkt ändert dadurch seinen Zustand; und
+`TODO.md` zitiert **keine** `COMPLIANCE-TABLE.md`-Zeilennummern, die Ziehung kippt dort also nichts.
+**CR (agy/Gemini), zwei Runden:** Runde 1 **CHANGES REQUESTED** (0 HIGH / 1 MEDIUM / 1 LOW / 1 NIT),
+Runde 2 **APPROVE** (0/0/0/0); alle drei Befunde eingearbeitet. Keiner traf den Diff — alle drei
+meine Begründung, darunter die falsche Zitat-Zuordnung und die Behauptung, der Drift sei
+„vorbestehend". Runde 2 hat die neue Zuordnungstabelle Zeile für Zeile nachgerechnet, die
+`+27`-Ursache am Hunk von `5707f33` bestätigt und die Grundgesamtheiten 98 und 31 nachgezählt. Ein
+Zusatzbefund ohne Befundstatus: dieselben Zitate stehen **auch** in den Nachweistexten der
+Compliance-Tabelle selbst (#357, #358, #360, #361) und in deren `changes/`-Dateien — der Drift ist
+breiter als die sechs `CHANGES.md`-Stellen; auch das ist Historie und bleibt unangetastet.
+**Der Rest, der bleibt:** Zeile #372 dieses PRs steht korrekt auf `(offen, base=main)` und wird nach
+ihrem Merge selbst stale — jede Reconcile-Runde lässt genau eine Zeile offen. Neu ist, dass der Rest
+zwischen zwei Durchgängen auf **drei** angewachsen war, weil #370 und #371 die Tabelle zwar
+beschrieben, die Vorgängerzellen aber laut Auftrag nicht ziehen durften; der in #369 notierte
+**Vorschlag** (ein Folge-PR zieht gemergte Vorgänger mit) hätte das verhindert und ist weiterhin
+**nicht** entschieden.
 
 ### test(tls): TL-00c — Cert-Dry-Run, die „Schlüssel-Sync"-Hälfte nachgezogen (2026-11-09 14:20)
 **Nur Test-Code:** `git diff --stat -- packages/` ⇒ **eine** Datei, `packages/daemon/src/tls.test.ts`,
