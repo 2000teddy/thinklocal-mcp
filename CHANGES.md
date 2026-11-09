@@ -6,7 +6,54 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-11-09 13:05
+## [Unreleased] — 2026-11-09 13:40
+
+### docs(todo): TL-00a verifiziert erledigt — Re-Pair-Migrationsstufe liegt seit Juli in `main` (2026-11-09 13:40)
+Doku-only, **read-only** verifiziert: **kein** `packages/`-Diff, kein neuer Endpunkt, kein
+Protokollwechsel, keine Config-Änderung, kein Laufzeit-Effekt (`cert.migrate_legacy_identity` ist
+per Default aus und wurde nicht angefasst), kein Deploy, kein Release.
+**Die Checkbox hing der Realität nach** — dieselbe Fehlerklasse wie bei TL-23 und TL-18, je eine in
+jede Richtung: der Code liegt seit `1be4c93` (#245, 2026-07-06) und `0faf6e9` (#246, 2026-07-07) in
+`main`, `docs/architecture/ADR-034-repair-migrationsstufe.md` steht auf **Accepted**, und der
+TODO-Eintrag nannte beides selbst als „umgesetzt", stand aber auf `[ ]`.
+**Alle drei Zusagen des Punkt-Textes einzeln belegt:** (a) die **Stufe** —
+`migrateLegacyCertToCanonical` in `tls.ts`, betretbar nur über den `migrateLegacyIdentity`-Zweig von
+`loadOrCreateTlsBundle`, der zusätzlich eigene kanonische URI, `fullyValid`, `signedByCurrentCa`,
+`certKeyMatches`, Legacy-`host/`-SAN und „noch nicht kanonisch" verlangt; die vom Auftrag erfragte
+Kette `config.ts` → `index.ts` → Stufe ist **geschlossen** und per Default **inert**. (b) das
+**Lock** — advisory `dataDir/tls/.migrate.lock` per `O_EXCL`, Stale-Steal 60 s, Timeout 10 s, beide
+injizierbar; laut ADR hängt die Korrektheit **nicht** am Lock, weil die Migration idempotent ist und
+unter dem Lock erneut auf „schon kanonisch" prüft — das Lock serialisiert, es garantiert nicht.
+(c) **keine zwei parallelen Identitäten** — nicht „wird vermieden", sondern strukturell
+ausgeschlossen: Key-Wiederverwendung macht den Platten-Swap zu einem **Einzeldatei**-Rename
+(`*.tmp` + `fsync` + `rename` + Dir-`fsync`, `node.key.pem` unberührt), `createNodeCert` setzt
+**genau eine** SPIFFE-SAN, und das Legacy-Cert landet unter `node.crt.legacy-premigrate.pem`, also
+**nicht live**; jeder Fehlerpfad ist fail-closed, weil der Rename der letzte Schritt ist.
+**TS:** `tls.test.ts` + `pairing-canonicalize.test.ts` **58/58 grün** (49 + 9), volle Suite
+**152 Dateien / 2188 grün** — unverändert, weil nichts geändert wurde. **Neun** Tests belegen
+TL-00a direkt: **sieben** unter `describe('ADR-034 — Re-Pair-Migrationsstufe …')`, darunter die
+**Schalter-AUS-Regression („bitidentisch")** und beide Lock-Wege (belegt → übersprungen, verwaist →
+gestohlen), plus **zwei** Retention-Tests zur Identitäts-Breite (Migrations-Cert behalten;
+überbreites Cert mit eigener **und** fremder kanonischer SAN verworfen).
+**Drei Dinge sind NICHT erledigt und stehen als solche im Abschlussvermerk:** kein **Enddatum** für
+die Legacy-Akzeptanz (ADR-034 schließt es in den eigenen „Grenzen" als §3.4-Betrieb aus; ein Grep
+über `packages/*/src` und `config/` findet keinen Sunset/Timer, und dieser Betriebspunkt hat in
+`TODO.md` **keinen** Eintrag — gemeldet, aber keine TL-Nummer erfunden); **kein Live-Einsatz** (die
+Stufe ist nie gelaufen, Einsatz an `.52`/`.55`/`.94` ist **TL-00b**, ⛔ Fenster); und
+**token-onboardete Legacy-Nodes können sich nicht selbst migrieren** (eigener Early-Return, müssen
+re-onboarden — in ADR-034 beabsichtigt).
+**Präzisierung zum zweiten Artefakt:** `canonicalizePairedPeer` (`pairing-canonicalize.ts`, 9 Tests)
+hat genau einen Aufrufer, `packages/daemon/scripts/canonicalize-pairings.ts` — kein
+Daemon-Laufzeitpfad, aber als npm-Script `canonicalize-pairings` registriert, also ein
+**Operator-Werkzeug mit Absicht** und **nicht** der TL-19-Befundtyp. Es verlangt zwei unabhängige
+Bindungen (CA-Anker plus Identitäts-Bindung), weil der CA-Anker allein bei geteilter Mesh-CA jeden
+Node verifiziert und damit Identitäts-Substitution erlauben würde.
+**Warum `[x]` und nicht „Verifikationspunkt" wie TL-01…TL-07:** jene tragen diese Form zu Recht,
+weil ihr *Fertig-wenn* ein **Live**-Kriterium ist. TL-00a schuldete die **Stufe**, nicht ihren
+Einsatz — und der Einsatz hat mit TL-00b schon einen eigenen Punkt; den Eintrag offen zu lassen
+würde ihn doppeln.
+**Nicht angefasst:** Zelle #369 (Selbst-Reconcile-Lücke, laut Auftrag Folge-Slice) und die
+`[Unreleased]`-Datumskonvention (Kanon-Beschluss, liegt bei Christian).
 
 ### docs: Reconcile — COMPLIANCE-Status-Zellen, verschobene Zeilenangaben, `[Unreleased]`-Datum (2026-11-09 13:05)
 Doku-only, **kein** `packages/`-Diff, kein Code, kein Test, kein Deploy. Drei Nachlässigkeiten in den

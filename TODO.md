@@ -146,9 +146,50 @@ Unverändert seit dem Owner-Sign-off vom 2026-08-26 (G1/G2, ADR-045 `Accepted`).
 damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-Pair** .52/.55
 (Legacy-`host/…` → kanonisch `node/…`; cross-host heute `403 peer not paired`).
 
-- [ ] **[v5.1] TL-00a (≈3 h)** Re-Pair-Migrationsstufe: EINE Stufe mit Übergangsfenster (Legacy lesen,
+- [x] **[v5.1] TL-00a (≈3 h)** Re-Pair-Migrationsstufe: EINE Stufe mit Übergangsfenster (Legacy lesen,
   kanonisch schreiben), Lock fürs Cert-Re-Key — keine zwei parallelen Identitäten. ↔ vgl. **umgesetzt**:
   ADR-034 (#245, v0.34.69) + CA-verankerter Re-Key (#246, v0.34.70, `pairing-canonicalize.ts`).
+  **Verifiziert erledigt 2026-11-09 (PR #370, read-only — dort nichts daran gebaut).** Die Checkbox
+  hing der Realität nach: der Code liegt seit `1be4c93` (#245, 2026-07-06) und `0faf6e9` (#246,
+  2026-07-07) in `main`, `docs/architecture/ADR-034-repair-migrationsstufe.md` steht auf
+  **Accepted**. Fortschrittslog `changes/2026-11-09_tl-00a-verification.md`.
+  **Alle drei Zusagen des Punkt-Textes einzeln am Code belegt:** (a) die **Stufe** —
+  `migrateLegacyCertToCanonical` in `tls.ts`, betreten nur im `migrateLegacyIdentity`-Zweig von
+  `loadOrCreateTlsBundle`, der zusätzlich eigene kanonische URI, `fullyValid`, `signedByCurrentCa`,
+  `certKeyMatches`, Legacy-`host/`-SAN und „noch nicht kanonisch" verlangt; die Kette
+  `cert.migrate_legacy_identity` (`config.ts`, Default **false**, Env
+  `TLMCP_CERT_MIGRATE_LEGACY_IDENTITY`) → `loadOrCreateTlsBundle`-Aufruf in `index.ts` → Stufe ist
+  **geschlossen**. (b) das **Lock** — advisory `dataDir/tls/.migrate.lock` per `O_EXCL`, Stale-Steal
+  (60 s) und Timeout (10 s), beide injizierbar; die Korrektheit hängt laut ADR **nicht** am Lock, da
+  die Migration idempotent ist und unter dem Lock erneut auf „schon kanonisch" prüft. (c) **keine
+  zwei parallelen Identitäten** — strukturell ausgeschlossen: Key-Wiederverwendung macht den Swap zu
+  einem Einzeldatei-Rename (`*.tmp` + `fsync` + `rename` + Dir-`fsync`, `node.key.pem` unberührt),
+  `createNodeCert` setzt **genau eine** SPIFFE-SAN, und das Legacy-Cert wird nach
+  `node.crt.legacy-premigrate.pem` **archiviert** (nicht live); jeder Fehler ist fail-closed, weil
+  der Rename der letzte Schritt ist. **Belegt mit 9 Tests in `tls.test.ts`:** **sieben** unter
+  `describe('ADR-034 — Re-Pair-Migrationsstufe …')` (Migration mit Key-Reuse, Idempotenz,
+  **Schalter-AUS-Regression bitidentisch**, fail-closed bei Backup-Fehler, Lock belegt →
+  übersprungen, Lock verwaist → gestohlen, schon kanonisch → keine Migration) und **zwei** unter
+  `describe('ADR-024 — Canonical-Cert-Retention')` zur Identitäts-Breite (Migrations-Cert behalten;
+  überbreites Cert mit eigener **und** fremder kanonischer SAN verworfen); `tls.test.ts` + `pairing-canonicalize.test.ts` **58/58
+  grün**, volle Suite **152 Dateien / 2188 grün** (unverändert, read-only).
+  **Drei Dinge sind NICHT erledigt und werden hier benannt statt mitverbucht:** (1) **kein Enddatum
+  für die Legacy-Akzeptanz** — ADR-034 schließt das in den eigenen „Grenzen" als **§3.4-Betrieb**
+  aus, und ein Grep über `packages/*/src` und `config/` findet **keinen** Sunset/Timer; dieser
+  **Betriebspunkt hat in dieser Datei heute keinen Eintrag** und ob er einen bekommt, ist ein
+  Owner-Entscheid (nur gemeldet, keine TL-Nummer erfunden). (2) **Kein Live-Einsatz** — die Stufe ist
+  nie gelaufen, ist per Default aus, und ihr Einsatz an `.52`/`.55`/`.94` ist **TL-00b** (⛔ Fenster,
+  Christian-gated). TL-00a schuldete die Stufe, nicht ihren Einsatz. (3) **Token-onboardete
+  Legacy-Nodes können sich nicht selbst migrieren** (eigener Early-Return, müssen re-onboarden) — in
+  ADR-034 als beabsichtigt dokumentiert und geloggt.
+  *Zum zweiten Artefakt, weil es nach einem Verdrahtungs-Rest aussieht: `canonicalizePairedPeer`
+  (`pairing-canonicalize.ts`, 9 Tests) hat genau einen Aufrufer, das Skript
+  `packages/daemon/scripts/canonicalize-pairings.ts` — kein Daemon-Laufzeitpfad, aber als npm-Script
+  `canonicalize-pairings` registriert, also ein **Operator-Werkzeug mit Absicht** und NICHT der
+  TL-19-Befundtyp (dort hat `circuit-breaker.ts` außer seinem Test keinen Aufrufer). Es verlangt zwei
+  unabhängige Bindungen (CA-Anker über die gespeicherte `caCertPem` plus Identitäts-Bindung an eine
+  asserted kanonische URI), weil der CA-Anker allein bei geteilter Mesh-CA jeden Node verifiziert und
+  damit Identitäts-Substitution erlauben würde.*
 - [ ] **[v5.1] TL-00b (je ≈1 h, ⛔ Fenster)** Re-Enroll `.52`, dann `.55` (nach Christians Pfad-A-Schritt),
   dann `.94`. ↔ vgl. bestehend „ADR-024-Rollout-Gate" + „Produktiv-Flotten-Flip (.56/.52/.222)" + „.55
   Pfad A/C2". **.52-Fenster aktiv (heute Nacht, zielt auf TL-07-Beweis).**
