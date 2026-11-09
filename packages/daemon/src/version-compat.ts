@@ -111,7 +111,6 @@ export const FEATURE_MATRIX: Record<string, string> = {
   'mTLS': '0.1.0',
   'telegram-gateway': '0.20.0',
   'static-peers': '0.22.0',
-  'graphql-api': '0.25.0',
   'jwt-auth': '0.25.0',
   'policy-engine': '0.25.0',
   'skill-sandbox': '0.27.0',
