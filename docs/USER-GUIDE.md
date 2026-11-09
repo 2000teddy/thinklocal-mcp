@@ -75,6 +75,9 @@ agent_type = "claude-code"
 [mesh]
 heartbeat_interval_ms = 10000
 heartbeat_timeout_missed = 3
+# Uhr-Abweichungs-Erkennung (TL-15). 0 = aus (Default) — siehe eigenen Abschnitt.
+clock_skew_threshold_ms = 0
+clock_skew_debounce = 3
 
 [cert]
 # Restlaufzeit-Schwelle (Tage): beim Daemon-Start wird ein Node-Cert mit
@@ -103,6 +106,8 @@ mdns_service_type = "_thinklocal._tcp"
 | `TLMCP_ALLOWED_MESH_CIDRS` | Mesh-CIDRs (ADR-019, komma-separiert) | - |
 | `TLMCP_EXCLUDE_INTERFACE_PATTERNS` | Interface-Excludes (ADR-019) | Defaults |
 | `TLMCP_CERT_RENEW_BEFORE_DAYS` | Cert-Reissue-Schwelle beim Start (Tage), `[1, 89]` | 30 |
+| `TLMCP_CLOCK_SKEW_THRESHOLD_MS` | Uhr-Abweichungs-Alarm ab dieser Schwelle (ms), `0` = aus | 0 |
+| `TLMCP_CLOCK_SKEW_DEBOUNCE` | Bestaetigungen, bevor der Zustand kippt (`>= 1`) | 3 |
 | `TELEGRAM_BOT_TOKEN` | Telegram Bot Token | - |
 | `TELEGRAM_ALLOWED_CHATS` | Erlaubte Chat-IDs | - |
 
@@ -123,6 +128,47 @@ ein frisch ausgestelltes Cert sofort wieder unter der Schwelle läge. Zulässig 
 `[1, 89]`. Hintergrund: `docs/architecture/ADR-024-*` (Canonical-Cert-Retention) und `CHANGES.md`
 (v0.34.68). Token-onboardete Nodes (ohne eigenen CA-Key) sind ausgenommen — sie erneuern sich per
 Re-Onboarding, nicht über diese Schwelle.
+
+### Uhr-Abweichungs-Erkennung (`[mesh]`, TL-15)
+
+Mehrere Pfade entscheiden anhand **absoluter** Zeit mit Werten, die von einem anderen Rechner
+kommen: das TLS-Gültigkeitsfenster, der Zukunfts-Timestamp-Filter des Peer-Caches, die TTL eines
+signierten Auftrags und der Cert-Ablauf-Monitor. Läuft die Uhr eines Partners weit weg, verwerfen
+diese Pfade fail-closed — ohne die Ursache zu nennen. Seit PR #368 wird sie gemessen und gemeldet.
+
+| Key (TOML `[mesh]`) | Env | Default | Wertebereich | Bedeutung |
+|---|---|---|---|---|
+| `clock_skew_threshold_ms` | `TLMCP_CLOCK_SKEW_THRESHOLD_MS` | `0` | Ganzzahl `>= 0` | Alarm, sobald die gemessene Abweichung diese Schwelle **auch nach Abzug der halben Antwortlaufzeit** überschreitet. `0` = **aus**. |
+| `clock_skew_debounce` | `TLMCP_CLOCK_SKEW_DEBOUNCE` | `3` | Ganzzahl `>= 1` | Aufeinanderfolgende gleichgerichtete Messungen, bevor der Zustand eines Peers kippt (Flap-Dämpfung). |
+
+Beide Werte werden beim Start streng validiert (Ganzzahl im zulässigen Bereich) — auch auf dem
+TOML-Pfad, weil TOML `nan`, `inf`, Strings und Fließkommazahlen zulässt und ein solcher Wert sonst
+stillschweigend die Dämpfung aushebeln oder die Messung stummschalten würde.
+
+**Die Messung kostet nichts extra.** Der Heartbeat holt ohnehin alle `heartbeat_interval_ms` bei
+jedem erreichbaren Peer `GET /health`, und diese Antwort trägt bereits dessen Uhrzeit. Gemessen wird
+wie bei NTP gegen die **Mitte** des lokalen Sende-/Empfangsfensters, nicht gegen den
+Empfangszeitpunkt — sonst ginge die halbe Laufzeit als Abweichung durch. Die halbe Laufzeit gilt
+dabei als Mess-Unsicherheit, und entschieden wird nur, was sie zulässt: **Alarm** erst, wenn die
+Abweichung die Schwelle auch im günstigsten Fall überschreitet, **Entwarnung** erst, wenn sie sie
+auch im ungünstigsten einhält, dazwischen *keine Aussage*. So kann Netzlatenz allein weder einen
+Alarm erzeugen noch eine Entwarnung vortäuschen.
+
+**Warum der Default `0` (aus) ist:** ein Default-an würde am laufenden Dienst sofort Alarme
+erzeugen — schlafende macOS-Peers zeigen nach dem Aufwachen regelmäßig Uhrensprünge. Solange die
+Schwelle `0` ist, wird der Health-Body nicht einmal gelesen; der Heartbeat verhält sich exakt wie
+vorher. Das Einschalten ist eine Betriebsentscheidung.
+
+**Ein sinnvoller Startwert ist `5000`** (5 s): weit jenseits dessen, was NTP-synchrone Rechner
+zeigen, und die Größenordnung, in der Auftrags-TTLs und Zertifikatsfenster beginnen zu kippen.
+
+**Was alarmiert wird:** nur der **Zustandswechsel** (`ok→skewed` und zurück), nie die einzelne
+Messung. Ein dauerhaft schiefer Peer erzeugt damit **eine** Nachricht, nicht eine pro Heartbeat.
+Der Alarm geht als `log.warn`, als signierte Audit-Zeile (`CLOCK_SKEW_WARNING`) und als Mesh-Event
+`system:clock_skew` heraus — letzteres landet im Telegram-Gateway und im Dashboard.
+
+**Was dieser Mechanismus nicht tut:** er **stellt keine Uhr**. Synchronisation ist Aufgabe von NTP
+auf dem jeweiligen Rechner. Details: `docs/architecture/TL-15-clock-skew-detection.md`.
 
 ### Credentials (.env)
 

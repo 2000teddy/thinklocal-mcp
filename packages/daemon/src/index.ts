@@ -16,6 +16,7 @@ import { startStaticPeerReconciler, resolveStaticReconcileSteadyMs } from './sta
 import { learnInboundPeer } from './inbound-peer-learner.js';
 import { AgentCardServer } from './agent-card.js';
 import { MeshManager, type MeshPeer } from './mesh.js';
+import { ClockSkewMonitor, type ClockSkewTransition } from './clock-skew.js';
 import { CapabilityRegistry } from './registry.js';
 import { GossipSync } from './gossip.js';
 import { RateLimiter } from './ratelimit.js';
@@ -541,6 +542,25 @@ async function main(): Promise<void> {
   }
 
   // 6. Mesh-Manager starten
+  // TL-15: Skew-Monitor NUR bauen, wenn eine Schwelle gesetzt ist (Default 0 = aus).
+  // Ohne Monitor liest der Heartbeat den Health-Body nicht — Verhalten unveraendert.
+  // Design: docs/architecture/TL-15-clock-skew-detection.md
+  const clockSkewMonitor =
+    config.mesh.clock_skew_threshold_ms > 0
+      ? new ClockSkewMonitor({
+          thresholdMs: config.mesh.clock_skew_threshold_ms,
+          debounce: config.mesh.clock_skew_debounce,
+        })
+      : undefined;
+  if (clockSkewMonitor) {
+    log.info(
+      {
+        thresholdMs: config.mesh.clock_skew_threshold_ms,
+        debounce: config.mesh.clock_skew_debounce,
+      },
+      '[clock-skew] Uhr-Abweichungs-Erkennung aktiv (TL-15)',
+    );
+  }
   const mesh = new MeshManager(
     config.mesh.heartbeat_interval_ms,
     config.mesh.heartbeat_timeout_missed,
@@ -558,9 +578,46 @@ async function main(): Promise<void> {
         rateLimiter.removePeer(peer.agentId);
         eventBus.emit('peer:leave', { agentId: peer.agentId });
       },
+      // TL-15: die drei Alarmwege eines Zustandswechsels — Log, signiertes Audit,
+      // EventBus (von dort in den Telegram-Sink und ins Dashboard). Alarmiert wird
+      // der WECHSEL, nicht die Messung (Flap-Daempfung sitzt im Monitor).
+      onClockSkew: (t: ClockSkewTransition): void => {
+        const ctx = {
+          agentId: t.agentId,
+          from: t.from,
+          to: t.to,
+          skewMs: Math.round(t.skewMs),
+          rttMs: Math.round(t.rttMs),
+          thresholdMs: t.thresholdMs,
+          confirmations: t.confirmations,
+        };
+        if (t.to === 'skewed') {
+          log.warn(ctx, '[clock-skew] Uhr-Abweichung eines Partners ueber der Schwelle');
+        } else {
+          log.info(ctx, '[clock-skew] Uhr-Abweichung eines Partners wieder im Rahmen');
+        }
+        // Auch die Erholung wird auditiert (anders als beim Cert-Monitor): ein Flip ist
+        // durch die Hysterese ohnehin selten, und erst mit beiden Richtungen laesst sich
+        // spaeter beantworten, ob eine fail-closed verworfene Zeit-Entscheidung in ein
+        // Skew-Fenster fiel.
+        //
+        // Audit separat gekapselt (CR-Runde 1, NIT-2): wirft `append` — etwa bei
+        // geschlossener DB waehrend eines spaeten In-Flight-Heartbeats im Shutdown —,
+        // darf der Operator-Alarm darunter nicht ausfallen.
+        try {
+          audit.append('CLOCK_SKEW_WARNING', t.agentId, JSON.stringify(ctx));
+        } catch (err) {
+          log.warn({ agentId: t.agentId, err: String(err) }, '[clock-skew] Audit-Zeile fehlgeschlagen (ignoriert)');
+        }
+        // Nur `ctx` — ein zusaetzliches `skewMsExact` waere redundant (die Nachkommastelle
+        // ist hoechstens 0.5 ms aus der RTT-Halbierung, weit unter der 0.1-s-Anzeige) und
+        // haette im Sink eine NaN-Falle geoeffnet (CR-Runde 1, LOW-3).
+        eventBus.emit('system:clock_skew', ctx);
+      },
     },
     log,
     tlsDispatcher,
+    clockSkewMonitor,
   );
 
   // 6b. ADR-035 A1 (TL-26): Peer-Auflösungs-Cache (Locator-only) — Boot-Load + periodischer/

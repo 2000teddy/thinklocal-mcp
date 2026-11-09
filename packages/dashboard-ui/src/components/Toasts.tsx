@@ -31,6 +31,11 @@ function eventToToast(event: MeshEvent): Omit<Toast, 'id' | 'timestamp'> | null 
       return { message: `Daemon gestartet`, type: 'info' };
     case 'system:shutdown':
       return { message: `Daemon gestoppt`, type: 'warning' };
+    // TL-15: Uhr-Abweichung eines Partners — parallel zum Telegram-Sink.
+    case 'system:clock_skew':
+      return data['to'] === 'ok'
+        ? { message: `Uhr-Abweichung behoben: ${data['agentId'] ?? ''}`, type: 'success' }
+        : { message: `Uhr-Abweichung: ${data['agentId'] ?? ''}`, type: 'warning' };
     default:
       return null; // Heartbeats, capability:synced etc. erzeugen keine Toasts
   }

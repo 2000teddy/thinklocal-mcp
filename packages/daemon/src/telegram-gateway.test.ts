@@ -9,6 +9,9 @@
  *
  * TL-18 (2026-11-09): dasselbe gilt fuer `task:refused` — die place-or-refuse-
  * Ablehnung war bis dahin im `default`-Zweig und erreichte keinen Operator.
+ *
+ * TL-15 (2026-11-09): `system:clock_skew` ist der dritte Alert-Event dieser Art —
+ * flap-gedaempft im Monitor, hier kommt nur ein Zustandswechsel an.
  */
 import { describe, it, expect } from 'vitest';
 import { formatMeshEventForTelegram } from './telegram-gateway.js';
@@ -79,6 +82,75 @@ describe('formatMeshEventForTelegram', () => {
       expect(out).toContain('🔴 KRITISCH');
       expect(out).toContain('5 Tag');
       expect(out).toContain('Reissue');
+    });
+  });
+
+  // --- TL-15: Uhr-Abweichung eines Partners ---
+  describe('system:clock_skew (TL-15)', () => {
+    /** Payload-Form wie `index.ts` sie aus einer ClockSkewTransition baut. */
+    function skew(over: Record<string, unknown> = {}): MeshEvent {
+      return ev('system:clock_skew', {
+        agentId: 'spiffe://thinklocal/node/12D3KooWX',
+        from: 'ok',
+        to: 'skewed',
+        skewMs: 12_345,
+        rttMs: 18,
+        thresholdMs: 5000,
+        confirmations: 3,
+        ...over,
+      });
+    }
+
+    it('wird zugestellt und nennt Peer, Betrag, Richtung und Schwelle', () => {
+      const out = formatMeshEventForTelegram(skew(), TS);
+      expect(out).toContain('⏱️');
+      expect(out).toContain(TS);
+      expect(out).toContain('Uhr-Abweichung');
+      expect(out).toContain('spiffe://thinklocal/node/12D3KooWX');
+      expect(out).toContain('12.3 s vor');
+      expect(out).toContain('Schwelle 5.0 s');
+    });
+
+    it('nachlaufende Uhr → Richtung "nach", Betrag ohne Vorzeichen', () => {
+      const out = formatMeshEventForTelegram(skew({ skewMs: -7100 }), TS);
+      expect(out).toContain('7.1 s nach');
+      expect(out).not.toContain('-7.1');
+    });
+
+    it('Erholung (to=ok) → eigene Formulierung mit ✅', () => {
+      const out = formatMeshEventForTelegram(
+        skew({ from: 'skewed', to: 'ok', skewMs: 240 }),
+        TS,
+      );
+      expect(out).toContain('✅');
+      expect(out).toContain('behoben');
+      expect(out).toContain('laeuft jetzt 0.2 s vor');
+      expect(out).not.toContain('⏱️');
+    });
+
+    it('nicht endlicher Messwert → ehrliche Aussage statt NaN', () => {
+      // Deckt den Fall ab, den die erste Fassung ueber `typeof === 'number'` durchliess
+      // (CR-Runde 1, LOW-3): `typeof NaN === 'number'` ist true.
+      expect(formatMeshEventForTelegram(skew({ skewMs: NaN }), TS)).toContain('Abweichung unbekannt');
+      expect(formatMeshEventForTelegram(skew({ skewMs: Infinity }), TS)).toContain('Abweichung unbekannt');
+      expect(formatMeshEventForTelegram(skew({ skewMs: '12345' }), TS)).toContain('Abweichung unbekannt');
+    });
+
+    it('fehlender Messwert → ehrliche Aussage, nie undefined/NaN', () => {
+      const out = formatMeshEventForTelegram(
+        skew({ skewMs: undefined }),
+        TS,
+      );
+      expect(out).toContain('Abweichung unbekannt');
+      expect(out).toContain('Schwelle 5.0 s');
+      expect(out).not.toMatch(/undefined|NaN|null/);
+    });
+
+    it('fehlende Schwelle → kein leeres Klammerpaar', () => {
+      const out = formatMeshEventForTelegram(skew({ thresholdMs: undefined }), TS);
+      expect(out).toContain('12.3 s vor');
+      expect(out).not.toContain('()');
+      expect(out).not.toContain('Schwelle');
     });
   });
 

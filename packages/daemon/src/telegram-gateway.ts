@@ -85,6 +85,28 @@ function describeRefusalLimit(d: Record<string, unknown>): string {
 }
 
 /**
+ * TL-15: macht eine gemessene Uhr-Abweichung lesbar — Betrag in Sekunden, Richtung
+ * (`vor`/`nach`) und die Schwelle, gegen die gemessen wurde. Ohne die Schwelle ist
+ * der Betrag fuer einen Operator nicht einzuordnen.
+ *
+ * Unlesbare Werte (fehlend, `NaN`, `Infinity`, falscher Typ) fallen auf eine ehrliche
+ * Aussage zurueck, nie auf `undefined`/`NaN` im Operator-Text.
+ */
+function describeClockSkew(d: Record<string, unknown>): string {
+  const seconds = (v: unknown): string | null =>
+    typeof v === 'number' && Number.isFinite(v) ? `${(v / 1000).toFixed(1)} s` : null;
+  const raw = d['skewMs'];
+  const threshold = seconds(d['thresholdMs']);
+  const suffix = threshold === null ? '' : ` (Schwelle ${threshold})`;
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+    return `Abweichung unbekannt${suffix}`;
+  }
+  const magnitude = seconds(Math.abs(raw));
+  const direction = raw >= 0 ? 'vor' : 'nach';
+  return `${magnitude} ${direction}${suffix}`;
+}
+
+/**
  * Bildet ein Mesh-Event auf eine Telegram-Notification-Zeile ab.
  * Gibt `null` zurueck, wenn das Event NICHT weitergeleitet wird
  * (Spam-Vermeidung: Heartbeats, capability:synced, etc.).
@@ -125,6 +147,15 @@ export function formatMeshEventForTelegram(event: MeshEvent, ts: string): string
       const head = critical ? '🔴 KRITISCH' : '🟠 WARNUNG';
       const hint = critical ? ' — Neustart fuer Reissue erforderlich' : '';
       return `${head} [${ts}] TLS-Node-Cert laeuft ab: noch ${d['daysLeft'] ?? '?'} Tag(e)${hint}`;
+    }
+    // TL-15: Uhr-Abweichung eines Partners. Flap-gedaempft im Monitor — hier kommt
+    // nur ein Zustandswechsel an, nie eine Einzelmessung.
+    case 'system:clock_skew': {
+      const agent = d['agentId'] ?? 'unknown';
+      const detail = describeClockSkew(d);
+      return d['to'] === 'ok'
+        ? `✅ [${ts}] Uhr-Abweichung behoben: ${agent} laeuft jetzt ${detail}`
+        : `⏱️ [${ts}] Uhr-Abweichung: ${agent} laeuft ${detail}`;
     }
     // T2.2: Skill-Health-State-Flip (flap-gedaempft) fuer den Alert-Sink.
     case 'system:skill_health': {

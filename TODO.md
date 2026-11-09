@@ -696,8 +696,55 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
     C1-Umsetzung, ADR-045 unangetastet, **kein `packages/`-Diff**.
 - [ ] **[v5.1] TL-14b (≈4 h, ⛔ Termin)** CA-Umzug durchführen (mit Christian). ↔ vgl. Decision-7
   Trust-Domain-Flip (KW30).
-- [ ] **[v5.1] TL-15 (≈3 h)** Uhr-Abweichungs-Erkennung zwischen Partnern (Skew-Messung im
+- [x] **[v5.1] TL-15 (≈3 h)** Uhr-Abweichungs-Erkennung zwischen Partnern (Skew-Messung im
   Handshake/Heartbeat, Alarm ab Schwelle; Kap. 3.5/3).
+  **Erledigt 2026-11-09 — PR #368.** Design-Doku **vor** dem Code:
+  `docs/architecture/TL-15-clock-skew-detection.md`; Fortschrittslog
+  `changes/2026-11-09_tl-15-clock-skew.md`.
+  **Dass der Punkt echt offen war, ist gemessen, nicht aus der Checkbox gelesen:** ein
+  `git grep -niE` nach `skew`/`clock_offset`/`clockDrift`/`time_drift` über `packages/*/src` liefert
+  **zwei** Treffer, **beide nur Kommentare** (`peer-cache.ts:132` wirft Zukunfts-Timestamps weg,
+  `tls.ts:595` prüft das Gültigkeitsfenster) — keine Messung, keine Schwelle, kein Alarm; über
+  `docs/` **null**.
+  **Der Befund, der den Zuschnitt bestimmt hat:** die Messstelle existierte bereits. `checkPeers`
+  (`mesh.ts`) holt ohnehin alle `mesh.heartbeat_interval_ms` bei jedem erreichbaren Peer
+  `GET /health`, und diese Antwort trägt schon immer `{ status, timestamp }` (`agent-card.ts:256`) —
+  der Body wurde **verworfen**, geprüft war nur `response.ok`. Deshalb **kein** neuer Endpunkt,
+  **keine** Wire-Format-Änderung, **keine** Peer-Versions-Abhängigkeit, **kein** zusätzlicher
+  Netzverkehr. Damit ist auch die offene Frage des Punkt-Texts („Handshake **oder** Heartbeat")
+  entschieden: der Heartbeat, weil die Messung dort gratis ist und sich wiederholt.
+  **Gemessen wird der Offset, nicht die Differenz** — NTP-üblich gegen die Mitte des lokalen
+  Sende-/Empfangsfensters (`skewMs = tp - (t0+t1)/2`), mit der halben RTT als Unsicherheit, und
+  **in beide Richtungen konservativ** klassifiziert: `skewed` nur, wenn die **untere** Schranke
+  `|skewMs| - uncertainty` die Schwelle überschreitet, `ok` nur, wenn die **obere** Schranke
+  `|skewMs| + uncertainty` sie einhält, dazwischen `unknown` (neutral). Damit kann Netzlatenz allein
+  weder alarmieren **noch eine Erholung vortäuschen** — die einseitige erste Fassung konnte das und
+  wurde von der CR-Runde 1 als MEDIUM zurückgewiesen (siehe unten).
+  **Flap-Dämpfung ist hier Teil des Slices** (die Lücke, die TL-18 offenlassen musste): Hysterese
+  wie im `SkillHealthMonitor`, Zustand `ok`/`skewed` pro Peer, Kippen erst nach
+  `mesh.clock_skew_debounce` aufeinanderfolgenden gleichgerichteten Messungen; alarmiert wird
+  **ausschließlich der Wechsel** (sonst 8640 Nachrichten pro Tag bei 10-s-Heartbeat).
+  **Neu:** reines Modul `clock-skew.ts`, Event-Typ `system:clock_skew`, Audit-Typ
+  `CLOCK_SKEW_WARNING`, Config-Keys `mesh.clock_skew_threshold_ms` + `clock_skew_debounce` (Env +
+  Range-Validierung, im `docs/USER-GUIDE.md` dokumentiert), die drei Alarmwege in `index.ts` und
+  **alle drei** Sinks (Telegram, Dashboard-Toast, EventFeed). **Belegt mit 51 neuen Tests**
+  (Suite `packages/daemon`: 2137 → **2188 grün**, 151 → 152 Dateien; 41 in `clock-skew.test.ts`,
+  6 im Telegram-Sink, 4 Verdrahtungstests in `mesh.test.ts`).
+  **Default `0` = AUS, bewusst** (Vorbild `placement.refuse_cpu_percent`, nicht
+  `refuse_ram_percent: 90`): ein Default-an würde am laufenden Dienst sofort alarmieren, weil mehrere
+  Peers dieser Flotte schlafende macOS-Rechner sind. Solange die Schwelle `0` ist, wird der
+  Health-Body nicht einmal gelesen. **Die Aktivierung ist eine Betriebsentscheidung**, kein
+  Code-Default — empfohlener Startwert `5000`.
+  **Ehrliche Lücken, benannt statt mitverbucht:** TL-15 **stellt keine Uhr** (Synchronisation ist
+  NTP auf dem jeweiligen Rechner, nicht Aufgabe des Daemons); für die drei Plumbing-Zeilen in
+  `mesh.ts` gibt es **keinen** Test — die Logik liegt vollständig in der getesteten
+  `observeHeartbeatSkew`, der Rest bräuchte einen `undici`-Mock, für den es im Repo keinen
+  Präzedenzfall gibt (die `removePeer`-Hälfte der Verdrahtung **ist** getestet); keine
+  Dashboard-Tests (Paket ohne Test-Infrastruktur); **kein Live-Beleg**, der bräuchte einen Peer mit
+  verstellter Uhr. **Prozess-Abweichung:** CO via `pal:consensus` weiter unbenutzbar — die
+  Entwurfsentscheidungen stehen schriftlich vor dem Code und wurden von der externen CR geprüft; die
+  Runde 1 hat dabei zwei echte Fehler gefunden (einseitige Klassifikation, lückenhafte
+  TOML-Validierung), beide gefixt und mit Regressionstests belegt.
 - [ ] **[v5.1] TL-16 (≈3 h + ⛔ Fenster)** Tresor-Passphrase von der Platte lösen (systemd-credentials);
   Startweg dokumentieren. ↔ vgl. bestehend „Unsicherer Vault-Default" (env/Keychain/random erledigt) —
   dies ist der Off-Disk-Folgeschritt.

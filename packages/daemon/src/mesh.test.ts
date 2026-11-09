@@ -4,6 +4,7 @@ import { MeshManager } from './mesh.js';
 import type { DiscoveredPeer } from './discovery.js';
 import type { AgentCard } from './agent-card.js';
 import { peerIdToSpiffeUri } from './peer-identity.js';
+import { ClockSkewMonitor } from './clock-skew.js';
 
 const noopEvents = { onPeerOnline: () => {}, onPeerOffline: () => {} };
 const mkMesh = () => new MeshManager(10_000, 3, noopEvents);
@@ -563,5 +564,66 @@ describe('MeshManager.getPeerCounts — Phantom-ROT-Observability (Bug-Pfad 1, �
     mesh.getPeer(C)!.status = 'offline';
     const c = mesh.getPeerCounts();
     expect(c.online + c.offline).toBe(c.known);
+  });
+});
+
+// TL-15: der Monitor darf nicht unbegrenzt wachsen. `removePeer` ist die einzige
+// Stelle, die vergisst — beim bloßen Offline-Gehen bleibt der Zustand absichtlich
+// stehen, damit ein zurueckkehrender Peer seinen `skewed→ok`-Alarm noch bekommt.
+describe('MeshManager — TL-15 Skew-Monitor-Lebensdauer', () => {
+  const SKEW = { skewMs: 12_000, rttMs: 20, uncertaintyMs: 10 };
+
+  it('removePeer vergisst den Monitor-Eintrag', () => {
+    const monitor = new ClockSkewMonitor({ thresholdMs: 5000, debounce: 1 });
+    const mesh = new MeshManager(10_000, 3, noopEvents, undefined, undefined, monitor);
+    mesh.addPeer(disc({ agentId: 'agent-a' }));
+    monitor.observe('agent-a', SKEW);
+    expect(monitor.size).toBe(1);
+
+    mesh.removePeer('agent-a');
+    expect(monitor.size).toBe(0);
+    expect(monitor.stateOf('agent-a')).toBeUndefined();
+  });
+
+  it('127a-Re-Key vergisst den Legacy-Schluessel (CR-Runde 1, LOW-2)', () => {
+    // Der Monitor ist nach `agentId` verschluesselt. Wird ein Peer vom Legacy- auf die
+    // kanonische agentId umgeschluesselt, war der Legacy-Eintrag vorher eine verwaiste
+    // Leiche: `removePeer(LEGACY)` greift danach nicht mehr, weil der Map-Eintrag weg ist.
+    const canonical = peerIdToSpiffeUri(PID);
+    const monitor = new ClockSkewMonitor({ thresholdMs: 5000, debounce: 1 });
+    const mesh = new MeshManager(10_000, 3, noopEvents, undefined, undefined, monitor);
+    mesh.addPeer(disc({ agentId: LEGACY, p2pPeerId: PID }));
+    mesh.updateAgentCard(LEGACY, card('KEY-V', LEGACY));
+    monitor.observe(LEGACY, SKEW); // unter der Legacy-ID schon gemessen
+    expect(monitor.stateOf(LEGACY)).toBe('skewed');
+
+    expect(mesh.markPeerIdVerified(PID, canonical).ok).toBe(true);
+    expect(mesh.getPeer(canonical)).toBeDefined();
+    expect(monitor.stateOf(LEGACY)).toBeUndefined();
+    expect(monitor.size).toBe(0);
+  });
+
+  it('rollback des Re-Key gibt den kanonischen Schluessel wieder frei', () => {
+    const canonical = peerIdToSpiffeUri(PID);
+    const monitor = new ClockSkewMonitor({ thresholdMs: 5000, debounce: 1 });
+    const mesh = new MeshManager(10_000, 3, noopEvents, undefined, undefined, monitor);
+    mesh.addPeer(disc({ agentId: LEGACY, p2pPeerId: PID }));
+    mesh.updateAgentCard(LEGACY, card('KEY-V', LEGACY));
+    const res = mesh.markPeerIdVerified(PID, canonical);
+    expect(res.ok).toBe(true);
+    monitor.observe(canonical, SKEW); // jetzt unter der kanonischen ID gemessen
+    expect(monitor.size).toBe(1);
+
+    res.rollback();
+    expect(mesh.getPeer(LEGACY)).toBeDefined();
+    expect(monitor.stateOf(canonical)).toBeUndefined();
+    expect(monitor.size).toBe(0);
+  });
+
+  it('ohne Monitor laeuft removePeer unveraendert (inerter Default)', () => {
+    const mesh = new MeshManager(10_000, 3, noopEvents);
+    mesh.addPeer(disc({ agentId: 'agent-b' }));
+    expect(() => mesh.removePeer('agent-b')).not.toThrow();
+    expect(mesh.getPeer('agent-b')).toBeUndefined();
   });
 });

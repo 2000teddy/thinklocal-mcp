@@ -8,6 +8,78 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(daemon): TL-15 — Uhr-Abweichungs-Erkennung zwischen Partnern (2026-11-09 12:25)
+Mehrere Pfade entscheiden anhand **absoluter** Zeit mit Werten von einem anderen Rechner —
+TLS-Gültigkeitsfenster (`tls.ts:595`), Zukunfts-Timestamp-Filter des Peer-Caches
+(`peer-cache.ts:132`), Auftrags-TTL (TL-12), Cert-Ablauf-Monitor. Alle behandeln die **Folge** einer
+schiefen Uhr defensiv und fail-closed; **keiner** nannte die Ursache, und es gab repo-weit keine
+Messung (`git grep -niE "skew|clock_offset|clockDrift|time_drift"` über `packages/*/src` ⇒ **2**
+Treffer, beide reine Kommentare an genau diesen Stellen; `docs/` ⇒ **0**).
+**Der Befund, der den Zuschnitt bestimmt hat:** die Messstelle existiert bereits. Der Heartbeat holt
+ohnehin alle `mesh.heartbeat_interval_ms` bei jedem erreichbaren Peer `GET /health`, und diese
+Antwort trägt schon heute `{ status, timestamp }` (`agent-card.ts:256`) — `checkPeers` **verwarf den
+Body** und prüfte nur `response.ok`. TL-15 braucht deshalb **keinen** neuen Endpunkt, **keine**
+Wire-Format-Änderung, **keine** Peer-Versions-Abhängigkeit und **keinen** zusätzlichen Netzverkehr;
+damit ist auch die offene Frage des TODO-Texts („Handshake **oder** Heartbeat") entschieden.
+**Gemessen wird der Offset, nicht die Differenz:** `localNow - peerTimestamp` wäre falsch, weil es
+die halbe Antwortlaufzeit als Uhrenabweichung ausgibt. Stattdessen NTP-üblich gegen die **Mitte**
+des lokalen Sende-/Empfangsfensters (`skewMs = tp - (t0+t1)/2`), mit der halben RTT als Unsicherheit.
+**Klassifikation konservativ in BEIDE Richtungen:** `skewed` nur, wenn die **untere** Schranke
+`|skewMs| - uncertainty` die Schwelle überschreitet; `ok` nur, wenn die **obere** Schranke
+`|skewMs| + uncertainty` sie einhält; dazwischen `unknown` und damit neutral für die Hysterese.
+Netzlatenz allein kann so weder alarmieren noch eine Erholung vortäuschen (Test: 6 s Punktschätzer
+bei 4 s RTT ⇒ `unknown`, dieselben 6 s bei 20 ms RTT ⇒ `skewed`). Die erste Fassung prüfte nur die
+untere Schranke und gab alles andere als `ok` aus — auf dem Rückweg war das das Gegenteil von
+konservativ; siehe CR unten.
+**Flap-Dämpfung ist Teil des Slices, nicht sein Rest** (anders als bei TL-18): Hysterese-Mechanik des
+`SkillHealthMonitor`, pro Peer ein Zustand `ok | skewed`, der erst nach `clock_skew_debounce`
+aufeinanderfolgenden gleichgerichteten Messungen kippt; alarmiert wird **ausschließlich der Wechsel**.
+Ein Test fährt 50 Messungen und erwartet **genau eine** Meldung. Nicht klassifizierbare Messungen sind
+**neutral** — sonst gälte ein Peer mit altem Daemon ohne `timestamp`-Feld als „wieder gut".
+**Neu:** `clock-skew.ts` (rein, 290 Zeilen: `parsePeerTimestamp`, `estimateClockSkew`,
+`classifyClockSkew`, `ClockSkewMonitor`, fail-open-Klammer `observeHeartbeatSkew`), Event-Typ
+`system:clock_skew`, Audit-Typ `CLOCK_SKEW_WARNING` (Vorbild `CERT_EXPIRY_WARNING`), Config-Keys
+`mesh.clock_skew_threshold_ms` / `clock_skew_debounce` samt Env-Override und
+Post-Merge-Range-Validierung, die drei Alarmwege in `index.ts` sowie die **drei** Sinks
+(Telegram-Case mit lesbarem Betrag/Richtung/Schwelle, Dashboard-Toast, EventFeed-Symbol).
+Design-Doku **vor** dem Code: `docs/architecture/TL-15-clock-skew-detection.md`; Config-Keys im
+`docs/USER-GUIDE.md` dokumentiert (TL-00d-Pflicht).
+**Default `0` = aus, bewusst:** Vorbild `placement.refuse_cpu_percent`, **nicht**
+`refuse_ram_percent: 90`. Ein Default-an würde am laufenden Dienst sofort alarmieren — mehrere Peers
+dieser Flotte sind schlafende macOS-Rechner, also genau die Klasse mit Uhrensprüngen nach dem
+Aufwachen. Solange die Schwelle `0` ist, wird der Health-Body **nicht einmal gelesen**; der Heartbeat
+verhält sich exakt wie vorher. Die Aktivierung ist eine Betriebsentscheidung (empfohlener Startwert
+`5000`).
+**TS ✅ (+51 Tests, Baseline per `git stash -u` auf demselben Arbeitsbaum gemessen):**
+`packages/daemon` `vitest run` 151 Dateien / 2137 → **152 / 2188 grün** (41 in `clock-skew.test.ts`,
+6 im Telegram-Sink, 4 Verdrahtungstests in `mesh.test.ts`); `tsc --noEmit` 0 → 0,
+`-p tsconfig.scripts.json` 0 → 0, `lint:scripts` 0 → 0; `packages/dashboard-ui` `tsc --noEmit` 0 → 0
+und `vite build` Exit 0 → Exit 0; eslint in **beiden** Umfängen exakt auf Baseline (Daemon-Scope
+460, Wurzel-Umfang 462) — ein erster Entwurf hatte **eine** Warnung erzeugt (fehlender Rückgabetyp am
+`onClockSkew`-Hook) und wurde nachgezogen. Die Config-Validierung ist auf **beiden** Wegen getestet:
+Env (Reader wirft) **und** TOML über eine temporäre Datei (sonst wären die zwei neuen
+Validator-Zweige ungetestet).
+**Externe CR (agy/Gemini), zwei Runden:** Runde 1 **CHANGES REQUESTED** mit 0 HIGH / 2 MEDIUM /
+3 LOW / 2 NIT — alle sieben eingearbeitet, jeder Befund mit Regressionstest, jede Behauptung vorher
+selbst nachgemessen. Die beiden MEDIUMs waren echte Fehler: die **einseitige Klassifikation** (ein
+Peer mit konstant 6 s Vorlauf hätte bei einer RTT-Spitze von 3 s als „ok“ gezählt und die in sich
+widersprüchliche Meldung „behoben: läuft jetzt 6.0 s vor (Schwelle 5.0 s)“ erzeugt — also genau das
+Pendeln durch Netzlatenz, das der Slice ausschließen sollte) und eine **lückenhafte
+TOML-Validierung** (`clock_skew_debounce = nan` hätte die Hysterese vollständig ausgehebelt, weil
+`NaN < 1` und `streak < NaN` beide `false` sind; `threshold = "5000"` hätte den Monitor gebaut und
+„aktiv“ geloggt, während jede Messung stumm bleibt). Dazu `Date.parse` ohne Formatprüfung, ein
+verwaister Monitor-Eintrag beim ADR-022-Re-Key und das redundante `skewMsExact` mit `NaN`-Falle.
+Runde 2 über den nachgebesserten Stand: **APPROVE**, 0/0/0/2 (beide NITs eingearbeitet —
+verschobene Zeilenangabe und ein Zeitstempel-Widerspruch).
+**Offen geblieben und benannt:** TL-15 **stellt keine Uhr** (Synchronisation ist NTP, nicht Daemon);
+kein Test für die drei Plumbing-Zeilen in `mesh.ts` (die Logik liegt vollständig in der getesteten
+`observeHeartbeatSkew`, der Rest bräuchte einen `undici`-Mock, für den es im Repo keinen
+Präzedenzfall gibt — die `removePeer`-Hälfte der Verdrahtung **ist** getestet); keine
+Dashboard-Tests (Paket ohne Test-Infrastruktur); kein Live-Beleg (bräuchte einen Peer mit verstellter
+Uhr). **Prozess-Abweichung:** CO via `pal:consensus` weiter unbenutzbar (beide Fremd-Backends
+`executable not found in PATH`) — die Design-Entscheidungen stehen deshalb schriftlich vor dem Code
+und wurden von der externen CR-Runde geprüft, nicht von einem Konsens-Lauf.
+
 ### feat(daemon): TL-18-Rest — `task:refused` erreicht den Operator (2026-11-09 10:50)
 Der Alarm-Weg der place-or-refuse-Ablehnung war offen: `task-executor.ts:155` emittiert seit T2.4
 `eventBus.emit('task:refused', …)`, aber **kein typ-bewusster Sink** hat das Event behandelt — beide
