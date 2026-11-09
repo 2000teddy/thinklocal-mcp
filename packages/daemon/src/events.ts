@@ -40,6 +40,9 @@ export type MeshEventType =
   | 'system:cert_expiry'
   // T2.2: Skill-Health-State-Flip (flap-gedämpft durch Hysterese) für den Alert-Sink.
   | 'system:skill_health'
+  // TL-15: Uhr-Abweichung eines Partners hat die Schwelle gekreuzt (flap-gedämpft,
+  // nur Zustandswechsel — siehe clock-skew.ts / TL-15-clock-skew-detection.md).
+  | 'system:clock_skew'
   // ADR-007/008 Phase A+B: governance + capability lifecycle events
   | 'inbox:new'
   // ADR-043 (TL-11): Heartbeat-Weckruf an eine registrierte Agenten-Instanz (inhaltsfrei).

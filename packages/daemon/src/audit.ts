@@ -41,6 +41,10 @@ export type AuditEventType =
   | 'SKILL_HEALTH_TRANSITION'
   // T2.1: TLS-Node-Cert läuft bald ab (Live-Monitor; Reissue erst beim Neustart).
   | 'CERT_EXPIRY_WARNING'
+  // TL-15: Uhr-Abweichung eines Partners über der Schwelle (Zustandswechsel, nicht
+  // jede Messung). Vorbild CERT_EXPIRY_WARNING: durabel + signiert, damit die
+  // Ursache einer später fail-closed verworfenen Zeit-Entscheidung auffindbar bleibt.
+  | 'CLOCK_SKEW_WARNING'
   // ADR-028 D4 / v5 Spur 3 (Modell B): MCP-Proxy-Audit, beidseitig.
   // RX = eingehender (autorisierter) /api/mcp-Proxy-Call auf diesem Node.
   // TX = dieser Node forwardet einen MCP-Call an den Owner-Peer (remote-forward).

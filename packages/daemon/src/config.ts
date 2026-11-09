@@ -53,6 +53,23 @@ export interface DaemonConfig {
   mesh: {
     heartbeat_interval_ms: number;
     heartbeat_timeout_missed: number;
+    /**
+     * TL-15: Schwelle in ms, oberhalb derer eine gemessene Uhr-Abweichung eines
+     * Partners alarmiert wird (nach Abzug der halben RTT). `0` = **aus** (Default).
+     *
+     * Default bewusst inert, nach dem Vorbild `placement.refuse_cpu_percent` und
+     * NICHT `refuse_ram_percent: 90`: ein Default-an würde am laufenden Dienst
+     * sofort Alarme erzeugen — in dieser Flotte sind mehrere Peers schlafende
+     * macOS-Rechner, also genau die Klasse mit Uhrensprüngen nach dem Aufwachen.
+     * Messung und Alarmwege sind fertig; die Aktivierung ist eine Betriebs-
+     * entscheidung. Solange `0`, wird der Health-Body nicht einmal gelesen.
+     */
+    clock_skew_threshold_ms: number;
+    /**
+     * TL-15: aufeinanderfolgende gleichgerichtete Messungen, bevor der Zustand eines
+     * Peers kippt (Flap-Dämpfung, Mechanik wie `SkillHealthMonitor`). `>= 1`.
+     */
+    clock_skew_debounce: number;
   };
   discovery: {
     mdns_service_type: string;
@@ -210,6 +227,9 @@ const DEFAULTS: DaemonConfig = {
   mesh: {
     heartbeat_interval_ms: 10_000,
     heartbeat_timeout_missed: 3,
+    // TL-15: 0 = aus. Siehe Begründung am Typ.
+    clock_skew_threshold_ms: 0,
+    clock_skew_debounce: 3,
   },
   discovery: {
     mdns_service_type: '_thinklocal._tcp',
@@ -437,6 +457,19 @@ export function loadConfig(configPath?: string): DaemonConfig {
       cfg.placement.refuse_agent_count,
     );
   }
+  // TL-15: Skew-Schwelle (0 = aus → readNonNegativeInt) und Flap-Dämpfung (>= 1).
+  if (env['TLMCP_CLOCK_SKEW_THRESHOLD_MS']) {
+    cfg.mesh.clock_skew_threshold_ms = readNonNegativeInt(
+      'TLMCP_CLOCK_SKEW_THRESHOLD_MS',
+      cfg.mesh.clock_skew_threshold_ms,
+    );
+  }
+  if (env['TLMCP_CLOCK_SKEW_DEBOUNCE']) {
+    cfg.mesh.clock_skew_debounce = readPositiveInt(
+      'TLMCP_CLOCK_SKEW_DEBOUNCE',
+      cfg.mesh.clock_skew_debounce,
+    );
+  }
 
   // LOW-FIX (CR-Review): CIDRs validieren — fail fast statt silent.
   // Typos wie "10.10.10.0/33" oder "10.10.10.0/24foo" muessen sofort
@@ -486,6 +519,25 @@ export function loadConfig(configPath?: string): DaemonConfig {
   if (cfg.placement.refuse_cpu_percent < 0 || cfg.placement.refuse_cpu_percent > 100) {
     throw new Error(
       `Ungueltige placement.refuse_cpu_percent (${cfg.placement.refuse_cpu_percent}): erwartet 0..100 (0 = aus).`,
+    );
+  }
+  // TL-15: Skew-Schwelle = Ganzzahl >= 0 (0 = aus). `Number.isInteger` ist hier nicht
+  // Kosmetik, sondern notwendig (CR-Runde 1, MEDIUM-1): der TOML-Pfad (`deepMerge`)
+  // übernimmt beliebige Typen ungeprüft, und ein reiner `< 0`-Test lässt `nan`, `inf`,
+  // `"5000"` und `1.5` durch. Nachgemessen: `clock_skew_threshold_ms = "5000"` ließe den
+  // Daemon den Monitor bauen und „aktiv" loggen, während jede Messung in
+  // `classifyClockSkew` stumm als `unknown` endet. Vorbild: `cert.renew_before_days`.
+  if (!Number.isInteger(cfg.mesh.clock_skew_threshold_ms) || cfg.mesh.clock_skew_threshold_ms < 0) {
+    throw new Error(
+      `Ungueltige mesh.clock_skew_threshold_ms (${cfg.mesh.clock_skew_threshold_ms}): erwartet Ganzzahl >= 0 (0 = aus).`,
+    );
+  }
+  // TL-15: Dämpfung = Ganzzahl >= 1. `0` hieße „kippe bei der ersten Messung" — also keine
+  // Dämpfung, obwohl eine konfiguriert aussieht. `nan` wäre schlimmer: `streak < NaN` ist
+  // immer `false`, die Hysterese wäre vollständig ausgehebelt; `inf` alarmierte nie.
+  if (!Number.isInteger(cfg.mesh.clock_skew_debounce) || cfg.mesh.clock_skew_debounce < 1) {
+    throw new Error(
+      `Ungueltige mesh.clock_skew_debounce (${cfg.mesh.clock_skew_debounce}): erwartet Ganzzahl >= 1.`,
     );
   }
   // T2.4-Folge: agent_count-Schwelle >= 0 (0 = deaktiviert).

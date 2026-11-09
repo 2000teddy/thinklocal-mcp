@@ -9,6 +9,7 @@ const EVENT_ICONS: Record<string, string> = {
   'task:completed': '🎉',
   'task:failed': '❌',
   'task:refused': '🚫', // TL-18: place-or-refuse-Ablehnung (vorher Fallback-Pin)
+  'system:clock_skew': '⏱️', // TL-15: Uhr-Abweichung eines Partners
   'capability:registered': '🧩',
   'capability:synced': '🔄',
   'skill:announced': '📢',

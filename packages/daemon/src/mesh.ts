@@ -5,6 +5,7 @@ import type { DiscoveredPeer } from './discovery.js';
 import type { AgentCard } from './agent-card.js';
 import { spiffeUriToPeerId } from './peer-identity.js';
 import type { PeerCacheLocator } from './peer-cache.js';
+import { observeHeartbeatSkew, type ClockSkewMonitor, type ClockSkewTransition } from './clock-skew.js';
 
 export type PeerStatus = 'online' | 'offline' | 'unknown';
 
@@ -38,6 +39,12 @@ export interface MeshPeer {
 export interface MeshEvents {
   onPeerOnline: (peer: MeshPeer) => void;
   onPeerOffline: (peer: MeshPeer) => void;
+  /**
+   * TL-15: Uhr-Abweichung eines Partners hat die Schwelle gekreuzt. Optional —
+   * ohne Hook (und ohne `skewMonitor` am Konstruktor) ist die Messung vollstaendig
+   * inert und der Health-Body wird nicht gelesen.
+   */
+  onClockSkew?: (transition: ClockSkewTransition) => void;
 }
 
 /**
@@ -101,6 +108,12 @@ export class MeshManager {
     private events: MeshEvents,
     private log?: Logger,
     private dispatcher?: Dispatcher,
+    /**
+     * TL-15: aktiver Skew-Monitor. `undefined` (Default, und wenn
+     * `mesh.clock_skew_threshold_ms` 0 ist) ⇒ keine Messung, Health-Body wird
+     * NICHT gelesen — der Heartbeat verhaelt sich dann byte-fuer-byte wie bisher.
+     */
+    private skewMonitor?: ClockSkewMonitor,
   ) {}
 
   addPeer(discovered: DiscoveredPeer): MeshPeer {
@@ -170,6 +183,10 @@ export class MeshManager {
       peer.status = 'offline';
       this.events.onPeerOffline(peer);
       this.peers.delete(agentId);
+      // TL-15: nur beim ENDGUELTIGEN Entfernen vergessen, nicht beim Offline-Gehen —
+      // ein schiefer Peer, der zurueckkommt, soll seinen `skewed→ok`-Alarm noch
+      // bekommen. Verhindert unbegrenztes Wachstum der Monitor-Map.
+      this.skewMonitor?.forget(agentId);
       this.log?.info({ agentId }, 'Peer entfernt');
     }
   }
@@ -528,6 +545,11 @@ export class MeshManager {
           const occupant = this.peers.get(senderUri);
           if (!occupant || occupant === t) {
             this.peers.delete(priorAgentId);
+            // TL-15 (CR-Runde 1, LOW-2): der Monitor ist nach `agentId` verschlüsselt. Ohne
+            // dieses `forget` bliebe ein unter der Legacy-ID bereits gemessener Peer als
+            // verwaiste Leiche stehen — ein späteres `removePeer(priorAgentId)` greift nicht
+            // mehr, weil der Map-Eintrag dort schon weg ist.
+            this.skewMonitor?.forget(priorAgentId);
             t.agentId = senderUri;
             this.peers.set(senderUri, t);
             rekeyedFromLegacy = true;
@@ -548,6 +570,9 @@ export class MeshManager {
           // noch-re-gekeyten `t` kollidieren. Erst `senderUri` freigeben, dann Duplikate zurück.
           if (rekeyedFromLegacy) {
             this.peers.delete(senderUri);
+            // TL-15: symmetrisch zum Re-Key — beim Zurückdrehen den kanonischen
+            // Monitor-Schlüssel freigeben, sonst bleibt der dann unbenutzte stehen.
+            this.skewMonitor?.forget(senderUri);
             t.agentId = priorAgentId;
             this.peers.set(priorAgentId, t);
           }
@@ -601,6 +626,9 @@ export class MeshManager {
     await Promise.allSettled(
       activePeers.map(async ([agentId, peer]) => {
         try {
+          // TL-15: lokale Sendemarke VOR dem fetch — zusammen mit der Empfangsmarke
+          // ergibt sie das Fenster, gegen dessen Mitte die Partner-Uhr gemessen wird.
+          const sentAtMs = Date.now();
           const response = await fetch(`${peer.endpoint}/health`, {
             signal: AbortSignal.timeout(5_000),
             dispatcher: this.dispatcher,
@@ -608,6 +636,30 @@ export class MeshManager {
 
           if (response.ok) {
             this.recordHeartbeat(agentId);
+            // TL-15: Skew-Messung aus demselben Call — der Body traegt die
+            // Partner-Uhrzeit und wurde bisher verworfen. Der Online-Zustand ist
+            // oben bereits entschieden; die Messung kann ihn nicht beeinflussen.
+            // `observeHeartbeatSkew` wirft nie; nur der Hook wird separat gekapselt,
+            // damit ein werfender Konsument keinen verpassten Heartbeat vortaeuscht.
+            if (this.skewMonitor) {
+              const transition = await observeHeartbeatSkew({
+                monitor: this.skewMonitor,
+                agentId,
+                sentAtMs,
+                readBody: () => response.json(),
+                log: this.log,
+              });
+              if (transition) {
+                try {
+                  this.events.onClockSkew?.(transition);
+                } catch (err) {
+                  this.log?.warn(
+                    { agentId, err: String(err) },
+                    '[clock-skew] onClockSkew-Hook fehlgeschlagen (ignoriert)',
+                  );
+                }
+              }
+            }
           } else {
             this.handleMissedBeat(agentId, peer);
           }
