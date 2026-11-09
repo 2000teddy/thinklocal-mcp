@@ -6,7 +6,76 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-06-26 09:05
+## [Unreleased] — 2026-11-09 13:05
+
+### docs: Reconcile — COMPLIANCE-Status-Zellen, verschobene Zeilenangaben, `[Unreleased]`-Datum (2026-11-09 13:05)
+Doku-only, **kein** `packages/`-Diff, kein Code, kein Test, kein Deploy. Drei Nachlässigkeiten in den
+Kanon-Dateien, alle drei durch Messung belegt statt vermutet.
+**(1) Neun Status-Zellen behaupteten „offen", obwohl gemergt.** `COMPLIANCE-TABLE.md` führt in der
+zweiten Spalte `(offen, base=main)` bis zum Merge und danach `(base=main, gemergt)`. Die Konvention
+läuft lückenlos bis **#359** und ist ab **#360** (2026-10-26) ausgefallen: alle neun Zeilen #360–#368
+standen auf „offen", während alle neun gemergt sind — einzeln per `gh pr view` geprüft (#360
+2026-10-26T11:11:10Z … #368 2026-11-09T11:35:14Z). In der Tabelle, die als **Prozess-Nachweis** gilt,
+war das eine Falschaussage über neun PRs. Alle neun Zellen gezogen; die Pipe-Anzahl jeder Zeile vor dem
+Schreiben auf 11 geprüft, damit die Tabelle nicht bricht.
+Der Ausfall reicht über **zwei Wochen und neun PRs** (2026-10-26 → 2026-11-09).
+**Dazu der durable Teil:** die Konvention stand **nirgends** — sie war nur aus dem Muster der Zeilen
+ablesbar. Sie ist jetzt im Kopf der Tabelle festgehalten, und zwar als **beobachtete Praxis**: ein PR
+kann seine eigene Zelle nicht schließen (der Squash-Merge ändert keine Datei, ein Commit davor
+entwertete das gepinnte Review/CI-Gate — die in #357–#360 beschriebene Selbst-Reconcile-Lücke), der
+Wechsel passiert folglich **später in einem eigenen PR auf `main`**, und das in zwei Epochen: **bis
+einschließlich #356** zogen ihn auch **reguläre** Folge-PRs im Vorbeigehen (#320, #326, #327, #353,
+#354, #356 — letzterer gleich drei Zeilen), damals zusammen mit dem Eintragen der PR-Nummer in
+Spalte 1, weil eine Zeile ohne Nummer angelegt wurde; **ab #357**, nachdem #356 erstmals Nummer und
+Status gleich beim Eröffnen schrieb, taten es nur noch dedizierte Reconcile-PRs (#357, #358, #360).
+**Zwei Entwürfe dieses Eintrags lagen hier daneben, beide von der CR kassiert:** der erste behauptete,
+der Wechsel „gehöre zum Merge-Schritt" (frei erfunden — ein Squash-Merge ändert keine Datei); der
+zweite behauptete, reguläre PRs hätten *nie* gezogen, weil meine Gegenprobe ein Grep-Muster auf eine
+führende `#NNN`-Spalte benutzte, das die ältere Zeilenform **per Konstruktion** nicht finden kann.
+Ebenfalls korrigiert: **#360 hat die Reconcile-Kette bewusst abgeschlossen** (die Zeilen #360/#361/#363
+nennen das „dokumentierter Endzustand aus #360, bewusst nicht fortgeschrieben"), um endlose
+rein-reconcilierende Ketten zu vermeiden — der Ausfall war also kein blindes Vergessen, sondern ein
+gesetzter Endpunkt, hinter dem die Praxis auslief.
+**(2) Neun Zeilenangaben in `TODO.md` waren falsch** — alle von eigenen Folge-Slices gekippt, keine
+durch fremden Code. **Fünf im TL-18-Eintrag:** `telegram-gateway.ts:111-117` (der `task:refused`-Block
+liegt jetzt bei 133-139) und `:440` (der `chatId`-Guard bei 471), weil TL-15 in derselben Datei
+oberhalb eingefügt hat, sowie `config.ts:255`, `:480` und `index.ts:956-957`, weil TL-15 dort
+Config-Keys und die Monitor-Verdrahtung ergänzt hat. **Vier weitere in Sektion B2** — geschrieben von
+#365, gekippt von denselben #368-Einschüben und erst durch die CR aufgefallen (MEDIUM-2):
+`mesh.ts:600` (der `p.status !== 'offline'`-Filter liegt jetzt bei 625), `config.ts:251`
+(`renew_before_days: 30` bei 271), `config.ts:252` (`migrate_legacy_identity: false` bei 272) und
+`index.ts:175` (`identity.spiffeUri` bei 176). **Statt neue Zahlen einzusetzen sind alle neun auf
+stabile Namen gezogen** — eine Zahl wäre beim nächsten Slice in derselben Datei wieder falsch.
+**Zusätzlich vorbeugend mitgezogen, obwohl heute noch korrekt:** `Toasts.tsx:23-29`,
+`EventFeed.tsx:11`, `task-executor.ts:147-149` und die Spanne `:55-85` von `describeRefusalLimit` —
+sie hängen an derselben Mechanik und heißen jetzt `eventToToast`, `EVENT_ICONS`, `decision.refuse`-Zweig
+bzw. „ebenda". **Nicht** angefasst: die vier Verweise auf `agent-card.ts:256`, `peer-cache.ts:132`,
+`tls.ts:595` und `websocket.ts:263` — sie zeigen in Dateien, die diese Slice-Familie nie berührt hat,
+und wurden heute einzeln gegengeprüft.
+**(3) Das `[Unreleased]`-Datum stand seit 2026-06-26 still.** Der Verlauf zeigt, dass die Zeitangabe
+bei **jedem** PR mitgezogen wurde (fünf Änderungen an zwei Tagen: 06-25 06:30 → 10:05 → 13:05 → 14:35
+→ 06-26 09:05), dann aber liegenblieb — während darunter inzwischen Einträge vom 09.11. stehen. Auf den
+Zeitpunkt des jüngsten Eintrags gezogen. Das war **nicht** Folge des TL-15-Merges, sondern ein eigener,
+vorbestehender Punkt; der Auftrag erlaubte ihn ausdrücklich, sofern er als solcher benannt wird.
+**Externe CR (agy/Gemini), drei Runden — Runde 1 CHANGES REQUESTED (0 HIGH / 2 MEDIUM / 1 LOW /
+1 NIT), Runde 2 CHANGES REQUESTED (0/1/1/0), Runde 3 **APPROVE** (0/0/0/1); alle sieben Befunde
+eingearbeitet.** Das MEDIUM der zweiten Runde war der Fehler, den erst mein Fix der ersten erzeugt
+hatte, und der NIT der dritten eine letzte Ungenauigkeit in derselben Aussage. Der ehrliche Befund
+dieses Slices: die neun Zellen zu ziehen war trivial — die **Geschichte** derselben Spalte korrekt zu
+beschreiben brauchte drei Anläufe. Beide MEDIUMs trafen diesen Eintrag selbst: die erfundene Merge-Regel (oben) und ein
+**zu klein angesetzter Umfang** — ich hatte behauptet, alle von dieser Slice-Familie gekippten Stellen
+gezogen zu haben, und die vier B2-Angaben übersehen. Dazu die Verwechslung „vier Monate" (gehört zum
+`[Unreleased]`-Datum, nicht zur Status-Zelle) und eine falsche Zuordnung in der Aufzählung. Der
+Reviewer hat zugleich bestätigt: die neun Merge-Zustände, dass genau die neun Status-Zellen und nur
+die zweite Spalte geändert wurden, die Pipe-Integrität, dass alle neun alten Zahlen tatsächlich erst
+durch #368 kippten, dass die eingesetzten Namen im Code eindeutig auffindbar und besser als Zahlen
+sind, dass die vier belassenen Angaben heute stimmen, der `[Unreleased]`-Verlauf samt neuem Wert, und
+die Abgrenzung gegen Zeile #367.
+**Bewusst nicht angefasst:** `COMPLIANCE-TABLE.md` Zeile #367 und
+`changes/2026-11-09_tl-18-task-refused-alert.md` tragen dieselben alten Zeilennummern — das sind
+Prozess- und Fortschrittsnachweis *jenes* PRs und beschreiben korrekt den Stand von damals.
+Rückwirkend zu ändern wäre dieselbe Geschichtsfälschung, die in #366 für die GraphQL-Nennungen
+abgelehnt wurde (`CONTRIBUTING.md:15-21`).
 
 ### feat(daemon): TL-15 — Uhr-Abweichungs-Erkennung zwischen Partnern (2026-11-09 12:25)
 Mehrere Pfade entscheiden anhand **absoluter** Zeit mit Werten von einem anderen Rechner —

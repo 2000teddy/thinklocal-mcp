@@ -86,7 +86,8 @@ werden:** am 2026-11-02 20:22:09 UTC wechselte TH01 den Anker, 20:35:45 UTC star
 `.222` liefen zu diesem Zeitpunkt noch unter der alten CA. 20:36:17 UTC wurden alle drei offline markiert,
 20:50–20:52 UTC wurden `.56`/`.222` neu enrollt (`notBefore 20:52:16` / `20:52:40`), 20:54:21/20:54:30 UTC
 hat TH01 ihre Cards per **ADR-022-Flip** erfolgreich kanonisiert. Der Status blieb trotzdem `offline`, weil
-`checkPeers()` auf `p.status !== 'offline'` filtert (`packages/daemon/src/mesh.ts:600`): ein einmal offline
+`checkPeers()` auf `p.status !== 'offline'` filtert (Peer-Auswahl am Kopf von `checkPeers`,
+`packages/daemon/src/mesh.ts`): ein einmal offline
 markierter Peer wird **nie wieder** angepingt, der Flip schreibt nur den Map-Key um. `.158` kam nur zurück,
 weil es ein **statischer** Peer ist. Die Ursache des *heutigen* Offline-Status ist also dieser Filter, nicht
 der Anker. **ADR-035-Klasse, Code-Slice-KANDIDAT — nicht freigegeben, nicht implementiert.** **Daraus zwei
@@ -98,18 +99,20 @@ nächster Absatz.
 **sieben** `cf00a5…`-Leafs laufen am **2027-01-31** ab, das früheste (TH01 selbst) um **20:35:41 UTC** —
 **exakt 90 Tage** nach Ausstellung am 2026-11-02 20:35:41 UTC. Renewal passiert weiterhin **nur beim
 Daemon-Start** (`loadOrCreateTlsBundle`, `packages/daemon/src/tls.ts:395`; Behalten-Gate
-`daysLeft > renewBeforeDays` auf `tls.ts:655` und `tls.ts:671-673`, Default **30** aus
-`packages/daemon/src/config.ts:251`), und TH01 fährt `NRestarts=0` — von allein passiert nichts.
+`daysLeft > renewBeforeDays` auf `tls.ts:655` und `tls.ts:671-673`, Default **30** im `cert`-Block der
+`DEFAULTS` in `packages/daemon/src/config.ts`), und TH01 fährt `NRestarts=0` — von allein passiert nichts.
 **Das Fenster öffnet am 2026-12-31, nicht am 2027-01-01:** `daysLeft` ist `Math.floor` (`tls.ts:590-592`),
 das Gate behält nur bei `daysLeft > 30`, also greift der Reissue ab **2026-12-31 20:35:42 UTC**
 (T-31d +1 s) für TH01 bzw. 2026-12-31 20:52:41 UTC für das späteste Leaf (`.222`).
 **Ein Neustart allein genügt aber NICHT — er ist sogar gefährlich:** fällt TH01 bei `daysLeft <= 30` durch
 beide Behalten-Gates, stellt `createNodeCert(ca, hostname, spiffeUri, localIps)` (`tls.ts:700`) mit
-`identity.spiffeUri` aus (`packages/daemon/src/index.ts:175`) — das ist die **Legacy**-URI
+`identity.spiffeUri` aus (drittes Argument des `loadOrCreateTlsBundle`-Aufrufs in
+`packages/daemon/src/index.ts`) — das ist die **Legacy**-URI
 `spiffe://thinklocal/host/<nodeId>`, die kanonische `node/<PeerID>`-Identität wird also **überschrieben**.
 Genau dieser Cert-Clobber ist am 2026-11-02 passiert und wurde erst durch `pop-canonicalize.ts` repariert.
 **`cert.migrate_legacy_identity` verhindert ihn NICHT** (Befund aus Review-Runde 2, im Code nachgeprüft):
-das Flag steht auf dem Default **false** (`config.ts:252`, im Unit nicht gesetzt), und selbst aktiviert
+das Flag steht auf dem Default **false** (`cert`-Block der `DEFAULTS` in `config.ts`, im Unit nicht
+gesetzt), und selbst aktiviert
 greift der Migrationszweig nur bei `certSpiffeUri.startsWith('spiffe://thinklocal/host/')`
 (`tls.ts:632-633`) — auf einem **bereits kanonischen** Cert also gar nicht. Er würde den Clobber erst bei
 einem **zweiten** Neustart rückgängig machen. (`fullyValid` ist im ganzen Renew-Fenster `true`,
@@ -753,16 +756,17 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
 - [x] **[v5.1] TL-18 (≈2 h)** place-or-refuse: >90 % RAM → Ablehnung + Alarm (Ressourcen-Daten laufen live).
   **Erledigt 2026-11-09 — PR #367 (Alarm-Weg); die Ablehnung lag seit T2.4 fertig.**
   **Ablehnung (unverändert, nur hier zusammengefasst):** Default `placement.refuse_ram_percent: 90`
-  (`config.ts:255`, Wertebereich 1..100 validiert `:480`), verdrahtet in `index.ts:956-957`
-  (`getRamUsedPercent`/`refuseRamPercent`), Entscheidung in `task-executor.ts:147-149`,
+  im `placement`-Block der `DEFAULTS` in `config.ts`, Wertebereich 1..100 im Post-Merge-Validator
+  derselben Datei; verdrahtet am `TaskExecutor` in `index.ts` (`getRamUsedPercent`/`refuseRamPercent`),
+  Entscheidung im `decision.refuse`-Zweig von `task-executor.ts`,
   Fortschrittslog `changes/2026-06-30_t24-resource-attrs-place-or-refuse.md` (T2.4).
   **Alarm (dieser PR):** neuer `case 'task:refused'` in `formatMeshEventForTelegram`
-  (`telegram-gateway.ts:111-117`) plus reine Hilfsfunktion `describeRefusalLimit` (`:55-85`), die die
+  (`telegram-gateway.ts`) plus reine Hilfsfunktion `describeRefusalLimit` ebenda, die die
   ausgelöste Dimension mit Messwert lesbar macht (`RAM 95.5 %`, `CPU 97.2 %`, `agent_count 25`) statt
   das Roh-Objekt zu dumpen — bewusst **ohne** Schwellwert, weil das Event ihn nicht mitträgt. Parallel
-  dazu die beiden Dashboard-Sinks, die `task:failed` ebenfalls kennen: `case` in `Toasts.tsx:23-29`
-  (`type: 'warning'` — ein überlasteter Knoten ist kein fehlgeschlagener Task) und Symbol in
-  `EventFeed.tsx:11`. **Belegt mit 14 neuen Tests** (Suite `packages/daemon`: 2123 → **2137 grün**, 151 Dateien;
+  dazu die beiden Dashboard-Sinks, die `task:failed` ebenfalls kennen: `case` in `eventToToast`
+  (`Toasts.tsx`, `type: 'warning'` — ein überlasteter Knoten ist kein fehlgeschlagener Task) und
+  Eintrag in `EVENT_ICONS` (`EventFeed.tsx`). **Belegt mit 14 neuen Tests** (Suite `packages/daemon`: 2123 → **2137 grün**, 151 Dateien;
   `telegram-gateway.test.ts` 11 → 19, `place-or-refuse.test.ts` 25 → 31 — die in #366 genannten „21
   Tests“ waren `it(`-Vorkommen, vitest zählt `it.each`-Fälle einzeln): 8 am Sink und 6 an den Alarmwegen, die alle **drei** Wege einzeln prüfen — Event-Payload
   (genau ein `task:refused`, **kein** `task:accepted`), Audit (`details` exakt
@@ -782,7 +786,8 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
   Keine Dashboard-Tests, weil `packages/dashboard-ui` **keine** Test-Infrastruktur hat (kein vitest,
   kein `test`-Script, keine `*.test.*`-Datei) — dort decken `tsc --noEmit` + `vite build` der CI ab.
   **Kein Live-Empfangsbeleg:** der Alarm geht an **einen** Kanal und nur bei laufendem Gateway mit
-  bekannter `chatId` (`telegram-gateway.ts:440`) — dieser Punkt macht die Zustellung **möglich**, er
+  bekannter `chatId` (Guard in `setupEventBridge`, `telegram-gateway.ts`) — dieser Punkt macht die
+  Zustellung **möglich**, er
   garantiert keinen Empfang; ein „RAM über 90 %, Nachricht kam an"-Beleg bräuchte einen überlasteten
   Knoten oder einen Testkanal und ist kein Agent-Schritt.
   *(Vorgeschichte: der Punkt war in #366 zuerst falsch auf `[x]` gezogen, weil Log + Audit + Emit als
