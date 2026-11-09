@@ -53,6 +53,38 @@ export interface TelegramGatewayConfig {
 }
 
 /**
+ * TL-18: macht die ausgeloeste place-or-refuse-Dimension eines `task:refused`-Events
+ * menschlich lesbar (Dimension + Messwert), statt das Roh-Objekt zu dumpen.
+ * Spiegelt `describeLimit` in `task-executor.ts` — bewusst ohne Schwellwert, den das
+ * Event nicht mittraegt. Unbekannte/fehlende Messwerte fallen auf die reine
+ * Dimensionsbezeichnung zurueck (nie `undefined`/`NaN` im Operator-Text).
+ */
+function describeRefusalLimit(d: Record<string, unknown>): string {
+  /** Prozentwert mit genau einer Dezimalstelle — identisch zu `describeLimit` im Executor. */
+  const pct = (v: unknown): string | null =>
+    typeof v === 'number' && Number.isFinite(v) ? `${v.toFixed(1)} %` : null;
+  /** Zaehlwert unveraendert (Ganzzahl bleibt Ganzzahl, kein `25.0`). */
+  const count = (v: unknown): string | null =>
+    typeof v === 'number' && Number.isFinite(v) ? String(v) : null;
+  switch (d['limit']) {
+    case 'cpu': {
+      const v = pct(d['cpuLoad']);
+      return v === null ? 'CPU-Last' : `CPU ${v}`;
+    }
+    case 'agents': {
+      const v = count(d['agentCount']);
+      return v === null ? 'Agenten-Anzahl' : `agent_count ${v}`;
+    }
+    case 'ram': {
+      const v = pct(d['ramUsedPercent']);
+      return v === null ? 'RAM-Auslastung' : `RAM ${v}`;
+    }
+    default:
+      return 'Auslastung';
+  }
+}
+
+/**
  * Bildet ein Mesh-Event auf eine Telegram-Notification-Zeile ab.
  * Gibt `null` zurueck, wenn das Event NICHT weitergeleitet wird
  * (Spam-Vermeidung: Heartbeats, capability:synced, etc.).
@@ -60,7 +92,10 @@ export interface TelegramGatewayConfig {
  * Reine Funktion — testbar ohne Bot/Polling. Die Flap-Daempfung der
  * Alert-Events (system:skill_health, system:cert_expiry) passiert upstream
  * (SkillHealthMonitor-Hysterese bzw. Schwellwert-Check im cert-expiry-monitor),
- * daher hier kein zusaetzliches Rate-Limiting noetig.
+ * daher hier kein zusaetzliches Rate-Limiting noetig. **Ausnahme `task:refused`
+ * (TL-18):** das Event feuert pro abgelehntem Request und ist upstream NICHT
+ * gedaempft — eine Daempfung gehoerte an die Quelle (`task-executor.ts`) und ist
+ * in `TODO.md` TL-18 als Rest benannt.
  */
 export function formatMeshEventForTelegram(event: MeshEvent, ts: string): string | null {
   const d = event.data;
@@ -73,6 +108,13 @@ export function formatMeshEventForTelegram(event: MeshEvent, ts: string): string
       return `✅ [${ts}] Task abgeschlossen: ${d['skillId'] ?? 'unknown'}`;
     case 'task:failed':
       return `❌ [${ts}] Task fehlgeschlagen: ${d['skillId'] ?? ''} — ${d['error'] ?? ''}`;
+    // TL-18: place-or-refuse-Ablehnung (Ueberlast) — das ist der Alarm-Weg zum
+    // Operator. Vorher fiel `task:refused` in den `default`-Zweig und erreichte
+    // niemanden (Log + Audit-Zeile sind kein Alarm).
+    case 'task:refused':
+      return `🚫 [${ts}] Task abgelehnt (Ueberlast): ${d['skillId'] ?? 'unknown'} — ` +
+        `${describeRefusalLimit(d)} ueber Schwelle` +
+        (d['requester'] ? ` (Anfrage: ${d['requester']})` : '');
     case 'system:startup':
       return `🚀 [${ts}] Daemon gestartet: ${d['agentId'] ?? ''}`;
     case 'system:shutdown':

@@ -8,6 +8,7 @@ const EVENT_ICONS: Record<string, string> = {
   'task:accepted': '✅',
   'task:completed': '🎉',
   'task:failed': '❌',
+  'task:refused': '🚫', // TL-18: place-or-refuse-Ablehnung (vorher Fallback-Pin)
   'capability:registered': '🧩',
   'capability:synced': '🔄',
   'skill:announced': '📢',

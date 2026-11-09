@@ -703,23 +703,45 @@ damit **Verifikations-/Live-Wiring-Punkte, kein Neubau**. Echter Blocker = **Re-
   dies ist der Off-Disk-Folgeschritt.
 - [ ] **[v5.1] TL-17 (≈4 h)** Fremdtext-Kontrakt: Entschärfungs-Modul an den Eintrittspunkten
   (Discovery-Banner, Katalogtexte, fremde Antworten; Kap. 10.3).
-- [ ] **[v5.1] TL-18 (≈2 h)** place-or-refuse: >90 % RAM → Ablehnung + Alarm (Ressourcen-Daten laufen live).
-  **Stand nachgemessen 2026-11-09 (PR #366, read-only — dort nichts daran gebaut): die „Ablehnung“ ist
-  fertig, der „Alarm“ nicht.** Fertig und getestet ist die Ablehnung: Default
-  `placement.refuse_ram_percent: 90` (`config.ts:255`, Wertebereich 1..100 validiert `:480`), verdrahtet
-  in `index.ts:956-957` (`getRamUsedPercent`/`refuseRamPercent`), Entscheidung in
-  `task-executor.ts:147-149`, 21 Tests in `packages/daemon/src/place-or-refuse.test.ts`, Fortschrittslog
-  `changes/2026-06-30_t24-resource-attrs-place-or-refuse.md` (T2.4). **Offen ist die Alarmierung:**
-  `task-executor.ts:150-155` schreibt ein `log.warn`, eine Audit-Zeile
-  (`audit.append('TASK_DELEGATE', …)`) und emittiert `eventBus.emit('task:refused', …)` — dieses Event
-  hat aber **repo-weit keinen Consumer**: es ist nur in der Typ-Union deklariert (`events.ts:28`) und
-  fällt im Telegram-Sink `formatMeshEventForTelegram` in den `default`-Zweig mit `return null`
-  (`telegram-gateway.ts:96-99`), während `task:failed`, `system:cert_expiry` und `system:skill_health`
-  dort zugestellt werden. Ein Log-Eintrag und eine Audit-Zeile erreichen keinen Operator, und
-  `place-or-refuse.test.ts` prüft **keinen** der drei Wege — nur den Rückgabewert. **Restaufwand daher
-  klein und klar umrissen:** `task:refused` im Telegram-Sink zustellen (oder einen anderen Consumer
-  benennen) plus Assertions auf die drei Wege. *(Befund aus der externen CR-Runde 1 zu #366, MEDIUM;
-  im Code gegengeprüft und bestätigt — der Punkt war dort zuerst falsch auf `[x]` gezogen.)*
+- [x] **[v5.1] TL-18 (≈2 h)** place-or-refuse: >90 % RAM → Ablehnung + Alarm (Ressourcen-Daten laufen live).
+  **Erledigt 2026-11-09 — PR #367 (Alarm-Weg); die Ablehnung lag seit T2.4 fertig.**
+  **Ablehnung (unverändert, nur hier zusammengefasst):** Default `placement.refuse_ram_percent: 90`
+  (`config.ts:255`, Wertebereich 1..100 validiert `:480`), verdrahtet in `index.ts:956-957`
+  (`getRamUsedPercent`/`refuseRamPercent`), Entscheidung in `task-executor.ts:147-149`,
+  Fortschrittslog `changes/2026-06-30_t24-resource-attrs-place-or-refuse.md` (T2.4).
+  **Alarm (dieser PR):** neuer `case 'task:refused'` in `formatMeshEventForTelegram`
+  (`telegram-gateway.ts:111-117`) plus reine Hilfsfunktion `describeRefusalLimit` (`:55-85`), die die
+  ausgelöste Dimension mit Messwert lesbar macht (`RAM 95.5 %`, `CPU 97.2 %`, `agent_count 25`) statt
+  das Roh-Objekt zu dumpen — bewusst **ohne** Schwellwert, weil das Event ihn nicht mitträgt. Parallel
+  dazu die beiden Dashboard-Sinks, die `task:failed` ebenfalls kennen: `case` in `Toasts.tsx:23-29`
+  (`type: 'warning'` — ein überlasteter Knoten ist kein fehlgeschlagener Task) und Symbol in
+  `EventFeed.tsx:11`. **Belegt mit 14 neuen Tests** (Suite `packages/daemon`: 2123 → **2137 grün**, 151 Dateien;
+  `telegram-gateway.test.ts` 11 → 19, `place-or-refuse.test.ts` 25 → 31 — die in #366 genannten „21
+  Tests“ waren `it(`-Vorkommen, vitest zählt `it.each`-Fälle einzeln): 8 am Sink und 6 an den Alarmwegen, die alle **drei** Wege einzeln prüfen — Event-Payload
+  (genau ein `task:refused`, **kein** `task:accepted`), Audit (`details` exakt
+  `system.health refused: RAM 95.5% > 90%`, `peer_id` = Anfrager, gegen die echte SQLite-`AuditLog`),
+  `log.warn` (genau eine, mit `refuseRamPercent: 90` im Kontext) — dazu die CPU-Dimension, eine
+  Negativprobe unter der Schwelle und die **Kette Executor→Sink** (das tatsächlich emittierte Event
+  durch `formatMeshEventForTelegram` ⇒ nicht `null`).
+  **Zwei Korrekturen am Befund aus #366, im Repo nachgeprüft:** (a) „`task:refused` hat repo-weit keinen
+  Consumer" war zu scharf — der WebSocket-Broadcast (`websocket.ts:263`) ist typ-**agnostisch** und hat
+  das Event immer schon an offene Dashboard-Clients geliefert; was fehlte, war ein typ-**bewusster**
+  Alarm-Sink. (b) `task:failed` wird nicht von einem, sondern von **drei** Sinks zugestellt — der Grep
+  im Befund deckte nur `packages/daemon/src/` ab.
+  **Bewusst nicht Teil dieses Punkts, als Rest benannt statt mitverbucht:** keine Flap-Dämpfung /
+  kein Rate-Limit für `task:refused` — ein dauerhaft überlasteter Knoten kann in Folge ablehnen; im Haus
+  passiert Dämpfung **upstream** (Hysterese im SkillHealthMonitor, Schwellwert im cert-expiry-monitor),
+  das wäre also eine Design-Entscheidung an der Quelle (`task-executor.ts`) und ein eigener Slice.
+  Keine Dashboard-Tests, weil `packages/dashboard-ui` **keine** Test-Infrastruktur hat (kein vitest,
+  kein `test`-Script, keine `*.test.*`-Datei) — dort decken `tsc --noEmit` + `vite build` der CI ab.
+  **Kein Live-Empfangsbeleg:** der Alarm geht an **einen** Kanal und nur bei laufendem Gateway mit
+  bekannter `chatId` (`telegram-gateway.ts:440`) — dieser Punkt macht die Zustellung **möglich**, er
+  garantiert keinen Empfang; ein „RAM über 90 %, Nachricht kam an"-Beleg bräuchte einen überlasteten
+  Knoten oder einen Testkanal und ist kein Agent-Schritt.
+  *(Vorgeschichte: der Punkt war in #366 zuerst falsch auf `[x]` gezogen, weil Log + Audit + Emit als
+  „Alarm" gezählt wurden; die externe CR-Runde hat das als MEDIUM zurückgewiesen, der Befund wurde im
+  Code bestätigt und der Punkt wieder geöffnet. Dokumentation dieses Slices:
+  `changes/2026-11-09_tl-18-task-refused-alert.md`.)*
 - [ ] **[v5.1] TL-19 (≈4 h)** Verbindungs-Pooling + Sicherungs-Schalter je Owner-Peer; `resolveMcp` meidet
   kranke Anbieter.
 - [ ] **[v5.1] TL-20 (≈3 h)** Pro-Rechner-Transportpolitik (ADR-031) + Relay netzweit „aus" (Entsch. 5).

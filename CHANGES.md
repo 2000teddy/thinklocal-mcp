@@ -8,6 +8,51 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ## [Unreleased] — 2026-06-26 09:05
 
+### feat(daemon): TL-18-Rest — `task:refused` erreicht den Operator (2026-11-09 10:50)
+Der Alarm-Weg der place-or-refuse-Ablehnung war offen: `task-executor.ts:155` emittiert seit T2.4
+`eventBus.emit('task:refused', …)`, aber **kein typ-bewusster Sink** hat das Event behandelt — beide
+Switches, die `task:failed` kennen (`formatMeshEventForTelegram` im Telegram-Gateway und `eventToToast`
+im Dashboard), warfen es in den `default`-Zweig mit `return null`. Ein `log.warn` und eine Audit-Zeile
+erreichen keinen Operator. **Präzisierung gegen den Befundtext aus #366:** „repo-weit keinen Consumer"
+war zu scharf — der WebSocket-Broadcast (`websocket.ts:263`) ist typ-agnostisch und hat `task:refused`
+immer schon an offene Dashboard-Clients geliefert; was fehlte, war der **Alarm**-Sink. Nachgeprüft wurde
+auch, welche Sinks `task:failed` überhaupt zustellen: **drei**, nicht einer — der Grep im Auftrag deckte
+nur `packages/daemon/src/` ab und sah die zwei Dashboard-Stellen nicht.
+**Geändert:** neuer `case 'task:refused'` in `telegram-gateway.ts` (`🚫 … Task abgelehnt (Ueberlast):
+<skill> — <Dimension> ueber Schwelle (Anfrage: <requester>)`) samt neuer reiner Hilfsfunktion
+`describeRefusalLimit`, die die ausgelöste Dimension plus Messwert lesbar macht (`RAM 95.5 %`,
+`CPU 97.2 %`, `agent_count 25` — Prozentwerte immer mit einer Dezimalstelle wie in `describeLimit`,
+Zählwerte unverändert) statt das Roh-Objekt zu dumpen; parallel dazu ein `case` in
+`Toasts.tsx` (`type: 'warning'` — Überlast ist kein Fehlschlag) und ein Symbol in `EventFeed.tsx`.
+Bewusst **ohne** Schwellwert im Text, weil das Event ihn nicht mitträgt; fehlende Messwerte
+(`cpuLoad`/`agentCount` sind `number | null`, `limit` ist optional) fallen auf die Dimensionsbezeichnung
+zurück, damit nie `undefined`/`NaN` in einer Operator-Nachricht steht. **Nicht** angefasst:
+`task-executor.ts`, `events.ts`, `websocket.ts`, Bot-/Polling-Code, Entscheidungslogik — der Weg wird am
+Sink geschlossen, nicht an der Quelle, das Gate-Verhalten ändert sich nicht.
+**TS ✅ (+14 Tests, Baseline per `git stash` auf demselben Arbeitsbaum gemessen):** `packages/daemon`
+`vitest run` 151 Dateien / 2123 → **151 / 2137 grün** (`telegram-gateway.test.ts` 11 → 19,
+`place-or-refuse.test.ts` 25 → 31; die in #366 genannten „21 Tests“ waren `it(`-Vorkommen, vitest zählt
+`it.each`-Fälle einzeln); `tsc --noEmit` 0 → 0, `-p tsconfig.scripts.json`
+0 → 0, `lint:scripts` 0 → 0; `packages/dashboard-ui` `tsc --noEmit` 0 → 0 und `vite build` Exit 0 → Exit 0;
+eslint in beiden Umfängen unverändert — `packages/daemon`-Scope (`eslint src/`) **460 → 460**,
+Wurzel-`npm run lint`-Umfang **462 → 462** Probleme (alle fünf geänderten Dateien 0 Fehler; ein erster Entwurf hatte
+zwei Rückgabetyp-Warnungen erzeugt, nachgezogen). **Externe CR (agy/Gemini), zwei Runden — Runde 1 APPROVE mit 0 HIGH /
+0 MEDIUM / 2 LOW / 2 NIT (alle vier eingearbeitet), Runde 2 APPROVE mit 0/0/0/2 (beide
+eingearbeitet: eine stehengebliebene Testzahl im Tabellen-Footer und Zeilennummern, die durch meine
+eigenen Runde-1-Fixes erneut gewandert waren)** — darunter ein echter Formatierungs-Bruch
+(`Number.isInteger` dimensionsunabhängig angewandt hätte `RAM 91 %` statt `RAM 91.0 %` erzeugt,
+abweichend von der Audit-Zeile) und ein Platzhalter `COMMIT_SHA`, den ein Commit per Konstruktion nicht
+auflösen kann. Die 6 neuen Alarmweg-Tests prüfen alle **drei** Wege
+einzeln (Event-Payload, Audit-`details` exakt `system.health refused: RAM 95.5% > 90%` gegen die echte
+SQLite-`AuditLog`, genau eine `log.warn`), die CPU-Dimension, die Negativprobe unter der Schwelle und die
+**Kette Executor→Sink**: das tatsächlich emittierte Event durch `formatMeshEventForTelegram` ⇒ nicht
+`null`. Letzteres bricht, sobald der `case` wieder verschwindet oder Payload-Feldnamen umbenannt werden.
+**Offen geblieben und als Rest benannt:** keine Flap-Dämpfung/Rate-Limit für `task:refused` (im Haus
+passiert Dämpfung upstream, das wäre eine Design-Entscheidung an der Quelle); keine Dashboard-Tests, weil
+`packages/dashboard-ui` **keine** Test-Infrastruktur hat (kein vitest, kein `test`-Script, keine
+`*.test.*`-Datei) — dort decken `tsc` + `vite build` ab; kein Live-Beleg, dass eine Nachricht ankommt
+(bräuchte einen überlasteten Knoten und einen aktiven Gateway, kein Agent-Schritt).
+
 ### refactor(daemon): TL-23 — tote GraphQL-Schnittstelle entfernt (2026-11-09 09:30)
 Dead-Code-Entfernung. **Kein** Verhaltens-Delta am laufenden Dienst, kein Deploy, kein Secret, kein State,
 kein Dienst-Eingriff, kein Beschluss.
