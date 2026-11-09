@@ -552,6 +552,120 @@ describe('loadOrCreateTlsBundle — Reissue-Schwelle (renewBeforeDays)', () => {
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
+  // --- TL-00c: Cert-Dry-Run — Reissue + Schlüssel-Sync ---
+  //
+  // Die vier Tests oben prüfen ausschließlich das CERT (neu/behalten). Keiner behauptet, dass das
+  // geschriebene `node.crt.pem` zum geschriebenen `node.key.pem` GEHÖRT — genau das ist die
+  // „Schlüssel-Sync"-Hälfte von TL-00c. Sie ist hier nachgezogen.
+  //
+  // Lesart (bestätigt): „Schlüssel-Sync" = LOKALE Cert/Key-Paar-Konsistenz nach dem Reissue, nicht
+  // ein Peer-Austausch. Der Reissue-Pfad erzeugt ein FRISCHES Keypair (`createNodeCert` ohne
+  // `existingKeyPem`) und schreibt beide Dateien — Gegenrichtung zur ADR-034-Migration, die den Key
+  // wiederverwendet und nur die Cert-Datei tauscht.
+  //
+  // Geprüft wird auf der PLATTE, nicht am Bundle-Return: der Rückgabewert kann stimmen, während die
+  // geschriebenen Dateien auseinanderlaufen — und nur die Dateien überleben den Neustart.
+  describe('TL-00c — Cert/Key-Paar-Konsistenz nach dem Reissue (Schlüssel-Sync)', () => {
+    /** Modulus des öffentlichen Schlüssels IM CERT (hex). */
+    function certModulus(certPem: string): string {
+      const pub = forge.pki.certificateFromPem(certPem).publicKey as forge.pki.rsa.PublicKey;
+      return pub.n.toString(16);
+    }
+    /** Modulus des PRIVATEN Schlüssels (hex). Gleich ⇔ Paar gehört zusammen. */
+    function keyModulus(keyPem: string): string {
+      const priv = forge.pki.privateKeyFromPem(keyPem) as forge.pki.rsa.PrivateKey;
+      return priv.n.toString(16);
+    }
+    function readPair(dir: string): { certPem: string; keyPem: string } {
+      return {
+        certPem: readFileSync(join(dir, 'tls', 'node.crt.pem'), 'utf-8'),
+        keyPem: readFileSync(join(dir, 'tls', 'node.key.pem'), 'utf-8'),
+      };
+    }
+
+    it('(1) Reissue: das auf die Platte geschriebene Cert/Key-Paar gehört zusammen', () => {
+      const ca = createMeshCA('thinklocal', 'tl00c-pair');
+      const node = mintNodeCertWithDaysLeft(ca, 20); // 20 d <= 30 → reissue
+      const dir = setup(ca, node);
+      try {
+        const bundle = loadOrCreateTlsBundle(dir, 'node', NODE_URI, undefined, 'tl00c-pair');
+        expect(bundle.certPem).not.toBe(node.certPem); // Vorbedingung: es WAR ein Reissue
+
+        const onDisk = readPair(dir);
+        // Der eigentliche Beleg: öffentlicher Cert-Key == privater Key, auf der Platte.
+        expect(certModulus(onDisk.certPem)).toBe(keyModulus(onDisk.keyPem));
+        // Und die Platte trägt genau das, was zurückgegeben wurde (kein Drift Return↔Datei).
+        expect(onDisk.certPem).toBe(bundle.certPem);
+        expect(onDisk.keyPem).toBe(bundle.keyPem);
+        // Identität bleibt erhalten.
+        expect(extractSpiffeUri(onDisk.certPem)).toBe(NODE_URI);
+      } finally { rmSync(dir, { recursive: true, force: true }); }
+    });
+
+    it('(2) Reissue rotiert den Key wirklich — Gegenprobe zur ADR-034-Migration', () => {
+      const ca = createMeshCA('thinklocal', 'tl00c-rotate');
+      const node = mintNodeCertWithDaysLeft(ca, 20);
+      const dir = setup(ca, node);
+      try {
+        loadOrCreateTlsBundle(dir, 'node', NODE_URI, undefined, 'tl00c-rotate');
+        const onDisk = readPair(dir);
+        // Der alte Key ist WEG (anders als bei der Migration, die ihn wiederverwendet).
+        expect(onDisk.keyPem).not.toBe(node.keyPem);
+        expect(keyModulus(onDisk.keyPem)).not.toBe(keyModulus(node.keyPem));
+        // Trotzdem konsistent — ein rotierter Key allein wäre wertlos.
+        expect(certModulus(onDisk.certPem)).toBe(keyModulus(onDisk.keyPem));
+      } finally { rmSync(dir, { recursive: true, force: true }); }
+    });
+
+    it('(3) Wochen-Restart simuliert: Reissue → Start → Start, kein zweiter Reissue, Paar stabil', () => {
+      const ca = createMeshCA('thinklocal', 'tl00c-restart');
+      const node = mintNodeCertWithDaysLeft(ca, 20); // erster Start: reissue
+      const dir = setup(ca, node);
+      try {
+        // Start 1 — der Reissue.
+        const first = loadOrCreateTlsBundle(dir, 'node', NODE_URI, undefined, 'tl00c-restart');
+        expect(first.certPem).not.toBe(node.certPem);
+        const afterReissue = readPair(dir);
+
+        // Start 2 und 3 — das ist der „Wochen-Restart": derselbe dataDir, erneut geladen. Das
+        // frische Cert hat volle Laufzeit, also greift `daysLeft > renewBeforeDays` und es darf
+        // NICHT erneut ausgestellt werden; sonst rotierte der Key bei jedem Neustart.
+        const second = loadOrCreateTlsBundle(dir, 'node', NODE_URI, undefined, 'tl00c-restart');
+        const third = loadOrCreateTlsBundle(dir, 'node', NODE_URI, undefined, 'tl00c-restart');
+        expect(second.certPem).toBe(afterReissue.certPem);
+        expect(third.certPem).toBe(afterReissue.certPem);
+
+        const afterRestarts = readPair(dir);
+        expect(afterRestarts.certPem).toBe(afterReissue.certPem);
+        expect(afterRestarts.keyPem).toBe(afterReissue.keyPem);
+        // Abnahme-Konstante des Punktes: das Paar bleibt über Neustarts konsistent.
+        expect(certModulus(afterRestarts.certPem)).toBe(keyModulus(afterRestarts.keyPem));
+      } finally { rmSync(dir, { recursive: true, force: true }); }
+    });
+
+    it('(4) Gegenprobe: ein FREMDES Paar auf der Platte wird erkannt und geheilt, nicht still serviert', () => {
+      const ca = createMeshCA('thinklocal', 'tl00c-mismatch');
+      // Zwei unabhängige Mints: Cert von A, Key von B — bewusst nicht zusammengehörig.
+      const certOwner = mintNodeCertWithDaysLeft(ca, 90); // Laufzeit WEIT über der Schwelle …
+      const keyStranger = mintNodeCertWithDaysLeft(ca, 90);
+      const dir = setup(ca, { certPem: certOwner.certPem, keyPem: keyStranger.keyPem });
+      try {
+        // Vorbedingung: das gepflanzte Paar ist wirklich inkonsistent (sonst prüft der Test nichts).
+        const planted = readPair(dir);
+        expect(certModulus(planted.certPem)).not.toBe(keyModulus(planted.keyPem));
+
+        // … trotzdem muss der Ladepfad neu ausstellen: die Behalten-Bedingung verlangt einen
+        // passenden Key, nicht nur Restlaufzeit. Ein stilles Servieren wäre der Defekt.
+        const bundle = loadOrCreateTlsBundle(dir, 'node', NODE_URI, undefined, 'tl00c-mismatch');
+        expect(bundle.certPem).not.toBe(certOwner.certPem);
+
+        const healed = readPair(dir);
+        expect(certModulus(healed.certPem)).toBe(keyModulus(healed.keyPem));
+        expect(extractSpiffeUri(healed.certPem)).toBe(NODE_URI);
+      } finally { rmSync(dir, { recursive: true, force: true }); }
+    });
+  });
+
   it('Grenze exakt: daysLeft == renewBeforeDays → reissue (strikte > Behalten-Bedingung)', () => {
     const ca = createMeshCA('thinklocal', 'renewedge');
     // Helper +12 h → daysLeft ist EXAKT 10; Schwelle 10 → `10 > 10` ist false → reissue.
