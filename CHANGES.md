@@ -6,7 +6,56 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-11-09 14:45
+## [Unreleased] — 2026-11-18 07:25
+
+### feat(inbox): `ack_reason` — Ablehnungsgrund des Empfaengers auf die Sendeseite durchreichen (2026-11-18 07:25)
+PR #373, Branch `agent/claude-code/ack-reason-propagation`, Basis `main` @ `bda3ff6`.
+**Gemessen, nicht vermutet:** zwei Laeufe (18.11. 06:54:35 und 06:55:39 MEZ) an ThinkHub02 lieferten
+zeichengleich `ack_status: "rejected"` **ohne** Grund — der Grund `sender not in pairing store` stand
+ausschliesslich im Log des **Empfaengers**, die Ursachenklaerung brauchte deshalb einen SSH-Login dort.
+Der Grund liegt im ACK bereits vor (`messages.ts:77`, `reason?: string`) und kommt signaturverifiziert
+an; `inbox-api.ts` uebernahm aber nur `status`.
+**Aenderung rein additiv** (`packages/daemon/src/inbox-api.ts`, +65/−2, davon ca. 11 Zeilen Logik): neue
+reine Funktion `sanitizeAckReason` plus Feld `ack_reason` im Log-Objekt und in der Antwort von
+`POST /api/inbox/send`, beide per Conditional Spread — **ohne `reason` entsteht kein Key**, damit die
+aelteren Mesh-Builds (`e3acc1a` auf .56/.82/.222, `cec4f96`, `842cd7b`, `a16b475`) byte-gleich bleiben.
+**Nicht angefasst:** Transport, Retry, Pairing/ACL, Identitaet, Discovery, `index.ts:904-919`,
+Loopback-Pfad, bestehende Feldnamen und Statuswerte. `mcp-stdio.ts` braucht **keine** Aenderung —
+`send_message_to_peer` gibt die Daemon-Antwort unveraendert weiter, das Feld erscheint dort von selbst.
+**`reason` ist Fremdtext und wird entschaerft** (`10-sicherheit.md` §10.3): Zeilentrenner inklusive NEL
+(U+0085) und U+2028/U+2029 werden zu **einem** Leerzeichen (ersatzloses Loeschen wuerde mehrzeilige
+Fremdmeldungen zu einem Wort verschmelzen), C0/DEL/**C1** (U+0080–U+009F; U+009B ist 8-Bit-CSI und wirkt
+in manchen Terminals wie `ESC [`) sowie BiDi-Overrides und -Isolate (U+202A–U+202E, U+2066–U+2069)
+entfallen, **ZWNJ/ZWJ (U+200C/U+200D) bleiben** — sie sind in persischer, arabischer und indischer
+Schrift sowie in Emoji-ZWJ-Sequenzen echter Text. Gekuerzt wird auf **200 Codepoints** via `Array.from`
+statt `slice`: ein Schnitt auf UTF-16-Code-Units kann ein Surrogatpaar zerschneiden, das Modul wuerde
+dann selbst ungueltiges UTF-16 erzeugen.
+**Tests real gemessen, nichts geschaetzt:** neue Datei `inbox-api-ack-reason.test.ts` mit **10** Faellen,
+**10/10 gruen** (eine Datei `inbox-api.test.ts` existierte nicht; vorhanden war nur
+`inbox-api-adr005.test.ts`, die ausschliesslich den Loopback-Pfad abdeckt — der Remote-Pfad laeuft hier
+mit gemocktem `undici.fetch` und einem **echt signierten** ACK-Envelope, EC P-256). **Rueckdrehprobe**
+(`git stash` nur auf `inbox-api.ts`): **5 rot / 5 gruen** — rot T1/T5/T7/T8/T9, gruen T2/T3/T4/T5b/T6,
+weil diese fuenf Abwesenheit pruefen und damit das Altverhalten absichern. Volle Daemon-Suite
+**153 Dateien, 2202/2202 gruen**, Exit 0, 20,38 s. `tsc --noEmit -p packages/daemon` 0 Fehler, `eslint`
+auf beiden geaenderten Dateien 0 Findings.
+**CR extern** ueber `~/.local/bin/agy --sandbox` (anderer Anbieter als der Implementierer): kein
+CRITICAL, kein HIGH, 2 MEDIUM + 2 LOW, **alle vier umgesetzt** — Sanitizer erweitert, Logger-Spy
+ergaenzt (das neue Log-Feld war wegen `log?.` in keinem Test ausgefuehrt), Conditional Spread auch im
+Log-Objekt, T6 (unverifiziertes ACK mit fremdem Signaturschluessel ⇒ **kein** `ack_reason`) plus exakte
+Laengengrenze. Der erste CR-Lauf scheiterte am headless-Werkzeug-Gate (`read_file` auto-denied) und
+wurde mit der Vorgabe „keine Werkzeuge" wiederholt, **nicht** mit `--dangerously-skip-permissions`.
+**CO/PC ⚠️ unveraendert gesperrt:** beide Fremd-Backends liegen unter `~/.local/bin`, das der
+`pal`-Serverprozess nicht erbt (PATH-Vorbehalt seit #364). Ersatz fuer CO ist die schriftliche
+Design-Entscheidung **vor** dem Code (`docs/architecture/ack-reason-propagation-2026-11-18.md`, Commit
+`0d334b3`); Ersatz fuer PC sind die Einzelpruefungen oben plus ein Secret-Scan ueber den vollen Diff
+ohne Treffer. Kein Umgehungsversuch.
+**Grenzen:** **kein** Merge, **kein** Release, **kein** Deploy durch diese Lane. Der gemessene
+TH02-Fehler wird **nicht** behoben — das waere ein Pairing-Eintrag auf TH02 und damit eine
+Trust-Aenderung mit ausdruecklicher Freigabepflicht; dieser PR macht die Ursache nur **sichtbar**. Kein
+Live-Test gegen das Mesh: der TH01-Daemon laeuft unveraendert auf `bda3ff6` und wurde **nicht** neu
+gestartet. Keine neue TL-Nummer, keine Kanonentscheidung.
+Details: `changes/2026-11-18_ack-reason-propagation.md`.
+
 
 ### docs(reconcile): COMPLIANCE-Status-Zellen #369, #370, #371 gezogen (2026-11-09 14:45)
 Doku-only, **kein** `packages/`-Diff, kein Code, kein Test, kein Deploy. Drei Zellen standen auf
