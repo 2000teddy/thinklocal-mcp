@@ -30,7 +30,8 @@ vi.mock('undici', () => ({
 
 const { AgentInbox } = await import('./agent-inbox.js');
 const { registerInboxApi } = await import('./inbox-api.js');
-const { MessageType, createEnvelope, encodeAndSign, serializeSignedMessage } = await import('./messages.js');
+const { MessageType, createEnvelope, encodeAndSign, serializeSignedMessage } =
+  await import('./messages.js');
 const OWN_ID = 'spiffe://thinklocal/node/12D3KooWownNodeAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
 const PEER_ID = 'spiffe://thinklocal/node/12D3KooWpeerNodeBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
 
@@ -54,7 +55,9 @@ function buildAck(
     status,
   };
   if (reason !== undefined) payload['reason'] = reason;
-  const envelope = createEnvelope(MessageType.AGENT_MESSAGE_ACK, PEER_ID, payload, { ttl_ms: 60_000 });
+  const envelope = createEnvelope(MessageType.AGENT_MESSAGE_ACK, PEER_ID, payload, {
+    ttl_ms: 60_000,
+  });
   return serializeSignedMessage(encodeAndSign(envelope, signWith));
 }
 
@@ -101,17 +104,27 @@ interface LogSpy {
 
 /** Erstes Argument des Log-Aufrufs mit der ACK-Meldung (CR MEDIUM-2). */
 function ackLogObject(log: LogSpy): Record<string, unknown> | undefined {
-  const call = log.info.mock.calls.find((c: unknown[]) => c[1] === 'AGENT_MESSAGE + ACK verifiziert');
+  const call = log.info.mock.calls.find(
+    (c: unknown[]) => c[1] === 'AGENT_MESSAGE + ACK verifiziert',
+  );
   return call?.[0] as Record<string, unknown> | undefined;
 }
 
-async function buildServer(): Promise<{ server: FastifyInstance; log: LogSpy; cleanup: () => Promise<void> }> {
+async function buildServer(): Promise<{
+  server: FastifyInstance;
+  log: LogSpy;
+  cleanup: () => Promise<void>;
+}> {
   const tmp = mkdtempSync(join(tmpdir(), 'tlmcp-ack-reason-'));
   const inbox = new AgentInbox(tmp);
   const mesh = {
     getPeer: (id: string) =>
       id === PEER_ID
-        ? { agentId: PEER_ID, endpoint: 'https://10.0.0.9:9440', agentCard: { publicKey: peerKeys.publicKey } }
+        ? {
+            agentId: PEER_ID,
+            endpoint: 'https://10.0.0.9:9440',
+            agentCard: { publicKey: peerKeys.publicKey },
+          }
         : undefined,
   } as unknown as Parameters<typeof registerInboxApi>[1]['mesh'];
   const server: FastifyInstance = Fastify({ logger: false });
@@ -201,7 +214,15 @@ describe('inbox-api — ack_reason durchreichen', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json() as Record<string, unknown>;
     expect(Object.keys(body).sort()).toEqual(
-      ['ack_status', 'ack_verified', 'delivery', 'message_id', 'peer_status', 'sent_at', 'status'].sort(),
+      [
+        'ack_status',
+        'ack_verified',
+        'delivery',
+        'message_id',
+        'peer_status',
+        'sent_at',
+        'status',
+      ].sort(),
     );
     expect(body['ack_status']).toBe('delivered');
     expect(Object.keys(ackLogObject(ctx.log) ?? {}).sort()).toEqual(
@@ -220,7 +241,8 @@ describe('inbox-api — ack_reason durchreichen', () => {
   });
 
   it('T5: Fremdtext wird entschärft — keine Steuerzeichen, max 200 Zeichen', async () => {
-    const boshaft = 'abgelehnt\n{"level":30,"msg":"gefaelscht"}\u001b[31mrot\u0000' + 'x'.repeat(400);
+    const boshaft =
+      'abgelehnt\n{"level":30,"msg":"gefaelscht"}\u001b[31mrot\u0000' + 'x'.repeat(400);
     fetchMock.mockResolvedValue(ackResponse(buildAck('irrelevant', 'rejected', boshaft)));
 
     const res = await send(ctx.server, PEER_ID);
