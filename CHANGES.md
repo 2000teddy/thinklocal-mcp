@@ -6,7 +6,63 @@ Format: [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-11-18 07:25
+## [Unreleased] — 2026-11-18 14:35
+
+### docs(reconcile): COMPLIANCE-Status-Zellen #372 und #373 gezogen (2026-11-18 14:35)
+PR #374, Branch `agent/claude-code/reconcile-pr-372-373`, Basis `main` @ `34ba4e8`.
+Doku-only: **kein** `packages/`-Diff, kein Code, kein Test-Delta, kein Deploy, kein Release, kein
+Rollout, kein Daemon-Neustart, kein Trust-/Pairing-Eingriff.
+**Anlass ist die im Tabellenkopf festgehaltene Selbst-Reconcile-Lücke** — ein PR kann seine eigene
+Statuszelle nicht schließen, weil der Squash-Merge keine Datei ändert und ein Commit davor das
+gepinnte Review/CI-Gate entwerten würde. Nach dem Merge von #373 standen **zwei** Zellen stale: #373
+seit demselben Tag, #372 seit dem 2026-11-09, weil danach neun Tage kein PR an dieser Tabelle schrieb.
+**Beide Merge-Zustände einzeln live per `gh pr view` erhoben**, nicht aus der Tabelle übernommen:
+#372 `MERGED` 2026-11-09T13:55:38Z, Squash `bda3ff64`, `APPROVED`; #373 `MERGED`
+2026-11-18T13:03:57Z, Squash `34ba4e8e`, `APPROVED` durch `peppiseppiullmann-ci` am **exakten** Head
+`9874e93a` (13:02:44Z); der Merge selbst lief head-gepinnt per `--match-head-commit`, ohne `--admin`
+und ohne Branchlöschung, `git diff origin/main 9874e93` leer.
+**Geändert: drei Positionen plus eine Einfügung, `+4/−3`** — `COMPLIANCE-TABLE.md:2106` und `:2107`
+Spalte 2 `(offen, base=main)` → `(base=main, gemergt)`, der lebende Footer, und die neue Zeile #374
+mit `(offen, base=main)` (konventionsgemäß ihre eigene Zelle offen). Adressiert per Zeilenpräfix mit
+`count=1`, damit eine gleichlautende Zeichenkette im Nachweistext unberührt bleibt; Spaltenzahl,
+Pipe-Zahl und Nachweistext beider Zeilen unverändert, kein Fließtext rückwirkend umgeschrieben.
+**Die CO/PC/PATH-Vorbehalte der #373-Zeile bleiben wörtlich stehen** (`pal:consensus` und
+`pal:precommit` weiter PATH-gesperrt, unverändert seit #364) — dieser PR zieht keinen der beiden auf ✅.
+**Fünf Assertions, maschinell, Abbruch vor dem Schreiben:** getroffen genau `372/373`; nimmt man die
+eingefügte Zeile heraus, ist die Datei an **genau drei** Positionen geändert und sonst
+**byte-identisch**; die drei berührten Zeilen tragen je **11 unescaped Pipes**; danach bleibt genau
+**eine** offene PR-Zelle (`374`); die **15** historischen `*Letzte Aktualisierung:*`-Zeilen sind
+byte-identisch.
+**Zwei Funde, gemeldet statt geraten, beide unangetastet:** (a) `*Letzte Aktualisierung:*` kommt
+**16×** vor, nicht einmal — die erste Footer-Assertion stoppte deshalb **vor** dem Schreiben (Datei
+nachweislich unverändert), korrigiert wurde die Assertion; (b) **sechs** Tabellenzeilen tragen
+unescaped Pipes im Nachweistext und rendern dadurch eine Zelle zu viel (#323, #324, #327, #353 je 12,
+#354 15, #355 13 statt 11) — vorbestehend seit Juli/August, nicht aus diesem PR, Reparatur hieße in
+sechs fremden Nachweistexten editieren ⇒ eigener Slice (Präzedenz: #372 meldete die
+Titel-statt-Status-Zelle von #164 genauso und liess sie stehen).
+**Eine Zelle über den wörtlichen Auftrag hinaus, offengelegt:** der Auftrag nannte #373, gezogen
+wurden zwei — #372 trug seit neun Tagen denselben Defekt in derselben Spalte, ist live als `MERGED`
+belegt, und sie stehen zu lassen hätte die Tabelle genau dort falsch gelassen, wo dieser PR schreibt.
+Präzedenz für das Mitziehen in einer Runde, **selbst gezählt** statt aus dem Fließtext übernommen:
+#356 **drei**, #357 **eine**, #360 **zwei**, #369 **neun**, #372 **drei** — ein Entwurf schrieb für #357
+„zwei“.
+**Eine eigene Zahl korrigiert:** ein Entwurf übernahm aus #357 die Angabe **43** nicht-PR-nummerierte
+offene Zeilen; selbst gezählt gegen `34ba4e8` sind es **31** (#372 nennt für denselben Bestand
+ebenfalls 31) — korrigiert vor dem Commit, in Tabelle und `changes/`-Eintrag.
+**TS n/a** (kein `.ts`-Diff), trotzdem als Nicht-Regressions-Beleg gemessen: Daemon-Suite **153
+Dateien / 2202 Tests grün**, `tsc --noEmit` **0**. **CR ✅** unabhängig über `agy --sandbox` (anderer
+Anbieter als der Implementierer, Diff inline, kein `--dangerously-skip-permissions`): **Runde 1 CHANGES
+REQUESTED, 0/0/2/2/1** — kein Befund traf die Tabellenänderung, vier trafen den Begleittext und sind
+umgesetzt, **einer ist widerlegt** (behauptete Footer-Zeile 2110; die Vorlage hat 2111 Zeilen und der
+Footer ist die letzte — die Leerzeile nach `---` war übersehen). **Runde 2: CHANGES REQUESTED, 0/0/1/0/2** — substanziell alles freigegeben (die Widerlegung zu
+Befund 1 wurde bestätigt), die drei Befunde trafen die Buchführung über den Review selbst: das
+Runde-2-Feld war gefüllt, bevor Runde 2 lief — **mein Fehler**, korrigiert — plus Satzdopplung und
+ein zu langes Zitat. Alle drei umgesetzt. **Runde 3 über den fertigen Stand: APPROVE, 0/0/0/0/0** — Zeilenarithmetik,
+SHAs, Präzedenz-Zahlen, Pipe-Zählung, unberührte CO/PC-Vorbehalte und Widerspruchsfreiheit der drei
+Dateien Punkt für Punkt bestätigt. Kette bei drei Runden beendet, nie ein HIGH oder CRITICAL. **PC ⚠️** PATH-gesperrt ⇒ Einzelprüfungen (Diff vollständig gelesen,
+Secret-Scan ohne Treffer, nur Markdown, keine Datei außerhalb `COMPLIANCE-TABLE.md`/`CHANGES.md`/`changes/`).
+**DO ✅** `changes/2026-11-18_reconcile-372-373.md`, dieser Eintrag, Zeile #374.
+**Review-of-record** über den repo-eigenen Bot-Pfad, **kein Selbst-Approval**, kein `--admin`-Bypass.
 
 ### feat(inbox): `ack_reason` — Ablehnungsgrund des Empfaengers auf die Sendeseite durchreichen (2026-11-18 07:25)
 PR #373, Branch `agent/claude-code/ack-reason-propagation`, Basis `main` @ `bda3ff6`.
