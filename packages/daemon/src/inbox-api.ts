@@ -70,6 +70,43 @@ interface SendBody {
 
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_LIMIT = 500;
+const MAX_ACK_REASON_CHARS = 200;
+
+/**
+ * Entschaerft den ACK-Grund eines Peers (Design-Notiz
+ * `docs/architecture/ack-reason-propagation-2026-11-18.md` §2.2).
+ *
+ * `reason` ist FREMDTEXT: er stammt vom entfernten Daemon und landet in
+ * unserem Log und in der HTTP-Antwort. Nach `10-sicherheit.md` §10.3 wird
+ * Fremdtext entschaerft angezeigt, nie uebernommen wie er kommt.
+ *
+ * Schritte (Reihenfolge ist bedeutsam):
+ *  1. Zeilen-/Tab-Trenner → EIN Leerzeichen. Nicht ersatzlos loeschen, sonst
+ *     verschmelzen mehrzeilige Fremdmeldungen zu einem Wort (CR MEDIUM-1.3).
+ *     Enthaelt auch NEL (U+0085) und die Unicode-Trenner U+2028/U+2029, die
+ *     viele Log-Viewer als Zeilenumbruch rendern.
+ *  2. Entfernen: C0 + DEL + C1 (U+0080–U+009F — U+009B ist 8-Bit-CSI, wirkt in
+ *     manchen Terminals wie `ESC [`) sowie BiDi-Overrides/Isolate
+ *     (U+202A–U+202E, U+2066–U+2069), die optisches Log-Spoofing erlauben.
+ *     ZWNJ/ZWJ (U+200C/U+200D) bleiben stehen: sie sind in persischen,
+ *     arabischen und indischen Schriften sowie in Emoji-Sequenzen echter Text.
+ *  3. Kuerzen auf MAX_ACK_REASON_CHARS **Codepoints** via `Array.from` — ein
+ *     `slice()` auf UTF-16-Code-Units kann ein Surrogatpaar zerschneiden und
+ *     damit selbst ungueltiges UTF-16 erzeugen (CR MEDIUM-1.3).
+ *
+ * Rueckgabe `undefined` heisst: Feld weglassen (kein `null`, kein `""`) —
+ * aeltere Peers ohne `reason` bleiben so byte-gleich zu vorher.
+ */
+function sanitizeAckReason(reason: unknown): string | undefined {
+  if (typeof reason !== 'string') return undefined;
+  const cleaned = reason
+    .replace(/[\r\n\t\u0085\u2028\u2029]+/g, ' ')
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, '')
+    .trim();
+  if (cleaned === '') return undefined;
+  return Array.from(cleaned).slice(0, MAX_ACK_REASON_CHARS).join('').trimEnd();
+}
 
 /**
  * Pruefen ob Aufrufer eine lokale (loopback) Connection hat.
@@ -301,6 +338,7 @@ export function registerInboxApi(server: FastifyInstance, deps: InboxApiDeps): v
       // ACK-Signaturpruefung: Peer-PublicKey aus AgentCard + Envelope decode.
       let ackVerified = false;
       let ackStatus: string | undefined;
+      let ackReason: string | undefined;
       try {
         const ackBody = new Uint8Array(await res.arrayBuffer());
         const peerInfo = mesh.getPeer(normalizedTo);
@@ -312,7 +350,20 @@ export function registerInboxApi(server: FastifyInstance, deps: InboxApiDeps): v
           const ackPayload = ackEnvelope.payload as AgentMessageAckPayload;
           ackVerified = true;
           ackStatus = ackPayload.status;
-          log?.info({ to: body.to, message_id: messageId, ack_verified: true, ack_status: ackPayload.status }, 'AGENT_MESSAGE + ACK verifiziert');
+          ackReason = sanitizeAckReason(ackPayload.reason);
+          log?.info(
+            {
+              to: body.to,
+              message_id: messageId,
+              ack_verified: true,
+              ack_status: ackPayload.status,
+              // CR LOW-3: auch im Log-Objekt per Conditional Spread, damit es
+              // ohne `reason` identisch zu vorher bleibt (In-Memory-Handler und
+              // `toHaveBeenCalledWith`-Tests sehen sonst `ack_reason: undefined`).
+              ...(ackReason !== undefined ? { ack_reason: ackReason } : {}),
+            },
+            'AGENT_MESSAGE + ACK verifiziert',
+          );
         } else {
           log?.info({ to: body.to, message_id: messageId }, 'AGENT_MESSAGE gesendet (kein Peer-PublicKey)');
         }
@@ -320,7 +371,19 @@ export function registerInboxApi(server: FastifyInstance, deps: InboxApiDeps): v
         log?.warn({ to: body.to, message_id: messageId, err: ackErr instanceof Error ? ackErr.message : String(ackErr) }, 'ACK-Signatur ungueltig');
       }
       onSent?.(messageId, body.to);
-      return { status: 'sent', delivery: 'remote', message_id: messageId, sent_at: payload.sent_at, peer_status: res.status, ack_verified: ackVerified, ack_status: ackStatus };
+      return {
+        status: 'sent',
+        delivery: 'remote',
+        message_id: messageId,
+        sent_at: payload.sent_at,
+        peer_status: res.status,
+        ack_verified: ackVerified,
+        ack_status: ackStatus,
+        // Additiv: nur gesetzt wenn der Peer einen nicht-leeren Grund lieferte (I2).
+        // `undefined` wird von Fastify nicht serialisiert → Antwort bleibt fuer
+        // aeltere Peers byte-gleich zu vorher.
+        ...(ackReason !== undefined ? { ack_reason: ackReason } : {}),
+      };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       log?.warn({ to: body.to, err: msg }, 'AGENT_MESSAGE konnte nicht zugestellt werden');
